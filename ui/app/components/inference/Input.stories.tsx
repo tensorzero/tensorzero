@@ -2,7 +2,7 @@ import Input from "./Input";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import pdfUrl from "./Input.stories.fixture.tensorzero.pdf?url";
 import mp3Url from "./Input.stories.fixture.tensorzero.mp3?url";
-import type { JsonValue } from "tensorzero-node";
+import type { JsonValue } from "~/types/tensorzero";
 
 const meta = {
   title: "Input",
@@ -598,7 +598,6 @@ export const UnknownAndThoughtContent: Story = {
           {
             type: "unknown",
             data: null,
-            model_provider_name: null,
           },
           {
             type: "unknown",
@@ -607,13 +606,12 @@ export const UnknownAndThoughtContent: Story = {
               data: 123,
               structure: ["is", "not", "validated"],
             } as JsonValue,
-            model_provider_name: null,
           },
           {
             type: "thought",
             text: "This is a thought content block for testing.",
             signature: undefined,
-            _internal_provider_type: undefined,
+            provider_type: undefined,
           },
         ],
       },

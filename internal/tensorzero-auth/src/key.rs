@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rand::{
     SeedableRng,
     distr::{Alphanumeric, SampleString},
@@ -17,7 +19,7 @@ pub struct TensorZeroApiKey {
 
 const SK_PREFIX: &str = "sk";
 const T0_PREFIX: &str = "t0";
-const SHORT_ID_LENGTH: usize = 12;
+pub const PUBLIC_ID_LENGTH: usize = 12;
 const LONG_KEY_LENGTH: usize = 48;
 
 /// Securely generates a fresh API key
@@ -25,7 +27,7 @@ const LONG_KEY_LENGTH: usize = 48;
 pub(crate) fn secure_fresh_api_key() -> SecretString {
     // Use a cryptographically secure RNG, seeded from the OS
     let mut rng = StdRng::from_os_rng();
-    let short_key = Alphanumeric.sample_string(&mut rng, SHORT_ID_LENGTH);
+    let short_key = Alphanumeric.sample_string(&mut rng, PUBLIC_ID_LENGTH);
     let long_key = Alphanumeric.sample_string(&mut rng, LONG_KEY_LENGTH);
     let key = format!("{SK_PREFIX}-{T0_PREFIX}-{short_key}-{long_key}");
     SecretString::from(key)
@@ -45,9 +47,8 @@ impl TensorZeroApiKey {
         }
     }
 
-    #[cfg(feature = "e2e_tests")]
-    pub fn get_public_id(&self) -> String {
-        self.public_id.clone()
+    pub fn get_public_id(&self) -> &str {
+        &self.public_id
     }
 
     #[cfg(feature = "e2e_tests")]
@@ -57,7 +58,7 @@ impl TensorZeroApiKey {
 
     /// Validates that the provided key is of the format `sk-t0-<public_id>-<long_key>`,
     /// where <public_id> is 12 alphanumeric characters and <long_key> is 48 alphanumeric characters.
-    /// Returns a `TensorZeroApiKey` containing the extracted short ID and long key.
+    /// Returns a `TensorZeroApiKey` containing the extracted public ID and long key.
     pub fn parse(key: &str) -> Result<Self, TensorZeroAuthError> {
         let parts = key.split('-').collect::<Vec<&str>>();
         let [sk, t0, public_id, long_key] = parts.as_slice() else {
@@ -75,9 +76,9 @@ impl TensorZeroApiKey {
                 "API key must start with `sk-t0-`",
             ));
         }
-        if public_id.len() != SHORT_ID_LENGTH {
+        if public_id.len() != PUBLIC_ID_LENGTH {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
-                "Short ID must be 12 characters",
+                "Public ID must be 12 characters",
             ));
         }
         if long_key.len() != LONG_KEY_LENGTH {
@@ -87,7 +88,7 @@ impl TensorZeroApiKey {
         }
         if !public_id.chars().all(char::is_alphanumeric) {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
-                "Short ID must be alphanumeric",
+                "Public ID must be alphanumeric",
             ));
         }
         if !long_key.chars().all(char::is_alphanumeric) {
@@ -96,7 +97,7 @@ impl TensorZeroApiKey {
             ));
         }
         Ok(Self {
-            public_id: public_id.to_string(),
+            public_id: (*public_id).to_owned(),
             hashed_long_key: Self::hash_long_key(long_key).into(),
         })
     }
@@ -117,14 +118,22 @@ impl TensorZeroApiKey {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum TensorZeroAuthError {
     #[error("Invalid format for TensorZero API key: {0}")]
     InvalidKeyFormat(&'static str),
     #[error("Database error: {0}")]
-    Sqlx(#[from] sqlx::Error),
+    Sqlx(Arc<sqlx::Error>),
     #[error("Migration error: {message}")]
     Migration { message: String },
+    #[error("Error performing authentication: {message}")]
+    Middleware { message: String },
+}
+
+impl From<sqlx::Error> for TensorZeroAuthError {
+    fn from(err: sqlx::Error) -> Self {
+        Self::Sqlx(Arc::new(err))
+    }
 }
 
 #[cfg(test)]
@@ -160,7 +169,7 @@ mod tests {
             TensorZeroApiKey::parse("sk-t0-12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
                 .unwrap_err()
                 .to_string(),
-            "Invalid format for TensorZero API key: Short ID must be 12 characters"
+            "Invalid format for TensorZero API key: Public ID must be 12 characters"
         );
         assert_eq!(
             TensorZeroApiKey::parse("sk-t0-aaaaaaaaaaaa-bb")
@@ -174,7 +183,7 @@ mod tests {
             )
             .unwrap_err()
             .to_string(),
-            "Invalid format for TensorZero API key: Short ID must be alphanumeric"
+            "Invalid format for TensorZero API key: Public ID must be alphanumeric"
         );
         assert_eq!(
             TensorZeroApiKey::parse(

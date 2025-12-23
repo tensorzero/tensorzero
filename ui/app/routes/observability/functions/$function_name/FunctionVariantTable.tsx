@@ -8,7 +8,6 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { VariantCounts } from "~/utils/clickhouse/function";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
@@ -22,8 +21,10 @@ import {
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
+import type { InferenceCountByVariant } from "~/types/tensorzero";
+import { Input } from "~/components/ui/input";
 
-type VariantCountsWithMetadata = VariantCounts & {
+type VariantCountsWithMetadata = InferenceCountByVariant & {
   type: string;
 };
 
@@ -58,11 +59,11 @@ export default function FunctionVariantTable({
         header: "Type",
         cell: (info) => <Code>{info.getValue()}</Code>,
       }),
-      columnHelper.accessor("count", {
+      columnHelper.accessor("inference_count", {
         header: "Count",
         cell: (info) => info.getValue(),
       }),
-      columnHelper.accessor("last_used", {
+      columnHelper.accessor("last_used_at", {
         header: "Last Used",
         cell: (info) => <TableItemTime timestamp={info.getValue()} />,
       }),
@@ -89,10 +90,10 @@ export default function FunctionVariantTable({
       <div className="mb-4">
         <div className="relative">
           <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <input
+          <Input
             type="text"
             placeholder="Search variants..."
-            value={globalFilter ?? ""}
+            value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
           />

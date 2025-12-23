@@ -7,7 +7,7 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import type { InferenceEvaluationConfig } from "tensorzero-node";
+import type { InferenceEvaluationConfig } from "~/types/tensorzero";
 import EditableChip from "~/components/ui/EditableChip";
 import {
   toEvaluationUrl,

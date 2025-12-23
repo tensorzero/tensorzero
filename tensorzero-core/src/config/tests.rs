@@ -1,11 +1,7 @@
+use super::*;
 use std::{io::Write, path::PathBuf};
 use tempfile::NamedTempFile;
 use toml::de::DeTable;
-use tracing_test::traced_test;
-
-use super::*;
-
-use std::env;
 
 use crate::{embeddings::EmbeddingProviderConfig, inference::types::Role, variant::JsonMode};
 
@@ -14,7 +10,7 @@ use crate::{embeddings::EmbeddingProviderConfig, inference::types::Role, variant
 async fn test_config_from_toml_table_valid() {
     let config = get_sample_valid_config();
 
-    Config::load_from_toml(config, &SpanMap::new_empty())
+    Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect("Failed to load config");
 
@@ -23,7 +19,7 @@ async fn test_config_from_toml_table_valid() {
     config
         .remove("metrics")
         .expect("Failed to remove `[metrics]` section");
-    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+    let config = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect("Failed to load config");
 
@@ -40,7 +36,7 @@ async fn test_config_from_toml_table_valid() {
         VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode().unwrap(),
         _ => panic!("Expected a chat completion variant"),
     };
-    assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
+    assert_eq!(prompt_a_json_mode, &JsonMode::Tool);
 
     let prompt_b_json_mode = match &config
         .functions
@@ -138,22 +134,29 @@ async fn test_config_from_toml_table_valid() {
                     assert_eq!(chat_config.model(), &"anthropic::claude-3.5-sonnet".into());
                     assert_eq!(chat_config.weight(), Some(1.0));
                     assert_eq!(
-                            chat_config.templates().get_implicit_system_template().unwrap().template,
-                            PathWithContents {
-                                // We don't use a real path for programmatically generated templates
-                                // Instead we use this handle and then the same in minijinja
-                                path: ResolvedTomlPath::new_for_tests(
-                                    PathBuf::from(
-                                        "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
-                                    ),
-                                    Some("Return True if there is NSFW content in this generation.\n\n".to_string())
+                        chat_config
+                            .templates()
+                            .get_implicit_system_template()
+                            .unwrap()
+                            .template,
+                        PathWithContents {
+                            // We don't use a real path for programmatically generated templates
+                            // Instead we use this handle and then the same in minijinja
+                            path: ResolvedTomlPathData::new_for_tests(
+                                PathBuf::from(
+                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
                                 ),
-                                contents:
+                                Some(
                                     "Return True if there is NSFW content in this generation.\n\n"
-                                        .to_string(),
-                            }
-                        );
-                    assert_eq!(chat_config.json_mode(), Some(&JsonMode::ImplicitTool));
+                                        .to_string()
+                                )
+                            ),
+                            contents:
+                                "Return True if there is NSFW content in this generation.\n\n"
+                                    .to_string(),
+                        }
+                    );
+                    assert_eq!(chat_config.json_mode(), Some(&JsonMode::Tool));
                 }
                 _ => panic!("Expected a chat completion variant"),
             }
@@ -267,7 +270,8 @@ async fn test_config_gateway_bind_address() {
     let mut config = get_sample_valid_config();
 
     // Test with a valid bind address
-    let parsed_config = Config::load_from_toml(config.clone(), &SpanMap::new_empty())
+
+    let parsed_config = Config::load_from_toml(ConfigInput::Fresh(config.clone()))
         .await
         .unwrap();
     assert_eq!(
@@ -277,7 +281,7 @@ async fn test_config_gateway_bind_address() {
 
     // Test with missing gateway section
     config.remove("gateway");
-    let parsed_config = Config::load_from_toml(config.clone(), &SpanMap::new_empty())
+    let parsed_config = Config::load_from_toml(ConfigInput::Fresh(config.clone()))
         .await
         .unwrap();
     assert!(parsed_config.gateway.bind_address.is_none());
@@ -287,7 +291,7 @@ async fn test_config_gateway_bind_address() {
         "gateway".to_string(),
         toml::Value::Table(toml::Table::new()),
     );
-    let parsed_config = Config::load_from_toml(config.clone(), &SpanMap::new_empty())
+    let parsed_config = Config::load_from_toml(ConfigInput::Fresh(config.clone()))
         .await
         .unwrap();
     assert!(parsed_config.gateway.bind_address.is_none());
@@ -297,7 +301,7 @@ async fn test_config_gateway_bind_address() {
         "bind_address".to_string(),
         toml::Value::String("invalid_address".to_string()),
     );
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -322,7 +326,7 @@ async fn test_config_from_toml_table_missing_models() {
         .retain(|k, _| k == "generate_draft");
 
     assert_eq!(
-        Config::load_from_toml(config, &SpanMap::new_empty())
+        Config::load_from_toml(ConfigInput::Fresh(config))
             .await
             .unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -341,7 +345,7 @@ async fn test_config_from_toml_table_missing_providers() {
         .remove("providers")
         .expect("Failed to remove `[providers]` section");
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -373,11 +377,19 @@ async fn test_config_from_toml_table_missing_credentials() {
             table.insert("model".into(), "dummy".into());
             table.insert(
                 "system_template".into(),
-                [(
-                    "__tensorzero_remapped_path".into(),
-                    "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-                        .into(),
-                )]
+                [
+                    (
+                        "__tensorzero_remapped_path".into(),
+                        "tensorzero-core/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+                            .into(),
+                    ),
+                    (
+                        "__data".into(),
+                        std::fs::read_to_string("tensorzero-core/fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+                            .unwrap_or_else(|_| "You are a helpful assistant.".to_string())
+                            .into(),
+                    ),
+                ]
                 .into_iter()
                 .collect::<toml::Table>()
                 .into(),
@@ -417,7 +429,7 @@ async fn test_config_from_toml_table_missing_credentials() {
         }),
     );
 
-    let error = Config::load_from_toml(config.clone(), &SpanMap::new_empty())
+    let error = Config::load_from_toml(ConfigInput::Fresh(config.clone()))
         .await
         .unwrap_err();
     assert_eq!(
@@ -437,7 +449,7 @@ async fn test_config_from_toml_table_nonexistent_function() {
         .remove("functions")
         .expect("Failed to remove `[functions]` section");
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::Config {
@@ -459,7 +471,7 @@ async fn test_config_from_toml_table_missing_variants() {
         .remove("variants")
         .expect("Failed to remove `[variants]` section");
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::Config {
@@ -475,11 +487,13 @@ async fn test_config_from_toml_table_extra_variables_root() {
     let mut config = get_sample_valid_config();
     config.insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("unknown field `enable_agi`, expected one of"));
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("unknown field `enable_agi`, expected one of")
+    );
 }
 
 /// Ensure that the config parsing fails when there are extra variables for models
@@ -491,11 +505,13 @@ async fn test_config_from_toml_table_extra_variables_models() {
         .expect("Failed to get `models.claude-3-haiku-20240307` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("unknown field `enable_agi`, expected"));
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("unknown field `enable_agi`, expected")
+    );
 }
 
 /// Ensure that the config parsing fails when there models with blacklisted names
@@ -513,7 +529,7 @@ async fn test_config_from_toml_table_blacklisted_models() {
         .expect("Failed to get `models` section")
         .insert("anthropic::claude-3-haiku-20240307".into(), claude_config);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     let error = result.unwrap_err().to_string();
     assert!(
         error.contains(
@@ -532,11 +548,13 @@ async fn test_config_from_toml_table_extra_variables_providers() {
         .expect("Failed to get `models.claude-3-haiku-20240307.providers.anthropic` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("unknown field `enable_agi`, expected"));
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("unknown field `enable_agi`, expected")
+    );
 }
 
 /// Ensure that the config parsing fails when there are extra variables for functions
@@ -548,11 +566,13 @@ async fn test_config_from_toml_table_extra_variables_functions() {
         .expect("Failed to get `functions.generate_draft` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("unknown field `enable_agi`, expected"));
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("unknown field `enable_agi`, expected")
+    );
 }
 
 /// Ensure that the config parsing defaults properly for JSON functions with no output schema
@@ -564,7 +584,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
         .expect("Failed to get `functions.generate_draft` section")
         .remove("output_schema");
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     let config = result.unwrap();
     // Check that the output schema is set to {}
     let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
@@ -584,11 +604,13 @@ async fn test_config_from_toml_table_extra_variables_variants() {
         .expect("Failed to get `functions.generate_draft.variants.openai_promptA` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("unknown field `enable_agi`, expected"));
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("unknown field `enable_agi`, expected")
+    );
 }
 
 /// Ensure that the config parsing fails when there are extra variables for metrics
@@ -600,11 +622,13 @@ async fn test_config_from_toml_table_extra_variables_metrics() {
         .expect("Failed to get `metrics.task_success` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("unknown field `enable_agi`, expected"));
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("unknown field `enable_agi`, expected")
+    );
 }
 
 /// Ensure that the config validation fails when a model has no providers in `routing`
@@ -613,11 +637,13 @@ async fn test_config_validate_model_empty_providers() {
     let mut config = get_sample_valid_config();
     config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec![]);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     let error = result.unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("`models.gpt-4.1-mini`: `routing` must not be empty"));
+    assert!(
+        error
+            .to_string()
+            .contains("`models.gpt-4.1-mini`: `routing` must not be empty")
+    );
 }
 
 /// Ensure that the config validation fails when there are duplicate routing entries
@@ -626,7 +652,7 @@ async fn test_config_validate_model_duplicate_routing_entry() {
     let mut config = get_sample_valid_config();
     config["models"]["gpt-4.1-mini"]["routing"] =
         toml::Value::Array(vec!["openai".into(), "openai".into()]);
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     let error = result.unwrap_err().to_string();
     assert!(error.contains("`models.gpt-4.1-mini.routing`: duplicate entry `openai`"));
 }
@@ -636,7 +662,7 @@ async fn test_config_validate_model_duplicate_routing_entry() {
 async fn test_config_validate_model_routing_entry_not_in_providers() {
     let mut config = get_sample_valid_config();
     config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
 }
 
@@ -644,115 +670,131 @@ async fn test_config_validate_model_routing_entry_not_in_providers() {
 #[tokio::test]
 async fn test_config_system_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["system_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_chat"]["system_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
+
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["system_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_json"]["system_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config loading fails when the user schema does not exist
 #[tokio::test]
 async fn test_config_user_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["user_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_chat"]["user_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
+
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["user_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_json"]["user_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config loading fails when the assistant schema does not exist
 #[tokio::test]
 async fn test_config_assistant_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
     let error = result.unwrap_err();
-    if let ErrorDetails::Config { message } = error.get_details() {
-        assert!(message.contains("Failed to read file at"));
-        assert!(message.contains("non_existent_file.json"));
-        assert!(message.contains("No such file or directory"));
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
     } else {
-        panic!("Expected Config error, got: {error:?}");
+        panic!("Expected JsonSchema error, got: {error:?}");
     }
 
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
     let error = result.unwrap_err();
-    if let ErrorDetails::Config { message } = error.get_details() {
-        assert!(message.contains("Failed to read file at"));
-        assert!(message.contains("non_existent_file.json"));
-        assert!(message.contains("No such file or directory"));
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
     } else {
-        panic!("Expected Config error, got: {error:?}");
+        panic!("Expected JsonSchema error, got: {error:?}");
     }
 }
 
@@ -770,7 +812,7 @@ async fn test_config_system_schema_is_needed() {
         .unwrap()
         .remove("best_of_n");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -783,7 +825,7 @@ async fn test_config_system_schema_is_needed() {
         .unwrap()
         .remove("system_schema");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -805,7 +847,7 @@ async fn test_config_user_schema_is_needed() {
         .unwrap()
         .remove("best_of_n");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -819,7 +861,7 @@ async fn test_config_user_schema_is_needed() {
         .unwrap()
         .remove("user_schema");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -842,7 +884,7 @@ async fn test_config_assistant_schema_is_needed() {
         .unwrap()
         .remove("best_of_n");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -855,7 +897,7 @@ async fn test_config_assistant_schema_is_needed() {
         .unwrap()
         .remove("assistant_schema");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -880,7 +922,7 @@ async fn test_config_best_of_n_candidate_not_found() {
             toml::Value::Array(vec!["non_existent_candidate".into()]),
         );
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(sample_config)).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::UnknownCandidate {
@@ -897,7 +939,7 @@ async fn test_config_validate_function_variant_negative_weight() {
     config["functions"]["generate_draft"]["variants"]["openai_promptA"]["weight"] =
         toml::Value::Float(-1.0);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::Config {
@@ -916,7 +958,7 @@ async fn test_config_validate_variant_model_not_in_models() {
     config["functions"]["generate_draft"]["variants"]["openai_promptA"]["model"] =
         "non_existent_model".into();
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
 
     assert_eq!(
         result.unwrap_err(),
@@ -931,23 +973,33 @@ async fn test_config_validate_variant_model_not_in_models() {
 #[tokio::test]
 async fn test_config_validate_variant_template_nonexistent() {
     let mut config = get_sample_valid_config();
-    config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] = [(
-        "__tensorzero_remapped_path".into(),
-        "nonexistent_template".into(),
-    )]
+    config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "nonexistent_template".into(),
+        ),
+        (
+            "__data".into(),
+            "invalid template content with {{ unclosed".into(),
+        ),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
 
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at nonexistent_template: No such file or directory (os error 2)".to_string()
-            }
-            .into()
+    // With eager loading, this should now fail during template parsing
+    let error = result.unwrap_err();
+    if let ErrorDetails::MiniJinjaTemplate { message, .. } = error.get_details() {
+        assert!(
+            message.contains("expected")
+                || message.contains("unclosed")
+                || message.contains("invalid")
         );
+    } else {
+        panic!("Expected MiniJinjaTemplate error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config validation fails when an evaluation points at a nonexistent function
@@ -956,7 +1008,7 @@ async fn test_config_validate_evaluation_function_nonexistent() {
     let mut config = get_sample_valid_config();
     config["evaluations"]["evaluation1"]["function_name"] = "nonexistent_function".into();
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
 
     assert_eq!(
             result.unwrap_err(),
@@ -981,7 +1033,7 @@ async fn test_config_validate_evaluation_name_contains_double_colon() {
         .unwrap()
         .insert("bad::evaluation".to_string(), evaluation1);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
 
     assert_eq!(
             result.unwrap_err(),
@@ -1005,7 +1057,7 @@ async fn test_config_validate_function_nonexistent_tool() {
     config["functions"]["generate_draft"]["tools"] =
         toml::Value::Array(vec!["non_existent_tool".into()]);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
 
     assert_eq!(
             result.unwrap_err(),
@@ -1031,11 +1083,11 @@ async fn test_config_validate_function_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_function".to_string(), old_function_entry);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "Function name cannot start with 'tensorzero::': tensorzero::bad_function"
+            message: "User-defined function name cannot start with 'tensorzero::': tensorzero::bad_function"
                 .to_string()
         })
     );
@@ -1057,7 +1109,7 @@ async fn test_config_validate_metric_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_metric".to_string(), old_metric_entry);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -1083,7 +1135,7 @@ async fn test_config_validate_model_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_model".to_string(), old_model_entry);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
@@ -1109,7 +1161,7 @@ async fn test_config_validate_embedding_model_name_tensorzero_prefix() {
         old_embedding_model_entry,
     );
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
@@ -1137,7 +1189,7 @@ async fn test_config_validate_tool_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_tool".to_string(), old_tool_entry);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -1156,7 +1208,7 @@ async fn test_config_validate_chat_function_json_mode() {
         .unwrap()
         .insert("json_mode".to_string(), "on".into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
 
     // Check that the config is rejected, since `generate_draft` is not a json function
     let err_msg = result.unwrap_err().to_string();
@@ -1185,14 +1237,16 @@ async fn test_config_validate_variant_name_tensorzero_prefix() {
 
     // This test will only pass if your code actually rejects variant names with that prefix
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
 
     // Adjust the expected message if your code gives a different error shape for variants
     // Or remove this test if variant names are *not* validated in that manner
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("tensorzero::bad_variant"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("tensorzero::bad_variant")
+    );
 }
 
 /// Ensure that the config validation fails when a model provider's name starts with `tensorzero::`
@@ -1221,7 +1275,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
         }
     }
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
 
     assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
 }
@@ -1230,12 +1284,12 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 #[tokio::test]
 async fn test_get_all_templates() {
     let config_table = get_sample_valid_config();
-    let config = Config::load_from_toml(config_table, &SpanMap::new_empty())
+    let config = Config::load_from_toml(ConfigInput::Fresh(config_table))
         .await
         .expect("Failed to load config");
 
     // Get all templates
-    let templates = config.get_templates();
+    let templates = Config::get_templates(&config.functions).unwrap();
 
     // Check if all expected templates are present
     assert_eq!(
@@ -1432,19 +1486,22 @@ async fn test_load_bad_extra_body_delete() {
         [functions.bash_assistant]
         type = "chat"
 
-        [functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+        [functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
         type = "chat_completion"
-        model = "anthropic::claude-3-7-sonnet-20250219"
+        model = "anthropic::claude-sonnet-4-5-20250929"
         max_tokens = 2048
         extra_body = [{ pointer = "/invalid-field-should-be-deleted", delete = false }]
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Config loading should fail")
         .to_string();
-    assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing replacement config: 'delete' must be 'true', or not set");
+    assert_eq!(
+        err,
+        "functions.bash_assistant: variants.anthropic_claude_4_5_sonnet_20250929: extra_body.[0]: Error deserializing replacement config: `delete` must be `true`, or not set"
+    );
 }
 
 #[tokio::test]
@@ -1453,22 +1510,25 @@ async fn test_load_bad_config_error_path() {
 [functions.bash_assistant]
 type = "chat"
 
-[functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+[functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
 type = "chat_completion"
-model = "anthropic::claude-3-7-sonnet-20250219"
+model = "anthropic::claude-sonnet-4-5-20250929"
 max_tokens = 2048
 
-[functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219.extra_body]
+[functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929.extra_body]
 tools = [{ type = "bash_20250124", name = "bash" }]
 thinking = { type = "enabled", budget_tokens = 1024 }
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Config loading should fail")
         .to_string();
-    assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body: invalid type: map, expected a sequence");
+    assert_eq!(
+        err,
+        "functions.bash_assistant: variants.anthropic_claude_4_5_sonnet_20250929: extra_body: invalid type: map, expected a sequence"
+    );
 }
 
 #[tokio::test]
@@ -1506,18 +1566,18 @@ async fn test_config_load_shorthand_models_only() {
         false,
     )
     .unwrap();
-    env::set_var("OPENAI_API_KEY", "sk-something");
-    env::set_var("ANTHROPIC_API_KEY", "sk-something");
-    env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("OPENAI_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("ANTHROPIC_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_OPENAI_API_KEY", "sk-something");
 
-    Config::load_from_toml(config.table, &config.span_map)
+    Config::load_from_toml(ConfigInput::Fresh(config.table))
         .await
         .expect("Failed to load config");
 }
 
 #[tokio::test]
-#[traced_test]
 async fn test_empty_config() {
+    let logs_contain = crate::utils::testing::capture_logs();
     let tempfile = NamedTempFile::new().unwrap();
     write!(&tempfile, "").unwrap();
     Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
@@ -1579,7 +1639,7 @@ async fn test_model_provider_unknown_field() {
 
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Config should fail to load");
     assert!(
@@ -1591,9 +1651,9 @@ async fn test_model_provider_unknown_field() {
 /// Get a sample valid config for testing
 fn get_sample_valid_config() -> toml::Table {
     let config_str = include_str!("../../fixtures/config/tensorzero.toml");
-    env::set_var("OPENAI_API_KEY", "sk-something");
-    env::set_var("ANTHROPIC_API_KEY", "sk-something");
-    env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("OPENAI_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("ANTHROPIC_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_OPENAI_API_KEY", "sk-something");
 
     let table = DeTable::parse(config_str).expect("Failed to parse sample config");
 
@@ -1622,7 +1682,7 @@ async fn test_bedrock_err_no_auto_detect_region() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Failed to load bedrock");
     let err_msg = err.to_string();
@@ -1636,8 +1696,8 @@ async fn test_bedrock_err_no_auto_detect_region() {
 async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
     // We want auto-detection to fail, so we clear this environment variable.
     // We use 'nextest' as our runner, so each test runs in its own process
-    std::env::remove_var("AWS_REGION");
-    std::env::remove_var("AWS_DEFAULT_REGION");
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
 
     let config_str = r#"
         [gateway]
@@ -1653,7 +1713,7 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Failed to load bedrock");
     let err_msg = err.to_string();
@@ -1688,12 +1748,10 @@ async fn test_bedrock_region_and_allow_auto() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    Config::load_from_toml(config, &SpanMap::new_empty())
+    Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect("Failed to construct config with valid AWS bedrock provider");
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_load_no_config_file() {
     let err = &ConfigFileGlob::new_from_path(Path::new("nonexistent.toml"))
@@ -1731,8 +1789,8 @@ async fn test_config_missing_filesystem_object_store() {
 }
 
 #[tokio::test]
-#[traced_test]
 async fn test_config_no_verify_creds_missing_filesystem_object_store() {
+    let logs_contain = crate::utils::testing::capture_logs();
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1751,16 +1809,17 @@ async fn test_config_no_verify_creds_missing_filesystem_object_store() {
     .await
     .unwrap();
     assert!(config.object_store_info.is_none());
-    assert!(logs_contain("Filesystem object store path does not exist: /fake-tensorzero-path/other-path. Treating object store as unconfigured"));
+    assert!(logs_contain(
+        "Filesystem object store path does not exist: /fake-tensorzero-path/other-path. Treating object store as unconfigured"
+    ));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_load_invalid_s3_creds() {
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
+
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1783,14 +1842,13 @@ async fn test_config_load_invalid_s3_creds() {
         "Unexpected error message: {err}"
     );
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_blocked_s3_http_endpoint_default() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1816,17 +1874,18 @@ async fn test_config_blocked_s3_http_endpoint_default() {
         err.contains("BadScheme"),
         "Missing `BadScheme` in error: {err}"
     );
-    assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
+    assert!(logs_contain(
+        "Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"
+    ));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_blocked_s3_http_endpoint_override() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
-    std::env::set_var("AWS_ALLOW_HTTP", "true");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ALLOW_HTTP", "true");
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1853,19 +1912,20 @@ async fn test_config_blocked_s3_http_endpoint_override() {
         err.contains("BadScheme"),
         "Missing `BadScheme` in error: {err}"
     );
-    assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
+    assert!(logs_contain(
+        "Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"
+    ));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_s3_allow_http_config() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
     // Make `object_store` fail immediately (with the expected dns resolution error)
     // to speed up this test.
-    std::env::set_var("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1896,18 +1956,17 @@ async fn test_config_s3_allow_http_config() {
         "[object_storage.allow_http]` is set to `true` - this is insecure"
     ));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_s3_allow_http_env_var() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
     // Make `object_store` fail immediately (with the expected dns resolution error)
     // to speed up this test.
-    std::env::set_var("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
-    std::env::set_var("AWS_ALLOW_HTTP", "true");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ALLOW_HTTP", "true");
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1964,11 +2023,14 @@ async fn test_missing_json_mode_chat() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
         .unwrap_err();
 
-    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.test]` (parent function `basic_test` is a JSON function)");
+    assert_eq!(
+        err.to_string(),
+        "`json_mode` must be specified for `[functions.basic_test.variants.test]` (parent function `basic_test` is a JSON function)"
+    );
 }
 
 #[tokio::test]
@@ -2002,11 +2064,14 @@ async fn test_missing_json_mode_dicl() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
         .unwrap_err();
 
-    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.dicl]` (parent function `basic_test` is a JSON function)");
+    assert_eq!(
+        err.to_string(),
+        "`json_mode` must be specified for `[functions.basic_test.variants.dicl]` (parent function `basic_test` is a JSON function)"
+    );
 }
 
 #[tokio::test]
@@ -2041,11 +2106,14 @@ async fn test_missing_json_mode_mixture_of_n() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
         .unwrap_err();
 
-    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.mixture_of_n_variant.fuser]` (parent function `basic_test` is a JSON function)");
+    assert_eq!(
+        err.to_string(),
+        "`json_mode` must be specified for `[functions.basic_test.variants.mixture_of_n_variant.fuser]` (parent function `basic_test` is a JSON function)"
+    );
 }
 
 #[tokio::test]
@@ -2082,7 +2150,7 @@ async fn test_missing_json_mode_best_of_n() {
 
     // This should succeed (evaluator's `json_mode` is optional)
     SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
         .expect("Config should load successfully with missing evaluator json_mode");
 }
@@ -2110,7 +2178,10 @@ async fn test_config_load_optional_credentials_validation() {
     if cfg!(feature = "e2e_tests") {
         assert!(res.is_ok());
     } else {
-        assert_eq!(res.unwrap_err().to_string(), "models.my-model.providers.openai: API key missing for provider openai: Failed to read credentials file - No such file or directory (os error 2)");
+        assert_eq!(
+            res.unwrap_err().to_string(),
+            "models.my-model.providers.openai: API key missing for provider openai: Failed to read credentials file - No such file or directory (os error 2)"
+        );
     }
 
     // Should not fail since validation is disabled
@@ -2142,7 +2213,7 @@ async fn test_gcp_no_endpoint_and_model() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
         .unwrap_err();
 
@@ -2184,7 +2255,7 @@ async fn test_config_duplicate_user_schema() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(ConfigInput::Fresh(config.table))
         .await
         .expect_err("Config should fail to load");
 
@@ -2223,7 +2294,7 @@ async fn test_config_named_schema_no_template() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(ConfigInput::Fresh(config.table))
         .await
         .expect_err("Config should fail to load");
 
@@ -2260,11 +2331,14 @@ async fn test_config_duplicate_user_template() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(ConfigInput::Fresh(config.table))
         .await
         .expect_err("Config should fail to load");
 
-    assert_eq!(err.to_string(), "functions.test.variants.bad_user_template: Cannot specify both `templates.user.path` and `user_template`");
+    assert_eq!(
+        err.to_string(),
+        "functions.test.variants.bad_user_template: Cannot specify both `templates.user.path` and `user_template`"
+    );
 }
 
 #[tokio::test]
@@ -2293,11 +2367,61 @@ async fn test_config_invalid_template_no_schema() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(ConfigInput::Fresh(config.table))
         .await
         .expect_err("Config should fail to load");
 
-    assert_eq!(err.to_string(), "`functions.no_schema.variants.invalid_system_template.system_template`: template needs variables: [assistant_name] but only `system_text` is allowed when template has no schema");
+    assert_eq!(
+        err.to_string(),
+        "`functions.no_schema.variants.invalid_system_template.system_template`: template needs variables: [assistant_name] but only `system_text` is allowed when template has no schema"
+    );
+}
+
+#[tokio::test]
+async fn deny_timeout_with_default_global_timeout() {
+    let config = r#"
+    [models.slow_with_timeout]
+    routing = ["slow"]
+
+    [models.slow_with_timeout.providers.slow]
+    type = "dummy"
+    model_name = "good"
+    timeouts = { non_streaming.total_ms = 99999999 }
+    "#;
+    let config = toml::from_str(config).unwrap();
+
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
+        .await
+        .expect_err("Config should fail to load");
+
+    assert_eq!(
+        err.to_string(),
+        "The `timeouts.non_streaming.total_ms` value `99999999` is greater than `gateway.global_outbound_http_timeout_ms`: `300000`"
+    );
+}
+
+#[tokio::test]
+async fn deny_timeout_with_non_default_global_timeout() {
+    let config = r#"
+    gateway.global_outbound_http_timeout_ms = 200
+    [models.slow_with_timeout]
+    routing = ["slow"]
+
+    [models.slow_with_timeout.providers.slow]
+    type = "dummy"
+    model_name = "good"
+    timeouts = { non_streaming.total_ms = 500 }
+    "#;
+    let config = toml::from_str(config).unwrap();
+
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
+        .await
+        .expect_err("Config should fail to load");
+
+    assert_eq!(
+        err.to_string(),
+        "The `timeouts.non_streaming.total_ms` value `500` is greater than `gateway.global_outbound_http_timeout_ms`: `200`"
+    );
 }
 
 #[tokio::test]
@@ -2313,14 +2437,14 @@ async fn deny_bad_timeout_fields() {
     "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Config should fail to load");
 
     assert_eq!(
-            err.to_string(),
-            "models.slow_with_timeout.providers.slow.timeouts.bad_field: unknown field `bad_field`, expected `non_streaming` or `streaming`"
-        );
+        err.to_string(),
+        "models.slow_with_timeout.providers.slow.timeouts.bad_field: unknown field `bad_field`, expected `non_streaming` or `streaming`"
+    );
 }
 
 #[tokio::test]
@@ -2336,14 +2460,14 @@ async fn deny_bad_timeouts_non_streaming_field() {
         "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Config should fail to load");
 
     assert_eq!(
-            err.to_string(),
-            "models.slow_with_timeout.providers.slow.timeouts.non_streaming.unknown_field: unknown field `unknown_field`, expected `total_ms`"
-        );
+        err.to_string(),
+        "models.slow_with_timeout.providers.slow.timeouts.non_streaming.unknown_field: unknown field `unknown_field`, expected `total_ms`"
+    );
 }
 
 #[tokio::test]
@@ -2373,9 +2497,9 @@ async fn deny_user_schema_and_input_wrapper() {
             .to_string();
 
     assert_eq!(
-            err.to_string(),
-            "functions.basic_test.variants.good_variant: Cannot provide both `input_wrappers.user` and `user_schema`"
-        );
+        err.to_string(),
+        "functions.basic_test.variants.good_variant: Cannot provide both `input_wrappers.user` and `user_schema`"
+    );
 }
 
 #[tokio::test]
@@ -2405,9 +2529,9 @@ async fn deny_user_template_and_input_wrapper() {
             .to_string();
 
     assert_eq!(
-            err.to_string(),
-            "functions.basic_test.variants.good_variant: Cannot provide both `input_wrappers.user` and `user` template"
-        );
+        err.to_string(),
+        "functions.basic_test.variants.good_variant: Cannot provide both `input_wrappers.user` and `user` template"
+    );
 }
 
 #[tokio::test]
@@ -2440,9 +2564,9 @@ async fn deny_fuser_user_template_and_input_wrapper() {
             .to_string();
 
     assert_eq!(
-            err.to_string(),
-            "functions.basic_test.variants.good_variant.fuser: Cannot provide both `input_wrappers.user` and `user` template"
-        );
+        err.to_string(),
+        "functions.basic_test.variants.good_variant.fuser: Cannot provide both `input_wrappers.user` and `user` template"
+    );
 }
 
 #[tokio::test]
@@ -2475,9 +2599,9 @@ async fn deny_evaluator_user_template_and_input_wrapper() {
             .to_string();
 
     assert_eq!(
-            err.to_string(),
-            "functions.basic_test.variants.good_variant.evaluator: Cannot provide both `input_wrappers.user` and `user` template"
-        );
+        err.to_string(),
+        "functions.basic_test.variants.good_variant.evaluator: Cannot provide both `input_wrappers.user` and `user` template"
+    );
 }
 
 #[tokio::test]
@@ -2493,14 +2617,14 @@ async fn deny_bad_timeouts_streaming_field() {
         "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Config should fail to load");
 
     assert_eq!(
-            err.to_string(),
-            "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
-        );
+        err.to_string(),
+        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
+    );
 }
 
 #[tokio::test]
@@ -2720,11 +2844,14 @@ async fn test_config_schema_missing_template() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(ConfigInput::Fresh(config.table))
         .await
         .expect_err("Config should fail to load");
 
-    assert_eq!(err.to_string(), "`functions.test.variants.missing_template.templates.my_custom_schema` is required when `functions.test.schemas.my_custom_schema` is specified");
+    assert_eq!(
+        err.to_string(),
+        "`functions.test.variants.missing_template.templates.my_custom_schema` is required when `functions.test.schemas.my_custom_schema` is specified"
+    );
 }
 
 #[tokio::test]
@@ -2755,7 +2882,7 @@ async fn test_experimentation_with_variant_weights_error_uniform() {
         "#;
 
     let config = toml::from_str(config_str).expect("Failed to parse config");
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Config should fail to load");
 
@@ -2801,7 +2928,7 @@ async fn test_experimentation_with_variant_weights_error_static_weights() {
         "#;
 
     let config = toml::from_str(config_str).expect("Failed to parse config");
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Config should fail to load");
 
@@ -2857,7 +2984,7 @@ async fn test_experimentation_with_variant_weights_error_track_and_stop() {
         "#;
 
     let config = toml::from_str(config_str).expect("Failed to parse config");
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect_err("Config should fail to load");
 
@@ -2974,10 +3101,12 @@ async fn test_config_file_glob_integration() {
 
     // Should match 2 .toml files, not the .md file
     assert_eq!(config_glob.paths.len(), 2);
-    assert!(config_glob
-        .paths
-        .iter()
-        .all(|p| p.extension().unwrap() == "toml"));
+    assert!(
+        config_glob
+            .paths
+            .iter()
+            .all(|p| p.extension().unwrap() == "toml")
+    );
 }
 
 #[tokio::test]
@@ -3000,4 +3129,112 @@ async fn test_config_file_glob_recursive() {
 
     // Should match both files
     assert_eq!(config_glob.paths.len(), 2);
+}
+
+/// Test that built-in functions are automatically loaded
+#[tokio::test]
+async fn test_built_in_functions_loaded() {
+    // Load a minimal config (empty table)
+    let config = toml::Table::new();
+    let config = Config::load_from_toml(ConfigInput::Fresh(config))
+        .await
+        .expect("Failed to load config");
+
+    // Check that both built-in functions are available
+    assert!(config.functions.contains_key("tensorzero::hello_chat"));
+    assert!(config.functions.contains_key("tensorzero::hello_json"));
+
+    // Verify hello_chat is a Chat function with no variants
+    let hello_chat = config.functions.get("tensorzero::hello_chat").unwrap();
+    match &**hello_chat {
+        FunctionConfig::Chat(chat_config) => {
+            assert!(chat_config.variants.is_empty());
+            assert!(chat_config.tools.is_empty());
+            assert!(chat_config.description.is_some());
+        }
+        FunctionConfig::Json(_) => panic!("Expected tensorzero::hello_chat to be a Chat function"),
+    }
+
+    // Verify hello_json is a JSON function with no variants
+    let hello_json = config.functions.get("tensorzero::hello_json").unwrap();
+    match &**hello_json {
+        FunctionConfig::Json(json_config) => {
+            assert!(json_config.variants.is_empty());
+            assert!(json_config.description.is_some());
+        }
+        FunctionConfig::Chat(_) => panic!("Expected tensorzero::hello_json to be a JSON function"),
+    }
+}
+
+/// Test that built-in functions can be retrieved via get_function
+#[tokio::test]
+async fn test_get_built_in_function() {
+    let config = toml::Table::new();
+    let config = Config::load_from_toml(ConfigInput::Fresh(config))
+        .await
+        .expect("Failed to load config");
+
+    // Should be able to get both built-in functions
+    assert!(config.get_function("tensorzero::hello_chat").is_ok());
+    assert!(config.get_function("tensorzero::hello_json").is_ok());
+}
+
+/// Test that built-in functions work alongside user-defined functions
+#[tokio::test]
+async fn test_built_in_and_user_functions_coexist() {
+    let config = get_sample_valid_config();
+
+    let config = Config::load_from_toml(ConfigInput::Fresh(config))
+        .await
+        .expect("Failed to load config");
+
+    // Check that both built-in and user functions exist
+    assert!(config.functions.contains_key("tensorzero::hello_chat"));
+    assert!(config.functions.contains_key("tensorzero::hello_json"));
+    assert!(config.functions.contains_key("generate_draft"));
+}
+
+/// Test that the deprecated `gateway.template_filesystem_access.enabled` option
+/// is still accepted and emits a deprecation warning
+#[tokio::test]
+async fn test_deprecated_template_filesystem_access_enabled() {
+    let logs_contain = crate::utils::testing::capture_logs();
+    let tempfile = NamedTempFile::new().unwrap();
+    write!(
+        &tempfile,
+        r"
+            [gateway.template_filesystem_access]
+            enabled = true
+
+            [functions]"
+    )
+    .unwrap();
+
+    // Should successfully load config despite deprecated field
+    let _config = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(tempfile.path()).unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    // Should emit deprecation warning
+    assert!(logs_contain(
+        "The `gateway.template_filesystem_access.enabled` flag is deprecated"
+    ));
+}
+
+#[tokio::test]
+async fn test_nested_skip_credential_validation() {
+    assert!(!skip_credential_validation());
+    with_skip_credential_validation(async move {
+        assert!(skip_credential_validation());
+        with_skip_credential_validation(async move {
+            assert!(skip_credential_validation());
+        })
+        .await;
+        assert!(skip_credential_validation());
+    })
+    .await;
+    assert!(!skip_credential_validation());
 }

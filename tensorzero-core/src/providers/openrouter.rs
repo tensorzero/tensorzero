@@ -6,7 +6,7 @@ use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::borrow::Cow;
 
 use crate::http::TensorzeroHttpClient;
@@ -17,34 +17,56 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
+use crate::embeddings::EmbeddingEncodingFormat;
+use crate::embeddings::{
+    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
+    EmbeddingProviderResponse, EmbeddingRequest,
+};
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
+};
+use crate::inference::InferenceProvider;
+use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::file::require_image;
-use crate::inference::types::ObjectStorageFile;
+use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Usage,
+    TextChunk, Unknown, Usage,
+    resolved_input::{FileUrl, LazyFile},
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 
+use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
-    inject_extra_request_data_and_send_eventsource,
+    inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
+};
+
+use super::chat_completions::{
+    ChatCompletionAllowedToolsMode, ChatCompletionTool, ChatCompletionToolChoice,
+    ChatCompletionToolChoiceString,
+};
+// Import unified OpenAI types for allowed_tools support
+use super::openai::{
+    AllowedToolsChoice as OpenAIAllowedToolsChoice,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode,
+    SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
 use crate::inference::TensorZeroEventError;
+use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::providers::openai::OpenAIEmbeddingUsage;
 
 lazy_static! {
     static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
@@ -57,9 +79,14 @@ lazy_static! {
 const PROVIDER_NAME: &str = "OpenRouter";
 pub const PROVIDER_TYPE: &str = "openrouter";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+type PreparedOpenRouterToolsResult<'a> = (
+    Option<Vec<OpenRouterTool<'a>>>,
+    Option<OpenRouterToolChoice<'a>>,
+    Option<bool>,
+);
+
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OpenRouterProvider {
     model_name: String,
     #[serde(skip)]
@@ -116,29 +143,31 @@ impl OpenRouterCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Option<&'a SecretString>, Error> {
+    ) -> Result<Option<&'a SecretString>, DelayedError> {
         match self {
             OpenRouterCredentials::Static(api_key) => Ok(Some(api_key)),
             OpenRouterCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 }))
                 .transpose()
             }
             OpenRouterCredentials::None => Ok(None),
             OpenRouterCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
         }
     }
@@ -153,7 +182,10 @@ impl InferenceProvider for OpenRouterProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_body_obj = OpenRouterRequest::new(&self.model_name, request.request).await?;
         let request_body = serde_json::to_value(request_body_obj).map_err(|e| {
@@ -263,7 +295,10 @@ impl InferenceProvider for OpenRouterProvider {
                     })
                 })?;
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let mut request_builder = http_client
             .post(request_url)
@@ -288,6 +323,7 @@ impl InferenceProvider for OpenRouterProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -318,11 +354,116 @@ impl InferenceProvider for OpenRouterProvider {
     }
 }
 
+impl EmbeddingProvider for OpenRouterProvider {
+    async fn embed(
+        &self,
+        request: &EmbeddingRequest,
+        client: &TensorzeroHttpClient,
+        dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
+    ) -> Result<EmbeddingProviderResponse, Error> {
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
+        let request_body = OpenRouterEmbeddingRequest::new(
+            &self.model_name,
+            &request.input,
+            request.encoding_format,
+        );
+        let request_url = get_embedding_url(&OPENROUTER_DEFAULT_BASE_URL)?;
+        let start_time = Instant::now();
+        let mut request_builder = client
+            .post(request_url)
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+
+        let request_body_value = serde_json::to_value(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing OpenRouter embedding request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &FullExtraBodyConfig::default(), // No overrides supported
+            &Default::default(),             // No extra headers for embeddings yet
+            model_provider_data,
+            &self.model_name,
+            request_body_value,
+            request_builder,
+        )
+        .await?;
+        if res.status().is_success() {
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+
+            let response: OpenRouterEmbeddingResponse = serde_json::from_str(&raw_response)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+            let latency = Latency::NonStreaming {
+                response_time: start_time.elapsed(),
+            };
+
+            Ok(OpenRouterEmbeddingResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+                raw_response,
+            }
+            .try_into()?)
+        } else {
+            Err(handle_openrouter_error(
+                &raw_request,
+                res.status(),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?,
+                PROVIDER_TYPE,
+            ))
+        }
+    }
+}
+
 pub fn stream_openrouter(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let mut tool_call_ids = Vec::new();
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
@@ -334,7 +475,7 @@ pub fn stream_openrouter(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(provider_type.clone(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, None).await);
                         }
                     }
                 }
@@ -349,7 +490,7 @@ pub fn stream_openrouter(
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                 ),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: provider_type.clone(),
                             }));
@@ -372,6 +513,18 @@ pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
         url.set_path(&format!("{}/", url.path()));
     }
     url.join("chat/completions").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
+
+fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("embeddings").map_err(|e| {
         Error::new(ErrorDetails::InvalidBaseUrl {
             message: e.to_string(),
         })
@@ -425,6 +578,87 @@ pub(super) fn handle_openrouter_error(
     }
 }
 
+// Embedding-related structures
+#[derive(Debug, Serialize)]
+struct OpenRouterEmbeddingRequest<'a> {
+    model: &'a str,
+    input: &'a EmbeddingInput,
+    // Note: OpenRouter doesn't support the dimensions parameter
+    encoding_format: EmbeddingEncodingFormat,
+}
+
+impl<'a> OpenRouterEmbeddingRequest<'a> {
+    fn new(
+        model: &'a str,
+        input: &'a EmbeddingInput,
+        encoding_format: EmbeddingEncodingFormat,
+    ) -> Self {
+        Self {
+            model,
+            input,
+            encoding_format,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct OpenRouterEmbeddingResponse {
+    data: Vec<OpenRouterEmbeddingData>,
+    usage: Option<OpenAIEmbeddingUsage>,
+}
+
+struct OpenRouterEmbeddingResponseWithMetadata<'a> {
+    response: OpenRouterEmbeddingResponse,
+    latency: Latency,
+    request: OpenRouterEmbeddingRequest<'a>,
+    raw_response: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct OpenRouterEmbeddingData {
+    embedding: Embedding,
+}
+
+impl<'a> TryFrom<OpenRouterEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
+    type Error = Error;
+    fn try_from(
+        response: OpenRouterEmbeddingResponseWithMetadata<'a>,
+    ) -> Result<Self, Self::Error> {
+        let OpenRouterEmbeddingResponseWithMetadata {
+            response,
+            latency,
+            request,
+            raw_response,
+        } = response;
+        let raw_request = serde_json::to_string(&request).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        let embeddings = response
+            .data
+            .into_iter()
+            .map(|embedding| embedding.embedding)
+            .collect();
+
+        Ok(EmbeddingProviderResponse::new(
+            embeddings,
+            request.input.clone(),
+            raw_request,
+            raw_response,
+            response.usage.map(|usage| usage.into()).unwrap_or_default(),
+            latency,
+        ))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenRouterSystemRequestMessage<'a> {
     pub content: Cow<'a, str>,
@@ -467,9 +701,21 @@ where
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpenRouterContentBlock<'a> {
-    Text { text: Cow<'a, str> },
-    ImageUrl { image_url: OpenRouterImageUrl },
-    Unknown { data: Cow<'a, Value> },
+    Text {
+        text: Cow<'a, str>,
+    },
+    ImageUrl {
+        image_url: OpenRouterImageUrl,
+    },
+    File {
+        file: OpenRouterFile<'a>,
+    },
+    InputAudio {
+        input_audio: OpenRouterInputAudio<'a>,
+    },
+    Unknown {
+        data: Cow<'a, Value>,
+    },
 }
 
 impl Serialize for OpenRouterContentBlock<'_> {
@@ -480,13 +726,27 @@ impl Serialize for OpenRouterContentBlock<'_> {
         #[derive(Serialize)]
         #[serde(tag = "type", rename_all = "snake_case")]
         enum Helper<'a> {
-            Text { text: &'a str },
-            ImageUrl { image_url: &'a OpenRouterImageUrl },
+            Text {
+                text: &'a str,
+            },
+            ImageUrl {
+                image_url: &'a OpenRouterImageUrl,
+            },
+            File {
+                file: &'a OpenRouterFile<'a>,
+            },
+            InputAudio {
+                input_audio: &'a OpenRouterInputAudio<'a>,
+            },
         }
         match self {
             OpenRouterContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
             OpenRouterContentBlock::ImageUrl { image_url } => {
                 Helper::ImageUrl { image_url }.serialize(serializer)
+            }
+            OpenRouterContentBlock::File { file } => Helper::File { file }.serialize(serializer),
+            OpenRouterContentBlock::InputAudio { input_audio } => {
+                Helper::InputAudio { input_audio }.serialize(serializer)
             }
             OpenRouterContentBlock::Unknown { data } => data.serialize(serializer),
         }
@@ -497,6 +757,22 @@ impl Serialize for OpenRouterContentBlock<'_> {
 #[serde(rename_all = "snake_case")]
 pub struct OpenRouterImageUrl {
     pub url: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct OpenRouterFile<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_data: Option<Cow<'a, str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<Cow<'a, str>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct OpenRouterInputAudio<'a> {
+    pub data: Cow<'a, str>,
+    pub format: Cow<'a, str>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -559,6 +835,8 @@ impl OpenRouterRequestMessage<'_> {
             OpenRouterRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenRouterContentBlock::Text { text } => text.to_lowercase().contains(value),
                 OpenRouterContentBlock::ImageUrl { .. } => false,
+                OpenRouterContentBlock::File { .. } => false,
+                OpenRouterContentBlock::InputAudio { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
                 OpenRouterContentBlock::Unknown { data: _ } => false,
             }),
@@ -569,6 +847,8 @@ impl OpenRouterRequestMessage<'_> {
                             text.to_lowercase().contains(value)
                         }
                         OpenRouterContentBlock::ImageUrl { .. } => false,
+                        OpenRouterContentBlock::File { .. } => false,
+                        OpenRouterContentBlock::InputAudio { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
                         OpenRouterContentBlock::Unknown { data: _ } => false,
                     })
@@ -584,11 +864,12 @@ impl OpenRouterRequestMessage<'_> {
 pub(super) async fn prepare_openrouter_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<OpenRouterRequestMessage<'a>>, Error> {
+    let fetch_and_encode = request.fetch_and_encode_input_files_before_inference;
     let mut messages: Vec<_> = try_join_all(
         request
             .messages
             .iter()
-            .map(tensorzero_to_openrouter_messages),
+            .map(|msg| tensorzero_to_openrouter_messages(msg, fetch_and_encode)),
     )
     .await?
     .into_iter()
@@ -608,23 +889,20 @@ pub(super) async fn prepare_openrouter_messages<'a>(
 /// Otherwise convert the tool choice and tools to OpenRouter format
 pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> (
-    Option<Vec<OpenRouterTool<'a>>>,
-    Option<OpenRouterToolChoice<'a>>,
-    Option<bool>,
-) {
-    match &request.tool_config {
-        None => (None, None, None),
-        Some(tool_config) => {
-            if !tool_config.any_tools_available() {
-                return (None, None, None);
-            }
-            let tools = Some(tool_config.tools_available().map(Into::into).collect());
-            let tool_choice = Some((&tool_config.tool_choice).into());
-            let parallel_tool_calls = tool_config.parallel_tool_calls;
-            (tools, tool_choice, parallel_tool_calls)
-        }
-    }
+) -> Result<PreparedOpenRouterToolsResult<'a>, Error> {
+    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true)?;
+
+    // Convert from ChatCompletionTool to OpenRouterTool
+    let openrouter_tools = tools.map(|t| t.into_iter().map(OpenRouterTool::from).collect());
+
+    // Convert from ChatCompletionToolChoice to OpenRouterToolChoice
+    let openrouter_tool_choice = tool_choice.map(OpenRouterToolChoice::from);
+
+    Ok((
+        openrouter_tools,
+        openrouter_tool_choice,
+        parallel_tool_calls,
+    ))
 }
 
 /// This function is complicated only by the fact that OpenRouter and Azure require
@@ -676,17 +954,113 @@ pub(super) fn tensorzero_to_openrouter_system_message<'a>(
     }
 }
 
+async fn prepare_openrouter_file_content_block(
+    file: &LazyFile,
+    fetch_and_encode_input_files_before_inference: bool,
+) -> Result<OpenRouterContentBlock<'static>, Error> {
+    match file {
+        LazyFile::Url {
+            file_url:
+                FileUrl {
+                    mime_type,
+                    url,
+                    detail,
+                    filename: _,
+                },
+            future: _,
+        } if !fetch_and_encode_input_files_before_inference
+            && matches!(
+                mime_type.as_ref().map(mime::MediaType::type_),
+                Some(mime::IMAGE) | None
+            ) =>
+        {
+            if detail.is_some() {
+                tracing::warn!(
+                    "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+                );
+            }
+            warn_cannot_forward_url_if_missing_mime_type(
+                file,
+                fetch_and_encode_input_files_before_inference,
+                PROVIDER_TYPE,
+            );
+            Ok(OpenRouterContentBlock::ImageUrl {
+                image_url: OpenRouterImageUrl {
+                    url: url.to_string(),
+                },
+            })
+        }
+        _ => {
+            let resolved_file = file.resolve().await?;
+            let ObjectStorageFile { file, data } = &*resolved_file;
+            let base64_url = format!("data:{};base64,{}", file.mime_type, data);
+
+            if file.mime_type.type_() == mime::IMAGE {
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+                    );
+                }
+                Ok(OpenRouterContentBlock::ImageUrl {
+                    image_url: OpenRouterImageUrl { url: base64_url },
+                })
+            } else if file.mime_type.type_() == mime::AUDIO {
+                let format = mime_type_to_audio_format(&file.mime_type)?;
+                Ok(OpenRouterContentBlock::InputAudio {
+                    input_audio: OpenRouterInputAudio {
+                        data: Cow::Owned(data.clone()),
+                        format: Cow::Owned(format.to_string()),
+                    },
+                })
+            } else {
+                let filename = if let Some(ref user_filename) = file.filename {
+                    // Use the user-provided filename if available
+                    Cow::Owned(user_filename.clone())
+                } else {
+                    // Otherwise, generate a filename with the appropriate extension
+                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMessage {
+                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                        })
+                    })?;
+                    Cow::Owned(format!("input.{suffix}"))
+                };
+                Ok(OpenRouterContentBlock::File {
+                    file: OpenRouterFile {
+                        file_data: Some(Cow::Owned(base64_url)),
+                        filename: Some(filename),
+                    },
+                })
+            }
+        }
+    }
+}
+
 pub(super) async fn tensorzero_to_openrouter_messages(
     message: &RequestMessage,
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_openrouter_user_messages(&message.content).await,
-        Role::Assistant => tensorzero_to_openrouter_assistant_messages(&message.content).await,
+        Role::User => {
+            tensorzero_to_openrouter_user_messages(
+                &message.content,
+                fetch_and_encode_input_files_before_inference,
+            )
+            .await
+        }
+        Role::Assistant => {
+            tensorzero_to_openrouter_assistant_messages(
+                &message.content,
+                fetch_and_encode_input_files_before_inference,
+            )
+            .await
+        }
     }
 }
 
 async fn tensorzero_to_openrouter_user_messages(
     content_blocks: &[ContentBlock],
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
 
@@ -714,24 +1088,18 @@ async fn tensorzero_to_openrouter_user_messages(
                 ));
             }
             ContentBlock::File(file) => {
-                let resolved_file = file.resolve().await?;
-                let ObjectStorageFile { file, data } = &*resolved_file;
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
-                    image_url: OpenRouterImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, data),
-                    },
-                });
+                user_content_blocks.push(
+                    prepare_openrouter_file_content_block(
+                        file,
+                        fetch_and_encode_input_files_before_inference,
+                    )
+                    .await?,
+                );
             }
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
             }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => {
+            ContentBlock::Unknown(Unknown { data, .. }) => {
                 user_content_blocks.push(OpenRouterContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
@@ -753,6 +1121,7 @@ async fn tensorzero_to_openrouter_user_messages(
 
 async fn tensorzero_to_openrouter_assistant_messages(
     content_blocks: &[ContentBlock],
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
@@ -783,24 +1152,18 @@ async fn tensorzero_to_openrouter_assistant_messages(
                 }));
             }
             ContentBlock::File(file) => {
-                let resolved_file = file.resolve().await?;
-                let ObjectStorageFile { file, data } = &*resolved_file;
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
-                    image_url: OpenRouterImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64File` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, data),
-                    },
-                });
+                assistant_content_blocks.push(
+                    prepare_openrouter_file_content_block(
+                        file,
+                        fetch_and_encode_input_files_before_inference,
+                    )
+                    .await?,
+                );
             }
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
             }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => {
+            ContentBlock::Unknown(Unknown { data, .. }) => {
                 assistant_content_blocks.push(OpenRouterContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
@@ -888,8 +1251,8 @@ pub(super) struct OpenRouterTool<'a> {
     pub(super) strict: bool,
 }
 
-impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for OpenRouterTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         OpenRouterTool {
             r#type: OpenRouterToolType::Function,
             function: OpenRouterFunction {
@@ -902,11 +1265,26 @@ impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
     }
 }
 
+impl<'a> From<ChatCompletionTool<'a>> for OpenRouterTool<'a> {
+    fn from(tool: ChatCompletionTool<'a>) -> Self {
+        OpenRouterTool {
+            r#type: OpenRouterToolType::Function,
+            function: OpenRouterFunction {
+                name: tool.function.name,
+                description: tool.function.description,
+                parameters: tool.function.parameters,
+            },
+            strict: tool.strict,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 pub(super) enum OpenRouterToolChoice<'a> {
     String(OpenRouterToolChoiceString),
     Specific(SpecificToolChoice<'a>),
+    AllowedTools(OpenAIAllowedToolsChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -946,6 +1324,54 @@ impl<'a> From<&'a ToolChoice> for OpenRouterToolChoice<'a> {
                 r#type: OpenRouterToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),
+        }
+    }
+}
+
+impl<'a> From<ChatCompletionToolChoice<'a>> for OpenRouterToolChoice<'a> {
+    fn from(tool_choice: ChatCompletionToolChoice<'a>) -> Self {
+        match tool_choice {
+            ChatCompletionToolChoice::String(tc_string) => match tc_string {
+                ChatCompletionToolChoiceString::None => {
+                    OpenRouterToolChoice::String(OpenRouterToolChoiceString::None)
+                }
+                ChatCompletionToolChoiceString::Auto => {
+                    OpenRouterToolChoice::String(OpenRouterToolChoiceString::Auto)
+                }
+                ChatCompletionToolChoiceString::Required => {
+                    OpenRouterToolChoice::String(OpenRouterToolChoiceString::Required)
+                }
+            },
+            ChatCompletionToolChoice::Specific(specific) => {
+                OpenRouterToolChoice::Specific(SpecificToolChoice {
+                    r#type: OpenRouterToolType::Function,
+                    function: SpecificToolFunction {
+                        name: specific.function.name,
+                    },
+                })
+            }
+            ChatCompletionToolChoice::AllowedTools(allowed_tools) => {
+                // Convert from common ChatCompletionAllowedToolsChoice to OpenAI AllowedToolsChoice
+                OpenRouterToolChoice::AllowedTools(OpenAIAllowedToolsChoice {
+                    r#type: allowed_tools.r#type,
+                    allowed_tools: OpenAIAllowedToolsConstraint {
+                        mode: match allowed_tools.allowed_tools.mode {
+                            ChatCompletionAllowedToolsMode::Auto => AllowedToolsMode::Auto,
+                            ChatCompletionAllowedToolsMode::Required => AllowedToolsMode::Required,
+                        },
+                        tools: allowed_tools
+                            .allowed_tools
+                            .tools
+                            .into_iter()
+                            .map(|tool_ref| ToolReference::Function {
+                                function: OpenAISpecificToolFunction {
+                                    name: tool_ref.function.name,
+                                },
+                            })
+                            .collect(),
+                    },
+                })
+            }
         }
     }
 }
@@ -1002,12 +1428,17 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -1019,7 +1450,7 @@ fn apply_inference_params(
     }
 
     if verbosity.is_some() {
-        request.verbosity = verbosity.clone();
+        request.verbosity.clone_from(verbosity);
     }
 }
 
@@ -1039,22 +1470,21 @@ impl<'a> OpenRouterRequest<'a> {
         };
         let mut messages = prepare_openrouter_messages(request).await?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request)?;
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
 
-        if model.to_lowercase().starts_with("o1-mini") {
-            if let Some(OpenRouterRequestMessage::System(_)) = messages.first() {
-                if let OpenRouterRequestMessage::System(system_msg) = messages.remove(0) {
-                    let user_msg = OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
-                        content: vec![OpenRouterContentBlock::Text {
-                            text: system_msg.content,
-                        }],
-                    });
-                    messages.insert(0, user_msg);
-                }
-            }
+        if model.to_lowercase().starts_with("o1-mini")
+            && let Some(OpenRouterRequestMessage::System(_)) = messages.first()
+            && let OpenRouterRequestMessage::System(system_msg) = messages.remove(0)
+        {
+            let user_msg = OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
+                    text: system_msg.content,
+                }],
+            });
+            messages.insert(0, user_msg);
         }
 
         let mut openrouter_request = OpenRouterRequest {
@@ -1083,11 +1513,10 @@ impl<'a> OpenRouterRequest<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(super) struct OpenRouterUsage {
-    pub prompt_tokens: u32,
-    #[serde(default)]
-    pub completion_tokens: u32,
+    pub prompt_tokens: Option<u32>,
+    pub completion_tokens: Option<u32>,
 }
 
 impl From<OpenRouterUsage> for Usage {
@@ -1375,10 +1804,6 @@ fn openrouter_to_tensorzero_chunk(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-    use std::borrow::Cow;
-    use tracing_test::traced_test;
-
     use crate::{
         inference::types::{FunctionType, RequestMessage},
         providers::test_helpers::{
@@ -1386,6 +1811,8 @@ mod tests {
         },
         tool::ToolCallConfig,
     };
+    use serde_json::json;
+    use std::borrow::Cow;
 
     #[test]
     fn test_get_chat_url() {
@@ -1810,8 +2237,8 @@ mod tests {
                 finish_reason: OpenRouterFinishReason::Stop,
             }],
             usage: OpenRouterUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1872,8 +2299,8 @@ mod tests {
             inference_response.output,
             vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
@@ -1909,8 +2336,8 @@ mod tests {
                 },
             }],
             usage: OpenRouterUsage {
-                prompt_tokens: 15,
-                completion_tokens: 25,
+                prompt_tokens: Some(15),
+                completion_tokens: Some(25),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1974,8 +2401,8 @@ mod tests {
                 arguments: "{}".to_string(),
             })]
         );
-        assert_eq!(inference_response.usage.input_tokens, 15);
-        assert_eq!(inference_response.usage.output_tokens, 25);
+        assert_eq!(inference_response.usage.input_tokens, Some(15));
+        assert_eq!(inference_response.usage.output_tokens, Some(25));
         assert_eq!(
             inference_response.finish_reason,
             Some(FinishReason::ToolCall)
@@ -2000,8 +2427,8 @@ mod tests {
         let invalid_response_no_choices = OpenRouterResponse {
             choices: vec![],
             usage: OpenRouterUsage {
-                prompt_tokens: 5,
-                completion_tokens: 0,
+                prompt_tokens: Some(5),
+                completion_tokens: Some(0),
             },
         };
         let request_body = OpenRouterRequest {
@@ -2058,8 +2485,8 @@ mod tests {
                 },
             ],
             usage: OpenRouterUsage {
-                prompt_tokens: 10,
-                completion_tokens: 10,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(10),
             },
         };
 
@@ -2121,7 +2548,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openrouter_tools(&request_with_tools);
+            prepare_openrouter_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -2164,7 +2591,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openrouter_tools(&request_without_tools);
+            prepare_openrouter_tools(&request_without_tools).unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
@@ -2173,7 +2600,7 @@ mod tests {
     #[tokio::test]
     async fn test_tensorzero_to_openrouter_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks)
+        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks, true)
             .await
             .unwrap();
         assert_eq!(openrouter_messages.len(), 1);
@@ -2194,7 +2621,7 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks)
+        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks, true)
             .await
             .unwrap();
         assert_eq!(openrouter_messages.len(), 1);
@@ -2224,9 +2651,10 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let openrouter_messages = tensorzero_to_openrouter_assistant_messages(&content_blocks)
-            .await
-            .unwrap();
+        let openrouter_messages =
+            tensorzero_to_openrouter_assistant_messages(&content_blocks, true)
+                .await
+                .unwrap();
         assert_eq!(openrouter_messages.len(), 1);
         match &openrouter_messages[0] {
             OpenRouterRequestMessage::Assistant(content) => {
@@ -2385,8 +2813,8 @@ mod tests {
         let chunk = OpenRouterChatChunk {
             choices: vec![],
             usage: Some(OpenRouterUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             }),
         };
         let message = openrouter_to_tensorzero_chunk(
@@ -2400,8 +2828,8 @@ mod tests {
         assert_eq!(
             message.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             })
         );
     }
@@ -2771,10 +3199,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_openrouter_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

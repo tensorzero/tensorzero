@@ -1,10 +1,10 @@
 use futures::StreamExt;
 use serde_json::json;
 use tensorzero::{
-    Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    InferenceOutput, InferenceResponseChunk, Role,
+    Client, ClientInferenceParams, InferenceOutput, InferenceResponseChunk, Input, InputMessage,
+    InputMessageContent, Role,
 };
-use tensorzero_core::inference::types::{Arguments, System, TextKind};
+use tensorzero_core::inference::types::{Arguments, System, Text};
 
 use crate::common::get_gateway_endpoint;
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -24,14 +24,14 @@ async fn test_client_stream_with_error(client: Client) {
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
             variant_name: Some("err_in_stream".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Please write me a sentence about Megumin making an explosion."
                             .into(),
                     })],

@@ -1,55 +1,86 @@
-import {
-  getDatasetMetadata,
-  getDatasetRows,
-} from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
-import DatasetRowTable from "./DatasetRowTable";
+import DatasetRowTable, { type DatasetRowsData } from "./DatasetRowTable";
 import { data, isRouteErrorResponse, redirect } from "react-router";
-import { useNavigate } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
 import DatasetRowSearchBar from "./DatasetRowSearchBar";
 import {
   PageHeader,
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { logger } from "~/utils/logger";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { useFetcher } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
-import { staleDatapoint } from "~/utils/clickhouse/datasets.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { useReadOnly } from "~/context/read-only";
+import type { DatapointFilter } from "~/types/tensorzero";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
   const url = new URL(request.url);
-  const pageSize = Number(url.searchParams.get("pageSize")) || 15;
+  const limit = Number(url.searchParams.get("limit")) || 15;
   const offset = Number(url.searchParams.get("offset")) || 0;
   const rowsAddedParam = url.searchParams.get("rowsAdded");
-  const rowsSkippedParam = url.searchParams.get("rowsSkipped");
   const rowsAdded = rowsAddedParam !== null ? Number(rowsAddedParam) : null;
-  const rowsSkipped =
-    rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
-
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  const function_name = url.searchParams.get("function_name") || undefined;
+  const search_query = url.searchParams.get("search_query") || undefined;
+  const filterParam = url.searchParams.get("filter");
+  let filter: DatapointFilter | undefined;
+  if (filterParam) {
+    try {
+      filter = JSON.parse(filterParam) as DatapointFilter;
+    } catch {
+      // Invalid JSON, ignore
+    }
   }
 
-  const [counts, rows] = await Promise.all([
-    getDatasetMetadata({}),
-    getDatasetRows({ dataset_name, page_size: pageSize, offset }),
-  ]);
-  const count_info = counts.find(
-    (count) => count.dataset_name === dataset_name,
-  );
-  if (!count_info) {
-    throw data("Dataset not found", { status: 404 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
-  return { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped };
+
+  // Promise for count (streams to PageHeader)
+  const countPromise = getTensorZeroClient()
+    .listDatasets({})
+    .then((response) => {
+      const info = response.datasets.find(
+        (d) => d.dataset_name === dataset_name,
+      );
+      if (!info) {
+        throw Error("Dataset not found");
+      }
+      return info.datapoint_count;
+    });
+
+  // Promise for table data (streams to DatasetRowTable)
+  const dataPromise: Promise<DatasetRowsData> = (async () => {
+    const response = await getTensorZeroClient().listDatapoints(dataset_name, {
+      limit: limit + 1, // Request one extra to check if there are more
+      offset,
+      function_name,
+      search_query_experimental:
+        search_query && search_query.length > 0 ? search_query : undefined,
+      filter,
+    });
+    const allRows = response.datapoints;
+    const hasMore = allRows.length > limit;
+    const rows = hasMore ? allRows.slice(0, limit) : allRows;
+    return { rows, hasMore };
+  })();
+
+  return {
+    dataset_name,
+    countPromise,
+    dataPromise,
+    limit,
+    offset,
+    rowsAdded,
+    function_name,
+    search_query,
+    filter,
+  };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -68,7 +99,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (action === "delete_datapoint") {
-    const datapoint_id = formData.get("datapoint_id");
+    const datapoint_id = formData.get("datapoint_id") as string;
     const function_name = formData.get("function_name");
     const function_type = formData.get("function_type");
 
@@ -87,20 +118,16 @@ export async function action({ request, params }: Route.ActionArgs) {
       throw data("Function configuration not found", { status: 404 });
     }
 
-    await staleDatapoint(
-      dataset_name,
-      datapoint_id as string,
-      functionConfig.type,
-    );
+    await getTensorZeroClient().deleteDatapoints(dataset_name, [datapoint_id]);
 
     // Check if this was the last datapoint in the dataset
-    const counts = await getDatasetMetadata({});
-    const count_info = counts.find(
-      (count) => count.dataset_name === dataset_name,
+    const datasetMetadata = await getTensorZeroClient().listDatasets({});
+    const count_info = datasetMetadata.datasets.find(
+      (dataset) => dataset.dataset_name === dataset_name,
     );
 
     // If no datapoints remain, redirect to datasets list
-    if (!count_info || count_info.count === 0) {
+    if (!count_info || count_info.datapoint_count === 0) {
       return redirect("/datasets");
     }
 
@@ -113,23 +140,32 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped } =
-    loaderData;
+  const {
+    dataset_name,
+    countPromise,
+    dataPromise,
+    limit,
+    offset,
+    rowsAdded,
+    function_name,
+    search_query,
+    filter,
+  } = loaderData;
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
   const fetcher = useFetcher();
-  const navigate = useNavigate();
 
   // Use useEffect to show toast only after component mounts
   useEffect(() => {
     if (rowsAdded !== null) {
-      toast({
+      const { dismiss } = toast.success({
         title: "Dataset Updated",
-        description: `Added ${rowsAdded} rows to the dataset. Skipped ${rowsSkipped} duplicate rows.`,
+        description: `Added ${rowsAdded} rows to the dataset.`,
       });
+      return () => dismiss({ immediate: true });
     }
+    return;
     // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsAdded, toast]);
 
   const handleDelete = () => {
@@ -137,24 +173,10 @@ export default function DatasetDetailPage({
     formData.append("action", "delete");
     fetcher.submit(formData, { method: "post" });
   };
-  const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-  const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
 
   return (
     <PageLayout>
-      <PageHeader
-        heading={`Dataset`}
-        name={count_info.dataset_name}
-        count={count_info.count}
-      >
+      <PageHeader heading={`Dataset`} name={dataset_name} count={countPromise}>
         <div className="flex justify-start">
           <DeleteButton
             onClick={handleDelete}
@@ -165,17 +187,17 @@ export default function DatasetDetailPage({
       </PageHeader>
 
       <SectionLayout>
-        <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
-        <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={offset === 0}
-          disableNext={offset + pageSize >= count_info.count}
+        <DatasetRowSearchBar dataset_name={dataset_name} />
+        <DatasetRowTable
+          data={dataPromise}
+          dataset_name={dataset_name}
+          limit={limit}
+          offset={offset}
+          function_name={function_name}
+          search_query={search_query}
+          filter={filter}
         />
       </SectionLayout>
-
-      <Toaster />
     </PageLayout>
   );
 }

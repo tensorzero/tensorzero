@@ -1,11 +1,11 @@
 use std::{borrow::Cow, time::Duration};
 
-use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
 use crate::inference::types::RequestMessage;
-use crate::providers::openai::{OpenAIMessagesConfig, OpenAIToolChoiceString};
-use futures::{future::try_join_all, StreamExt};
+use crate::inference::types::chat_completion_inference_params::{
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
+};
+use crate::providers::openai::OpenAIMessagesConfig;
+use futures::{StreamExt, future::try_join_all};
 use lazy_static::lazy_static;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
@@ -17,12 +17,12 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
+use crate::inference::InferenceProvider;
 use crate::inference::types::{
     FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs,
 };
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -30,20 +30,23 @@ use crate::providers::helpers::{
 use crate::tool::ToolChoice;
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
+    error::{DelayedError, Error, ErrorDetails},
     inference::types::{
-        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStreamInner, Text, TextChunk, Thought, ThoughtChunk,
+        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
     },
     tool::{ToolCall, ToolCallChunk},
 };
 
-use super::helpers_thinking_block::{process_think_blocks, ThinkingState};
+use super::helpers_thinking_block::{ThinkingState, process_think_blocks};
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-    OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType,
-    OpenAIUsage,
+    OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolType, OpenAIUsage, get_chat_url,
+    handle_openai_error, tensorzero_to_openai_messages,
+};
+use crate::providers::chat_completions::prepare_chat_completion_tools;
+use crate::providers::chat_completions::{
+    ChatCompletionTool, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
 };
 
 lazy_static! {
@@ -56,9 +59,8 @@ lazy_static! {
 pub const PROVIDER_NAME: &str = "Together";
 pub const PROVIDER_TYPE: &str = "together";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TogetherProvider {
     model_name: String,
     #[serde(skip)]
@@ -124,31 +126,34 @@ impl TogetherCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Cow<'a, SecretString>, Error> {
+    ) -> Result<Cow<'a, SecretString>, DelayedError> {
         match self {
             TogetherCredentials::Static(api_key) => Ok(Cow::Owned(api_key.clone())),
-            TogetherCredentials::Dynamic(key_name) => {
-                Ok(Cow::Borrowed(dynamic_api_keys.get(key_name).ok_or_else(
-                    || ErrorDetails::ApiKeyMissing {
+            TogetherCredentials::Dynamic(key_name) => Ok(Cow::Borrowed(
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    },
-                )?))
-            }
+                    })
+                })?,
+            )),
             TogetherCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            TogetherCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            })?,
+            })),
         }
     }
 }
@@ -178,7 +183,10 @@ impl InferenceProvider for TogetherProvider {
             })
         })?;
         let request_url = get_chat_url(&TOGETHER_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
@@ -248,6 +256,7 @@ impl InferenceProvider for TogetherProvider {
                 status,
                 &raw_response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -275,7 +284,10 @@ impl InferenceProvider for TogetherProvider {
                 ),
             })
         })?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let request_url = get_chat_url(&TOGETHER_API_BASE)?;
         let start_time = Instant::now();
         let request_builder = http_client
@@ -358,9 +370,9 @@ struct TogetherRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<TogetherResponseFormat<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    tool_choice: Option<ChatCompletionToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -375,12 +387,17 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -429,11 +446,15 @@ impl<'a> TogetherRequest<'a> {
 
         let (tools, mut tool_choice, parallel_tool_calls) = match tool_choice {
             Some(&ToolChoice::None) => (None, None, None),
-            _ => prepare_openai_tools(request),
+            _ => prepare_chat_completion_tools(request, false)?,
         };
         // Together AI doesn't seem to support `tool_choice="required"`, so we convert it to `tool_choice="auto"`
-        if let Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Required)) = tool_choice {
-            tool_choice = Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto));
+        if let Some(ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Required)) =
+            tool_choice
+        {
+            tool_choice = Some(ChatCompletionToolChoice::String(
+                ChatCompletionToolChoiceString::Auto,
+            ));
         }
 
         let mut together_request = TogetherRequest {
@@ -694,8 +715,6 @@ fn stream_together(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 
@@ -842,16 +861,16 @@ struct TogetherChatChunk {
 mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
-
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
 
     use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
-    use crate::providers::openai::{
-        OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+    use crate::providers::chat_completions::{
+        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+        ChatCompletionToolChoice, ChatCompletionToolType,
     };
+    use crate::providers::openai::OpenAIUsage;
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
     #[tokio::test]
@@ -894,16 +913,19 @@ mod tests {
         assert!(!together_request.stream);
         let tools = together_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             together_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
         assert_eq!(together_request.parallel_tool_calls, None);
     }
@@ -951,8 +973,8 @@ mod tests {
                 finish_reason: None,
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1000,8 +1022,8 @@ mod tests {
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1020,8 +1042,8 @@ mod tests {
                 finish_reason: None,
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
@@ -1068,8 +1090,8 @@ mod tests {
                 finish_reason: None,
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
@@ -1122,8 +1144,8 @@ mod tests {
                 finish_reason: None,
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
 
@@ -1494,8 +1516,8 @@ mod tests {
         let chunk = TogetherChatChunk {
             choices: vec![],
             usage: Some(OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             }),
         };
         let message = together_to_tensorzero_chunk(
@@ -1511,8 +1533,8 @@ mod tests {
         assert_eq!(
             message.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             })
         );
 
@@ -1629,10 +1651,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_together_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

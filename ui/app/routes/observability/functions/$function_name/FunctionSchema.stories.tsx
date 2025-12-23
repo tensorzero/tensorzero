@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import FunctionSchema from "./FunctionSchema";
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig } from "~/types/tensorzero";
 
 const meta = {
   title: "Function Detail Page/FunctionSchema",
@@ -130,7 +130,7 @@ export const JsonFunctionWithOutput: Story = {
       tools: [],
       tool_choice: null,
       parallel_tool_calls: null,
-      implicit_tool_call_config: null,
+      json_mode_tool_call_config: null,
       schemas: {
         system: {
           schema: {

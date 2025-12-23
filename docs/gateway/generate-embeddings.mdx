@@ -217,3 +217,26 @@ CreateEmbeddingResponse(
 </Step>
 
 </Steps>
+
+## Cache embeddings
+
+The TensorZero Gateway supports caching embeddings to improve latency and reduce costs.
+When caching is enabled, identical embedding requests will be served from the cache instead of being sent to the model provider.
+
+```python
+result = client.embeddings.create(
+    input="Hello, world!",
+    model="tensorzero::embedding_model_name::openai::text-embedding-3-small",
+    extra_body={
+        "tensorzero::cache_options": {
+            "enabled": "on",  # Enable reading from and writing to cache
+            "max_age_s": 3600,  # Optional: cache entries older than 1 hour are ignored
+        }
+    }
+)
+```
+
+Caching works for single embeddings.
+Batch embedding requests (multiple inputs) will write to the cache but won't serve cached responses.
+
+See the [Inference Caching](/gateway/guides/inference-caching) guide for more details on cache modes and options.

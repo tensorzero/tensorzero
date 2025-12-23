@@ -8,7 +8,10 @@ use std::{
 };
 
 use crate::{
-    config::{provider_types::ProviderTypesConfig, skip_credential_validation},
+    config::{
+        e2e_skip_credential_validation, provider_types::ProviderTypesConfig,
+        skip_credential_validation,
+    },
     error::{Error, ErrorDetails},
     model::{
         Credential, CredentialLocation, CredentialLocationWithFallback, UninitializedProviderConfig,
@@ -19,7 +22,7 @@ use crate::{
         deepseek::DeepSeekCredentials,
         fireworks::FireworksCredentials,
         gcp_vertex_anthropic::make_gcp_sdk_credentials,
-        gcp_vertex_gemini::{build_gcp_non_sdk_credentials, GCPVertexCredentials},
+        gcp_vertex_gemini::{GCPVertexCredentials, build_gcp_non_sdk_credentials},
         google_ai_studio_gemini::GoogleAIStudioCredentials,
         groq::GroqCredentials,
         hyperbolic::HyperbolicCredentials,
@@ -136,15 +139,7 @@ pub struct BaseModelTable<T> {
     #[serde(skip)]
     #[ts(skip)]
     pub default_credentials: Arc<ProviderTypeDefaultCredentials>,
-}
-
-impl<T: ShorthandModelConfig> Default for BaseModelTable<T> {
-    fn default() -> Self {
-        BaseModelTable {
-            table: HashMap::new(),
-            default_credentials: Arc::new(ProviderTypeDefaultCredentials::default()),
-        }
-    }
+    global_outbound_http_timeout: chrono::Duration,
 }
 
 pub trait ShorthandModelConfig: Sized {
@@ -156,7 +151,11 @@ pub trait ShorthandModelConfig: Sized {
         model_name: &str,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self, Error>;
-    fn validate(&self, key: &str) -> Result<(), Error>;
+    fn validate(
+        &self,
+        key: &str,
+        global_outbound_http_timeout: &chrono::Duration,
+    ) -> Result<(), Error>;
 }
 
 /// This is `Cow` without the `T: Clone` bound.
@@ -196,10 +195,21 @@ fn check_shorthand<'a>(prefixes: &[&'a str], key: &'a str) -> Option<Shorthand<'
     None
 }
 
+impl<T: ShorthandModelConfig> Default for BaseModelTable<T> {
+    fn default() -> Self {
+        Self {
+            table: HashMap::new(),
+            default_credentials: Arc::new(ProviderTypeDefaultCredentials::default()),
+            global_outbound_http_timeout: chrono::Duration::seconds(120),
+        }
+    }
+}
+
 impl<T: ShorthandModelConfig> BaseModelTable<T> {
     pub fn new(
         models: HashMap<Arc<str>, T>,
         provider_type_default_credentials: Arc<ProviderTypeDefaultCredentials>,
+        global_outbound_http_timeout: chrono::Duration,
     ) -> Result<Self, String> {
         for key in models.keys() {
             if RESERVED_MODEL_PREFIXES
@@ -217,6 +227,7 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
         Ok(Self {
             table: models,
             default_credentials: provider_type_default_credentials,
+            global_outbound_http_timeout,
         })
     }
 
@@ -242,7 +253,7 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
         // Try direct lookup (if it's blacklisted, it's not in the table)
         // If it's shorthand and already in the table, it's valid
         if let Some(model_config) = self.table.get(key) {
-            model_config.validate(key)?;
+            model_config.validate(key, &self.global_outbound_http_timeout)?;
             return Ok(());
         }
 
@@ -546,18 +557,17 @@ impl std::fmt::Debug for ProviderTypeDefaultCredentials {
 
 fn load_credential(
     location: &CredentialLocation,
-    provider_type: ProviderType,
+    provider_type: impl Display,
 ) -> Result<Credential, Error> {
     match location {
         CredentialLocation::Env(key_name) => match env::var(key_name) {
             Ok(value) => Ok(Credential::Static(SecretString::from(value))),
             Err(_) => {
                 if skip_credential_validation() {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
+                    if e2e_skip_credential_validation() {
                         tracing::warn!(
-                                "You are missing the credentials required for a model provider of type {provider_type} (environment variable `{key_name}` is unset), so the associated tests will likely fail.",
-                            );
+                            "You are missing the credentials required for a model provider of type {provider_type} (environment variable `{key_name}` is unset), so the associated tests will likely fail.",
+                        );
                     }
                     Ok(Credential::Missing)
                 } else {
@@ -574,12 +584,11 @@ fn load_credential(
                 Ok(path) => path,
                 Err(_) => {
                     if skip_credential_validation() {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
+                        if e2e_skip_credential_validation() {
                             tracing::warn!(
                                 "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
-                                env_key, provider_type
-
+                                env_key,
+                                provider_type
                             );
                         }
                         return Ok(Credential::Missing);
@@ -598,11 +607,11 @@ fn load_credential(
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                 Err(e) => {
                     if skip_credential_validation() {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
+                        if e2e_skip_credential_validation() {
                             tracing::warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
-                                provider_type, e
+                                provider_type,
+                                e
                             );
                         }
                         Ok(Credential::Missing)
@@ -619,11 +628,11 @@ fn load_credential(
             Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
             Err(e) => {
                 if skip_credential_validation() {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
+                    if e2e_skip_credential_validation() {
                         tracing::warn!(
-                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
-                            provider_type, e
+                            "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
+                            provider_type,
+                            e
                         );
                     }
                     Ok(Credential::Missing)
@@ -641,11 +650,17 @@ fn load_credential(
     }
 }
 
+pub fn load_tensorzero_relay_credential(
+    location_with_fallback: &crate::model::CredentialLocationWithFallback,
+) -> Result<Credential, Error> {
+    load_credential_with_fallback(location_with_fallback, "tensorzero::relay")
+}
+
 /// Load credential with fallback support
 /// Constructs a WithFallback credential that will be resolved at inference time
 fn load_credential_with_fallback(
     location_with_fallback: &crate::model::CredentialLocationWithFallback,
-    provider_type: ProviderType,
+    provider_type: impl Display + Copy,
 ) -> Result<Credential, Error> {
     let default_credential =
         load_credential(location_with_fallback.default_location(), provider_type)?;

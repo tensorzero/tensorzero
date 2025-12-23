@@ -31,10 +31,98 @@ This field allows for dynamic tool use, i.e. defining tools at runtime.
 You should prefer to define tools in the configuration file if possible.
 Only use this field if dynamic tool use is necessary for your use case.
 
-Each tool is an object with the following fields: `description`, `name`, `parameters`, and `strict`.
+##### Function Tools
 
-The fields are identical to those in the configuration file, except that the `parameters` field should contain the JSON schema itself rather than a path to it.
+Function tools are the typical tools used with LLMs.
+
+Function tools use JSON Schema to define their parameters.
+Each function tool is an object with the following fields:
+
+- `name` (string, required): The name of the tool
+- `description` (string, required): A description of what the tool does
+- `parameters` (object, required): A JSON Schema defining the tool's parameters
+- `strict` (boolean, optional): Whether to enforce strict schema validation (defaults to `false`)
+
 See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) for more details.
+
+##### OpenAI Custom Tools
+
+<Warning>
+
+OpenAI custom tools are only supported by OpenAI models (both Chat Completions and Responses APIs).
+Using custom tools with other providers will result in an error.
+
+</Warning>
+
+OpenAI custom tools support alternative output formats beyond JSON Schema, such as freeform text or grammar-constrained output.
+
+Each custom tool is an object with the following fields:
+
+- `type` (string, required): Must be `"openai_custom"`
+- `name` (string, required): The name of the tool
+- `description` (string, optional): A description of what the tool does
+- `format` (object, optional): The output format for the tool (see below)
+
+The `format` field can be one of:
+
+- `{"type": "text"}`: Freeform text output
+- `{"type": "grammar", "grammar": {"syntax": "lark", "definition": "..."}}`: Output constrained by a [Lark grammar](https://lark-parser.readthedocs.io/)
+- `{"type": "grammar", "grammar": {"syntax": "regex", "definition": "..."}}`: Output constrained by a regular expression
+
+<Accordion title="Example: OpenAI Custom Tool with Text Format">
+
+```json
+{
+  "model_name": "openai::gpt-5-mini",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Generate Python code to print 'Hello, World!'"
+      }
+    ]
+  },
+  "additional_tools": [
+    {
+      "type": "openai_custom",
+      "name": "code_generator",
+      "description": "Generates Python code snippets",
+      "format": { "type": "text" }
+    }
+  ]
+}
+```
+
+</Accordion>
+
+<Accordion title="Example: OpenAI Custom Tool with Regex Grammar">
+
+```json
+{
+  "model_name": "openai::gpt-5-mini",
+  "input": {
+    "messages": [
+      { "role": "user", "content": "Format the phone number 4155550123" }
+    ]
+  },
+  "additional_tools": [
+    {
+      "type": "openai_custom",
+      "name": "phone_formatter",
+      "description": "Formats phone numbers in XXX-XXX-XXXX format",
+      "format": {
+        "type": "grammar",
+        "grammar": {
+          "syntax": "regex",
+          "definition": "^\\d{3}-\\d{3}-\\d{4}$"
+        }
+      }
+    }
+  ]
+}
+```
+
+</Accordion>
 
 #### `allowed_tools`
 
@@ -42,9 +130,13 @@ See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) 
 - **Required:** no
 
 A list of tool names that the model is allowed to call.
-The tools must be defined in the configuration file.
+The tools must be defined in the configuration file or provided dynamically via `additional_tools`.
 
-Any tools provided in `additional_tools` are always allowed, irrespective of this field.
+The names should be the configuration keys (e.g. `foo` from `[tools.foo]`), not the display names shown to the LLM (e.g. `bar` from `tools.foo.name = "bar"`).
+
+Some providers (notably OpenAI) natively support restricting allowed tools.
+For these providers, we send all tools (both configured and dynamic) to the provider, and separately specify which ones are allowed to be called.
+For providers that do not natively support this feature, we filter the tool list ourselves and only send the allowed tools to the provider.
 
 #### `cache_options`
 
@@ -142,13 +234,16 @@ See [Episodes](/gateway/guides/episodes) for more information.
 The `extra_body` field allows you to modify the request body that TensorZero sends to a model provider.
 This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
 
-Each object in the array must have three fields:
+Each object in the array must have two or three fields:
 
-- `variant_name` or `model_provider_name`: The modification will only be applied to the specified variant or model provider
 - `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
   - `delete = true`: Deletes the field at the specified location, if present.
+- Optional: If one of the following is specified, the modification will only be applied to the specified variant, model, or model provider. If neither is specified, the modification applies to all model inferences.
+  - `variant_name`
+  - `model_name`
+  - `model_name` and `provider_name`
 
 <Tip>
 
@@ -182,12 +277,12 @@ If TensorZero would normally send this request body to the provider...
   // ...
   "extra_body": [
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      "variant_name": "my_variant", // or "model_name": "my_model", "provider_name": "my_provider"
       "pointer": "/agi",
       "value": true
     },
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      // No `variant_name` or `model_name`/`provider_name` specified, so it applies to all variants and providers
       "pointer": "/safety_checks/no_agi",
       "value": {
         "bypass": "on"
@@ -197,7 +292,7 @@ If TensorZero would normally send this request body to the provider...
 }
 ```
 
-...overrides the request body (for `my_variant` only) to:
+...overrides the request body to:
 
 ```json
 {
@@ -222,11 +317,14 @@ If TensorZero would normally send this request body to the provider...
 The `extra_headers` field allows you to modify the request headers that TensorZero sends to a model provider.
 This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
 
-Each object in the array must have three fields:
+Each object in the array must have two or three fields:
 
-- `variant_name` or `model_provider_name`: The modification will only be applied to the specified variant or model provider
 - `name`: The name of the header to modify
 - `value`: The value to set the header to
+- Optional: If one of the following is specified, the modification will only be applied to the specified variant, model, or model provider. If neither is specified, the modification applies to all model inferences.
+  - `variant_name`
+  - `model_name`
+  - `model_name` and `provider_name`
 
 <Tip>
 
@@ -253,12 +351,12 @@ Safety-Checks: on
 {
   "extra_headers": [
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      "variant_name": "my_variant", // or "model_name": "my_model", "provider_name": "my_provider"
       "name": "Safety-Checks",
       "value": "off"
     },
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      // No `variant_name` or `model_name`/`provider_name` specified, so it applies to all variants and providers
       "name": "Intelligence-Level",
       "value": "AGI"
     }
@@ -266,7 +364,7 @@ Safety-Checks: on
 }
 ```
 
-...overrides the request headers to:
+...overrides the request headers so that `Safety-Checks` is set to `off` only for `my_variant`, while `Intelligence-Level: AGI` is applied globally to all variants and providers:
 
 ```text
 Safety-Checks: off
@@ -349,10 +447,14 @@ If the content block has type `file`, it must have exactly one of the following 
   - `file_type`: must be `url`
   - `url`
   - `mime_type` (optional): override the MIME type of the file
+  - `detail` (optional): controls the fidelity of image processing. Only applies to image files; ignored for other file types. Can be `low`, `high`, or `auto`. Affects token consumption and image quality. Only supported by some model providers; ignored otherwise.
+  - `filename` (optional): a filename to associate with the file
 - Base64-encoded Files
   - `file_type`: must be `base64`
   - `data`: `base64`-encoded data for an embedded file
-  - `mime_type`: the MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`)
+  - `mime_type` (optional): the MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`). If not provided, TensorZero will attempt to infer the MIME type from the file's magic bytes.
+  - `detail` (optional): controls the fidelity of image processing. Only applies to image files; ignored for other file types. Can be `low`, `high`, or `auto`. Affects token consumption and image quality. Only supported by some model providers; ignored otherwise.
+  - `filename` (optional): a filename to associate with the file
 
 See the [Multimodal Inference](/gateway/guides/multimodal-inference/) guide for more details on how to use images in inference.
 
@@ -368,11 +470,12 @@ If the content block has type `thought`, it must have the following additional f
 If the content block has type `unknown`, it must have the following additional fields:
 
 - `data`: The original content block from the provider, without any validation or transformation by TensorZero.
-- `model_provider_name` (optional): A string specifying when this content block should be included in the model provider input.
-  If set, the content block will only be provided to this specific model provider.
-  If not set, the content block is passed to all model providers.
+- `model_name` (string, optional): A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`). If set, the content block will only be provided to this specific model.
+- `provider_name` (string, optional): A provider name for the model you specified (e.g. `my_openai`). If set, the content block will only be provided to this specific provider for the model.
 
-For example, the following hypothetical unknown content block will send the `daydreaming` content block to inference requests targeting the `your_model_provider_name` model provider.
+If neither `model_name` nor `provider_name` is set, the content block is passed to all model providers.
+
+For example, the following hypothetical unknown content block will send the `daydreaming` content block to inference requests targeting the `your_provider_name` provider for `your_model_name`.
 
 ```json
 {
@@ -381,17 +484,10 @@ For example, the following hypothetical unknown content block will send the `day
     "type": "daydreaming",
     "dream": "..."
   },
-  "model_provider_name": "tensorzero::model_name::your_model_name::provider_name::your_model_provider_name"
+  "model_name": "your_model_name",
+  "provider_name": "your_provider_name"
 }
 ```
-
-<Warning>
-
-Certain reasoning models (e.g. DeepSeek R1) can include `thought` content blocks in the response.
-These content blocks can't directly be used as inputs to subsequent inferences in multi-turn scenarios.
-If you need to provide `thought` content blocks to a model, you should convert them to `text` content blocks.
-
-</Warning>
 
 This is the most complex field in the entire API. See this example for more details.
 
@@ -625,6 +721,7 @@ Currently, we support the following:
   - `presence_penalty`
   - `reasoning_effort`
   - `seed`
+  - `service_tier`
   - `stop_sequences`
   - `temperature`
   - `thinking_budget_tokens`
@@ -650,6 +747,83 @@ For example, if you wanted to dynamically override the `temperature` parameter f
 ```
 
 See ["Chat Function with Dynamic Inference Parameters"](#chat-function-with-dynamic-inference-parameters) for a complete example.
+
+</Accordion>
+
+#### `provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+A list of provider-specific built-in tools defined at inference time that can be used by the model.
+These are tools that run server-side on the provider's infrastructure, such as OpenAI's web search tool.
+
+Each object in the array has the following fields:
+
+- `scope` (object, optional): Limits which model/provider combination can use this tool. If omitted, the tool is available to all compatible providers.
+  - `model_name` (string): The model name as defined in your configuration
+  - `provider_name` (string, optional): The provider name for that model. If omitted, the tool is available to all providers for the specified model.
+- `tool` (object, required): The provider-specific tool configuration as defined by the provider's API
+
+This field allows for dynamic provider tool use at runtime.
+You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference/#provider_tools)).
+Only use this field if dynamic provider tool configuration is necessary for your use case.
+
+<Accordion title="Example: OpenAI Web Search (Unscoped)">
+
+```json
+{
+  "function_name": "my_function",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What were the latest developments in AI this week?"
+      }
+    ]
+  },
+  "provider_tools": [
+    {
+      "tool": {
+        "type": "web_search"
+      }
+    }
+  ]
+}
+```
+
+This makes the web search tool available to all compatible providers configured for the function.
+
+</Accordion>
+
+<Accordion title="Example: OpenAI Web Search (Scoped)">
+
+```json
+{
+  "function_name": "my_function",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What were the latest developments in AI this week?"
+      }
+    ]
+  },
+  "provider_tools": [
+    {
+      "scope": {
+        "model_name": "gpt-5-mini",
+        "provider_name": "openai"
+      },
+      "tool": {
+        "type": "web_search"
+      }
+    }
+  ]
+}
+```
+
+This makes the web search tool available only to the OpenAI provider for the `gpt-5-mini` model.
 
 </Accordion>
 
@@ -734,9 +908,10 @@ If `type` is `thought`, the content block has the following fields:
 If the model provider responds with a content block of an unknown type, it will be included in the response as a content block of type `unknown` with the following additional fields:
 
 - `data`: The original content block from the provider, without any validation or transformation by TensorZero.
-- `model_provider_name`: The fully-qualified name of the model provider that returned the content block.
+- `model_name` (string, optional): The model name that returned the content block.
+- `provider_name` (string, optional): The provider name that returned the content block.
 
-For example, if the model provider `your_model_provider_name` returns a content block of type `daydreaming`, it will be included in the response like this:
+For example, if the model provider `your_provider_name` for `your_model_name` returns a content block of type `daydreaming`, it will be included in the response like this:
 
 ```json
 {
@@ -745,7 +920,8 @@ For example, if the model provider `your_model_provider_name` returns a content 
     "type": "daydreaming",
     "dream": "..."
   },
-  "model_provider_name": "tensorzero::model_name::your_model_name::provider_name::your_model_provider_name"
+  "model_name": "your_model_name",
+  "provider_name": "your_provider_name"
 }
 ```
 
@@ -773,7 +949,6 @@ The returned data depends on the variant type:
 - `experimental_best_of_n_sampling`: raw response from the inference to the `evaluator`
 - `experimental_mixture_of_n_sampling`: raw response from the inference to the `fuser`
 - `experimental_dynamic_in_context_learning`: raw response from the inference to the `model`
-- `experimental_chain_of_thought`: raw response from the inference to the `model`
 
 ##### `variant_name`
 
@@ -889,7 +1064,6 @@ The returned data depends on the variant type:
 - `experimental_best_of_n_sampling`: raw response from the inference to the `evaluator`
 - `experimental_mixture_of_n_sampling`: raw response from the inference to the `fuser`
 - `experimental_dynamic_in_context_learning`: raw response from the inference to the `model`
-- `experimental_chain_of_thought`: raw response from the inference to the `model`
 
 ##### `output`
 

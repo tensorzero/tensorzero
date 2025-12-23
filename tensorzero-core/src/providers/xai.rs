@@ -4,24 +4,24 @@ use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::time::Instant;
 use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
 };
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -29,11 +29,12 @@ use crate::providers::helpers::{
 use crate::providers::openai::OpenAIMessagesConfig;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
-    OpenAIToolChoice, StreamOptions, SystemOrDeveloper,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, StreamOptions, SystemOrDeveloper,
+    get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
 };
 use crate::inference::TensorZeroEventError;
+use crate::providers::chat_completions::prepare_chat_completion_tools;
+use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 
 lazy_static! {
     static ref XAI_DEFAULT_BASE_URL: Url = {
@@ -45,9 +46,8 @@ lazy_static! {
 const PROVIDER_NAME: &str = "xAI";
 pub const PROVIDER_TYPE: &str = "xai";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct XAIProvider {
     model_name: String,
     #[serde(skip)]
@@ -102,31 +102,32 @@ impl XAICredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             XAICredentials::Static(api_key) => Ok(api_key),
             XAICredentials::Dynamic(key_name) => dynamic_api_keys.get(key_name).ok_or_else(|| {
-                ErrorDetails::ApiKeyMissing {
+                DelayedError::new(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
                     message: format!("Dynamic api key `{key_name}` is missing"),
-                }
-                .into()
+                })
             }),
             XAICredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            XAICredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            XAICredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -154,7 +155,10 @@ impl InferenceProvider for XAIProvider {
                 })
             })?;
         let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
@@ -226,6 +230,7 @@ impl InferenceProvider for XAIProvider {
                 status,
                 &response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -253,7 +258,10 @@ impl InferenceProvider for XAIProvider {
             })?;
 
         let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
@@ -274,6 +282,8 @@ impl InferenceProvider for XAIProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            None,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -334,9 +344,11 @@ struct XAIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    tool_choice: Option<ChatCompletionToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -349,12 +361,17 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -411,7 +428,8 @@ impl<'a> XAIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_chat_completion_tools(request, false)?;
         let mut xai_request = XAIRequest {
             messages,
             model,
@@ -425,6 +443,7 @@ impl<'a> XAIRequest<'a> {
             stream,
             stream_options,
             tools,
+            parallel_tool_calls,
             tool_choice,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,
@@ -545,8 +564,6 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
 mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
-
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -554,9 +571,12 @@ mod tests {
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
+    use crate::providers::chat_completions::{
+        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+        ChatCompletionToolChoice, ChatCompletionToolType,
+    };
     use crate::providers::openai::{
-        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
-        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
@@ -597,16 +617,19 @@ mod tests {
         let tools = xai_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             xai_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
 
         let request_with_tools = ModelInferenceRequest {
@@ -648,16 +671,19 @@ mod tests {
         let tools = xai_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             xai_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
     }
 
@@ -705,8 +731,8 @@ mod tests {
                 finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -754,8 +780,8 @@ mod tests {
         );
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(inference_response.raw_response, "test_response");
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -765,10 +791,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_xai_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

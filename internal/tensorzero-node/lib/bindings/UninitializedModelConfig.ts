@@ -6,4 +6,5 @@ export type UninitializedModelConfig = {
   routing: Array<string>;
   providers: { [key in string]?: UninitializedModelProvider };
   timeouts: TimeoutsConfig;
+  skip_relay: boolean | null;
 };

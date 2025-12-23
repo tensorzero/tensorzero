@@ -1,22 +1,27 @@
+use crate::client::{File, InputMessage, InputMessageContent};
 use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
-use crate::inference::types::file::{Base64FileMetadata, ObjectStorageFile, ObjectStoragePointer};
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
-use crate::inference::types::storage::StoragePath;
+use crate::inference::types::Input;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredContentBlock;
 use crate::inference::types::System;
 use crate::inference::types::Template;
+use crate::inference::types::file::{Base64FileMetadata, ObjectStorageFile, ObjectStoragePointer};
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
+use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{RawText, Role, Text, Thought, ToolCall, ToolResult, Unknown};
+use crate::tool::ToolCallWrapper;
 use futures::future::try_join_all;
+use schemars::JsonSchema;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::ops::Deref;
+use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -29,14 +34,14 @@ use pyo3::prelude::*;
 /// (which can be used to re-fetch the file and produce a `ResolvedInput`).
 ///
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
+#[export_schema]
 pub struct StoredInput {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
+    #[ts(optional)]
     pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<StoredInputMessage>,
@@ -74,12 +79,28 @@ impl StoredInput {
             .await?,
         })
     }
+
+    /// Converts a `StoredInput` to an `Input` without fetching file data.
+    /// Files are converted to `File::ObjectStoragePointer` variant which contains
+    /// only metadata (source_url, mime_type, storage_path) without the actual file data.
+    ///
+    /// TODO(shuyangli): Add optional parameter to fetch files from object storage.
+    pub fn into_input(self) -> Input {
+        Input {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(StoredInputMessage::into_input_message)
+                .collect(),
+        }
+    }
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
+#[export_schema]
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
 pub struct StoredInputMessage {
     pub role: Role,
@@ -100,6 +121,18 @@ impl StoredInputMessage {
             )
             .await?,
         })
+    }
+
+    /// Converts a `StoredInputMessage` to an `InputMessage`, possibly fetching files (later).
+    pub fn into_input_message(self) -> InputMessage {
+        InputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(StoredInputMessageContent::into_input_message_content)
+                .collect(),
+        }
     }
 }
 
@@ -163,9 +196,9 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
                         .into_iter()
                         .map(|mut value| {
                             // Check if this is a legacy Text variant: {"type": "text", "value": ...}
-                            if let Some(obj) = value.as_object_mut() {
-                                if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
-                                    if let Some(val) = obj.remove("value") {
+                            if let Some(obj) = value.as_object_mut()
+                                && obj.get("type").and_then(|v| v.as_str()) == Some("text")
+                                    && let Some(val) = obj.remove("value") {
                                         // Convert based on value type
                                         match val {
                                             Value::String(text) => {
@@ -187,8 +220,6 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
                                             }
                                         }
                                     }
-                                }
-                            }
 
                             // Deserialize the transformed value
                             serde_json::from_value(value).map_err(de::Error::custom)
@@ -207,19 +238,27 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
+#[export_schema]
 pub enum StoredInputMessageContent {
+    #[schemars(title = "StoredInputMessageContentText")]
     Text(Text),
+    #[schemars(title = "StoredInputMessageContentTemplate")]
     Template(Template),
+    #[schemars(title = "StoredInputMessageContentToolCall")]
     ToolCall(ToolCall),
+    #[schemars(title = "StoredInputMessageContentToolResult")]
     ToolResult(ToolResult),
+    #[schemars(title = "StoredInputMessageContentRawText")]
     RawText(RawText),
+    #[schemars(title = "StoredInputMessageContentThought")]
     Thought(Thought),
     #[serde(alias = "image")]
+    #[schemars(title = "StoredInputMessageContentFile", with = "ObjectStoragePointer")]
     File(Box<StoredFile>),
+    #[schemars(title = "StoredInputMessageContentUnknown")]
     Unknown(Unknown),
 }
 
@@ -253,6 +292,8 @@ impl StoredInputMessageContent {
                             source_url: file.source_url.clone(),
                             mime_type: file.mime_type.clone(),
                             storage_path: file.storage_path.clone(),
+                            detail: file.detail.clone(),
+                            filename: file.filename.clone(),
                         },
                         data,
                     },
@@ -261,6 +302,30 @@ impl StoredInputMessageContent {
             StoredInputMessageContent::Unknown(unknown) => {
                 Ok(ResolvedInputMessageContent::Unknown(unknown))
             }
+        }
+    }
+
+    /// Converts a `StoredInputMessageContent` to the client type `InputMessageContent`, possibly fetching files (later).
+    pub fn into_input_message_content(self) -> InputMessageContent {
+        match self {
+            StoredInputMessageContent::Text(text) => InputMessageContent::Text(text),
+            StoredInputMessageContent::Template(template) => {
+                InputMessageContent::Template(template)
+            }
+            StoredInputMessageContent::ToolCall(tool_call) => {
+                InputMessageContent::ToolCall(ToolCallWrapper::ToolCall(tool_call))
+            }
+            StoredInputMessageContent::ToolResult(tool_result) => {
+                InputMessageContent::ToolResult(tool_result)
+            }
+            StoredInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(raw_text),
+            StoredInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
+            StoredInputMessageContent::File(stored_file) => {
+                // Convert StoredFile (ObjectStoragePointer) to File::ObjectStoragePointer
+                // This preserves only the metadata without fetching actual file data
+                InputMessageContent::File(File::ObjectStoragePointer(stored_file.0))
+            }
+            StoredInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),
         }
     }
 }
@@ -324,6 +389,8 @@ impl<'de> Deserialize<'de> for StoredFile {
                 source_url: legacy.file.source_url,
                 mime_type: legacy.file.mime_type,
                 storage_path: legacy.storage_path,
+                detail: None,
+                filename: None,
             }));
         }
 
@@ -429,7 +496,8 @@ impl StoredInput {
 /// Only the object-storage path is actually stored in clickhouse
 /// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
 /// of `ResolvedInput/StoredInput`
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StoredRequestMessage {
     pub role: Role,
     pub content: Vec<StoredContentBlock>,
@@ -655,6 +723,8 @@ mod tests {
                 kind: StorageKind::Disabled,
                 path: object_store::path::Path::parse("test/image.png").unwrap(),
             },
+            detail: None,
+            filename: None,
         });
 
         let json = serde_json::to_value(&stored_file).unwrap();
@@ -678,6 +748,8 @@ mod tests {
                 kind: StorageKind::Disabled,
                 path: object_store::path::Path::parse("test/path.png").unwrap(),
             },
+            detail: None,
+            filename: None,
         });
 
         let json = serde_json::to_value(&original).unwrap();

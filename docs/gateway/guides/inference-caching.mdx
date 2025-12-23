@@ -58,3 +58,6 @@ print(response)
 - When the gateway serves a cached response, the usage fields are set to zero.
 - The cache data is stored in ClickHouse.
 - For batch inference, the gateway only writes to the cache but does not serve cached responses.
+- Inference caching also works for embeddings, using the same cache modes and options as chat completion inference.
+  Caching works for single embeddings.
+  Batch embedding requests (multiple inputs) will write to the cache but won't serve cached responses.

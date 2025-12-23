@@ -3,8 +3,9 @@ name = "tensorzero"
 description = "The Python client for TensorZero"
 license = "Apache-2.0"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
+    "dacite>=1.9.2",
     "httpx>=0.27.0",
     "typing-extensions>=4.12.2",
     "uuid-utils>=0.9.0",
@@ -67,3 +68,6 @@ dev = [
 [tool.maturin]
 features = ["pyo3/extension-module"]
 include = [".cargo/*", ".sqlx/*"]
+
+[tool.uv]
+constraint-dependencies = ["urllib3>=2.6.0"]

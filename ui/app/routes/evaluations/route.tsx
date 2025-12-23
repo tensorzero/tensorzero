@@ -6,10 +6,6 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import {
-  countTotalEvaluationRuns,
-  getEvaluationRunInfo,
-} from "~/utils/clickhouse/evaluations.server";
 import EvaluationRunsTable from "./EvaluationRunsTable";
 import { useState } from "react";
 import { EvaluationsActions } from "./EvaluationsActions";
@@ -20,20 +16,25 @@ import {
 } from "~/utils/evaluations.server";
 import { logger } from "~/utils/logger";
 import { toEvaluationUrl } from "~/utils/urls";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const totalEvaluationRuns = await countTotalEvaluationRuns();
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
-  const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const evaluationRuns = await getEvaluationRunInfo(pageSize, offset);
+  const limit = parseInt(searchParams.get("limit") || "15");
+
+  const [totalEvaluationRuns, evaluationRunsResponse] = await Promise.all([
+    getTensorZeroClient().countEvaluationRuns(),
+    getTensorZeroClient().listEvaluationRuns(limit, offset),
+  ]);
+  const evaluationRuns = evaluationRunsResponse.runs;
 
   return {
     totalEvaluationRuns,
     evaluationRuns,
     offset,
-    pageSize,
+    limit,
   };
 }
 
@@ -45,6 +46,8 @@ export async function action({ request }: Route.ActionArgs) {
     variant_name: formData.get("variant_name"),
     concurrency_limit: formData.get("concurrency_limit"),
     inference_cache: formData.get("inference_cache"),
+    max_datapoints: formData.get("max_datapoints"),
+    precision_targets: formData.get("precision_targets"),
   });
 
   if (!evaluationFormData) {
@@ -57,6 +60,8 @@ export async function action({ request }: Route.ActionArgs) {
     variant_name,
     concurrency_limit,
     inference_cache,
+    max_datapoints,
+    precision_targets,
   } = evaluationFormData;
 
   let evaluation_start_info;
@@ -67,6 +72,8 @@ export async function action({ request }: Route.ActionArgs) {
       variant_name,
       concurrency_limit,
       inference_cache,
+      max_datapoints,
+      precision_targets,
     );
   } catch (error) {
     logger.error("Error starting evaluation:", error);
@@ -85,16 +92,16 @@ export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const { totalEvaluationRuns, evaluationRuns, offset, pageSize } = loaderData;
+  const { totalEvaluationRuns, evaluationRuns, offset, limit } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("offset", String(offset - limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const [launchEvaluationModalIsOpen, setLaunchEvaluationModalIsOpen] =
@@ -112,7 +119,7 @@ export default function EvaluationSummaryPage({
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset <= 0}
-          disableNext={offset + pageSize >= totalEvaluationRuns}
+          disableNext={offset + limit >= totalEvaluationRuns}
         />
       </SectionLayout>
       <LaunchEvaluationModal

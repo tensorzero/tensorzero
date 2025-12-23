@@ -79,10 +79,19 @@ async fn get_providers() -> E2ETestProviders {
 
     let embedding_providers = vec![EmbeddingTestProvider {
         model_name: "azure-text-embedding-3-small".into(),
+        dimensions: 1536,
     }];
 
     // azure requires deployment_id and endpoint parameters, so it can't be tested with just default credentials
     let provider_type_default_credentials_providers = vec![];
+
+    let input_audio_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "azure".to_string(),
+        model_name: "azure-gpt-4o-audio-preview".into(),
+        model_provider_name: "azure".into(),
+        credentials: HashMap::new(),
+    }];
 
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "azure".to_string(),
@@ -117,6 +126,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
         pdf_inference: vec![],
+        input_audio: input_audio_providers,
         shorthand_inference: vec![],
         credential_fallbacks,
     }

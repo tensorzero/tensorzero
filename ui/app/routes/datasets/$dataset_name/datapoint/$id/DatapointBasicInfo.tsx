@@ -1,5 +1,4 @@
 import { useFunctionConfig } from "~/context/config";
-import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -18,9 +17,10 @@ import {
   toEpisodeUrl,
 } from "~/utils/urls";
 import { useReadOnly } from "~/context/read-only";
+import type { Datapoint } from "~/types/tensorzero";
 
 interface BasicInfoProps {
-  datapoint: ParsedDatasetRow;
+  datapoint: Datapoint;
   onRenameDatapoint?: (newName: string) => void | Promise<void>;
 }
 

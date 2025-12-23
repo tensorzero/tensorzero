@@ -1,8 +1,4 @@
-import {
-  countInferencesForFunction,
-  queryInferenceTableBoundsByFunctionName,
-  queryInferenceTableByFunctionName,
-} from "~/utils/clickhouse/inference.server";
+import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -17,13 +13,6 @@ import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
-import {
-  getVariantCounts,
-  getVariantPerformances,
-  getFunctionThroughputByVariant,
-} from "~/utils/clickhouse/function";
-import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
-import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
@@ -39,20 +28,18 @@ import {
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
-import {
-  getNativeDatabaseClient,
-  getNativeTensorZeroClient,
-} from "~/utils/tensorzero/native_client.server";
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { applyPaginationLogic } from "~/utils/pagination";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
   const config = await getConfig();
-  const dbClient = await getNativeDatabaseClient();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
+  const limit = Number(url.searchParams.get("limit")) || 10;
   const metric_name = url.searchParams.get("metric_name") || undefined;
   const time_granularity = (url.searchParams.get("time_granularity") ||
     "week") as TimeWindow;
@@ -62,51 +49,49 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const feedback_time_granularity = (url.searchParams.get(
     "cumulative_feedback_time_granularity",
   ) || "week") as TimeWindow;
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
 
   const function_config = await getFunctionConfig(function_name, config);
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
-  const inferencePromise = queryInferenceTableByFunctionName({
+  const client = getTensorZeroClient();
+  const inferencePromise = client.listInferenceMetadata({
     function_name,
     before: beforeInference || undefined,
     after: afterInference || undefined,
-    page_size: pageSize,
+    limit: limit + 1, // Fetch one extra to determine pagination
   });
-  const tableBoundsPromise = queryInferenceTableBoundsByFunctionName({
+  const numInferencesPromise = countInferencesForFunction(function_name);
+  const tensorZeroClient = getTensorZeroClient();
+  const metricsWithFeedbackPromise =
+    tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
+  const variantCountsPromise = tensorZeroClient.getInferenceCount(
     function_name,
-  });
-  const numInferencesPromise = countInferencesForFunction(
-    function_name,
-    function_config,
+    {
+      groupBy: "variant",
+    },
   );
-  const metricsWithFeedbackPromise = queryMetricsWithFeedback({
-    function_name,
-    inference_table: getInferenceTableName(function_config),
-  });
-  const variantCountsPromise = getVariantCounts({
-    function_name,
-    function_config,
-  });
   const variantPerformancesPromise =
     // Only get variant performances if metric_name is provided and valid
     metric_name && config.metrics[metric_name]
-      ? getVariantPerformances({
-          function_name,
-          function_config,
-          metric_name,
-          metric_config: config.metrics[metric_name],
-          time_window_unit: time_granularity,
-        })
-      : undefined;
-  const variantThroughputPromise = getFunctionThroughputByVariant(
-    function_name,
-    throughput_time_granularity,
-    10,
-  );
+      ? tensorZeroClient
+          .getVariantPerformances(function_name, metric_name, time_granularity)
+          .then((response) =>
+            response.performances.length > 0
+              ? response.performances
+              : undefined,
+          )
+      : Promise.resolve(undefined);
+  const variantThroughputPromise = tensorZeroClient
+    .getFunctionThroughputByVariant(
+      function_name,
+      throughput_time_granularity,
+      10,
+    )
+    .then((response) => response.throughput);
 
   // Get feedback timeseries
   // For now, we only fetch this for track_and_stop experimentation
@@ -119,14 +104,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }
       : null;
   const feedbackTimeseriesPromise = feedbackParams
-    ? (async () => {
-        return dbClient.getCumulativeFeedbackTimeseries({
-          function_name,
-          ...feedbackParams,
-          time_window: feedback_time_granularity as TimeWindow,
-          max_periods: 10,
-        });
-      })()
+    ? tensorZeroClient.getCumulativeFeedbackTimeseries({
+        function_name,
+        ...feedbackParams,
+        time_window: feedback_time_granularity as TimeWindow,
+        max_periods: 10,
+      })
     : Promise.resolve(undefined);
 
   // Get variant sampling probabilities from the gateway
@@ -143,8 +126,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   })();
 
   const [
-    inferences,
-    inference_bounds,
+    inferenceResult,
     num_inferences,
     metricsWithFeedback,
     variant_performances,
@@ -154,7 +136,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_sampling_probabilities,
   ] = await Promise.all([
     inferencePromise,
-    tableBoundsPromise,
     numInferencesPromise,
     metricsWithFeedbackPromise,
     variantPerformancesPromise,
@@ -164,7 +145,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variantSamplingProbabilitiesPromise,
   ]);
 
-  const variant_counts_with_metadata = variant_counts.map((variant_count) => {
+  const variant_counts_with_metadata = (
+    variant_counts.count_by_variant ?? []
+  ).map((variant_count) => {
     let variant_config = function_config.variants[
       variant_count.variant_name
     ] || {
@@ -207,10 +190,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     };
   });
 
+  // Handle pagination from listInferenceMetadata response
+  const {
+    items: inferences,
+    hasNextPage: hasNextInferencePage,
+    hasPreviousPage: hasPreviousInferencePage,
+  } = applyPaginationLogic(inferenceResult.inference_metadata, limit, {
+    before: beforeInference,
+    after: afterInference,
+  });
+
   return {
     function_name,
     inferences,
-    inference_bounds,
+    hasNextInferencePage,
+    hasPreviousInferencePage,
     num_inferences,
     metricsWithFeedback,
     variant_performances,
@@ -225,7 +219,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const {
     function_name,
     inferences,
-    inference_bounds,
+    hasNextInferencePage,
+    hasPreviousInferencePage,
     num_inferences,
     metricsWithFeedback,
     variant_performances,
@@ -262,12 +257,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     searchParams.set("afterInference", topInference.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-
-  // Modify pagination disable logic to handle empty inferences
-  const disablePreviousInferencePage =
-    !topInference || inference_bounds.last_id === topInference.id;
-  const disableNextInferencePage =
-    !bottomInference || inference_bounds.first_id === bottomInference.id;
 
   const metric_name = searchParams.get("metric_name") || "";
 
@@ -349,8 +338,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           <PageButtons
             onPreviousPage={handlePreviousInferencePage}
             onNextPage={handleNextInferencePage}
-            disablePrevious={disablePreviousInferencePage}
-            disableNext={disableNextInferencePage}
+            disablePrevious={!hasPreviousInferencePage}
+            disableNext={!hasNextInferencePage}
           />
         </SectionLayout>
       </SectionsGroup>

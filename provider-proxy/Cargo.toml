@@ -2,7 +2,7 @@
 name = "provider-proxy"
 version = "0.1.0"
 rust-version.workspace = true
-edition = "2021"
+edition.workspace = true
 license.workspace = true
 
 [[test]]
@@ -12,24 +12,24 @@ path = "tests/e2e/tests.rs"
 [dependencies]
 anyhow = { workspace = true }
 bytes = { version = "1.10.0", features = ["serde"] }
-clap = { version = "4.5.49", features = ["derive"] }
+clap = { version = "4.5.53", features = ["derive"] }
 hex = "0.4.3"
-http = "1.2.0"
+http = "1.4.0"
 http-body-util = "0.1.2"
 http-serde-ext = "1.0.2"
 hyper = { version = "1.7.0", features = ["client", "server", "http1", "http2"] }
-hyper-util = "0.1.15"
+hyper-util = "0.1.19"
 moka = { version = "0.12.10", features = ["sync"] }
 pin-project = "1.1.10"
-rcgen = "0.14.2"
+rcgen = "0.14.6"
 reqwest.workspace = true
-rustls = "0.23.34"
+rustls = "0.23.35"
 serde = { workspace = true }
 serde_json.workspace = true
 sha2 = "0.10.9"
 tokio.workspace = true
 tokio-rustls = "0.26.1"
-tracing = "0.1.41"
+tracing = "0.1.43"
 tracing-subscriber.workspace = true
 tempfile = "3.21.0"
 
@@ -40,3 +40,6 @@ workspace = true
 [dev-dependencies]
 axum.workspace = true
 rand = "0.9.1"
+async-stream.workspace = true
+reqwest-eventsource.workspace = true
+futures-util = "0.3.31"

@@ -277,7 +277,7 @@ impl Migration for Migration0009<'_> {
             let insert_boolean_metric_feedback = async {
                 let query = format!(
                     r"
-                    INSERT INTO BooleanMetricFeedbackByTargetId
+                    INSERT INTO BooleanMetricFeedbackByTargetId (id, target_id, metric_name, value, tags)
                     SELECT
                         id,
                         target_id,
@@ -290,11 +290,10 @@ impl Migration for Migration0009<'_> {
                 );
                 self.clickhouse.run_query_synchronous_no_params(query).await
             };
-
             let insert_comment_feedback = async {
                 let query = format!(
                     r"
-                    INSERT INTO CommentFeedbackByTargetId
+                    INSERT INTO CommentFeedbackByTargetId (id, target_id, target_type, value, tags)
                     SELECT
                         id,
                         target_id,
@@ -307,11 +306,10 @@ impl Migration for Migration0009<'_> {
                 );
                 self.clickhouse.run_query_synchronous_no_params(query).await
             };
-
             let insert_demonstration_feedback = async {
                 let query = format!(
                     r"
-                    INSERT INTO DemonstrationFeedbackByInferenceId
+                    INSERT INTO DemonstrationFeedbackByInferenceId (id, inference_id, value, tags)
                     SELECT
                         id,
                         inference_id,
@@ -323,11 +321,10 @@ impl Migration for Migration0009<'_> {
                 );
                 self.clickhouse.run_query_synchronous_no_params(query).await
             };
-
             let insert_float_metric_feedback = async {
                 let query = format!(
                     r"
-                    INSERT INTO FloatMetricFeedbackByTargetId
+                    INSERT INTO FloatMetricFeedbackByTargetId (id, target_id, metric_name, value, tags)
                     SELECT
                         id,
                         target_id,

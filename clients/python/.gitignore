@@ -68,5 +68,5 @@ docs/_build/
 # VSCode
 .vscode/
 
-# Pyenv
-.python-version
+# Mypy stubtest
+.mypy_cache/

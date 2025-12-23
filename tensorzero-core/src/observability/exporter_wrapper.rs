@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use opentelemetry::{trace::Status, KeyValue};
+use opentelemetry::{KeyValue, trace::Status};
 use opentelemetry_sdk::{
+    Resource,
     error::OTelSdkResult,
     trace::{SpanData, SpanExporter},
-    Resource,
 };
 
 /// Wraps a `SpanExporter`, and applies some TensorZero-specific adjustments:

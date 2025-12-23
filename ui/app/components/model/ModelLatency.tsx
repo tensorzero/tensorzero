@@ -1,4 +1,4 @@
-import type { ModelLatencyDatapoint, TimeWindow } from "tensorzero-node";
+import type { ModelLatencyDatapoint, TimeWindow } from "~/types/tensorzero";
 import {
   Line,
   LineChart,

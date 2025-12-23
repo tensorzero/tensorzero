@@ -5,12 +5,13 @@ on:
     secrets:
       DOCKERHUB_USERNAME:
         required: true
-      DOCKERHUB_TOKEN:
+      DOCKERHUB_LIMITED_TOKEN:
         required: true
 
 env:
   TAG: tensorzero/gateway-e2e:sha-${{ github.sha }}
   LATEST_TAG: tensorzero/gateway-e2e:latest
+  TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
 
 jobs:
   build-gateway-container:
@@ -28,11 +29,14 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      # We use 'DOCKERHUB_LIMITED_TOKEN' to ensure that we can only push to our private '-dev' repos,
+      # not to any of the public production repos.
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          # We're using an organization access token, so we need to use the org name for the username.
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
@@ -47,16 +51,11 @@ jobs:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Pull latest image for caching (ignore errors if image doesn't exist)
-        run: docker pull $LATEST_TAG || true
+      # For some reason, 'docker compose build --push' doesn't work when using a remote builder (i.e. Namespace)
+      - name: Build test containers
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml build --push mock-inference-provider provider-proxy gateway live-tests
 
-      - name: Build `gateway-e2e` container
-        run: docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 --build-arg PROFILE=release --build-arg CARGO_BUILD_FLAGS="--features e2e_tests" --cache-from $LATEST_TAG -f gateway/Dockerfile . -t $TAG
-
-      - name: Tag latest image and push both tags
-        run: |
-          docker tag $TAG $LATEST_TAG
-          echo "Pushing $TAG"
-          docker push $TAG
-          echo "Pushing $LATEST_TAG"
-          docker push $LATEST_TAG
+      # Note that this pushes an e2e build of the gateway to 'tensorzero/gateway-e2e'.
+      # It does *not* push to the production 'tensorzero/gateway' repo.
+      - name: Push test containers
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml push mock-inference-provider provider-proxy gateway live-tests

@@ -6,7 +6,7 @@ use std::{
 use serde::Serialize;
 
 use crate::{
-    config::{path::ResolvedTomlPath, ErrorContext, PathWithContents, SchemaData},
+    config::{ErrorContext, PathWithContents, SchemaData, path::ResolvedTomlPathData},
     error::{Error, ErrorDetails},
     inference::types::Role,
     jsonschema_util::StaticJSONSchema,
@@ -16,9 +16,8 @@ use crate::{
 };
 
 /// Holds of all of the templates and schemas used by a chat-completion variant.
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ChatTemplates {
     #[serde(flatten)]
     templates: HashMap<String, Arc<TemplateWithSchema>>,
@@ -62,6 +61,13 @@ impl ChatTemplates {
     pub fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.templates.values().map(|t| &t.template).collect()
     }
+
+    /// Returns an iterator over all templates (name, template_with_schema pairs)
+    pub(super) fn iter_templates(
+        &self,
+    ) -> impl Iterator<Item = (&String, &Arc<TemplateWithSchema>)> {
+        self.templates.iter()
+    }
 }
 
 impl ChatTemplates {
@@ -75,7 +81,7 @@ impl ChatTemplates {
     fn validate_wrapper(
         template_and_schema: Option<TemplateWithSchema>,
         schema: Option<&StaticJSONSchema>,
-        wrapper: Option<ResolvedTomlPath>,
+        wrapper: Option<ResolvedTomlPathData>,
         error_prefix: &str,
         name: &str,
     ) -> Result<Option<TemplateWithSchema>, Error> {

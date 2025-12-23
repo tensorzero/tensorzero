@@ -4,31 +4,38 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::extract::State;
-use axum::{debug_handler, Json};
+use axum::{Extension, Json, debug_handler};
 use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::{time::Instant, try_join};
+use tokio_util::task::TaskTracker;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
+    ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text, parse_chat_output,
 };
 use crate::jsonschema_util::StaticJSONSchema;
-use crate::serde_util::deserialize_optional_json_string;
-use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
+use crate::tool::{
+    StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+    deserialize_optional_tool_info,
+};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;
+
 pub mod human_feedback;
+pub mod internal;
 
 /// There is a potential issue here where if we write an inference and then immediately write feedback for it,
 /// we might not be able to find the inference in the database because it hasn't been written yet.
@@ -93,9 +100,10 @@ pub struct FeedbackResponse {
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(
     State(app_state): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Json<FeedbackResponse>, Error> {
-    Ok(Json(feedback(app_state, params).await?))
+    Ok(Json(feedback(app_state, params, api_key_ext).await?))
 }
 
 // Helper function to avoid requiring axum types in the client
@@ -112,9 +120,11 @@ pub async fn feedback(
     AppStateData {
         config,
         clickhouse_connection_info,
+        deferred_tasks,
         ..
     }: AppStateData,
     mut params: Params,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<FeedbackResponse, Error> {
     let span = tracing::Span::current();
     if let Some(inference_id) = params.inference_id {
@@ -136,6 +146,12 @@ pub async fn feedback(
     }
     validate_tags(&params.tags, params.internal)?;
     validate_feedback_specific_tags(&params.tags)?;
+    if let Some(api_key_ext) = api_key_ext {
+        params.tags.insert(
+            "tensorzero::api_key_public_id".to_string(),
+            api_key_ext.0.api_key.get_public_id().into(),
+        );
+    }
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         &config,
@@ -168,18 +184,21 @@ pub async fn feedback(
         FeedbackType::Comment => {
             write_comment(
                 clickhouse_connection_info,
+                &deferred_tasks,
                 &params,
                 feedback_metadata.target_id,
                 feedback_metadata.level,
                 feedback_id,
                 dryrun,
                 config.gateway.unstable_disable_feedback_target_validation,
+                config.hash.clone(),
             )
             .await?;
         }
         FeedbackType::Demonstration => {
             write_demonstration(
                 clickhouse_connection_info,
+                &deferred_tasks,
                 &config,
                 &params,
                 feedback_metadata.target_id,
@@ -191,6 +210,7 @@ pub async fn feedback(
         FeedbackType::Float => {
             write_float(
                 clickhouse_connection_info,
+                &deferred_tasks,
                 &config,
                 params,
                 feedback_metadata.target_id,
@@ -203,6 +223,7 @@ pub async fn feedback(
         FeedbackType::Boolean => {
             write_boolean(
                 clickhouse_connection_info,
+                &deferred_tasks,
                 &config,
                 params,
                 feedback_metadata.target_id,
@@ -278,14 +299,17 @@ fn get_feedback_metadata<'a>(
     })
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn write_comment(
     connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: &TaskTracker,
     params: &Params,
     target_id: Uuid,
     level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
     disable_validation: bool,
+    snapshot_hash: SnapshotHash,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
@@ -300,12 +324,11 @@ async fn write_comment(
         "target_id": target_id,
         "value": value,
         "id": feedback_id,
-        "tags": tags
+        "tags": tags,
+        "snapshot_hash": snapshot_hash,
     });
     if !dryrun {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move {
+        deferred_tasks.spawn(async move {
             let _ = connection_info
                 .write_batched(&[payload], TableName::CommentFeedback)
                 .await;
@@ -316,6 +339,7 @@ async fn write_comment(
 
 async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: &TaskTracker,
     config: &Config,
     params: &Params,
     inference_id: Uuid,
@@ -345,11 +369,9 @@ async fn write_demonstration(
             message: format!("Failed to serialize parsed value to json: {e}"),
         })
     })?;
-    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
+    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
     if !dryrun {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move {
+        deferred_tasks.spawn(async move {
             let _ = connection_info
                 .write_batched(&[payload], TableName::DemonstrationFeedback)
                 .await;
@@ -358,8 +380,10 @@ async fn write_demonstration(
     Ok(())
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
     target_id: Uuid,
@@ -386,11 +410,9 @@ async fn write_float(
             message: format!("Feedback value for metric `{metric_name}` must be a number"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
     if !dryrun {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move {
+        deferred_tasks.spawn(async move {
             let payload = payload;
             let payload_array = [payload];
             let clickhouse = connection_info;
@@ -411,8 +433,10 @@ async fn write_float(
     Ok(())
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
     target_id: Uuid,
@@ -438,11 +462,9 @@ async fn write_boolean(
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
     if !dryrun {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move {
+        deferred_tasks.spawn(async move {
             let payload_array = [payload];
             let clickhouse = connection_info;
             let _ = try_join!(
@@ -475,9 +497,20 @@ async fn throttled_get_function_info(
     target_id: &Uuid,
 ) -> Result<FunctionInfo, Error> {
     // Compute how long ago the target_id was created.
-    // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
-    // In this case we should be conservative and assume no time has passed.
-    let elapsed = uuid_elapsed(target_id).unwrap_or(Duration::from_secs(0));
+    let elapsed = match uuid_elapsed(target_id) {
+        Ok(elapsed) => elapsed,
+        Err(e) => {
+            // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
+            // In this case we should be conservative and assume no time has passed.
+            if matches!(e.get_details(), ErrorDetails::UuidInFuture { .. }) {
+                // We don't log anything, since this is an expected case.
+                e.suppress_logging_of_error_message();
+                Duration::from_secs(0)
+            } else {
+                return Err(e.log());
+            }
+        }
+    };
 
     // Calculate the remaining cooldown (which may be zero) and ensure we wait at least FEEDBACK_MINIMUM_WAIT_TIME.
     let wait_time = max(
@@ -665,7 +698,7 @@ pub async fn validate_parse_demonstration(
                 .into_iter()
                 .map(DemonstrationContentBlock::try_into)
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
-            let parsed_value = parse_chat_output(content_blocks, tool_call_config.as_ref()).await;
+            let parsed_value = parse_chat_output(content_blocks, tool_call_config.as_ref(), None).await;
             for block in &parsed_value {
                 if let ContentBlockChatOutput::ToolCall(tool_call) = block {
                     if tool_call.name.is_none() {
@@ -717,7 +750,7 @@ pub enum DynamicDemonstrationInfo {
 
 #[derive(Debug, Deserialize)]
 struct ToolParamsResult {
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     tool_params: Option<ToolCallConfigDatabaseInsert>,
 }
 
@@ -737,7 +770,7 @@ async fn get_dynamic_demonstration_info(
 ) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
-            let parameterized_query = "SELECT tool_params FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
+            let parameterized_query = "SELECT tool_params, dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
             let result = clickhouse_client
                 .run_query_synchronous(
                     parameterized_query,
@@ -914,7 +947,9 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
-    use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
+    use crate::tool::{
+        FunctionToolConfig, InferenceResponseToolCall, StaticToolConfig, ToolChoice,
+    };
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
@@ -1108,6 +1143,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1143,6 +1179,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await
@@ -1169,6 +1206,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1215,6 +1253,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await
@@ -1239,6 +1278,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1282,6 +1322,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1299,6 +1340,7 @@ mod tests {
     async fn test_validate_parse_demonstration() {
         let weather_tool_config_static = StaticToolConfig {
             name: "get_temperature".to_string(),
+            key: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
             parameters: StaticJSONSchema::from_value(json!({
                 "type": "object",
@@ -1331,7 +1373,11 @@ mod tests {
         let value = json!("Hello, world!");
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools
+                    .values()
+                    .cloned()
+                    .map(FunctionToolConfig::Static)
+                    .collect(),
                 vec![],
             )));
         let parsed_value = serde_json::to_string(
@@ -1355,7 +1401,11 @@ mod tests {
         );
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools
+                    .values()
+                    .cloned()
+                    .map(FunctionToolConfig::Static)
+                    .collect(),
                 vec![],
             )));
         let parsed_value = serde_json::to_string(
@@ -1368,8 +1418,8 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let expected_parsed_value =
-            serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+        let expected_parsed_value = serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(
+            InferenceResponseToolCall {
                 id: "get_temperature_123".to_string(),
                 name: Some("get_temperature".to_string()),
                 raw_name: "get_temperature".to_string(),
@@ -1378,8 +1428,9 @@ mod tests {
                     &json!({"location": "London", "unit": "celsius"}),
                 )
                 .unwrap(),
-            })])
-            .unwrap();
+            },
+        )])
+        .unwrap();
         assert_eq!(expected_parsed_value, parsed_value);
 
         // Case 3: a tool call to get_humidity, which does not exist
@@ -1387,7 +1438,11 @@ mod tests {
         );
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools
+                    .values()
+                    .cloned()
+                    .map(FunctionToolConfig::Static)
+                    .collect(),
                 vec![],
             )));
         let err = validate_parse_demonstration(
@@ -1410,7 +1465,11 @@ mod tests {
         );
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools
+                    .values()
+                    .cloned()
+                    .map(FunctionToolConfig::Static)
+                    .collect(),
                 vec![],
             )));
         let err = validate_parse_demonstration(
@@ -1444,12 +1503,12 @@ mod tests {
           "required": ["name", "age"],
           "additionalProperties": false
         });
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1479,9 +1538,10 @@ mod tests {
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
             .unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Demonstration does not fit function output schema"));
+        assert!(
+            err.to_string()
+                .contains("Demonstration does not fit function output schema")
+        );
 
         // Case 7: Mismatched function type - Chat function with JSON demonstration info
         let value = json!("Hello, world!");
@@ -1508,7 +1568,11 @@ mod tests {
         });
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools
+                    .values()
+                    .cloned()
+                    .map(FunctionToolConfig::Static)
+                    .collect(),
                 vec![],
             )));
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)

@@ -1,37 +1,38 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::inference::types::{
-    chat_completion_inference_params::{
-        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+use crate::{
+    inference::types::{
+        ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
+        chat_completion_inference_params::{
+            ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
+        },
     },
-    ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
+    tool::{OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarSyntax, ToolConfigRef},
 };
 
 const PROVIDER_NAME: &str = "OpenAI Responses";
 use crate::providers::helpers::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
-use futures::{future::try_join_all, Stream};
+use futures::{Stream, future::try_join_all};
 use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::time::Instant;
 use url::Url;
 
 use crate::{
-    error::{warn_discarded_thought_block, Error, ErrorDetails},
+    error::{Error, ErrorDetails, warn_discarded_thought_block},
     inference::types::{
         ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
         ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-        TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
+        TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, file::Detail,
     },
-    model::fully_qualified_name,
     providers::openai::{
-        prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
-        OpenAIFile, OpenAIMessagesConfig, OpenAITool, OpenAIToolType, SystemOrDeveloper,
-        PROVIDER_TYPE,
+        OpenAIContentBlock, OpenAIFile, OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE,
+        SystemOrDeveloper, prepare_file_message, prepare_system_or_developer_message_helper,
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
@@ -62,6 +63,8 @@ pub struct OpenAIResponsesRequest<'a> {
     include: Option<Vec<OpenAIResponsesInclude>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<OpenAIResponsesReasoningConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<ServiceTier>,
     stream: bool,
 }
 
@@ -101,7 +104,7 @@ pub enum OpenAIResponsesTextConfigFormat {
 pub(super) struct OpenAIResponsesResponse<'a> {
     #[serde(borrow)]
     pub(super) output: Vec<OpenAIResponsesOutput<'a>>,
-    pub(super) usage: OpenAIResponsesUsage,
+    pub(super) usage: Option<OpenAIResponsesUsage>,
     pub incomplete_details: Option<OpenAIResponsesIncompleteDetails>,
 }
 
@@ -112,8 +115,8 @@ pub struct OpenAIResponsesIncompleteDetails {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct OpenAIResponsesUsage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
 }
 
 impl From<OpenAIResponsesUsage> for Usage {
@@ -176,6 +179,15 @@ impl OpenAIResponsesResponse<'_> {
                         name: function_call.name.to_string(),
                     }));
                 }
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::CustomToolCall(
+                    custom_tool_call,
+                )) => {
+                    output.push(ContentBlockOutput::ToolCall(ToolCall {
+                        id: custom_tool_call.call_id.to_string(),
+                        arguments: custom_tool_call.input.to_string(),
+                        name: custom_tool_call.name.to_string(),
+                    }));
+                }
 
                 FlattenUnknown::Normal(OpenAIResponsesOutputInner::Reasoning {
                     encrypted_content,
@@ -206,10 +218,11 @@ impl OpenAIResponsesResponse<'_> {
                     output.push(ContentBlockOutput::Thought(thought));
                 }
                 FlattenUnknown::Unknown(data) => {
-                    output.push(ContentBlockOutput::Unknown {
+                    output.push(ContentBlockOutput::Unknown(Unknown {
                         data: data.into_owned(),
-                        model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-                    });
+                        model_name: Some(model_name.to_string()),
+                        provider_name: Some(provider_name.to_string()),
+                    }));
                 }
             }
         }
@@ -235,7 +248,7 @@ impl OpenAIResponsesResponse<'_> {
                 input_messages: generic_request.messages.clone(),
                 raw_request,
                 raw_response: raw_response.clone(),
-                usage: self.usage.into(),
+                usage: self.usage.map(|u| u.into()).unwrap_or_default(),
                 latency,
                 finish_reason,
             },
@@ -257,30 +270,74 @@ pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
 
 impl<'a> OpenAITool<'a> {
     pub fn into_openai_responses_tool(self) -> OpenAIResponsesTool<'a> {
-        OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
-            r#type: self.r#type,
-            name: self.function.name,
-            description: self.function.description,
-            parameters: self.function.parameters,
-            strict: self.strict,
-        })
+        match self {
+            OpenAITool::Function { function, strict } => {
+                OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
+                    name: function.name,
+                    description: function.description,
+                    parameters: function.parameters,
+                    strict,
+                })
+            }
+            OpenAITool::Custom {
+                custom: custom_tool,
+            } => OpenAIResponsesTool::Custom(custom_tool.into()),
+        }
     }
 }
 
 #[derive(Debug, Serialize)]
-#[serde(untagged)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIResponsesTool<'a> {
     Function(OpenAIResponsesFunctionTool<'a>),
     BuiltIn(&'a Value),
+    Custom(OpenAIResponsesCustomTool<'a>),
 }
 
 #[derive(Serialize, Debug)]
 pub struct OpenAIResponsesFunctionTool<'a> {
-    r#type: OpenAIToolType,
     name: &'a str,
     description: Option<&'a str>,
     parameters: &'a Value,
     strict: bool,
+}
+
+/// Custom tool format for the Responses API (flattened structure)
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesCustomToolFormat {
+    Text,
+    Grammar {
+        syntax: OpenAIGrammarSyntax,
+        definition: String,
+    },
+}
+
+#[derive(Serialize, Debug)]
+pub struct OpenAIResponsesCustomTool<'a> {
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<OpenAIResponsesCustomToolFormat>,
+}
+
+impl<'a> From<&'a OpenAICustomTool> for OpenAIResponsesCustomTool<'a> {
+    fn from(tool: &'a OpenAICustomTool) -> Self {
+        OpenAIResponsesCustomTool {
+            name: &tool.name,
+            description: tool.description.as_deref(),
+            format: tool.format.as_ref().map(|f| match f {
+                OpenAICustomToolFormat::Text => OpenAIResponsesCustomToolFormat::Text,
+                OpenAICustomToolFormat::Grammar { grammar } => {
+                    OpenAIResponsesCustomToolFormat::Grammar {
+                        syntax: grammar.syntax.clone(),
+                        definition: grammar.definition.clone(),
+                    }
+                }
+            }),
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -301,6 +358,7 @@ pub enum OpenAIResponsesToolChoiceString {
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIResponsesAllowedToolsMode {
+    Auto,
     Required,
 }
 
@@ -342,8 +400,15 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .as_ref()
             .map(|tool_config| {
                 tool_config
-                    .tools_available()
-                    .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
+                    .tools_available_with_openai_custom()
+                    .map(|tool_ref| match tool_ref {
+                        ToolConfigRef::Function(func) => {
+                            OpenAITool::from(func).into_openai_responses_tool()
+                        }
+                        ToolConfigRef::OpenAICustom(custom) => {
+                            OpenAIResponsesTool::Custom(custom.into())
+                        }
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -359,12 +424,36 @@ impl<'a> OpenAIResponsesRequest<'a> {
             );
         }
 
+        // Check if we have allowed_tools constraint
+        let allowed_tools_list = request
+            .tool_config
+            .as_ref()
+            .and_then(|tc| tc.allowed_tools.as_dynamic_allowed_tools());
+
         // For now, we don't allow selecting any built-in tools
-        let tool_choice =
-            request
-                .tool_config
-                .as_ref()
-                .map(|tool_config| match &tool_config.tool_choice {
+        let tool_choice = request.tool_config.as_ref().map(|tool_config| {
+            // If we have allowed_tools, create an AllowedTools variant
+            if let Some(allowed_tool_names) = &allowed_tools_list {
+                let mode = match &tool_config.tool_choice {
+                    ToolChoice::Required => OpenAIResponsesAllowedToolsMode::Required,
+                    _ => OpenAIResponsesAllowedToolsMode::Auto,
+                };
+
+                let tool_refs = allowed_tool_names
+                    .iter()
+                    .map(|name| OpenAIResponsesToolReference::Function {
+                        name: (*name).to_owned(),
+                    })
+                    .collect();
+
+                OpenAIResponsesToolChoice::AllowedTools(OpenAIResponsesAllowedTools {
+                    mode,
+                    tools: tool_refs,
+                    r#type: StaticTypeAllowedTools,
+                })
+            } else {
+                // No allowed_tools constraint, use regular tool_choice
+                match &tool_config.tool_choice {
                     ToolChoice::None => {
                         OpenAIResponsesToolChoice::String(OpenAIResponsesToolChoiceString::None)
                     }
@@ -383,7 +472,9 @@ impl<'a> OpenAIResponsesRequest<'a> {
                             r#type: StaticTypeAllowedTools,
                         })
                     }
-                });
+                }
+            }
+        });
 
         let mut parallel_tool_calls = request
             .tool_config
@@ -448,7 +539,8 @@ impl<'a> OpenAIResponsesRequest<'a> {
             } else {
                 None
             },
-            reasoning: None, // handled below
+            reasoning: None,    // handled below
+            service_tier: None, // handled below
             stream: request.stream,
         };
         apply_inference_params(&mut openai_responses_request, &request.inference_params_v2);
@@ -462,6 +554,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -470,6 +563,10 @@ fn apply_inference_params(
         request.reasoning = Some(OpenAIResponsesReasoningConfig {
             effort: reasoning_effort.clone(),
         });
+    }
+
+    if service_tier.is_some() {
+        request.service_tier.clone_from(service_tier);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -481,7 +578,7 @@ fn apply_inference_params(
     }
 
     if verbosity.is_some() {
-        request.text.verbosity = verbosity.clone();
+        request.text.verbosity.clone_from(verbosity);
     }
 }
 
@@ -494,6 +591,8 @@ pub enum OpenAIResponsesOutputInner<'a> {
     Message(OpenAIResponsesInputMessage<'a>),
     #[serde(borrow)]
     FunctionCall(OpenAIResponsesFunctionCall<'a>),
+    #[serde(borrow)]
+    CustomToolCall(OpenAIResponsesCustomToolCall<'a>),
     Reasoning {
         #[serde(default)]
         encrypted_content: Option<String>,
@@ -533,10 +632,10 @@ impl OpenAIResponsesInput<'_> {
         match self {
             OpenAIResponsesInput::Known(OpenAIResponsesInputInner::Message(msg)) => {
                 for block in &msg.content {
-                    if let OpenAIResponsesInputMessageContent::InputText { text } = block {
-                        if text.to_lowercase().contains(value) {
-                            return true;
-                        }
+                    if let OpenAIResponsesInputMessageContent::InputText { text } = block
+                        && text.to_lowercase().contains(value)
+                    {
+                        return true;
                     }
                 }
                 false
@@ -566,6 +665,15 @@ pub struct OpenAIResponsesFunctionCall<'a> {
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct OpenAIResponsesCustomToolCall<'a> {
+    id: Cow<'a, str>,
+    call_id: Cow<'a, str>,
+    name: Cow<'a, str>,
+    input: Cow<'a, str>,
+    status: Cow<'a, str>,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct OpenAIResponsesInputMessage<'a> {
     pub role: &'a str,
     pub id: Option<Cow<'a, str>>,
@@ -580,6 +688,8 @@ pub enum OpenAIResponsesInputMessageContent<'a> {
     },
     InputImage {
         image_url: Cow<'a, str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        detail: Option<Detail>,
     },
     InputFile {
         #[serde(flatten)]
@@ -609,6 +719,8 @@ impl Serialize for OpenAIResponsesInputMessageContent<'_> {
             },
             InputImage {
                 image_url: &'a str,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                detail: Option<&'a Detail>,
             },
             InputFile {
                 #[serde(flatten)]
@@ -622,8 +734,12 @@ impl Serialize for OpenAIResponsesInputMessageContent<'_> {
             OpenAIResponsesInputMessageContent::InputText { text } => {
                 Helper::InputText { text }.serialize(serializer)
             }
-            OpenAIResponsesInputMessageContent::InputImage { image_url } => {
-                Helper::InputImage { image_url }.serialize(serializer)
+            OpenAIResponsesInputMessageContent::InputImage { image_url, detail } => {
+                Helper::InputImage {
+                    image_url,
+                    detail: detail.as_ref(),
+                }
+                .serialize(serializer)
             }
             OpenAIResponsesInputMessageContent::InputFile { file } => {
                 Helper::InputFile { file }.serialize(serializer)
@@ -732,6 +848,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                                 role: "user",
                                 content: vec![OpenAIResponsesInputMessageContent::InputImage {
                                     image_url: Cow::Owned(image_url.url),
+                                    detail: image_url.detail,
                                 }],
                             }),
                         ));
@@ -759,10 +876,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => {
+            ContentBlock::Unknown(Unknown { data, .. }) => {
                 // The user included an 'unknown' content block inside of the user message,
                 // so push a new user message that includes their custom JSON value
                 messages.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
@@ -836,8 +950,7 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                     message: "Files are not supported in assistant messages".to_string(),
                 }));
             }
-            Cow::Borrowed(ContentBlock::Thought(ref thought))
-            | Cow::Owned(ContentBlock::Thought(ref thought)) => {
+            Cow::Borrowed(ContentBlock::Thought(thought)) => {
                 if let Some(encrypted_content) = &thought.signature {
                     output.push(OpenAIResponsesInput::Known(
                         OpenAIResponsesInputInner::Reasoning(OpenAIResponsesReasoning {
@@ -862,17 +975,35 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                     ));
                 }
             }
+            Cow::Owned(ContentBlock::Thought(thought)) => {
+                if let Some(encrypted_content) = thought.signature {
+                    output.push(OpenAIResponsesInput::Known(
+                        OpenAIResponsesInputInner::Reasoning(OpenAIResponsesReasoning {
+                            encrypted_content: Cow::Owned(encrypted_content),
+                            summary: thought
+                                .summary
+                                .map(|summary| {
+                                    summary
+                                        .into_iter()
+                                        .map(|block| match block {
+                                            ThoughtSummaryBlock::SummaryText { text } => {
+                                                OpenAIResponsesReasoningSummary::SummaryText {
+                                                    text: Cow::Owned(text),
+                                                }
+                                            }
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
+                        }),
+                    ));
+                }
+            }
 
-            Cow::Borrowed(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 output.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
             }
-            Cow::Owned(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Owned(ContentBlock::Unknown(Unknown { data, .. })) => {
                 output.push(OpenAIResponsesInput::Unknown(Cow::Owned(data)));
             }
         }
@@ -978,6 +1109,7 @@ pub(super) enum OpenAIResponsesStreamEvent {
 
 /// Stream function for OpenAI Responses API
 /// Similar to stream_openai but uses the Responses API streaming format
+#[expect(clippy::too_many_arguments)]
 pub fn stream_openai_responses(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
@@ -985,23 +1117,36 @@ pub fn stream_openai_responses(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    request_id: Option<String>,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let mut current_tool_id: Option<String> = None;
     let mut current_tool_name: Option<String> = None;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
+    let mut saw_content_block = false;
+    let mut encountered_error = false;
 
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
+                    let request_id_for_error = match &e {
+                        TensorZeroEventError::TensorZero(_) => request_id.clone(),
+                        TensorZeroEventError::EventSource(inner) => {
+                            request_id.clone().or_else(|| super::request_id_from_event_source_error(inner))
+                        }
+                    };
                     match e {
                         TensorZeroEventError::TensorZero(e) => {
-                            yield Err(e);
+                            encountered_error = true;
+                            yield Err(super::with_request_id(e, request_id_for_error.as_deref()));
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(provider_type.clone(), e).await);
+                            encountered_error = true;
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -1044,10 +1189,14 @@ pub fn stream_openai_responses(
                             discard_unknown_chunks,
                             &model_name,
                             &provider_name,
+                            &raw_request,
                         );
 
                         match stream_message {
                             Ok(Some(chunk)) => {
+                                if !chunk.content.is_empty() {
+                                    saw_content_block = true;
+                                }
                                 yield Ok(chunk);
                                 // Break after yielding terminal events
                                 if is_terminal {
@@ -1056,6 +1205,7 @@ pub fn stream_openai_responses(
                             }
                             Ok(None) => continue, // Skip lifecycle events
                             Err(e) => {
+                                encountered_error = true;
                                 yield Err(e);
                                 // Break on error events too
                                 break;
@@ -1064,6 +1214,13 @@ pub fn stream_openai_responses(
                     }
                 },
             }
+        }
+        if !saw_content_block && !encountered_error {
+            tracing::warn!(
+                provider = %provider_type,
+                request_id = request_id.as_deref(),
+                "OpenAI Responses streaming response returned no content blocks"
+            );
         }
     })
 }
@@ -1081,6 +1238,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match event {
         // Text delta - the main content streaming event
@@ -1129,7 +1287,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                             message: "Got function_call_arguments.delta without current tool id"
                                 .to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
-                            raw_request: None,
+                            raw_request: Some(raw_request.to_string()),
                             raw_response: Some(raw_message.clone()),
                         })
                     })?,
@@ -1196,10 +1354,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                         vec![ContentBlockChunk::Unknown(UnknownChunk {
                             id: output_index.to_string(),
                             data: item,
-                            model_provider_name: Some(fully_qualified_name(
-                                model_name,
-                                provider_name,
-                            )),
+                            model_name: Some(model_name.to_string()),
+                            provider_name: Some(provider_name.to_string()),
                         })],
                         None,
                         raw_message,
@@ -1214,13 +1370,21 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
         // Completed event - extract usage and finish reason
         OpenAIResponsesStreamEvent::ResponseCompleted { response } => {
-            let usage = response.get("usage").and_then(|u| {
-                let input_tokens = u.get("input_tokens")?.as_u64()? as u32;
-                let output_tokens = u.get("output_tokens")?.as_u64()? as u32;
-                Some(Usage {
+            let usage = response.get("usage").map(|u| {
+                let input_tokens = match u.get("input_tokens") {
+                    None => None,
+                    Some(v) => v.as_u64().map(|v| v as u32),
+                };
+
+                let output_tokens = match u.get("output_tokens") {
+                    None => None,
+                    Some(v) => v.as_u64().map(|v| v as u32),
+                };
+
+                Usage {
                     input_tokens,
                     output_tokens,
-                })
+                }
             });
 
             // The incomplete_details field indicates if response was cut short
@@ -1249,20 +1413,28 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: error_msg.to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
         }
 
         // Incomplete event - extract finish reason
         OpenAIResponsesStreamEvent::ResponseIncomplete { response } => {
-            let usage = response.get("usage").and_then(|u| {
-                let input_tokens = u.get("input_tokens")?.as_u64()? as u32;
-                let output_tokens = u.get("output_tokens")?.as_u64()? as u32;
-                Some(Usage {
+            let usage = response.get("usage").map(|u| {
+                let input_tokens = match u.get("input_tokens") {
+                    None => None,
+                    Some(v) => v.as_u64().map(|v| v as u32),
+                };
+
+                let output_tokens = match u.get("output_tokens") {
+                    None => None,
+                    Some(v) => v.as_u64().map(|v| v as u32),
+                };
+
+                Usage {
                     input_tokens,
                     output_tokens,
-                })
+                }
             });
 
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1280,7 +1452,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: format!("Model refused to respond: {delta}"),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
         }
@@ -1290,7 +1462,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: error.to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
         }
@@ -1322,7 +1494,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "unknown".to_string(),
                     data,
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
                 })],
                 None,
                 raw_message,
@@ -1337,7 +1510,6 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 mod tests {
     use super::*;
     use std::time::Duration;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{FunctionType, ModelInferenceRequest, RequestMessage, Role};
@@ -1580,6 +1752,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1615,6 +1788,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1661,6 +1835,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1702,6 +1877,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1740,6 +1916,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1785,6 +1962,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1818,6 +1996,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1848,6 +2027,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1876,6 +2056,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1914,6 +2095,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -1946,6 +2128,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1954,8 +2137,8 @@ mod tests {
         assert_eq!(
             result.usage,
             Some(Usage {
-                input_tokens: 15,
-                output_tokens: 25
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::Stop));
@@ -1991,6 +2174,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1999,8 +2183,8 @@ mod tests {
         assert_eq!(
             result.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 100
+                input_tokens: Some(10),
+                output_tokens: Some(100),
             })
         );
     }
@@ -2032,6 +2216,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -2058,6 +2243,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -2084,6 +2270,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -2123,6 +2310,7 @@ mod tests {
                 false,
                 "test_model",
                 "test_provider",
+                "",
             )
             .unwrap();
 
@@ -2150,6 +2338,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -2189,6 +2378,7 @@ mod tests {
             true,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap();
 
@@ -2297,18 +2487,17 @@ mod tests {
         assert_eq!(provider_response.output.len(), 1);
 
         match &provider_response.output[0] {
-            ContentBlockOutput::Unknown {
+            ContentBlockOutput::Unknown(Unknown {
                 data,
-                model_provider_name,
-            } => {
+                model_name,
+                provider_name,
+            }) => {
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
                     Some("web_search_call")
                 );
-                assert_eq!(
-                    model_provider_name.as_deref(),
-                    Some("tensorzero::model_name::test-model::provider_name::test-provider")
-                );
+                assert_eq!(model_name.as_deref(), Some("test-model"));
+                assert_eq!(provider_name.as_deref(), Some("test-provider"));
             }
             _ => panic!("Expected ContentBlockOutput::Unknown"),
         }
@@ -2407,7 +2596,7 @@ mod tests {
 
         // Second should be unknown (web_search_call)
         match &provider_response.output[1] {
-            ContentBlockOutput::Unknown { data, .. } => {
+            ContentBlockOutput::Unknown(Unknown { data, .. }) => {
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
                     Some("web_search_call")
@@ -2427,10 +2616,11 @@ mod tests {
 
         // Fourth should be unknown (another_unknown_type)
         match &provider_response.output[3] {
-            ContentBlockOutput::Unknown {
+            ContentBlockOutput::Unknown(Unknown {
                 data,
-                model_provider_name,
-            } => {
+                model_name,
+                provider_name,
+            }) => {
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
                     Some("another_unknown_type")
@@ -2439,18 +2629,16 @@ mod tests {
                     data.get("custom_field").and_then(|v| v.as_str()),
                     Some("custom_value")
                 );
-                assert_eq!(
-                    model_provider_name.as_deref(),
-                    Some("tensorzero::model_name::gpt-5-nano::provider_name::openai")
-                );
+                assert_eq!(model_name.as_deref(), Some("gpt-5-nano"));
+                assert_eq!(provider_name.as_deref(), Some("openai"));
             }
             _ => panic!("Expected ContentBlockOutput::Unknown for another_unknown_type"),
         }
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_openai_responses_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -2460,6 +2648,7 @@ mod tests {
             function_type: FunctionType::Chat,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: Some("high".to_string()),
+                service_tier: None,
                 thinking_budget_tokens: Some(1024),
                 verbosity: Some("low".to_string()),
             },
@@ -2494,5 +2683,391 @@ mod tests {
             openai_responses_request.text.verbosity,
             Some("low".to_string())
         );
+    }
+
+    #[test]
+    fn test_input_image_serialization_with_detail() {
+        use crate::inference::types::file::Detail;
+
+        // Test serialization with detail: low
+        let input_low = OpenAIResponsesInputMessageContent::InputImage {
+            image_url: Cow::Borrowed("https://example.com/image.png"),
+            detail: Some(Detail::Low),
+        };
+        let json_low = serde_json::to_value(&input_low).unwrap();
+        assert_eq!(json_low["type"], "input_image");
+        assert_eq!(json_low["image_url"], "https://example.com/image.png");
+        assert_eq!(json_low["detail"], "low");
+
+        // Test serialization with detail: high
+        let input_high = OpenAIResponsesInputMessageContent::InputImage {
+            image_url: Cow::Borrowed("https://example.com/image.png"),
+            detail: Some(Detail::High),
+        };
+        let json_high = serde_json::to_value(&input_high).unwrap();
+        assert_eq!(json_high["detail"], "high");
+
+        // Test serialization with detail: auto
+        let input_auto = OpenAIResponsesInputMessageContent::InputImage {
+            image_url: Cow::Borrowed("https://example.com/image.png"),
+            detail: Some(Detail::Auto),
+        };
+        let json_auto = serde_json::to_value(&input_auto).unwrap();
+        assert_eq!(json_auto["detail"], "auto");
+
+        // Test serialization with detail: None (should be omitted from JSON)
+        let input_none = OpenAIResponsesInputMessageContent::InputImage {
+            image_url: Cow::Borrowed("https://example.com/image.png"),
+            detail: None,
+        };
+        let json_none = serde_json::to_value(&input_none).unwrap();
+        assert_eq!(json_none["type"], "input_image");
+        assert_eq!(json_none["image_url"], "https://example.com/image.png");
+        assert!(json_none.get("detail").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_openai_responses_request_with_allowed_tools_auto() {
+        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use std::borrow::Cow;
+
+        // Create a tool config with explicit allowed_tools and auto tool choice
+        let mut tool_config = MULTI_TOOL_CONFIG.clone();
+        tool_config.tool_choice = ToolChoice::Auto;
+        tool_config.allowed_tools = AllowedTools {
+            tools: vec!["get_temperature".to_string()],
+            choice: AllowedToolsChoice::Explicit,
+        };
+
+        let request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let openai_responses_request = OpenAIResponsesRequest::new(
+            "gpt-4o-2024-08-06",
+            &request,
+            false,
+            &[],
+            "test_model",
+            "openai",
+        )
+        .await
+        .unwrap();
+
+        // Verify tool_choice is AllowedTools variant with Auto mode
+        assert!(openai_responses_request.tool_choice.is_some());
+        let tool_choice = openai_responses_request.tool_choice.unwrap();
+        match tool_choice {
+            OpenAIResponsesToolChoice::AllowedTools(allowed_tools) => {
+                assert!(matches!(
+                    allowed_tools.mode,
+                    OpenAIResponsesAllowedToolsMode::Auto
+                ));
+                assert_eq!(allowed_tools.tools.len(), 1);
+                match &allowed_tools.tools[0] {
+                    OpenAIResponsesToolReference::Function { name } => {
+                        assert_eq!(name, "get_temperature");
+                    }
+                }
+            }
+            OpenAIResponsesToolChoice::String(_) => panic!("Expected AllowedTools variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_responses_request_with_allowed_tools_required() {
+        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use std::borrow::Cow;
+
+        // Create a tool config with explicit allowed_tools and required tool choice
+        let mut tool_config = MULTI_TOOL_CONFIG.clone();
+        tool_config.tool_choice = ToolChoice::Required;
+        tool_config.allowed_tools = AllowedTools {
+            tools: vec!["query_articles".to_string(), "get_temperature".to_string()],
+            choice: AllowedToolsChoice::Explicit,
+        };
+
+        let request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let openai_responses_request = OpenAIResponsesRequest::new(
+            "gpt-4o-2024-08-06",
+            &request,
+            false,
+            &[],
+            "test_model",
+            "openai",
+        )
+        .await
+        .unwrap();
+
+        // Verify tool_choice is AllowedTools variant with Required mode
+        assert!(openai_responses_request.tool_choice.is_some());
+        let tool_choice = openai_responses_request.tool_choice.unwrap();
+        match tool_choice {
+            OpenAIResponsesToolChoice::AllowedTools(allowed_tools) => {
+                assert!(matches!(
+                    allowed_tools.mode,
+                    OpenAIResponsesAllowedToolsMode::Required
+                ));
+                assert_eq!(allowed_tools.tools.len(), 2);
+                let tool_names: Vec<String> = allowed_tools
+                    .tools
+                    .iter()
+                    .map(|t| match t {
+                        OpenAIResponsesToolReference::Function { name } => name.clone(),
+                    })
+                    .collect();
+                assert!(tool_names.contains(&"query_articles".to_string()));
+                assert!(tool_names.contains(&"get_temperature".to_string()));
+            }
+            OpenAIResponsesToolChoice::String(_) => panic!("Expected AllowedTools variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_responses_request_with_allowed_tools_none_tool_choice() {
+        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use std::borrow::Cow;
+
+        // Test that when tool_choice is None but allowed_tools is set,
+        // we use AllowedTools variant with Auto mode
+        let mut tool_config = MULTI_TOOL_CONFIG.clone();
+        tool_config.tool_choice = ToolChoice::None;
+        tool_config.allowed_tools = AllowedTools {
+            tools: vec!["get_temperature".to_string()],
+            choice: AllowedToolsChoice::Explicit,
+        };
+
+        let request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let openai_responses_request = OpenAIResponsesRequest::new(
+            "gpt-4o-2024-08-06",
+            &request,
+            false,
+            &[],
+            "test_model",
+            "openai",
+        )
+        .await
+        .unwrap();
+
+        assert!(openai_responses_request.tool_choice.is_some());
+        let tool_choice = openai_responses_request.tool_choice.unwrap();
+        match tool_choice {
+            OpenAIResponsesToolChoice::AllowedTools(allowed_tools) => {
+                // ToolChoice::None with allowed_tools should map to Auto mode
+                assert!(matches!(
+                    allowed_tools.mode,
+                    OpenAIResponsesAllowedToolsMode::Auto
+                ));
+            }
+            OpenAIResponsesToolChoice::String(_) => panic!("Expected AllowedTools variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_responses_request_without_allowed_tools() {
+        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
+        use std::borrow::Cow;
+
+        // Test that when allowed_tools is not set (FunctionDefault),
+        // we use the regular tool_choice conversion
+        let tool_config = MULTI_TOOL_CONFIG.clone();
+        // MULTI_TOOL_CONFIG has ToolChoice::Required but no explicit allowed_tools
+
+        let request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let openai_responses_request = OpenAIResponsesRequest::new(
+            "gpt-4o-2024-08-06",
+            &request,
+            false,
+            &[],
+            "test_model",
+            "openai",
+        )
+        .await
+        .unwrap();
+
+        assert!(openai_responses_request.tool_choice.is_some());
+        let tool_choice = openai_responses_request.tool_choice.unwrap();
+        // Without allowed_tools, should use regular String variant
+        match tool_choice {
+            OpenAIResponsesToolChoice::String(OpenAIResponsesToolChoiceString::Required) => {
+                // This is expected
+            }
+            _ => panic!("Expected String(Required) variant, got {tool_choice:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_responses_request_with_specific_tool_without_allowed_tools() {
+        use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
+        use std::borrow::Cow;
+
+        // Test that Specific tool choice without allowed_tools converts to AllowedTools with mode Required
+        let tool_config = WEATHER_TOOL_CONFIG.clone();
+        // This has ToolChoice::Specific and no explicit allowed_tools
+
+        let request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let openai_responses_request = OpenAIResponsesRequest::new(
+            "gpt-4o-2024-08-06",
+            &request,
+            false,
+            &[],
+            "test_model",
+            "openai",
+        )
+        .await
+        .unwrap();
+
+        assert!(openai_responses_request.tool_choice.is_some());
+        let tool_choice = openai_responses_request.tool_choice.unwrap();
+        // Specific without allowed_tools should convert to AllowedTools with mode Required
+        match tool_choice {
+            OpenAIResponsesToolChoice::AllowedTools(allowed_tools) => {
+                assert!(matches!(
+                    allowed_tools.mode,
+                    OpenAIResponsesAllowedToolsMode::Required
+                ));
+                assert_eq!(allowed_tools.tools.len(), 1);
+                match &allowed_tools.tools[0] {
+                    OpenAIResponsesToolReference::Function { name } => {
+                        assert_eq!(name, "get_temperature");
+                    }
+                }
+            }
+            OpenAIResponsesToolChoice::String(_) => {
+                panic!("Expected AllowedTools variant, got {tool_choice:?}")
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_responses_request_empty_allowed_tools_list() {
+        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use std::borrow::Cow;
+
+        // Test edge case: explicit allowed_tools but empty list
+        let mut tool_config = MULTI_TOOL_CONFIG.clone();
+        tool_config.allowed_tools = AllowedTools {
+            tools: vec![],
+            choice: AllowedToolsChoice::Explicit,
+        };
+
+        let request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let openai_responses_request = OpenAIResponsesRequest::new(
+            "gpt-4o-2024-08-06",
+            &request,
+            false,
+            &[],
+            "test_model",
+            "openai",
+        )
+        .await
+        .unwrap();
+
+        assert!(openai_responses_request.tool_choice.is_some());
+        let tool_choice = openai_responses_request.tool_choice.unwrap();
+        match tool_choice {
+            OpenAIResponsesToolChoice::AllowedTools(allowed_tools) => {
+                assert_eq!(allowed_tools.tools.len(), 0);
+            }
+            OpenAIResponsesToolChoice::String(_) => {
+                panic!("Expected AllowedTools variant with empty list")
+            }
+        }
+    }
+
+    #[test]
+    fn test_openai_responses_tool_choice_serialization_allowed_tools() {
+        // Test that AllowedTools serializes correctly to match OpenAI spec
+        let tool_choice = OpenAIResponsesToolChoice::AllowedTools(OpenAIResponsesAllowedTools {
+            mode: OpenAIResponsesAllowedToolsMode::Required,
+            tools: vec![
+                OpenAIResponsesToolReference::Function {
+                    name: "get_weather".to_string(),
+                },
+                OpenAIResponsesToolReference::Function {
+                    name: "search".to_string(),
+                },
+            ],
+            r#type: StaticTypeAllowedTools,
+        });
+
+        let json = serde_json::to_value(&tool_choice).unwrap();
+
+        // Verify structure matches OpenAI spec
+        assert_eq!(json["type"], "allowed_tools");
+        assert_eq!(json["mode"], "required");
+        assert_eq!(json["tools"].as_array().unwrap().len(), 2);
+        assert_eq!(json["tools"][0]["type"], "function");
+        assert_eq!(json["tools"][0]["name"], "get_weather");
+        assert_eq!(json["tools"][1]["type"], "function");
+        assert_eq!(json["tools"][1]["name"], "search");
+    }
+
+    #[test]
+    fn test_openai_responses_tool_choice_serialization_string() {
+        // Test that String variants serialize correctly
+        let tool_choice_auto =
+            OpenAIResponsesToolChoice::String(OpenAIResponsesToolChoiceString::Auto);
+        let json_auto = serde_json::to_value(&tool_choice_auto).unwrap();
+        assert_eq!(json_auto, "auto");
+
+        let tool_choice_required =
+            OpenAIResponsesToolChoice::String(OpenAIResponsesToolChoiceString::Required);
+        let json_required = serde_json::to_value(&tool_choice_required).unwrap();
+        assert_eq!(json_required, "required");
+
+        let tool_choice_none =
+            OpenAIResponsesToolChoice::String(OpenAIResponsesToolChoiceString::None);
+        let json_none = serde_json::to_value(&tool_choice_none).unwrap();
+        assert_eq!(json_none, "none");
     }
 }

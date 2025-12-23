@@ -16,27 +16,28 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
+import type {
+  WorkflowEvaluationRun,
+  WorkflowEvaluationRunStatistics,
+} from "~/types/tensorzero";
 
 import { useConfig } from "~/context/config";
-import { formatMetricSummaryValue } from "~/utils/config/feedback";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue from "~/components/metric/MetricValue";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import type {
-  GroupedWorkflowEvaluationRunEpisodeWithFeedback,
-  WorkflowEvaluationRunStatisticsByMetricName,
-} from "~/utils/clickhouse/workflow_evaluations";
-import { TableItemShortUuid } from "~/components/ui/TableItems";
-import { formatDate } from "~/utils/date";
-import type { MetricConfig } from "tensorzero-node";
+  GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow,
+  MetricConfig,
+} from "~/types/tensorzero";
 
 interface WorkflowEvaluationProjectResultsTableProps {
   selected_run_infos: WorkflowEvaluationRun[];
-  evaluation_results: GroupedWorkflowEvaluationRunEpisodeWithFeedback[][];
-  evaluation_statistics: Record<
-    string,
-    WorkflowEvaluationRunStatisticsByMetricName[]
-  >;
+  evaluation_results: GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow[][];
+  evaluation_statistics: Record<string, WorkflowEvaluationRunStatistics[]>;
 }
 
 export function WorkflowEvaluationProjectResultsTable({
@@ -159,7 +160,7 @@ export function WorkflowEvaluationProjectResultsTable({
 
                           {/* Timestamp cell */}
                           <TableCell className="text-center align-middle">
-                            {formatDate(new Date(result.timestamp))}
+                            <TableItemTime timestamp={result.timestamp} />
                           </TableCell>
 
                           {/* Metrics cells */}
@@ -301,10 +302,14 @@ const MetricProperties = ({
                 ></div>
                 <span>
                   {formatMetricSummaryValue(stat.avg_metric, metricConfig)}
-                  {stat.ci_error ? (
+                  {stat.ci_lower != null && stat.ci_upper != null ? (
                     <>
                       {" "}
-                      ± {formatMetricSummaryValue(stat.ci_error, metricConfig)}
+                      {formatConfidenceInterval(
+                        stat.ci_lower,
+                        stat.ci_upper,
+                        metricConfig,
+                      )}
                     </>
                   ) : null}{" "}
                   (n={stat.count})
@@ -341,10 +346,7 @@ const EvaluationRunCircle = ({ runId }: { runId: string }) => {
 // to a map from metric_name to a list of statistics with different run_ids,
 // sorted in the order of selected_run_ids.
 function convertStatsByRunIdToStatsByMetricName(
-  evaluation_statistics: Record<
-    string,
-    WorkflowEvaluationRunStatisticsByMetricName[]
-  >,
+  evaluation_statistics: Record<string, WorkflowEvaluationRunStatistics[]>,
   uniqueMetricNames: string[],
   selectedRunIds: string[],
 ) {
@@ -399,5 +401,6 @@ interface WorkflowEvaluationStatisticsByRunId {
   count: number;
   avg_metric: number;
   stdev: number | null;
-  ci_error: number | null;
+  ci_lower: number | null;
+  ci_upper: number | null;
 }

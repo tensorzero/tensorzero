@@ -5,15 +5,15 @@ use std::sync::Arc;
 use crate::config::OtlpConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
-use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
-use crate::inference::types::file::serialize_with_file_data;
+use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
 use crate::serde_util::{deserialize_json_string, serialize_json_string};
-use crate::tool::{ToolCallConfig, ToolCallOutput};
+use crate::tool::{InferenceResponseToolCall, InferenceResponseToolCallExt, ToolCallConfig};
+use crate::utils::spawn_ignoring_shutdown;
 use blake3::Hash;
 use clap::ValueEnum;
 use serde::de::{DeserializeOwned, IgnoredAny};
@@ -165,9 +165,9 @@ impl ModelProviderRequest<'_> {
         hasher.update(&[0]); // null byte after model name to ensure data is prefix-free
         hasher.update(provider_name.as_bytes());
         hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
-                             // Convert the request to a JSON Value, error if serialization fails
+        // Convert the request to a JSON Value, error if serialization fails
 
-        let mut request_value = serialize_with_file_data(request).map_err(|e| {
+        let mut request_value = serde_json::to_value(request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize request: {e}"),
             })
@@ -214,8 +214,8 @@ pub struct CacheData<T: CacheOutput> {
     pub output: T,
     pub raw_request: String,
     pub raw_response: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,
 }
 
@@ -246,7 +246,7 @@ impl CacheOutput for NonStreamingCacheData {
             if let ContentBlockOutput::ToolCall(tool_call) = block {
                 if cache_validation_info.tool_config.is_some() {
                     // If we have a tool config, validate against the schema
-                    let output = ToolCallOutput::new(
+                    let output = InferenceResponseToolCall::new_from_tool_call(
                         tool_call.clone(),
                         cache_validation_info.tool_config.as_ref(),
                     )
@@ -307,9 +307,7 @@ fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     clickhouse_client: ClickHouseConnectionInfo,
     cache_validation_info: CacheValidationInfo,
 ) {
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(async move {
+    spawn_ignoring_shutdown(async move {
         if row
             .data
             .output
@@ -394,7 +392,7 @@ pub fn start_cache_write_streaming(
             finish_reason = Some(chunk_finish_reason);
         }
     }
-    let finish_reason = finish_reason.cloned();
+    let finish_reason = finish_reason.copied();
     let output = StreamingCacheData {
         chunks: chunks
             .into_iter()

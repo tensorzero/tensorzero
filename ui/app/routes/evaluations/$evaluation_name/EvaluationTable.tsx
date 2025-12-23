@@ -21,23 +21,27 @@ import { toEvaluationDatapointUrl } from "~/utils/urls";
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
   EvaluationRunInfo,
-  EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
-import type { DisplayInput } from "~/utils/clickhouse/common";
-import { Output } from "~/components/inference/Output";
+import type { EvaluationStatistics } from "~/types/tensorzero";
+import type { ZodDisplayInput } from "~/utils/clickhouse/common";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import { formatMetricSummaryValue } from "~/utils/config/feedback";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
 import type {
   EvaluatorConfig,
   MetricConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import {
   useColorAssigner,
   ColorAssignerProvider,
@@ -56,7 +60,7 @@ type TruncatedContentProps = (
     }
   | {
       type: "input";
-      content: DisplayInput;
+      content: ZodDisplayInput;
     }
   | {
       type: "output";
@@ -88,8 +92,10 @@ const TruncatedContent = ({
         </div>
       ) : type === "input" ? (
         <Input {...content} />
+      ) : Array.isArray(content) ? (
+        <ChatOutputElement output={content} />
       ) : (
-        <Output output={content} />
+        <JsonOutputElement output={content} />
       )}
     </TruncatedContentTooltip>
   );
@@ -121,7 +127,7 @@ const TruncatedContentTooltip: React.FC<
 );
 
 // Helper function to generate a summary of an Input object
-function getInputSummary(input: DisplayInput): string {
+function getInputSummary(input: ZodDisplayInput): string {
   if (!input || !input.messages || input.messages.length === 0) {
     return "Empty input";
   }
@@ -225,7 +231,7 @@ interface EvaluationTableProps {
 
 interface MetricValueInfo {
   value: string;
-  evaluator_inference_id: string | null;
+  evaluator_inference_id?: string;
   inference_id: string;
   is_human_feedback: boolean;
 }
@@ -261,7 +267,7 @@ export function EvaluationTable({
       {
         id: string;
         name: string | null;
-        input: DisplayInput;
+        input: ZodDisplayInput;
         reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
       }
     >();
@@ -319,7 +325,7 @@ export function EvaluationTable({
       if (runData && result.metric_name) {
         runData.metrics.set(result.metric_name, {
           value: result.metric_value,
-          evaluator_inference_id: result.evaluator_inference_id,
+          evaluator_inference_id: result.evaluator_inference_id ?? undefined,
           inference_id: result.inference_id,
           is_human_feedback: result.is_human_feedback,
         });
@@ -587,9 +593,7 @@ export function EvaluationTable({
                                     className="h-[52px] text-center align-middle"
                                   >
                                     {/* Add group and relative positioning to the container */}
-                                    <div
-                                      className={`group relative flex h-full items-center justify-center ${metricValue && evaluatorConfig?.type === "llm_judge" ? "pl-10" : ""}`}
-                                    >
+                                    <div className="group relative flex h-full items-center justify-center">
                                       {metricValue &&
                                       metricType &&
                                       evaluatorConfig ? (
@@ -615,7 +619,7 @@ export function EvaluationTable({
                                           {evaluatorConfig.type ===
                                             "llm_judge" && (
                                             <div
-                                              className="ml-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                              className="absolute right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                                               // Stop click event propagation so the row navigation is not triggered
                                               onClick={(e) =>
                                                 e.stopPropagation()
@@ -792,12 +796,12 @@ const EvaluatorProperties = ({
                 ></div>
                 <span>
                   {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
-                  {stat.stderr_metric ? (
+                  {stat.ci_lower != null && stat.ci_upper != null ? (
                     <>
                       {" "}
-                      ±{" "}
-                      {formatMetricSummaryValue(
-                        stat.stderr_metric,
+                      {formatConfidenceInterval(
+                        stat.ci_lower,
+                        stat.ci_upper,
                         metricConfig,
                       )}
                     </>

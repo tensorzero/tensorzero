@@ -22,7 +22,7 @@ use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
 use clap::{Parser, ValueEnum};
 use http::{HeaderName, HeaderValue, Version};
-use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
 use moka::sync::Cache;
@@ -70,16 +70,15 @@ fn save_cache_body(
 
     // None of our providers produce image/pdf responses, so this is good enough to exclude
     // things like file fetching (which happen to use the proxied HTTP client in the gateway)
-    if let Some(content_type) = parts.headers.get(http::header::CONTENT_TYPE) {
-        if content_type.to_str().unwrap().starts_with("image/")
+    if let Some(content_type) = parts.headers.get(http::header::CONTENT_TYPE)
+        && (content_type.to_str().unwrap().starts_with("image/")
             || content_type
                 .to_str()
                 .unwrap()
-                .starts_with("application/pdf")
-        {
-            tracing::info!("Skipping caching of response with content type {content_type:?}");
-            return Ok(());
-        }
+                .starts_with("application/pdf"))
+    {
+        tracing::info!("Skipping caching of response with content type {content_type:?}");
+        return Ok(());
     }
 
     #[derive(Serialize)]
@@ -104,8 +103,13 @@ fn save_cache_body(
     // If we have multiple concurrent requests to the same path, one of them will win the race.
     // This is fine for our use case, as it shouldn't matter which successful (by HTTP status code)
     // response is cached.
-    let mut tmpfile = tempfile::NamedTempFile::new()
-        .with_context(|| format!("Failed to create tempfile for path {path_str}"))?;
+    // We create the tempfile in the same directory as the final path, since the directory
+    // may be a different filesystem (e.g. a Docker volume mount) from the standard tempfile directory.
+    let mut tmpfile = tempfile::NamedTempFile::new_in(
+        path.parent()
+            .with_context(|| format!("Failed to get parent directory for path {path_str}"))?,
+    )
+    .with_context(|| format!("Failed to create tempfile for path {path_str}"))?;
     tmpfile
         .write_all(json_str.as_bytes())
         .with_context(|| format!("Failed to write to file for path {path_str}"))?;
@@ -135,16 +139,22 @@ async fn check_cache<
 ) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
     request.extensions_mut().clear();
     let mut sanitized_header = false;
-    if args.sanitize_bearer_auth {
-        if let Some(auth_header) = request.headers().get("Authorization") {
-            if auth_header.to_str().unwrap().starts_with("Bearer ") {
-                request.headers_mut().insert(
-                    "Authorization",
-                    HeaderValue::from_static("Bearer TENSORZERO_PROVIDER_PROXY_TOKEN"),
-                );
-                sanitized_header = true;
-            }
-        }
+    if args.sanitize_bearer_auth
+        && let Some(auth_header) = request.headers().get("Authorization")
+        && auth_header.to_str().unwrap().starts_with("Bearer ")
+    {
+        request.headers_mut().insert(
+            "Authorization",
+            HeaderValue::from_static("Bearer TENSORZERO_PROVIDER_PROXY_TOKEN"),
+        );
+        sanitized_header = true;
+    }
+    if args.sanitize_traceparent && request.headers().contains_key("traceparent") {
+        request.headers_mut().insert(
+            "traceparent",
+            HeaderValue::from_static("TENSORZERO_PROVIDER_PROXY_TOKEN"),
+        );
+        sanitized_header = true;
     }
     if args.sanitize_aws_sigv4 {
         let header_names = [
@@ -197,15 +207,34 @@ async fn check_cache<
     let path = args.cache_path.join(filename);
     let path_str = path.to_string_lossy().into_owned();
 
-    let use_cache = || match args.mode {
+    let mut file_mtime = None;
+
+    let mut use_cache = || match args.mode {
         CacheMode::ReadOnly => Ok::<_, anyhow::Error>(true),
         CacheMode::ReadWrite => Ok(true),
         CacheMode::ReadOldWriteNew => {
-            let file_mtime = std::fs::metadata(&path)
+            let current_file_mtime = std::fs::metadata(&path)
                 .with_context(|| format!("Failed to read cache file metadata for {path_str}"))?
                 .modified()
                 .with_context(|| format!("Failed to read cache file mtime for {path_str}"))?;
-            Ok(file_mtime <= start_time)
+            let use_cache = current_file_mtime <= start_time;
+            // If we have a file on disk but we decided not to use it, then *delete* the existing file.
+            // This file might have been a bad response from the provider (which we decided to retry),
+            // so we don't want to leave it on disk in case our successful response fails to write to disk
+            // for some reason.
+            // This can delete 'good' files (if multiple independent tests happen to make identical requests
+            // to the same provider), but whichever run finishes last should still write a file to disk.
+            // Additionally, we can miss writing good files to disk, since the stream might get closed early
+            // by the client (when it sees a `[DONE]` event).
+            // However, both of these cases don't affect correctness. The important requirement is that all
+            // cache files left on disk at the end of a successful test suite run are 'good' files
+            // (since we'll upload them to our S3 bucket)
+            if !use_cache {
+                std::fs::remove_file(&path)
+                    .with_context(|| format!("Failed to remove cache file {path_str}"))?;
+            }
+            file_mtime = Some(current_file_mtime);
+            Ok(use_cache)
         }
     };
 
@@ -228,7 +257,12 @@ async fn check_cache<
         .with_context(|| format!("Failed to await tokio spawn_blocking for {path_str_clone}"))??;
         (resp, HEADER_TRUE)
     } else {
-        tracing::info!("Cache miss: {}", path_str);
+        tracing::info!(
+            file_mtime = ?file_mtime,
+            start_time = ?start_time,
+            "Cache miss: {}",
+            path_str,
+        );
         let response = match missing().await {
             Ok(response) => response,
             Err(e) => {
@@ -265,7 +299,12 @@ async fn check_cache<
                     b,
                     Box::new(move |body| {
                         if write {
-                            tokio::task::spawn_blocking(move || {
+                            tokio::task::block_in_place(move || {
+                                // Run this synchronously, so that we ensure that the file is written to disk
+                                // before we send a response to the client.
+                                // This ensures that any retries from the caller (e.g. tensorzero e2e tests)
+                                // will happen after the first response was fully written to disk,
+                                // ensuring that newer retries will overwrite the response from older retries on disk.
                                 if let Err(e) = save_cache_body(path, parts, body) {
                                     tracing::error!(
                                         err = e.as_ref() as &dyn std::error::Error,
@@ -316,6 +355,10 @@ pub struct Args {
     /// Health check port
     #[arg(long, default_value = "3004")]
     pub health_port: u16,
+    /// If `true`, replaces `traceparent` header with `traceparent: TENSORZERO_PROVIDER_PROXY_TOKEN`
+    /// when constructing a cache key.
+    #[arg(long, default_value = "true")]
+    pub sanitize_traceparent: bool,
     /// If `true`, replaces `Authorization: Bearer <token>` with `Authorization: Bearer TENSORZERO_PROVIDER_PROXY_TOKEN`
     /// when constructing a cache key.
     #[arg(long, default_value = "true")]

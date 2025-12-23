@@ -4,8 +4,8 @@ use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 use super::{
-    prepare_gcp_vertex_gemini_messages, tensorzero_to_gcp_vertex_gemini_content,
-    GCPVertexGeminiFileURI, GCPVertexGeminiSupervisedRow,
+    GCPVertexGeminiFileURI, GCPVertexGeminiSupervisedRow, prepare_gcp_vertex_gemini_messages,
+    tensorzero_to_gcp_vertex_gemini_content,
 };
 use crate::{
     config::TimeoutsConfig,
@@ -17,9 +17,11 @@ use crate::{
     },
     optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::gcp_vertex_gemini::{
-        GCPVertexGeminiContent, GCPVertexGeminiContentPart, GCPVertexGeminiRole, PROVIDER_TYPE,
+        GCPVertexGeminiContent, GCPVertexGeminiContentPart, GCPVertexGeminiPartData,
+        GCPVertexGeminiRole, PROVIDER_TYPE,
     },
     stored_inference::LazyRenderedSample,
+    tool::Tool,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -62,7 +64,15 @@ impl<'a> GCPVertexGeminiSupervisedRow<'a> {
             .tool_params
             .additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(Into::into).collect())
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter_map(|dt| match &dt {
+                        Tool::Function(func) => Some(func.into()),
+                        Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         let mut contents = prepare_gcp_vertex_gemini_messages(&inference.messages).await?;
         let system_instruction =
@@ -71,9 +81,13 @@ impl<'a> GCPVertexGeminiSupervisedRow<'a> {
                 .as_ref()
                 .map(|system_instruction| GCPVertexGeminiContent {
                     role: GCPVertexGeminiRole::System,
-                    parts: vec![FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text {
-                        text: Cow::Borrowed(system_instruction),
-                    })],
+                    parts: vec![GCPVertexGeminiContentPart {
+                        thought: false,
+                        thought_signature: None,
+                        data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                            text: Cow::Borrowed(system_instruction),
+                        }),
+                    }],
                 });
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
@@ -216,6 +230,7 @@ pub fn convert_to_optimizer_status(
                     routing: vec![model_name.clone().into()],
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
                     timeouts: TimeoutsConfig::default(),
+                    skip_relay: None,
                 }),
             }
         }
@@ -253,7 +268,6 @@ mod tests {
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
             StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
-        providers::gcp_vertex_gemini::GCPVertexGeminiContentPart,
         stored_inference::{RenderedSample, StoredOutput},
         tool::DynamicToolParams,
     };
@@ -312,8 +326,8 @@ mod tests {
         let system_text = system_instruction
             .parts
             .iter()
-            .filter_map(|part| match part {
-                FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+            .filter_map(|part| match &part.data {
+                FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
                     Some(text.as_ref())
                 }
                 _ => None,
@@ -329,8 +343,8 @@ mod tests {
         // Check user message
         assert_eq!(row.contents[0].role, GCPVertexGeminiRole::User);
         let user_part = &row.contents[0].parts[0];
-        match user_part {
-            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+        match &user_part.data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
                 assert_eq!(text, "What is the capital of France?");
             }
             _ => panic!("First message should be a text message"),
@@ -339,8 +353,8 @@ mod tests {
         // Check assistant message
         assert_eq!(row.contents[1].role, GCPVertexGeminiRole::Model);
         let assistant_part = &row.contents[1].parts[0];
-        match assistant_part {
-            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+        match &assistant_part.data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
                 assert_eq!(text, "The capital of France is Paris.");
             }
             _ => panic!("Second message should be a text message"),
@@ -407,9 +421,11 @@ mod tests {
         assert!(result.is_err());
         // Optionally, you can also check the error message
         if let Err(error) = result {
-            assert!(error
-                .to_string()
-                .contains("Tuned model must have an endpoint"));
+            assert!(
+                error
+                    .to_string()
+                    .contains("Tuned model must have an endpoint")
+            );
         }
 
         // Test for "running" status

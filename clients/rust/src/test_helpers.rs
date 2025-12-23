@@ -1,10 +1,14 @@
 #![expect(clippy::expect_used, clippy::unwrap_used, clippy::missing_panics_doc)]
 
+use std::collections::HashMap;
+
 use crate::{Client, ClientBuilder, ClientBuilderMode};
 use tempfile::NamedTempFile;
-use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
 use url::Url;
+
+// Re-export e2e test helpers from tensorzero-core
+pub use tensorzero_core::test_helpers::{get_e2e_config, get_e2e_config_path};
 
 pub async fn make_http_gateway() -> Client {
     ClientBuilder::new(ClientBuilderMode::HTTPGateway {
@@ -13,20 +17,6 @@ pub async fn make_http_gateway() -> Client {
     .build()
     .await
     .unwrap()
-}
-
-pub fn get_e2e_config_path() -> std::path::PathBuf {
-    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../../tensorzero-core/tests/e2e/tensorzero.toml");
-    config_path
-}
-
-pub async fn get_e2e_config() -> Config {
-    let config_path = get_e2e_config_path();
-    let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    Config::load_from_path_optional_verify_credentials(&config_glob, false)
-        .await
-        .unwrap()
 }
 
 pub async fn make_embedded_gateway() -> Client {
@@ -115,10 +105,28 @@ macro_rules! make_gateway_test_functions {
     };
 }
 
-fn get_gateway_endpoint(path: &str) -> String {
+pub fn get_gateway_endpoint(path: &str) -> String {
     let gateway_host =
         std::env::var("TENSORZERO_GATEWAY_HOST").unwrap_or_else(|_| "localhost".to_string());
     let gateway_port =
         std::env::var("TENSORZERO_GATEWAY_PORT").unwrap_or_else(|_| "3000".to_string());
     format!("http://{gateway_host}:{gateway_port}{path}")
+}
+
+pub async fn get_metrics(client: &reqwest::Client, url: &str) -> HashMap<String, String> {
+    let response = client.get(url).send().await.unwrap().text().await.unwrap();
+    let metrics: HashMap<String, String> = response
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| {
+            // Split on the last space, since the metric name may itself have spaces
+            let mut parts = line.rsplitn(2, ' ');
+            match (parts.next(), parts.next()) {
+                (Some(value), Some(key)) => Some((key.to_string(), value.to_string())),
+                _ => None,
+            }
+        })
+        .collect();
+
+    metrics
 }

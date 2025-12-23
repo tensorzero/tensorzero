@@ -91,6 +91,14 @@ model = "openai::gpt-4o-mini"
 
 This minimal configuration file tells the TensorZero Gateway everything it needs to replicate our original OpenAI call.
 
+<Tip>
+
+Using the shorthand `openai::gpt-4o-mini` notation is convenient for getting started.
+To learn about all configuration options including schemas, templates, and advanced variant types, see [Configure functions and variants](/gateway/configure-functions-and-variants).
+For production deployments with multiple providers, routing, and fallbacks, see [Configure models and providers](/gateway/configure-models-and-providers).
+
+</Tip>
+
 ## Deploying TensorZero
 
 We're almost ready to start making API calls.
@@ -109,11 +117,11 @@ curl -LO "https://raw.githubusercontent.com/tensorzero/tensorzero/refs/heads/mai
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+# For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    image: clickhouse:lts
     environment:
       - CLICKHOUSE_USER=chuser
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
@@ -153,11 +161,7 @@ services:
 
   ui:
     image: tensorzero/ui
-    volumes:
-      # Mount our tensorzero.toml file into the container
-      - ./config:/app/config:ro
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
       - TENSORZERO_GATEWAY_URL=http://gateway:3000
     ports:

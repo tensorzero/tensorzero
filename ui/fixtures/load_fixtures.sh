@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -euxo pipefail
 
 DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
 if [ -f /load_complete.marker ]; then
@@ -54,6 +54,9 @@ clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --pass
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE DynamicEvaluationRunEpisode"
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE ModelInferenceCache"
 
+# Download JSONL fixtures from R2
+uv run ./download-small-fixtures.py
+
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO JsonInference FORMAT JSONEachRow" < json_inference_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ChatInference FORMAT JSONEachRow" < chat_inference_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FORMAT JSONEachRow" < boolean_metric_feedback_examples.jsonl
@@ -77,25 +80,19 @@ if [ "${TENSORZERO_SKIP_LARGE_FIXTURES:-}" = "1" ]; then
 fi
 
 uv run python --version
-uv run ./download-fixtures.py
-df -h
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ChatInference FROM INFILE './s3-fixtures/large_chat_inference_v2.parquet' FORMAT Parquet"
-df -h
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO JsonInference FROM INFILE './s3-fixtures/large_json_inference_v2.parquet' FORMAT Parquet"
-df -h
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FROM INFILE './s3-fixtures/large_chat_model_inference_v2.parquet' FORMAT Parquet"
-df -h
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FROM INFILE './s3-fixtures/large_json_model_inference_v2.parquet' FORMAT Parquet"
-df -h
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FROM INFILE './s3-fixtures/large_chat_boolean_feedback.parquet' FORMAT Parquet"
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FROM INFILE './s3-fixtures/large_json_boolean_feedback.parquet' FORMAT Parquet"
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO FloatMetricFeedback FROM INFILE './s3-fixtures/large_chat_float_feedback.parquet' FORMAT Parquet"
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO FloatMetricFeedback FROM INFILE './s3-fixtures/large_json_float_feedback.parquet' FORMAT Parquet"
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO CommentFeedback FROM INFILE './s3-fixtures/large_chat_comment_feedback.parquet' FORMAT Parquet"
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO CommentFeedback FROM INFILE './s3-fixtures/large_json_comment_feedback.parquet' FORMAT Parquet"
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO DemonstrationFeedback FROM INFILE './s3-fixtures/large_chat_demonstration_feedback.parquet' FORMAT Parquet"
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO DemonstrationFeedback FROM INFILE './s3-fixtures/large_json_demonstration_feedback.parquet' FORMAT Parquet"
-
+uv run ./download-large-fixtures.py
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ChatInference FROM INFILE './s3-fixtures/large_chat_inference_v2.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO JsonInference FROM INFILE './s3-fixtures/large_json_inference_v2.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FROM INFILE './s3-fixtures/large_chat_model_inference_v2.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FROM INFILE './s3-fixtures/large_json_model_inference_v2.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FROM INFILE './s3-fixtures/large_chat_boolean_feedback.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FROM INFILE './s3-fixtures/large_json_boolean_feedback.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO FloatMetricFeedback FROM INFILE './s3-fixtures/large_chat_float_feedback.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO FloatMetricFeedback FROM INFILE './s3-fixtures/large_json_float_feedback.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO CommentFeedback FROM INFILE './s3-fixtures/large_chat_comment_feedback.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO CommentFeedback FROM INFILE './s3-fixtures/large_json_comment_feedback.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO DemonstrationFeedback FROM INFILE './s3-fixtures/large_chat_demonstration_feedback.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO DemonstrationFeedback FROM INFILE './s3-fixtures/large_json_demonstration_feedback.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
 # Give ClickHouse some time to make the writes visible
 sleep 2
 

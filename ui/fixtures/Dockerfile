@@ -1,10 +1,13 @@
 # This Dockerfile is used to load fixtures into a (separate) ClickHouse server
-FROM clickhouse/clickhouse-server:24.12-alpine
+FROM clickhouse:lts
 
-RUN apk add --no-cache python3
+RUN apt-get update && apt-get install -y cmake curl
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
+    unzip awscliv2.zip && \
+    ./aws/install
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Copy Python project files and install dependencies
 WORKDIR /fixtures
-COPY ui/fixtures/pyproject.toml ui/fixtures/uv.lock ./
+COPY ui/fixtures/pyproject.toml ui/fixtures/uv.lock ui/fixtures/.python-version ./
 RUN uv sync --frozen

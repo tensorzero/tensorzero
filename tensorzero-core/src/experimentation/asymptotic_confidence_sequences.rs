@@ -77,7 +77,8 @@ pub fn asymp_cs(
     }
 
     // Default value of rho, computed as sqrt( (-2 log(alpha) + log(-2 log(alpha)) + 1) / 100 )
-    let rho = rho.unwrap_or_else(|| (-2.0 * alpha.ln() + (-2.0 * alpha.ln()).ln() + 1.0) / 10.0);
+    let rho =
+        rho.unwrap_or_else(|| (-2.0 * alpha.ln() + (-2.0 * alpha.ln()).ln() + 1.0).sqrt() / 10.0);
 
     if rho <= 0.0 {
         return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -288,7 +289,7 @@ mod tests {
         assert!(result[0].cs_upper.unwrap() > result[0].mean);
         // With zero variance, bounds should be very tight
         let width = result[0].cs_upper.unwrap() - result[0].cs_lower.unwrap();
-        assert!(width < 0.1);
+        assert!(width < 0.2);
     }
 
     #[test]
@@ -314,10 +315,12 @@ mod tests {
         let feedback = vec![create_test_point(0.5, 0.25, 100)];
         let result = asymp_cs(feedback, 0.0, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("alpha must be in (0, 1)"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("alpha must be in (0, 1)")
+        );
     }
 
     #[test]
@@ -325,10 +328,12 @@ mod tests {
         let feedback = vec![create_test_point(0.5, 0.25, 100)];
         let result = asymp_cs(feedback, 1.0, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("alpha must be in (0, 1)"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("alpha must be in (0, 1)")
+        );
     }
 
     #[test]
@@ -336,10 +341,12 @@ mod tests {
         let feedback = vec![create_test_point(0.5, 0.25, 100)];
         let result = asymp_cs(feedback, -0.1, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("alpha must be in (0, 1)"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("alpha must be in (0, 1)")
+        );
     }
 
     #[test]
@@ -347,10 +354,12 @@ mod tests {
         let feedback = vec![create_test_point(0.5, 0.25, 100)];
         let result = asymp_cs(feedback, 1.5, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("alpha must be in (0, 1)"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("alpha must be in (0, 1)")
+        );
     }
 
     #[test]
@@ -358,10 +367,12 @@ mod tests {
         let feedback = vec![create_test_point(0.5, 0.25, 100)];
         let result = asymp_cs(feedback, 0.05, Some(0.0));
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("rho must be strictly positive"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("rho must be strictly positive")
+        );
     }
 
     #[test]
@@ -369,10 +380,12 @@ mod tests {
         let feedback = vec![create_test_point(0.5, 0.25, 100)];
         let result = asymp_cs(feedback, 0.05, Some(-0.5));
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("rho must be strictly positive"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("rho must be strictly positive")
+        );
     }
 
     #[test]

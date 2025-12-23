@@ -1,31 +1,28 @@
 {
-    "name": "Python Container",
-    "image": "mcr.microsoft.com/devcontainers/python:3.10",
-    "features":  {
-      "ghcr.io/devcontainers/features/docker-in-docker:2": {}
-    },
-    "customizations": {
-      "vscode": {
-        "settings": {
-          "python.defaultInterpreterPath": "/usr/bin/python"
-        },
-        "extensions": [
-          "ms-python.python",
-          "ms-python.vscode-pylance",
-          "mkhl.direnv",
-          "ms-toolsai.jupyter",
-          "ms-toolsai.jupyter-renderers",
-          "ms-toolsai.vscode-jupyter-cell-tags",
-          "ms-toolsai.vscode-jupyter-slideshow",
-          "mikoz.black-py",
-          "ms-pyright.pyright"
-        ]
-      }
-    },
-    "postCreateCommand": "curl -Ls https://astral.sh/uv/install.sh | sh && curl -sfL https://direnv.net/install.sh | bash && echo 'eval \"$(direnv hook bash)\"' >> ~/.bashrc && echo 'eval \"$(direnv hook zsh)\"' >> ~/.zshrc",
-    "runArgs": [
-      "--gpus=all",
-      "--network=host"
-    ],
-    "remoteUser": "vscode"
-  }
+  "name": "Python Container",
+  "image": "mcr.microsoft.com/devcontainers/python:3.10",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "mkhl.direnv",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.jupyter-renderers",
+        "ms-toolsai.vscode-jupyter-cell-tags",
+        "ms-toolsai.vscode-jupyter-slideshow",
+        "mikoz.black-py",
+        "ms-pyright.pyright"
+      ]
+    }
+  },
+  "postCreateCommand": "curl -Ls https://astral.sh/uv/install.sh | sh && curl -sfL https://direnv.net/install.sh | bash && echo 'eval \"$(direnv hook bash)\"' >> ~/.bashrc && echo 'eval \"$(direnv hook zsh)\"' >> ~/.zshrc",
+  "runArgs": ["--gpus=all", "--network=host"],
+  "remoteUser": "vscode"
+}

@@ -13,7 +13,7 @@ use crate::{
     variant::VariantInfo,
 };
 
-use super::VariantSampler;
+use super::{VariantSampler, check_duplicates_across_map, check_duplicates_within};
 
 /// Pure function for static weights sampling logic.
 /// Given a uniform sample in [0, 1), selects a variant from active_variants
@@ -35,28 +35,15 @@ pub(crate) fn sample_static_weights(
 
     if total_weight <= 0.0 {
         // No active variants in the candidate set, try fallback variants
-        // Take the intersection of active_variants and fallback_variants
-        let intersection: Vec<&String> = active_variants
-            .keys()
-            .filter(|variant_name| fallback_variants.contains(variant_name))
-            .collect();
-
-        if intersection.is_empty() {
-            Err(ErrorDetails::NoFallbackVariantsRemaining.into())
-        } else {
-            // Use uniform sample to select from intersection
-            let random_index = (uniform_sample * intersection.len() as f64).floor() as usize;
-            intersection
-                .get(random_index)
-                .ok_or_else(|| {
-                    Error::new(ErrorDetails::Inference {
-                        message: format!(
-                            "Failed to sample variant from nonempty intersection. {IMPOSSIBLE_ERROR_MESSAGE}"
-                        ),
-                    })
-                })
-                .map(std::string::ToString::to_string)
+        // Select the first variant from the ranked fallback_variants list that is active
+        for variant_name in fallback_variants {
+            if active_variants.contains_key(variant_name) {
+                return Ok(variant_name.clone());
+            }
         }
+
+        // No active fallback variants found
+        Err(ErrorDetails::NoFallbackVariantsRemaining.into())
     } else {
         // Use weighted sampling from candidate variants
         let random_threshold = uniform_sample * total_weight;
@@ -89,13 +76,14 @@ pub(crate) fn sample_static_weights(
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StaticWeightsConfig {
-    // Map from variant name to weight. We enforce that weights are positive at construction time.
+    // Map from variant name to weight. Zero weights exclude variants from weighted sampling.
+    // We enforce that weights are non-negative during setup validation.
     candidate_variants: BTreeMap<String, f64>,
     // list of fallback variants (we will uniformly sample from these at inference time)
+    #[serde(default)]
     fallback_variants: Vec<String>,
 }
 
@@ -130,7 +118,13 @@ impl VariantSampler for StaticWeightsConfig {
         _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
     ) -> Result<(), Error> {
-        // We just assert that all weights are non-negative
+        // Check for duplicates within fallback_variants
+        check_duplicates_within(&self.fallback_variants, "fallback_variants")?;
+
+        // Check for duplicates across candidate_variants and fallback_variants
+        check_duplicates_across_map(self.candidate_variants.keys(), &self.fallback_variants)?;
+
+        // Validate that all weights are non-negative
         for weight in self.candidate_variants.values() {
             if *weight < 0.0 {
                 return Err(Error::new(ErrorDetails::Config {
@@ -138,6 +132,17 @@ impl VariantSampler for StaticWeightsConfig {
                 }));
             }
         }
+
+        // Make sure there are candidate variants with positive weight or fallback variants
+        let has_positive_weight = self.candidate_variants.values().any(|&w| w > 0.0);
+        if !has_positive_weight && self.fallback_variants.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Static weights config for function '{_function_name}' has no candidate variants with positive weight and no fallback variants. At least one is required."
+                ),
+            }));
+        }
+
         Ok(())
     }
 
@@ -152,6 +157,7 @@ impl VariantSampler for StaticWeightsConfig {
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
+        // Sampling is stable per episode ID
         let uniform_sample = get_uniform_value(function_name, &episode_id);
         let selected_variant_name = sample_static_weights(
             active_variants,
@@ -192,24 +198,29 @@ impl VariantSampler for StaticWeightsConfig {
 
         if total_weight <= 0.0 {
             // No active variants in the candidate set, use fallback variants
-            // Take the intersection of active_variants and fallback_variants
-            let intersection: Vec<&str> = active_variants
-                .keys()
-                .filter(|variant_name| self.fallback_variants.contains(variant_name))
-                .map(String::as_str)
-                .collect();
+            // Find the first variant from the ranked fallback_variants list that is active
+            let first_active_fallback = self
+                .fallback_variants
+                .iter()
+                .find(|variant_name| active_variants.contains_key(*variant_name));
 
-            if intersection.is_empty() {
-                return Err(ErrorDetails::NoFallbackVariantsRemaining.into());
+            if let Some(selected_variant) = first_active_fallback {
+                // The first active fallback variant gets 100% probability
+                // All other active fallback variants get 0% probability
+                let mut probabilities: HashMap<&'a str, f64> = HashMap::new();
+                for key in active_variants.keys() {
+                    if self.fallback_variants.contains(key) {
+                        if key == selected_variant {
+                            probabilities.insert(key.as_str(), 1.0);
+                        } else {
+                            probabilities.insert(key.as_str(), 0.0);
+                        }
+                    }
+                }
+                Ok(probabilities)
+            } else {
+                Err(ErrorDetails::NoFallbackVariantsRemaining.into())
             }
-
-            // Use uniform probability for all fallback variants
-            let uniform_prob = 1.0 / intersection.len() as f64;
-            let probabilities: HashMap<&'a str, f64> = intersection
-                .into_iter()
-                .map(|variant_name| (variant_name, uniform_prob))
-                .collect();
-            Ok(probabilities)
         } else {
             // Use weighted probabilities from candidate variants
             let probabilities: HashMap<&'a str, f64> = active_variants
@@ -232,7 +243,7 @@ mod tests {
     use crate::config::{Config, ConfigFileGlob, ErrorContext, SchemaData, TimeoutsConfig};
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::variant::chat_completion::ChatCompletionConfig;
-    use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+    use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
     use tempfile::NamedTempFile;
     use tokio;
     use uuid::Uuid;
@@ -317,6 +328,59 @@ mod tests {
             .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_setup_error_no_positive_weights_no_fallbacks() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::new(),
+            fallback_variants: Vec::new(),
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("no candidate variants with positive weight")
+        );
+        assert!(err.to_string().contains("no fallback variants"));
+    }
+
+    #[tokio::test]
+    async fn test_setup_error_zero_weights_no_fallbacks() {
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 0.0);
+        candidate_variants.insert("B".to_string(), 0.0);
+
+        let config = StaticWeightsConfig {
+            candidate_variants,
+            fallback_variants: Vec::new(),
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("no candidate variants with positive weight")
+        );
     }
 
     #[tokio::test]
@@ -497,7 +561,7 @@ mod tests {
 
     fn create_test_variants(names: &[&str]) -> BTreeMap<String, Arc<VariantInfo>> {
         use crate::config::{ErrorContext, SchemaData};
-        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+        use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
 
         names
             .iter()
@@ -589,12 +653,8 @@ mod tests {
         let candidate_variants = BTreeMap::new(); // No candidate variants
         let fallback_variants = vec!["A".to_string(), "B".to_string(), "C".to_string()];
 
-        // With 3 fallback variants:
-        // A: [0.0, 1.0/3.0) -> [0.0, 0.333...)
-        // B: [1.0/3.0, 2.0/3.0) -> [0.333..., 0.666...)
-        // C: [2.0/3.0, 3.0/3.0) -> [0.666..., 1.0)
-
         // Test sample that should select A
+        // With ranked list, always returns the first active variant (A)
         let result = sample_static_weights(
             &active_variants,
             &candidate_variants,
@@ -603,23 +663,21 @@ mod tests {
         );
         assert_eq!(result.unwrap(), "A");
 
-        // Test sample that should select B
         let result = sample_static_weights(
             &active_variants,
             &candidate_variants,
             &fallback_variants,
             0.5,
         );
-        assert_eq!(result.unwrap(), "B");
+        assert_eq!(result.unwrap(), "A");
 
-        // Test sample that should select C
         let result = sample_static_weights(
             &active_variants,
             &candidate_variants,
             &fallback_variants,
             0.9,
         );
-        assert_eq!(result.unwrap(), "C");
+        assert_eq!(result.unwrap(), "A");
     }
 
     #[test]
@@ -666,8 +724,7 @@ mod tests {
 
         // Total weight = 0.0, should use fallback
         // Active fallbacks: B, C
-        // B: [0.0, 0.5)
-        // C: [0.5, 1.0)
+        // With ranked list, always returns the first active variant (B)
 
         let result = sample_static_weights(
             &active_variants,
@@ -683,7 +740,7 @@ mod tests {
             &fallback_variants,
             0.7,
         );
-        assert_eq!(result.unwrap(), "C");
+        assert_eq!(result.unwrap(), "B");
     }
 
     #[test]
@@ -834,11 +891,11 @@ mod tests {
             .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
-        // Should have uniform probabilities
+        // With ranked list, first active variant gets 100% probability
         assert_eq!(probs.len(), 3);
-        assert!((probs["A"] - 1.0 / 3.0).abs() < 1e-9);
-        assert!((probs["B"] - 1.0 / 3.0).abs() < 1e-9);
-        assert!((probs["C"] - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs["A"] - 1.0).abs() < 1e-9);
+        assert!((probs["B"] - 0.0).abs() < 1e-9);
+        assert!((probs["C"] - 0.0).abs() < 1e-9);
 
         // Check sum
         let sum: f64 = probs.values().sum();
@@ -892,10 +949,10 @@ mod tests {
             .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
-        // Only B and C are active and in fallback
+        // Only B and C are active and in fallback. With ranked list, first active (B) gets 100%
         assert_eq!(probs.len(), 2);
-        assert!((probs["B"] - 0.5).abs() < 1e-9);
-        assert!((probs["C"] - 0.5).abs() < 1e-9);
+        assert!((probs["B"] - 1.0).abs() < 1e-9);
+        assert!((probs["C"] - 0.0).abs() < 1e-9);
 
         // Check sum
         let sum: f64 = probs.values().sum();
@@ -917,5 +974,80 @@ mod tests {
         let result = config.get_current_display_probabilities("test", &active_variants, &postgres);
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_setup_validation_duplicate_fallbacks() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::from([("A".to_string(), 1.0)]),
+            fallback_variants: vec!["B".to_string(), "C".to_string(), "B".to_string()],
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("`fallback_variants` contains duplicate entries"));
+        assert!(err_msg.contains("B"));
+    }
+
+    #[tokio::test]
+    async fn test_setup_validation_duplicate_across_lists() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::from([("A".to_string(), 1.0), ("B".to_string(), 2.0)]),
+            fallback_variants: vec!["B".to_string(), "C".to_string()],
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("cannot appear in both `candidate_variants` and `fallback_variants`")
+        );
+        assert!(err_msg.contains("B"));
+    }
+
+    #[tokio::test]
+    async fn test_setup_validation_multiple_duplicates_across_lists() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::from([
+                ("A".to_string(), 1.0),
+                ("B".to_string(), 2.0),
+                ("C".to_string(), 3.0),
+            ]),
+            fallback_variants: vec!["B".to_string(), "C".to_string(), "D".to_string()],
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("cannot appear in both `candidate_variants` and `fallback_variants`")
+        );
+        assert!(err_msg.contains("B"));
+        assert!(err_msg.contains("C"));
     }
 }

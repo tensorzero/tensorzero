@@ -1,0 +1,51 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_entities]
+type = "json"
+output_schema = "output_schema.json"
+
+[functions.extract_entities.variants.claude-haiku-4-5-detailed-prompt]
+type = "chat_completion"
+model = "anthropic::claude-haiku-4-5"
+templates.system.path = "detailed_system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.variants.claude-haiku-4-5-simple-prompt]
+type = "chat_completion"
+model = "anthropic::claude-haiku-4-5"
+templates.system.path = "simple_system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.variants.claude-sonnet-4-5-detailed-prompt]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+templates.system.path = "detailed_system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.variants.claude-sonnet-4-5-simple-prompt]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+templates.system.path = "simple_system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.experimentation]
+type = "track_and_stop"
+candidate_variants = ["claude-haiku-4-5-detailed-prompt", "claude-haiku-4-5-simple-prompt", "claude-sonnet-4-5-detailed-prompt", "claude-sonnet-4-5-simple-prompt"]
+metric = "exact_match"
+update_period_s = 15  # low for the sake of the demo (recommended: 300)
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"

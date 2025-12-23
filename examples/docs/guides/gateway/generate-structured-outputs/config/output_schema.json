@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": ["string", "null"],
+      "description": "The customer's full name"
+    },
+    "email": {
+      "type": ["string", "null"],
+      "description": "The customer's email address"
+    }
+  },
+  "required": ["name", "email"],
+  "additionalProperties": false
+}

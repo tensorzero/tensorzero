@@ -1,46 +1,17 @@
 import { createRequire } from "module";
 import type {
   CacheEnabledMode,
-  AdjacentDatapointIds,
   ClientInferenceParams,
-  Config,
-  CountDatapointsForDatasetFunctionParams,
-  DatasetDetailRow,
-  DatasetMetadata,
-  DatasetQueryParams,
-  EpisodeByIdRow,
   EvaluationRunEvent,
-  CumulativeFeedbackTimeSeriesPoint,
-  FeedbackByVariant,
-  GetAdjacentDatapointIdsParams,
-  GetDatasetMetadataParams,
-  GetDatasetRowsParams,
-  GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
-  ModelLatencyDatapoint,
-  ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
-  StaleDatapointParams,
   StaleDatasetResponse,
-  TableBoundsWithCount,
-  FeedbackRow,
-  FeedbackBounds,
-  TimeWindow,
-  QueryFeedbackBoundsByTargetIdParams,
-  QueryFeedbackByTargetIdParams,
-  CountFeedbackByTargetIdParams,
-  QueryDemonstrationFeedbackByInferenceIdParams,
-  DemonstrationFeedbackRow,
-  GetDatapointParams,
-  Datapoint,
-  GetCumulativeFeedbackTimeseriesParams,
   KeyInfo,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
-  DatabaseClient as NativeDatabaseClientType,
   PostgresClient as NativePostgresClientType,
 } from "../index";
 import { logger } from "./utils/logger";
@@ -54,8 +25,6 @@ const require = createRequire(import.meta.url);
 
 const {
   TensorZeroClient: NativeTensorZeroClient,
-  getConfig: nativeGetConfig,
-  DatabaseClient: NativeDatabaseClient,
   PostgresClient: NativePostgresClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
@@ -72,21 +41,6 @@ export class TensorZeroClient {
 
   constructor(client: NativeTensorZeroClientType) {
     this.nativeClient = client;
-  }
-
-  static async buildEmbedded(
-    configPath: string,
-    clickhouseUrl?: string | undefined | null,
-    postgresUrl?: string | undefined | null,
-    timeout?: number | undefined | null,
-  ): Promise<TensorZeroClient> {
-    const nativeClient = await NativeTensorZeroClient.buildEmbedded(
-      configPath,
-      clickhouseUrl,
-      postgresUrl,
-      timeout,
-    );
-    return new TensorZeroClient(nativeClient);
   }
 
   static async buildHttp(gatewayUrl: string): Promise<TensorZeroClient> {
@@ -137,23 +91,26 @@ export class TensorZeroClient {
 
 export default TensorZeroClient;
 
-export async function getConfig(configPath: string | null): Promise<Config> {
-  const configString = await nativeGetConfig(configPath);
-  return JSON.parse(configString) as Config;
-}
-
 // Export quantiles array from migration_0035
 export { getQuantiles };
 
 interface RunEvaluationStreamingParams {
   gatewayUrl: string;
   clickhouseUrl: string;
-  configPath: string;
+  /** JSON-serialized EvaluationConfig */
+  evaluationConfig: string;
+  /** JSON-serialized EvaluationFunctionConfig */
+  functionConfig: string;
   evaluationName: string;
   datasetName: string;
-  variantName: string;
+  /** Exactly one of variantName or internalDynamicVariantConfig must be provided */
+  variantName?: string;
+  /** JSON-serialized UninitializedVariantInfo */
+  internalDynamicVariantConfig?: string;
   concurrency: number;
   inferenceCache: CacheEnabledMode;
+  maxDatapoints?: number;
+  precisionTargets?: string;
   onEvent: (event: EvaluationRunEvent) => void;
 }
 
@@ -227,197 +184,6 @@ function safeStringify(obj: unknown) {
   }
 }
 
-/// Wrapper class for type safety and convenience
-/// around the native DatabaseClient
-export class DatabaseClient {
-  private nativeDatabaseClient: NativeDatabaseClientType;
-
-  constructor(client: NativeDatabaseClientType) {
-    this.nativeDatabaseClient = client;
-  }
-
-  static async fromClickhouseUrl(url: string): Promise<DatabaseClient> {
-    return new DatabaseClient(
-      await NativeDatabaseClient.fromClickhouseUrl(url),
-    );
-  }
-
-  async getDatapoint(params: GetDatapointParams): Promise<Datapoint> {
-    const paramsString = safeStringify(params);
-    const result = await this.nativeDatabaseClient.getDatapoint(paramsString);
-    return JSON.parse(result) as Datapoint;
-  }
-
-  async getModelUsageTimeseries(
-    timeWindow: TimeWindow,
-    maxPeriods: number,
-  ): Promise<ModelUsageTimePoint[]> {
-    const params = safeStringify({
-      time_window: timeWindow,
-      max_periods: maxPeriods,
-    });
-    const modelUsageTimeseriesString =
-      await this.nativeDatabaseClient.getModelUsageTimeseries(params);
-    return JSON.parse(modelUsageTimeseriesString) as ModelUsageTimePoint[];
-  }
-
-  async getModelLatencyQuantiles(
-    timeWindow: TimeWindow,
-  ): Promise<ModelLatencyDatapoint[]> {
-    const params = safeStringify({
-      time_window: timeWindow,
-    });
-    const modelLatencyQuantilesString =
-      await this.nativeDatabaseClient.getModelLatencyQuantiles(params);
-    return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
-  }
-
-  async countDistinctModelsUsed(): Promise<number> {
-    const response = await this.nativeDatabaseClient.countDistinctModelsUsed();
-    return response;
-  }
-
-  async queryEpisodeTable(
-    pageSize: number,
-    before?: string,
-    after?: string,
-  ): Promise<EpisodeByIdRow[]> {
-    const params = safeStringify({
-      page_size: pageSize,
-      before: before,
-      after: after,
-    });
-    const episodeTableString =
-      await this.nativeDatabaseClient.queryEpisodeTable(params);
-    return JSON.parse(episodeTableString) as EpisodeByIdRow[];
-  }
-
-  async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
-    const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
-    return JSON.parse(bounds) as TableBoundsWithCount;
-  }
-
-  async queryFeedbackByTargetId(
-    params: QueryFeedbackByTargetIdParams,
-  ): Promise<FeedbackRow[]> {
-    const paramsString = safeStringify(params);
-    const feedbackString =
-      await this.nativeDatabaseClient.queryFeedbackByTargetId(paramsString);
-    return JSON.parse(feedbackString) as FeedbackRow[];
-  }
-
-  async queryDemonstrationFeedbackByInferenceId(
-    params: QueryDemonstrationFeedbackByInferenceIdParams,
-  ): Promise<DemonstrationFeedbackRow[]> {
-    const paramsString = safeStringify(params);
-    const feedbackString =
-      await this.nativeDatabaseClient.queryDemonstrationFeedbackByInferenceId(
-        paramsString,
-      );
-    return JSON.parse(feedbackString) as DemonstrationFeedbackRow[];
-  }
-
-  async queryFeedbackBoundsByTargetId(
-    params: QueryFeedbackBoundsByTargetIdParams,
-  ): Promise<FeedbackBounds> {
-    const paramsString = safeStringify(params);
-    const boundsString =
-      await this.nativeDatabaseClient.queryFeedbackBoundsByTargetId(
-        paramsString,
-      );
-    return JSON.parse(boundsString) as FeedbackBounds;
-  }
-
-  async getCumulativeFeedbackTimeseries(
-    params: GetCumulativeFeedbackTimeseriesParams,
-  ): Promise<CumulativeFeedbackTimeSeriesPoint[]> {
-    const paramsString = safeStringify(params);
-    const feedbackTimeseriesString =
-      await this.nativeDatabaseClient.getCumulativeFeedbackTimeseries(
-        paramsString,
-      );
-    return JSON.parse(
-      feedbackTimeseriesString,
-    ) as CumulativeFeedbackTimeSeriesPoint[];
-  }
-
-  async countFeedbackByTargetId(
-    params: CountFeedbackByTargetIdParams,
-  ): Promise<number> {
-    const paramsString = safeStringify(params);
-    const countString =
-      await this.nativeDatabaseClient.countFeedbackByTargetId(paramsString);
-    return JSON.parse(countString) as number;
-  }
-
-  async countRowsForDataset(params: DatasetQueryParams): Promise<number> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.countRowsForDataset(paramsString);
-    return result;
-  }
-
-  async insertRowsForDataset(params: DatasetQueryParams): Promise<number> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.insertRowsForDataset(paramsString);
-    return result;
-  }
-
-  async getDatasetMetadata(
-    params: GetDatasetMetadataParams,
-  ): Promise<DatasetMetadata[]> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.getDatasetMetadata(paramsString);
-    return JSON.parse(result) as DatasetMetadata[];
-  }
-
-  async getDatasetRows(
-    params: GetDatasetRowsParams,
-  ): Promise<DatasetDetailRow[]> {
-    const paramsString = safeStringify(params);
-    const result = await this.nativeDatabaseClient.getDatasetRows(paramsString);
-    return JSON.parse(result) as DatasetDetailRow[];
-  }
-
-  async countDatasets(): Promise<number> {
-    return this.nativeDatabaseClient.countDatasets();
-  }
-
-  async staleDatapoint(params: StaleDatapointParams): Promise<void> {
-    const paramsString = safeStringify(params);
-    await this.nativeDatabaseClient.staleDatapoint(paramsString);
-  }
-
-  async countDatapointsForDatasetFunction(
-    params: CountDatapointsForDatasetFunctionParams,
-  ): Promise<number> {
-    const paramsString = safeStringify(params);
-    return this.nativeDatabaseClient.countDatapointsForDatasetFunction(
-      paramsString,
-    );
-  }
-
-  async getAdjacentDatapointIds(
-    params: GetAdjacentDatapointIdsParams,
-  ): Promise<AdjacentDatapointIds> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.getAdjacentDatapointIds(paramsString);
-    return JSON.parse(result) as AdjacentDatapointIds;
-  }
-
-  async getFeedbackByVariant(
-    params: GetFeedbackByVariantParams,
-  ): Promise<FeedbackByVariant[]> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.getFeedbackByVariant(paramsString);
-    return JSON.parse(result) as FeedbackByVariant[];
-  }
-}
-
 /**
  * Wrapper class for type safety and convenience
  * around the native PostgresClient
@@ -444,5 +210,16 @@ export class PostgresClient {
 
   async disableApiKey(publicId: string): Promise<string> {
     return this.nativePostgresClient.disableApiKey(publicId);
+  }
+
+  async updateApiKeyDescription(
+    publicId: string,
+    description?: string | null,
+  ): Promise<KeyInfo> {
+    const result = await this.nativePostgresClient.updateApiKeyDescription(
+      publicId,
+      description ?? null,
+    );
+    return JSON.parse(result) as KeyInfo;
   }
 }

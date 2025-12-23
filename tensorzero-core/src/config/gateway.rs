@@ -1,16 +1,22 @@
+use chrono::Duration;
 use serde::{Deserialize, Serialize};
 
+use crate::model::{CredentialLocation, CredentialLocationWithFallback};
+use crate::model_table::load_tensorzero_relay_credential;
+use crate::relay::RelayCredentials;
 use crate::{
-    config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
+    config::{
+        ExportConfig, ObservabilityConfig, TemplateFilesystemAccess, UninitializedRelayConfig,
+    },
     error::Error,
+    http::DEFAULT_HTTP_CLIENT_TIMEOUT,
     inference::types::storage::StorageKind,
+    relay::TensorzeroRelay,
 };
 
 use super::ObjectStoreInfo;
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
     #[serde(default = "default_gateway_auth_cache_enabled")]
@@ -36,9 +42,7 @@ fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     pub enabled: bool,
@@ -46,7 +50,7 @@ pub struct AuthConfig {
     pub cache: Option<GatewayAuthCacheConfig>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
@@ -77,6 +81,9 @@ pub struct UninitializedGatewayConfig {
     pub fetch_and_encode_input_files_before_inference: Option<bool>,
     #[serde(default)]
     pub auth: AuthConfig,
+    pub global_outbound_http_timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub relay: Option<UninitializedRelayConfig>,
 }
 
 impl UninitializedGatewayConfig {
@@ -86,13 +93,35 @@ impl UninitializedGatewayConfig {
         {
             value
         } else {
-            if let Some(info) = object_store_info {
-                if !matches!(info.kind, StorageKind::Disabled) {
-                    tracing::info!("Object store is enabled but `gateway.fetch_and_encode_input_files_before_inference` is unset (defaults to `false`). In rare cases, the files we fetch for object storage may differ from the image the inference provider fetched if this setting is disabled.");
-                }
+            if let Some(info) = object_store_info
+                && !matches!(info.kind, StorageKind::Disabled)
+            {
+                tracing::info!(
+                    "Object store is enabled but `gateway.fetch_and_encode_input_files_before_inference` is unset (defaults to `false`). In rare cases, the files we fetch for object storage may differ from the image the inference provider fetched if this setting is disabled."
+                );
             }
-            default_fetch_and_encode_input_files_before_inference()
+            false
         };
+
+        let relay = if let Some(relay_config) = self.relay {
+            if let Some(gateway_url) = &relay_config.gateway_url {
+                let location = relay_config.api_key_location.clone().unwrap_or(
+                    CredentialLocationWithFallback::Single(CredentialLocation::None),
+                );
+
+                let credential = load_tensorzero_relay_credential(&location)?;
+                Some(TensorzeroRelay::new(
+                    gateway_url.clone(),
+                    RelayCredentials::try_from(credential)?,
+                    relay_config,
+                )?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Ok(GatewayConfig {
             bind_address: self.bind_address,
             observability: self.observability,
@@ -106,13 +135,16 @@ impl UninitializedGatewayConfig {
             disable_pseudonymous_usage_analytics: self.disable_pseudonymous_usage_analytics,
             fetch_and_encode_input_files_before_inference,
             auth: self.auth,
+            global_outbound_http_timeout: self
+                .global_outbound_http_timeout_ms
+                .map(|ms| Duration::milliseconds(ms as i64))
+                .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
+            relay,
         })
     }
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
@@ -126,9 +158,12 @@ pub struct GatewayConfig {
     pub unstable_disable_feedback_target_validation: bool,
     #[serde(default)]
     pub disable_pseudonymous_usage_analytics: bool,
-    #[serde(default = "default_fetch_and_encode_input_files_before_inference")]
+    #[serde(default)]
     pub fetch_and_encode_input_files_before_inference: bool,
     pub auth: AuthConfig,
+    pub global_outbound_http_timeout: Duration,
+    #[serde(skip)]
+    pub relay: Option<TensorzeroRelay>,
 }
 
 impl Default for GatewayConfig {
@@ -143,15 +178,12 @@ impl Default for GatewayConfig {
             unstable_error_json: Default::default(),
             unstable_disable_feedback_target_validation: Default::default(),
             disable_pseudonymous_usage_analytics: Default::default(),
-            fetch_and_encode_input_files_before_inference:
-                default_fetch_and_encode_input_files_before_inference(),
+            fetch_and_encode_input_files_before_inference: Default::default(),
             auth: Default::default(),
+            global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
+            relay: Default::default(),
         }
     }
-}
-
-fn default_fetch_and_encode_input_files_before_inference() -> bool {
-    false
 }
 
 fn serialize_optional_socket_addr<S>(

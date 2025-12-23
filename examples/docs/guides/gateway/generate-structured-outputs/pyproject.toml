@@ -1,0 +1,9 @@
+[project]
+name = "tensorzero-examples-docs-guides-gateway-generate-structured-outputs-json-mode"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.101.0",
+    "tensorzero>=2025.8.3",
+]

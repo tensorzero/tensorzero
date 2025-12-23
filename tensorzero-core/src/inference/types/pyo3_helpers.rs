@@ -2,25 +2,26 @@ use std::borrow::Cow;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::types::{IntoPyDict, PyDict};
+use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, sync::PyOnceLock, types::PyModule};
 use pyo3::{intern, prelude::*};
-use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
-use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::ResolvedContentBlock;
+use crate::db::stored_datapoint::StoredDatapoint;
+use crate::endpoints::datasets::Datapoint;
+use crate::inference::types::stored_input::{StoredInput, StoredInputMessageContent};
 use crate::inference::types::{
-    stored_input::StoredInputMessageContent, ContentBlockChatOutput, ResolvedInputMessageContent,
+    ContentBlockChatOutput, ResolvedContentBlock, ResolvedInputMessageContent, Unknown,
 };
+use crate::optimization::UninitializedOptimizerConfig;
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
 use crate::optimization::gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig;
+use crate::optimization::gepa::UninitializedGEPAConfig;
 use crate::optimization::openai_rft::UninitializedOpenAIRFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
-use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
     RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredInferenceDatabase, StoredSample,
 };
@@ -158,13 +159,14 @@ pub fn resolved_content_block_to_python(
                 ),
             )
         }
-        ResolvedContentBlock::Unknown {
+        ResolvedContentBlock::Unknown(Unknown {
             data,
-            model_provider_name,
-        } => {
+            model_name,
+            provider_name,
+        }) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, data)?;
-            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+            unknown_content_block.call1(py, (serialized_data, model_name, provider_name))
         }
     }
 }
@@ -195,13 +197,14 @@ pub fn content_block_chat_output_to_python(
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text,))
         }
-        ContentBlockChatOutput::Unknown {
+        ContentBlockChatOutput::Unknown(Unknown {
             data,
-            model_provider_name,
-        } => {
+            model_name,
+            provider_name,
+        }) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, data)?;
-            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+            unknown_content_block.call1(py, (serialized_data, model_name, provider_name))
         }
     }
 }
@@ -263,7 +266,10 @@ pub fn stored_input_message_content_to_python(
         StoredInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, &unknown.data)?;
-            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
+            unknown_content_block.call1(
+                py,
+                (serialized_data, &unknown.model_name, &unknown.provider_name),
+            )
         }
     }
 }
@@ -328,7 +334,10 @@ pub fn resolved_input_message_content_to_python(
         ResolvedInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, &unknown.data)?;
-            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
+            unknown_content_block.call1(
+                py,
+                (serialized_data, &unknown.model_name, &unknown.provider_name),
+            )
         }
     }
 }
@@ -357,29 +366,42 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
 /// If it is, we return it directly.
 /// If it is not, we assume it is a Python object that matches the serialization pattern of the
 /// `StoredSample` type and deserialize it (and throw an error if it doesn't match).
+///
+/// NOTE(shuyangli): This doesn't store or fetch any files for the time being. We'll need to rearchitect the optimization
+/// pipeline to support proper file handling.
 pub fn deserialize_from_stored_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
     config: &Config,
 ) -> PyResult<StoredSampleItem> {
-    if obj.is_instance_of::<StoredInference>() {
-        // Extract wire type and convert to storage type
-        let wire: StoredInference = obj.extract()?;
+    // Try deserializing into named types first
+    let generated_types_module = py.import("tensorzero.generated_types")?;
+    let stored_inference_type = generated_types_module.getattr("StoredInference")?;
+    // TODO: add the config hash to the StoredSample type
+
+    if obj.is_instance(&stored_inference_type)? {
+        let wire = deserialize_from_pyobj::<StoredInference>(py, obj)?;
         let storage = match wire.to_storage(config) {
             Ok(s) => s,
             Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
         };
-        Ok(StoredSampleItem::StoredInference(storage))
-    } else if obj.is_instance_of::<Datapoint>() {
+        return Ok(StoredSampleItem::StoredInference(storage));
+    }
+
+    if obj.is_instance_of::<Datapoint>() {
         // Extract wire type and convert to storage type
         let wire: Datapoint = obj.extract()?;
-        match wire {
+        return match wire {
             Datapoint::Chat(chat_wire) => {
                 let function_config = match config.get_function(&chat_wire.function_name) {
                     Ok(f) => f,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
                 };
-                let datapoint = match chat_wire.into_storage(&function_config, &config.tools) {
+                let datapoint = match chat_wire.into_storage_without_file_handling(
+                    &function_config,
+                    &config.tools,
+                    &config.hash,
+                ) {
                     Ok(d) => d,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
                 };
@@ -387,13 +409,21 @@ pub fn deserialize_from_stored_sample<'a>(
                     datapoint,
                 )))
             }
-            Datapoint::Json(json_wire) => Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
-                json_wire,
-            ))),
-        }
-    } else {
-        deserialize_from_pyobj(py, obj)
+            Datapoint::Json(json_wire) => {
+                let datapoint =
+                    match json_wire.into_storage_without_file_handling(config.hash.clone()) {
+                        Ok(d) => d,
+                        Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                    };
+                Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
+                    datapoint,
+                )))
+            }
+        };
     }
+
+    // Fall back to generic deserialization
+    deserialize_from_pyobj(py, obj)
 }
 
 /// In the `experimental_launch_optimization` function, we need to be able to accept
@@ -429,11 +459,13 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(
             obj.extract()?,
         ))
+    } else if obj.is_instance_of::<UninitializedGEPAConfig>() {
+        Ok(UninitializedOptimizerConfig::GEPA(obj.extract()?))
     } else {
         // Fall back to deserializing from a dictionary
         deserialize_from_pyobj(obj.py(), obj).map_err(|e| {
             PyValueError::new_err(format!(
-                "Invalid optimization config. Expected one of: OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, GCPVertexGeminiSFTConfig, or DICLOptimizationConfig (as either a class instance or a dictionary with 'type' field). Error: {e}"
+                "Invalid optimization config. Expected one of: OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, GCPVertexGeminiSFTConfig, DICLOptimizationConfig, or GEPAConfig (as either a class instance or a dictionary with 'type' field). Error: {e}"
             ))
         })
     }
@@ -482,8 +514,9 @@ impl StoredSample for StoredSampleItem {
     }
 }
 
-/// Converts a Python dictionary/list to json with `json.dumps`,
-/// then deserializes to a Rust type via serde
+/// Converts a Python dataclass / dictionary / list to json with `json.dumps`,
+/// then deserializes to a Rust type via serde. This handles OMIT values correctly by calling a custom
+/// `TensorZeroTypeEncoder` class from Python.
 pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,

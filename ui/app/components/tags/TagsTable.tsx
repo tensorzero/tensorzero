@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -19,6 +19,7 @@ import {
   toInferenceUrl,
   toWorkflowEvaluationRunUrl,
 } from "~/utils/urls";
+import { DeleteButton } from "../ui/DeleteButton";
 
 interface TagsTableProps {
   tags: Record<string, string>;
@@ -168,15 +169,7 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
                   {isEditing && (
                     <TableCell>
                       {!isSystemTag && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveTag(key)}
-                          className="text-muted-foreground hover:text-destructive h-6 w-6 p-0"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        <DeleteButton onDelete={() => handleRemoveTag(key)} />
                       )}
                     </TableCell>
                   )}

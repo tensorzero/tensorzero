@@ -66,6 +66,12 @@ extra_body = [
 ]
 ```
 
+<Tip>
+
+If you don't need to customize the model configuration (e.g. `include_encrypted_reasoning`, `provider_tools`), you can use the short-hand model name `openai::responses::gpt-5-codex` to call it directly.
+
+</Tip>
+
 </Step>
 
 <Step title="Deploy a standalone (HTTP) TensorZero Gateway">
@@ -147,7 +153,7 @@ ChatInferenceResponse(
                     type='summary_text'
                 )
             ],
-            _internal_provider_type='openai'
+            provider_type='openai'
         ),
         UnknownContentBlock(
             data={
@@ -159,14 +165,15 @@ ChatInferenceResponse(
                     'query': 'Japan population 2025 October 2025 population estimate Statistics Bureau of Japan'
                 }
             },
-            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            model_name='gpt-5-mini-responses-web-search',
+            provider_name='openai',
             type='unknown'
         ),
         Thought(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -178,14 +185,15 @@ ChatInferenceResponse(
                     'query': "Ministry of Internal Affairs and Communications Japan population Oct 1 2024 'total population' 'Japan' 'population estimates' '2024' 'Oct. 1' '総人口' '令和6年' "
                 }
             },
-            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            model_name='gpt-5-mini-responses-web-search',
+            provider_name='openai',
             type='unknown'
         ),
         Thought(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -197,14 +205,15 @@ ChatInferenceResponse(
                     'query': "Ministry of Internal Affairs and Communications population Japan Oct 1 2024 total population 'Oct. 1, 2024' 'population' 'Japan' 'MIC' 'population estimates' '2024' '総人口' "
                 }
             },
-            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            model_name='gpt-5-mini-responses-web-search',
+            provider_name='openai',
             type='unknown'
         ),
         Thought(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -213,14 +222,15 @@ ChatInferenceResponse(
                 'status': 'completed',
                 'action': {'type': 'search'}
             },
-            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            model_name='gpt-5-mini-responses-web-search',
+            provider_name='openai',
             type='unknown'
         ),
         Thought(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -229,14 +239,15 @@ ChatInferenceResponse(
                 'status': 'completed',
                 'action': {'type': 'search'}
             },
-            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            model_name='gpt-5-mini-responses-web-search',
+            provider_name='openai',
             type='unknown'
         ),
         Thought(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -245,14 +256,15 @@ ChatInferenceResponse(
                 'status': 'completed',
                 'action': {'type': 'search'}
             },
-            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            model_name='gpt-5-mini-responses-web-search',
+            provider_name='openai',
             type='unknown'
         ),
         Thought(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -264,14 +276,15 @@ ChatInferenceResponse(
                     'query': "United Nations World Population Prospects 2024 Japan 2025 population 'Japan population 2025' 'World Population Prospects 2024' 'Japan' "
                 }
             },
-            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            model_name='gpt-5-mini-responses-web-search',
+            provider_name='openai',
             type='unknown'
         ),
         Thought(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -283,14 +296,15 @@ ChatInferenceResponse(
                     'query': "UN World Population Prospects 2024 Japan population 2025 '123,103,479' 'Japan 2025' 'World Population Prospects' 'Japan' '2025' "
                 }
             },
-            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            model_name='gpt-5-mini-responses-web-search',
+            provider_name='openai',
             type='unknown'
         ),
         Thought(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -302,14 +316,15 @@ ChatInferenceResponse(
                     'query': "United Nations population Japan 2025 'World Population Prospects 2024' 'Japan population 2025' site:un.org"
                 }
             },
-            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            model_name='gpt-5-mini-responses-web-search',
+            provider_name='openai',
             type='unknown'
         ),
         Thought(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         Text(
             text="Short answer: about 123–124 million people.\n\nMore precisely:\n- Japan's official estimate (Ministry of Internal Affairs and Communications / e‑Stat) reported a total population of 123,802,000 (including foreign residents) as of October 1, 2024 (release published Apr 14, 2025). ([e-stat.go.jp](https://www.e-stat.go.jp/en/stat-search/files?layout=dataset&page=1&query=Population+Estimates%2C+natural))  \n- The United Nations (WPP 2024, used by sources such as Worldometer) gives a mid‑2025 estimate of about 123.1 million. ([srv1.worldometers.info](https://srv1.worldometers.info/world-population/japan-population/?utm_source=openai))\n\nDo you want a live "right now" estimate for today (Oct 20, 2025) or a breakdown by Japanese nationals vs. foreign residents? I can fetch the latest live or official figures for the exact date you want.",
@@ -743,7 +758,7 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
           "text": "I need to search for Japan's current population data."
         }
       ],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -756,14 +771,15 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
           "query": "Japan population 2025 estimated population October 2025 Japan population"
         }
       },
-      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+      "model_name": "gpt-5-mini-responses-web-search",
+      "provider_name": "openai"
     },
     {
       "type": "thought",
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -776,14 +792,15 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
           "query": "UN World Population Prospects 2024 Japan population 2025 mid-year 'Japan population 2025' 'World Population Prospects 2024' 'Japan' "
         }
       },
-      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+      "model_name": "gpt-5-mini-responses-web-search",
+      "provider_name": "openai"
     },
     {
       "type": "thought",
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -795,14 +812,15 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
           "type": "search"
         }
       },
-      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+      "model_name": "gpt-5-mini-responses-web-search",
+      "provider_name": "openai"
     },
     {
       "type": "thought",
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -815,14 +833,15 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
           "query": "Statistics Bureau of Japan population October 1 2025 \"Population Estimates\" \"Japan\" site:stat.go.jp"
         }
       },
-      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+      "model_name": "gpt-5-mini-responses-web-search",
+      "provider_name": "openai"
     },
     {
       "type": "thought",
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -835,14 +854,15 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
           "query": "UN World Population Prospects 2024 Japan population 2025 'Japan population 2025 UN WPP' 'United Nations Department of Economic and Social Affairs' 'Japan 2025 population' "
         }
       },
-      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+      "model_name": "gpt-5-mini-responses-web-search",
+      "provider_name": "openai"
     },
     {
       "type": "thought",
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -855,14 +875,15 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
           "query": "World Population Prospects 2024 Japan population 2025 site:un.org"
         }
       },
-      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+      "model_name": "gpt-5-mini-responses-web-search",
+      "provider_name": "openai"
     },
     {
       "type": "thought",
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -874,14 +895,15 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
           "type": "search"
         }
       },
-      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+      "model_name": "gpt-5-mini-responses-web-search",
+      "provider_name": "openai"
     },
     {
       "type": "thought",
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "text",
@@ -904,3 +926,26 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
 </Tab>
 
 </Tabs>
+
+## Call the OpenAI Responses API with Azure
+
+You can call the OpenAI Responses API with Azure by setting `api_base` in your configuration to your Azure deployment URL.
+
+```toml
+[models.azure-gpt-5-mini-responses]
+routing = ["azure"]
+
+[models.azure-gpt-5-mini-responses.providers.azure]
+type = "openai"  # CAREFUL: not `azure`!
+api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
+api_key_location = "env::AZURE_OPENAI_API_KEY"
+model_name = "gpt-5-mini"
+api_type = "responses"
+```
+
+<Warning>
+
+The `azure` model provider does not support the Responses API.
+You must use the `openai` provider with a custom `api_base` instead.
+
+</Warning>

@@ -7,22 +7,26 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { DatasetMetadata } from "tensorzero-node";
-import { Link, useFetcher } from "react-router";
+import type { DatasetMetadata } from "~/types/tensorzero";
+import { Link, useFetcher, useLocation } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { toDatasetUrl } from "~/utils/urls";
 import { Button } from "~/components/ui/button";
 import { Trash, ChevronUp, ChevronDown, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Suspense, use, useMemo, useState } from "react";
+import { Skeleton } from "~/components/ui/skeleton";
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
+  getPaginationRowModel,
   createColumnHelper,
   flexRender,
   type SortingState,
+  type PaginationState,
 } from "@tanstack/react-table";
+import PageButtons from "~/components/utils/PageButtons";
 import {
   Dialog,
   DialogContent,
@@ -35,17 +39,63 @@ import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 const columnHelper = createColumnHelper<DatasetMetadata>();
 
-export default function DatasetTable({
-  counts,
+// Skeleton table for loading state
+function SkeletonTable() {
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Dataset Name</TableHead>
+            <TableHead>Datapoint Count</TableHead>
+            <TableHead>Last Updated</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: 15 }).map((_, i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <Skeleton className="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-16" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-28" />
+              </TableCell>
+              <TableCell />
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <PageButtons
+        onPreviousPage={() => {}}
+        onNextPage={() => {}}
+        disablePrevious
+        disableNext
+      />
+    </>
+  );
+}
+
+// Table content that resolves promise and renders
+function DatasetTableContent({
+  data,
+  globalFilter,
+  onDeleteClick,
 }: {
-  counts: DatasetMetadata[];
+  data: Promise<DatasetMetadata[]>;
+  globalFilter: string;
+  onDeleteClick: (datasetName: string) => void;
 }) {
-  const fetcher = useFetcher();
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
+  const datasets = use(data);
 
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 15,
+  });
 
   const columns = useMemo(
     () => [
@@ -62,7 +112,7 @@ export default function DatasetTable({
           </Link>
         ),
       }),
-      columnHelper.accessor("count", {
+      columnHelper.accessor("datapoint_count", {
         header: "Datapoint Count",
         cell: (info) => info.getValue(),
       }),
@@ -77,10 +127,7 @@ export default function DatasetTable({
           <div className="text-right">
             <ReadOnlyGuard
               asChild
-              onClick={() => {
-                setDatasetToDelete(info.row.original.dataset_name);
-                setDeleteDialogOpen(true);
-              }}
+              onClick={() => onDeleteClick(info.row.original.dataset_name)}
             >
               <Button
                 variant="ghost"
@@ -95,38 +142,28 @@ export default function DatasetTable({
         enableSorting: false,
       }),
     ],
-    [],
+    [onDeleteClick],
   );
 
   const table = useReactTable({
-    data: counts,
+    data: datasets,
     columns,
     state: {
       sorting,
       globalFilter,
+      pagination,
     },
     onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     globalFilterFn: "includesString",
   });
 
   return (
-    <div>
-      <div className="mb-4">
-        <div className="relative">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search datasets..."
-            value={globalFilter ?? ""}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
-          />
-        </div>
-      </div>
+    <>
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -187,6 +224,52 @@ export default function DatasetTable({
           )}
         </TableBody>
       </Table>
+
+      <PageButtons
+        onPreviousPage={() => table.previousPage()}
+        onNextPage={() => table.nextPage()}
+        disablePrevious={!table.getCanPreviousPage()}
+        disableNext={!table.getCanNextPage()}
+      />
+    </>
+  );
+}
+
+export default function DatasetTable({
+  data,
+}: {
+  data: Promise<DatasetMetadata[]>;
+}) {
+  const fetcher = useFetcher();
+  const location = useLocation();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
+  const [globalFilter, setGlobalFilter] = useState("");
+
+  return (
+    <div>
+      <div className="mb-4">
+        <div className="relative">
+          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search datasets..."
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
+          />
+        </div>
+      </div>
+      <Suspense key={location.key} fallback={<SkeletonTable />}>
+        <DatasetTableContent
+          data={data}
+          globalFilter={globalFilter}
+          onDeleteClick={(name) => {
+            setDatasetToDelete(name);
+            setDeleteDialogOpen(true);
+          }}
+        />
+      </Suspense>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>

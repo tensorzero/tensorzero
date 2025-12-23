@@ -7,34 +7,33 @@ import {
   SectionHeader,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import {
-  getWorkflowEvaluationRuns,
-  countWorkflowEvaluationRuns,
-  getWorkflowEvaluationProjects,
-  countWorkflowEvaluationProjects,
-} from "~/utils/clickhouse/workflow_evaluations.server";
 import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
 import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
 import { logger } from "~/utils/logger";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const runOffset = parseInt(searchParams.get("runOffset") || "0");
-  const runPageSize = parseInt(searchParams.get("runPageSize") || "15");
+  const runLimit = parseInt(searchParams.get("runLimit") || "15");
   const projectOffset = parseInt(searchParams.get("projectOffset") || "0");
-  const projectPageSize = parseInt(searchParams.get("projectPageSize") || "15");
+  const projectLimit = parseInt(searchParams.get("projectLimit") || "15");
+  const tensorZeroClient = getTensorZeroClient();
   const [
-    workflowEvaluationRuns,
+    workflowEvaluationRunsResponse,
     count,
-    workflowEvaluationProjects,
+    workflowEvaluationProjectsResponse,
     projectCount,
   ] = await Promise.all([
-    getWorkflowEvaluationRuns(runPageSize, runOffset),
-    countWorkflowEvaluationRuns(),
-    getWorkflowEvaluationProjects(projectPageSize, projectOffset),
-    countWorkflowEvaluationProjects(),
+    tensorZeroClient.listWorkflowEvaluationRuns(runLimit, runOffset),
+    tensorZeroClient.countWorkflowEvaluationRuns(),
+    tensorZeroClient.getWorkflowEvaluationProjects(projectLimit, projectOffset),
+    tensorZeroClient.countWorkflowEvaluationProjects(),
   ]);
+  const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
+  const workflowEvaluationProjects =
+    workflowEvaluationProjectsResponse.projects;
 
   return {
     workflowEvaluationRuns,
@@ -42,9 +41,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     workflowEvaluationProjects,
     projectCount,
     runOffset,
-    runPageSize,
+    runLimit,
     projectOffset,
-    projectPageSize,
+    projectLimit,
   };
 }
 
@@ -58,30 +57,30 @@ export default function EvaluationSummaryPage({
     workflowEvaluationProjects,
     projectCount,
     runOffset,
-    runPageSize,
+    runLimit,
     projectOffset,
-    projectPageSize,
+    projectLimit,
   } = loaderData;
   const handleNextRunPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("runOffset", String(runOffset + runPageSize));
+    searchParams.set("runOffset", String(runOffset + runLimit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousRunPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("runOffset", String(runOffset - runPageSize));
+    searchParams.set("runOffset", String(runOffset - runLimit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handleNextProjectPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("projectOffset", String(projectOffset + projectPageSize));
+    searchParams.set("projectOffset", String(projectOffset + projectLimit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousProjectPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("projectOffset", String(projectOffset - projectPageSize));
+    searchParams.set("projectOffset", String(projectOffset - projectLimit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -97,7 +96,7 @@ export default function EvaluationSummaryPage({
           onPreviousPage={handlePreviousProjectPage}
           onNextPage={handleNextProjectPage}
           disablePrevious={projectOffset <= 0}
-          disableNext={projectOffset + projectPageSize >= projectCount}
+          disableNext={projectOffset + projectLimit >= projectCount}
         />
       </SectionLayout>
       <SectionLayout>
@@ -109,7 +108,7 @@ export default function EvaluationSummaryPage({
           onPreviousPage={handlePreviousRunPage}
           onNextPage={handleNextRunPage}
           disablePrevious={runOffset <= 0}
-          disableNext={runOffset + runPageSize >= count}
+          disableNext={runOffset + runLimit >= count}
         />
       </SectionLayout>
     </PageLayout>

@@ -5,7 +5,7 @@ import {
   SelectValue,
   SelectTrigger,
 } from "~/components/ui/select";
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
 
 type TimeGranularitySelectorProps = {
   time_granularity: TimeWindow;

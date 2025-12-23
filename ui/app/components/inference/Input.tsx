@@ -1,11 +1,11 @@
 import type {
-  DisplayInputMessageContent,
-  DisplayInputMessage,
-  DisplayTextInput,
-  ToolCallContent,
-  ToolResultContent,
-  Template,
-  ThoughtContent,
+  ZodDisplayInputMessageContent,
+  ZodDisplayInputMessage,
+  ZodDisplayTextInput,
+  ZodToolCallContent,
+  ZodToolResultContent,
+  ZodTemplate,
+  ZodThoughtContent,
 } from "~/utils/clickhouse/common";
 import {
   SnippetLayout,
@@ -22,12 +22,14 @@ import type { JsonObject } from "type-fest";
 import { AddButton } from "~/components/ui/AddButton";
 import { DeleteButton } from "~/components/ui/DeleteButton";
 
+/// NOTE: This component is being DEPRECATED in favor of ui/app/components/input_output/InputElement.tsx.
+
 interface InputProps {
-  messages: DisplayInputMessage[];
+  messages: ZodDisplayInputMessage[];
   system?: string | JsonObject | null;
   isEditing?: boolean;
   onSystemChange?: (system: string | object | null) => void;
-  onMessagesChange?: (messages: DisplayInputMessage[]) => void;
+  onMessagesChange?: (messages: ZodDisplayInputMessage[]) => void;
   maxHeight?: number | "Content";
 }
 
@@ -42,7 +44,7 @@ export default function Input({
   const onContentBlockChange = (
     messageIndex: number,
     contentBlockIndex: number,
-    updatedContentBlock: DisplayInputMessageContent,
+    updatedContentBlock: ZodDisplayInputMessageContent,
   ) => {
     const updatedMessages = [...messages];
     const updatedMessage = { ...updatedMessages[messageIndex] };
@@ -83,9 +85,9 @@ export default function Input({
 
   const onAppendContentBlock = (
     messageIndex: number,
-    contentBlock: DisplayInputMessageContent,
+    contentBlock: ZodDisplayInputMessageContent,
   ) => {
-    const updatedMessage: DisplayInputMessage = {
+    const updatedMessage: ZodDisplayInputMessage = {
       role: messages[messageIndex].role,
       content: [...messages[messageIndex].content, contentBlock],
     };
@@ -96,7 +98,7 @@ export default function Input({
   };
 
   const onAppendTextContentBlock = (messageIndex: number) => {
-    const contentBlock: DisplayTextInput = {
+    const contentBlock: ZodDisplayTextInput = {
       type: "text",
       text: "",
     };
@@ -105,7 +107,7 @@ export default function Input({
   };
 
   const onAppendToolCallContentBlock = (messageIndex: number) => {
-    const contentBlock: ToolCallContent = {
+    const contentBlock: ZodToolCallContent = {
       type: "tool_call",
       name: "",
       id: "",
@@ -116,7 +118,7 @@ export default function Input({
   };
 
   const onAppendToolResultContentBlock = (messageIndex: number) => {
-    const contentBlock: ToolResultContent = {
+    const contentBlock: ZodToolResultContent = {
       type: "tool_result",
       name: "",
       id: "",
@@ -127,7 +129,7 @@ export default function Input({
   };
 
   const onAppendTemplateContentBlock = (messageIndex: number) => {
-    const contentBlock: Template = {
+    const contentBlock: ZodTemplate = {
       type: "template",
       name: "",
       arguments: JSON.parse("{}"),
@@ -137,7 +139,7 @@ export default function Input({
   };
 
   const onAppendThoughtContentBlock = (messageIndex: number) => {
-    const contentBlock: ThoughtContent = {
+    const contentBlock: ZodThoughtContent = {
       type: "thought",
       text: "",
     };
@@ -188,7 +190,7 @@ export default function Input({
                     onContentBlockChange(
                       messageIndex,
                       contentBlockIndex,
-                      updatedContentBlock as DisplayInputMessageContent,
+                      updatedContentBlock as ZodDisplayInputMessageContent,
                     )
                   }
                   action={

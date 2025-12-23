@@ -1,6 +1,7 @@
 /// Definitions for inference-related traits and types.
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -11,13 +12,19 @@ use mockall::automock;
 
 use crate::config::Config;
 use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
+use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
-use crate::serde_util::{deserialize_defaulted_string, deserialize_json_string};
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::{
+    ContentBlockChatOutput, FunctionType, JsonInferenceOutput, StoredInput,
+};
+use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::{ToolCallConfigDatabaseInsert, deserialize_tool_info};
+
+pub(crate) const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[derive(Debug, Deserialize)]
 pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
@@ -32,9 +39,15 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<String>,
-    #[serde(deserialize_with = "deserialize_defaulted_string")]
+    #[serde(flatten, deserialize_with = "deserialize_tool_info")]
     pub tool_params: ToolCallConfigDatabaseInsert,
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub inference_params: InferenceParams,
+    pub processing_time_ms: Option<u64>,
+    pub ttft_ms: Option<u64>,
 }
 
 impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredChatInferenceDatabase {
@@ -66,6 +79,10 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
             tool_params: value.tool_params,
             tags: value.tags,
             timestamp: value.timestamp,
+            extra_body: value.extra_body,
+            inference_params: value.inference_params,
+            processing_time_ms: value.processing_time_ms,
+            ttft_ms: value.ttft_ms,
         })
     }
 }
@@ -86,6 +103,12 @@ pub(super) struct ClickHouseStoredJsonInferenceWithDispreferredOutputs {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output_schema: Value,
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub inference_params: InferenceParams,
+    pub processing_time_ms: Option<u64>,
+    pub ttft_ms: Option<u64>,
 }
 
 impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJsonInference {
@@ -116,6 +139,10 @@ impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJso
             output_schema: value.output_schema,
             tags: value.tags,
             timestamp: value.timestamp,
+            extra_body: value.extra_body,
+            inference_params: value.inference_params,
+            processing_time_ms: value.processing_time_ms,
+            ttft_ms: value.ttft_ms,
         })
     }
 }
@@ -147,13 +174,17 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
     }
 }
 
+// TODO(shuyangli): Move to tensorzero-core/src/endpoints/stored_inferences/v1/types.rs
 /// Source of an inference output when querying inferences. Users can choose this because there may be
 /// demonstration feedback (manually-curated output) for the inference that should be preferred.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
 pub enum InferenceOutputSource {
+    /// No output - used when creating datapoints without output.
+    None,
     /// The inference output is the original output from the inference.
+    #[default]
     Inference,
     /// The inference output is the demonstration feedback for the inference.
     Demonstration,
@@ -164,6 +195,7 @@ impl TryFrom<&str> for InferenceOutputSource {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
+            "none" => Ok(InferenceOutputSource::None),
             "inference" => Ok(InferenceOutputSource::Inference),
             "demonstration" => Ok(InferenceOutputSource::Demonstration),
             _ => Err(Error::new(ErrorDetails::InvalidInferenceOutputSource {
@@ -188,10 +220,19 @@ pub struct ListInferencesParams<'a> {
     /// Source of the inference output to query.
     pub output_source: InferenceOutputSource,
     /// Maximum number of inferences to return.
-    pub limit: Option<u64>,
-    /// Number of inferences to skip.
-    pub offset: Option<u64>,
+    /// We always enforce a limit at the database level to avoid unbounded queries.
+    pub limit: u32,
+    /// Number of inferences to skip before starting to return results.
+    /// This is mutually exclusive with cursor pagination. If both are provided, we return an error.
+    pub offset: u32,
+    /// Optional cursor-based pagination condition.
+    /// This supports 2 types: "before a given ID" and "after a given ID".
+    /// This is mutually exclusive with offset pagination. If both are provided, we return an error.
+    pub pagination: Option<PaginationParams>,
+    /// Ordering criteria for the results.
     pub order_by: Option<&'a [OrderBy]>,
+    /// Experimental: search query to filter inferences by.
+    pub search_query_experimental: Option<&'a str>,
 }
 
 impl Default for ListInferencesParams<'_> {
@@ -203,11 +244,69 @@ impl Default for ListInferencesParams<'_> {
             episode_id: None,
             filters: None,
             output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
+            limit: DEFAULT_INFERENCE_QUERY_LIMIT,
+            offset: 0,
+            pagination: None,
             order_by: None,
+            search_query_experimental: None,
         }
     }
+}
+
+/// Parameters for cursor-based pagination.
+/// Currently it only supports paginating before/after a given ID. In the future, we can extend this
+/// to support paginating with additional metrics at the page boundary.
+#[derive(Debug, Clone)]
+pub enum PaginationParams {
+    /// Return the latest inferences before the given ID.
+    Before { id: Uuid },
+    /// Return the oldest inferences after the given ID.
+    After { id: Uuid },
+}
+
+/// Inference metadata from the InferenceById table.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct InferenceMetadata {
+    pub id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    pub function_type: FunctionType,
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<String>,
+}
+
+/// Parameters for listing inference metadata.
+#[derive(Debug, Clone, Default)]
+pub struct ListInferenceMetadataParams {
+    /// Optional cursor-based pagination condition.
+    pub pagination: Option<PaginationParams>,
+    /// Maximum number of records to return.
+    pub limit: u32,
+    /// Optional function name to filter by.
+    pub function_name: Option<String>,
+    /// Optional variant name to filter by.
+    pub variant_name: Option<String>,
+    /// Optional episode ID to filter by.
+    pub episode_id: Option<Uuid>,
+}
+
+/// Parameters for a CountInferences query.
+/// Similar to ListInferencesParams but without pagination fields since we only need a count.
+#[derive(Debug, Clone, Default)]
+pub struct CountInferencesParams<'a> {
+    /// Function name to query. If provided, only inferences from this function will be counted.
+    pub function_name: Option<&'a str>,
+    /// Variant name to query.
+    pub variant_name: Option<&'a str>,
+    /// Episode ID to query.
+    pub episode_id: Option<&'a Uuid>,
+    /// Filters to apply to the query.
+    pub filters: Option<&'a InferenceFilter>,
+    /// Experimental: search query to filter inferences by.
+    pub search_query_experimental: Option<&'a str>,
 }
 
 #[async_trait]
@@ -219,4 +318,17 @@ pub trait InferenceQueries {
         config: &Config,
         params: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInferenceDatabase>, Error>;
+
+    /// List inference metadata from the InferenceById table.
+    async fn list_inference_metadata(
+        &self,
+        params: &ListInferenceMetadataParams,
+    ) -> Result<Vec<InferenceMetadata>, Error>;
+
+    /// Count inferences matching the given parameters.
+    async fn count_inferences(
+        &self,
+        config: &Config,
+        params: &CountInferencesParams<'_>,
+    ) -> Result<u64, Error>;
 }

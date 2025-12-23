@@ -153,8 +153,8 @@ test("should be able to add float feedback via the inference page", async ({
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
 
-  // Click "Select a metric"
-  await page.getByText("Select a metric").click();
+  // Open the metric combobox
+  await page.getByRole("combobox", { name: "Metric" }).click();
 
   // Explicitly wait for the item to be visible before clicking
   const metricItemLocator = page
@@ -167,7 +167,9 @@ test("should be able to add float feedback via the inference page", async ({
   // Click on the metric in the command list
   await metricItemLocator.click();
 
-  await page.locator("body").click();
+  // Wait for the value input to be visible (dropdown should close automatically after selection)
+  const valueInput = page.getByRole("spinbutton", { name: "Value" });
+  await valueInput.waitFor({ state: "visible" });
 
   // Fill in the value using the correct role and label
   // Generate a random float between 0 and 1, avoiding .225 which seems to occur frequently
@@ -175,9 +177,7 @@ test("should be able to add float feedback via the inference page", async ({
   const randomValue = (0.1 + Math.random() * 0.8).toFixed(3);
   const randomFloat = parseFloat(randomValue);
 
-  await page
-    .getByRole("spinbutton", { name: "Value" })
-    .fill(randomFloat.toString());
+  await valueInput.fill(randomFloat.toString());
 
   // Click the submit button
   await page.getByText("Submit Feedback").click();
@@ -203,8 +203,8 @@ test("should be able to add boolean feedback via the inference page", async ({
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
 
-  // Click "Select a metric"
-  await page.getByText("Select a metric").click();
+  // Open the metric combobox
+  await page.getByRole("combobox", { name: "Metric" }).click();
 
   // Explicitly wait for the item to be visible before clicking
   const metricItemLocator = page
@@ -250,8 +250,8 @@ test("should be able to add json demonstration feedback via the inference page",
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
 
-  // Click "Select a metric"
-  await page.getByText("Select a metric").click();
+  // Open the metric combobox
+  await page.getByRole("combobox", { name: "Metric" }).click();
 
   // Explicitly wait for the item to be visible before clicking
   const metricItemLocator = page
@@ -300,8 +300,8 @@ test("should be able to add chat demonstration feedback via the inference page",
   // Sleep for a little bit to ensure the dialog is open
   await page.waitForTimeout(500);
 
-  // Click "Select a metric"
-  await page.getByText("Select a metric").click();
+  // Open the metric combobox
+  await page.getByRole("combobox", { name: "Metric" }).click();
 
   // Explicitly wait for the item to be visible before clicking
   const metricItemLocator = page

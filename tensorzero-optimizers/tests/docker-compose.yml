@@ -1,0 +1,51 @@
+services:
+  clickhouse:
+    image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-lts}
+    environment:
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
+    ports:
+      - "8123:8123" # HTTP port
+      - "9000:9000" # Native port
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
+      start_period: 30s
+      start_interval: 1s
+
+  # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
+  gateway:
+    build:
+      context: ../../
+      dockerfile: gateway/Dockerfile
+      target: gateway
+    environment:
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    command: ["--default-config"]
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/health",
+        ]
+      start_period: 1s
+      start_interval: 1s
+      timeout: 1s
+
+volumes:
+  clickhouse-data:

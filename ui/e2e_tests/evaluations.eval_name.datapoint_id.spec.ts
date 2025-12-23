@@ -114,7 +114,7 @@ test("should be able to add a datapoint from the evaluation page", async ({
   await page.waitForTimeout(500);
 
   // Find the CommandInput by its placeholder text
-  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  const commandInput = page.getByPlaceholder("Create or find a dataset");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
 
@@ -139,6 +139,9 @@ test("should be able to add a datapoint from the evaluation page", async ({
     .getByText("View");
   await viewButton.waitFor({ state: "visible" });
   await viewButton.click();
+
+  // Wait for 500ms. TODO - figure out why waitForURL and waitForLoadState("networkidle") are not enough.
+  await page.waitForTimeout(500);
 
   // Wait for navigation to the new datapoint page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {

@@ -1,10 +1,14 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
-use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
+use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
 use evaluations::stats::{EvaluationInfo, EvaluationUpdate};
-use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs};
+use evaluations::{
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
+    run_evaluation_core_streaming,
+};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use serde::Serialize;
 use serde_json::Value;
@@ -13,15 +17,13 @@ use tensorzero::{
     OptimizationJobHandle, QUANTILES,
 };
 use tensorzero_core::{
-    cache::CacheEnabledMode,
-    config::{Config, ConfigFileGlob},
-    db::clickhouse::ClickHouseConnectionInfo,
+    cache::CacheEnabledMode, config::BatchWritesConfig, db::clickhouse::ClickHouseConnectionInfo,
+    evaluations::EvaluationConfig,
 };
 use uuid::Uuid;
 
 #[macro_use]
 mod napi_bridge;
-mod database;
 mod postgres;
 
 #[macro_use]
@@ -43,8 +45,8 @@ pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
     pub evaluation_name: String,
-    pub dataset_name: String,
-    pub variant_name: String,
+    pub dataset_name: Option<String>,
+    pub variant_name: Option<String>,
 }
 
 #[derive(Serialize, ts_rs::TS)]
@@ -110,12 +112,21 @@ fn send_event(
 pub struct RunEvaluationStreamingParams {
     pub gateway_url: String,
     pub clickhouse_url: String,
-    pub config_path: String,
+    /// JSON-serialized EvaluationConfig
+    pub evaluation_config: String,
+    /// JSON-serialized EvaluationFunctionConfig
+    pub function_config: String,
     pub evaluation_name: String,
-    pub dataset_name: String,
-    pub variant_name: String,
+    pub dataset_name: Option<String>,
+    pub datapoint_ids: Option<Vec<String>>,
+    pub variant_name: Option<String>,
+    pub internal_dynamic_variant_config: Option<String>,
     pub concurrency: u32,
     pub inference_cache: String,
+    pub max_datapoints: Option<u32>,
+    /// JSON string mapping evaluator names to precision limit thresholds.
+    /// Example: '{"exact_match": 0.13, "llm_judge": 0.16}'
+    pub precision_targets: Option<String>,
 }
 
 #[napi]
@@ -126,36 +137,38 @@ pub async fn run_evaluation_streaming(
     let url = Url::parse(&params.gateway_url)
         .map_err(|e| napi::Error::from_reason(format!("Invalid gateway URL: {e}")))?;
 
-    let config_glob =
-        ConfigFileGlob::new_from_path(Path::new(&params.config_path)).map_err(|e| {
-            napi::Error::from_reason(format!(
-                "Failed to resolve config glob from {}: {e}",
-                params.config_path
-            ))
+    // Deserialize configs from JSON strings
+    let evaluation_config: EvaluationConfig = serde_json::from_str(&params.evaluation_config)
+        .map_err(|e| {
+            napi::Error::from_reason(format!("Failed to deserialize evaluation_config: {e}"))
         })?;
+    let evaluation_config = Arc::new(evaluation_config);
 
-    let config = Arc::new(
-        Config::load_from_path_optional_verify_credentials(&config_glob, false)
+    // Extract function name from evaluation config
+    let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
+    let function_name = inference_eval_config.function_name.clone();
+
+    // Deserialize function config and create a single-entry table
+    let function_config: EvaluationFunctionConfig = serde_json::from_str(&params.function_config)
+        .map_err(|e| {
+        napi::Error::from_reason(format!("Failed to deserialize function_config: {e}"))
+    })?;
+    let mut function_configs = EvaluationFunctionConfigTable::new();
+    function_configs.insert(function_name, function_config);
+    let function_configs = Arc::new(function_configs);
+
+    // Create ClickHouse client with default batch writes config (no config file available)
+    let clickhouse_client =
+        ClickHouseConnectionInfo::new(&params.clickhouse_url, BatchWritesConfig::default())
             .await
             .map_err(|e| {
-                napi::Error::from_reason(format!(
-                    "Failed to load configuration from {}: {e}",
-                    params.config_path
-                ))
-            })?,
-    );
+                napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}"))
+            })?;
 
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
         .build()
         .await
         .map_err(|e| napi::Error::from_reason(format!("Failed to build TensorZero client: {e}")))?;
-
-    let clickhouse_client = ClickHouseConnectionInfo::new(
-        &params.clickhouse_url,
-        config.gateway.observability.batch_writes.clone(),
-    )
-    .await
-    .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
 
     let cache_mode = match params.inference_cache.as_str() {
         "on" => CacheEnabledMode::On,
@@ -177,36 +190,84 @@ pub async fn run_evaluation_streaming(
         ))
     })?;
 
+    let datapoint_ids: Vec<Uuid> = params
+        .datapoint_ids
+        .unwrap_or_default()
+        .iter()
+        .map(|s| {
+            Uuid::parse_str(s).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid UUID in datapoint_ids: {e}"))
+            })
+        })
+        .collect::<Result<Vec<Uuid>, napi::Error>>()?;
+
     let evaluation_run_id = Uuid::now_v7();
+
+    // Parse precision_targets from JSON string to HashMap
+    let precision_targets = if let Some(limits_json_str) = params.precision_targets {
+        let limits_map: std::collections::HashMap<String, f64> =
+            serde_json::from_str(&limits_json_str).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid precision_targets JSON: {e}"))
+            })?;
+        // Convert f64 to f32
+        limits_map.into_iter().map(|(k, v)| (k, v as f32)).collect()
+    } else {
+        HashMap::new()
+    };
+
+    let variant = match (
+        params.variant_name.clone(),
+        params.internal_dynamic_variant_config,
+    ) {
+        (Some(name), None) => EvaluationVariant::Name(name),
+        (None, Some(config)) => {
+            let config = serde_json::from_str(&config).map_err(|e| {
+                napi::Error::from_reason(format!(
+                    "Failed to deserialize internal_dynamic_variant_config: {e}"
+                ))
+            })?;
+            EvaluationVariant::Info(Box::new(config))
+        }
+        _ => {
+            return Err(napi::Error::from_reason(
+                "Exactly one of variant_name or internal_dynamic_variant_config must be provided",
+            ));
+        }
+    };
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse_client.clone(),
-        config: config.clone(),
+        evaluation_config,
+        function_configs,
         dataset_name: params.dataset_name.clone(),
-        variant_name: params.variant_name.clone(),
+        datapoint_ids: Some(datapoint_ids.clone()),
+        variant,
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
         inference_cache: cache_mode,
         concurrency,
     };
 
-    let result = match run_evaluation_core_streaming(core_args).await {
-        Ok(result) => result,
-        Err(error) => {
-            let _ = callback.abort();
-            return Err(napi::Error::from_reason(format!(
-                "Failed to start evaluation run: {error}"
-            )));
-        }
-    };
+    let result =
+        match run_evaluation_core_streaming(core_args, params.max_datapoints, precision_targets)
+            .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                let _ = callback.abort();
+                return Err(napi::Error::from_reason(format!(
+                    "Failed to start evaluation run: {error}"
+                )));
+            }
+        };
 
     let start_event = EvaluationRunEvent::Start(EvaluationRunStartEvent {
         evaluation_run_id,
         num_datapoints: result.run_info.num_datapoints,
         evaluation_name: params.evaluation_name.clone(),
         dataset_name: params.dataset_name.clone(),
-        variant_name: params.variant_name.clone(),
+        variant_name: params.variant_name,
     });
 
     send_event(&callback, &start_event)?;
@@ -232,20 +293,20 @@ pub async fn run_evaluation_streaming(
     let join_handle = clickhouse_client.batcher_join_handle();
     drop(clickhouse_client);
 
-    if let Some(handle) = join_handle {
-        if let Err(error) = handle.await {
-            let fatal_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
-                evaluation_run_id: Some(evaluation_run_id),
-                message: format!(
-                    "Error waiting for evaluations ClickHouse batch writer to finish: {error}"
-                ),
-            });
-            let _ = send_event(&callback, &fatal_event);
-            let _ = callback.abort();
-            return Err(napi::Error::from_reason(format!(
+    if let Some(handle) = join_handle
+        && let Err(error) = handle.await
+    {
+        let fatal_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
+            evaluation_run_id: Some(evaluation_run_id),
+            message: format!(
                 "Error waiting for evaluations ClickHouse batch writer to finish: {error}"
-            )));
-        }
+            ),
+        });
+        let _ = send_event(&callback, &fatal_event);
+        let _ = callback.abort();
+        return Err(napi::Error::from_reason(format!(
+            "Error waiting for evaluations ClickHouse batch writer to finish: {error}"
+        )));
     }
 
     let complete_event =
@@ -264,27 +325,6 @@ pub struct TensorZeroClient {
 
 #[napi]
 impl TensorZeroClient {
-    #[napi(factory)]
-    pub async fn build_embedded(
-        config_path: String,
-        clickhouse_url: Option<String>,
-        postgres_url: Option<String>,
-        timeout: Option<f64>,
-    ) -> Result<Self, napi::Error> {
-        let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(Path::new(&config_path).to_path_buf()),
-            clickhouse_url,
-            postgres_url,
-            timeout: timeout.map(Duration::from_secs_f64),
-            verify_credentials: false,
-            allow_batch_writes: false,
-        })
-        .build()
-        .await
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        Ok(Self { client })
-    }
-
     #[napi(factory)]
     pub async fn build_http(gateway_url: String) -> Result<Self, napi::Error> {
         let url = Url::parse(&gateway_url).map_err(|e| napi::Error::from_reason(e.to_string()))?;
@@ -334,10 +374,13 @@ impl TensorZeroClient {
     pub async fn stale_dataset(&self, dataset_name: String) -> Result<String, napi::Error> {
         let result = self
             .client
-            .stale_dataset(dataset_name)
+            .delete_dataset(dataset_name)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        let result_str = serde_json::to_string(&result).map_err(|e| {
+        let shim_result = StaleDatasetResponse {
+            num_staled_datapoints: result.num_deleted_datapoints,
+        };
+        let result_str = serde_json::to_string(&shim_result).map_err(|e| {
             napi::Error::from_reason(format!("Failed to serialize stale dataset result: {e}"))
         })?;
         Ok(result_str)
@@ -358,7 +401,9 @@ impl TensorZeroClient {
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let InferenceOutput::NonStreaming(result) = result else {
-            return Err(napi::Error::from_reason("Streaming inference is not supported. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports"));
+            return Err(napi::Error::from_reason(
+                "Streaming inference is not supported. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+            ));
         };
         let result_str = serde_json::to_string(&result).map_err(|e| {
             napi::Error::from_reason(format!("Failed to serialize inference result: {e}"))
@@ -383,20 +428,6 @@ impl TensorZeroClient {
         })?;
         Ok(probabilities_str)
     }
-}
-
-#[napi]
-pub async fn get_config(config_path: Option<String>) -> Result<String, napi::Error> {
-    let config_path = config_path
-        .as_ref()
-        .map(Path::new)
-        .map(|path| path.to_path_buf());
-    let config = tensorzero::get_config_no_verify_credentials(config_path)
-        .await
-        .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?;
-    let config_str =
-        serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-    Ok(config_str)
 }
 
 #[napi]

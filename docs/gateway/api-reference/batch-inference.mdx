@@ -59,11 +59,15 @@ See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) 
 - **Required:** no
 
 A list of lists of tool names that the model is allowed to call.
-The tools must be defined in the configuration file.
+The tools must be defined in the configuration file or provided dynamically via `additional_tools`.
 Each element in the outer list corresponds to a single inference in the batch.
 Each inner list contains the names of the tools that are allowed for the corresponding inference.
 
-Any tools provided in `additional_tools` are always allowed, irrespective of this field.
+The names should be the configuration keys (e.g. `foo` from `[tools.foo]`), not the display names shown to the LLM (e.g. `bar` from `tools.foo.name = "bar"`).
+
+Some providers (notably OpenAI) natively support restricting allowed tools.
+For these providers, we send all tools (both configured and dynamic) to the provider, and separately specify which ones are allowed to be called.
+For providers that do not natively support this feature, we filter the tool list ourselves and only send the allowed tools to the provider.
 
 ### `credentials`
 
@@ -172,10 +176,12 @@ If the content block has type `file`, it must have exactly one of the following 
   - `file_type`: must be `url`
   - `url`
   - `mime_type` (optional): override the MIME type of the file
+  - `filename` (optional): a filename to associate with the file
 - Base64-encoded Files
   - `file_type`: must be `base64`
   - `data`: `base64`-encoded data for an embedded file
-  - `mime_type`: the MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`)
+  - `mime_type` (optional): the MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`). If not provided, TensorZero will attempt to infer the MIME type from the file's magic bytes.
+  - `filename` (optional): a filename to associate with the file
 
 See the [Multimodal Inference](/gateway/guides/multimodal-inference/) guide for more details on how to use images in inference.
 
@@ -191,11 +197,12 @@ If the content block has type `thought`, it must have the following additional f
 If the content block has type `unknown`, it must have the following additional fields:
 
 - `data`: The original content block from the provider, without any validation or transformation by TensorZero.
-- `model_provider_name` (optional): A string specifying when this content block should be included in the model provider input.
-  If set, the content block will only be provided to this specific model provider.
-  If not set, the content block is passed to all model providers.
+- `model_name` (string, optional): A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`). If set, the content block will only be provided to this specific model.
+- `provider_name` (string, optional): A provider name for the model you specified (e.g. `my_openai`). If set, the content block will only be provided to this specific provider for the model.
 
-For example, the following hypothetical unknown content block will send the `daydreaming` content block to inference requests targeting the `your_model_provider_name` model provider.
+If neither `model_name` nor `provider_name` is set, the content block is passed to all model providers.
+
+For example, the following hypothetical unknown content block will send the `daydreaming` content block to inference requests targeting the `your_provider_name` provider for `your_model_name`.
 
 ```json
 {
@@ -204,7 +211,8 @@ For example, the following hypothetical unknown content block will send the `day
     "type": "daydreaming",
     "dream": "..."
   },
-  "model_provider_name": "tensorzero::model_name::your_model_name::provider_name::your_model_provider_name"
+  "model_name": "your_model_name",
+  "provider_name": "your_provider_name"
 }
 ```
 
@@ -347,10 +355,13 @@ Currently, we support the following:
 
 - `chat_completion`
   - `frequency_penalty`
+  - `json_mode`
   - `max_tokens`
   - `presence_penalty`
   - `reasoning_effort`
   - `seed`
+  - `service_tier`
+  - `stop_sequences`
   - `temperature`
   - `thinking_budget_tokens`
   - `top_p`

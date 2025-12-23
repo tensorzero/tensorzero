@@ -1,5 +1,5 @@
 use tracing::Subscriber;
-use tracing_subscriber::{filter, layer::Filter, registry::LookupSpan, Layer};
+use tracing_subscriber::{Layer, filter, layer::Filter, registry::LookupSpan};
 
 #[cfg(any(test, feature = "e2e_tests"))]
 pub static DISABLE_TRACING_BUG_WORKAROUND: std::sync::atomic::AtomicBool =
@@ -116,7 +116,7 @@ mod tests {
             observability::tracing_bug::DISABLE_TRACING_BUG_WORKAROUND
                 .store(true, std::sync::atomic::Ordering::SeqCst);
         }
-        let handle = observability::setup_observability(observability::LogFormat::Json)
+        let handle = observability::setup_observability(observability::LogFormat::Json, false)
             .await
             .unwrap();
         handle.delayed_otel.unwrap().enable_otel().unwrap();

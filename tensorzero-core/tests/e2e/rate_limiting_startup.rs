@@ -16,16 +16,12 @@ enabled = true
 model_inferences_per_minute = 10
 always = true
 
-[models]
-
 [models."dummy"]
 routing = ["dummy"]
 
 [models."dummy".providers.dummy]
 type = "dummy"
 model_name = "dummy"
-
-[functions]
 
 [functions.basic_test]
 type = "chat"
@@ -72,16 +68,12 @@ model = "dummy"
 async fn test_no_rate_limiting_no_postgres_ok() {
     // Configuration without rate limiting and no Postgres - should work fine
     let config = r#"
-[models]
-
 [models."dummy"]
 routing = ["dummy"]
 
 [models."dummy".providers.dummy]
 type = "dummy"
 model_name = "dummy"
-
-[functions]
 
 [functions.basic_test]
 type = "chat"
@@ -123,16 +115,12 @@ enabled = false
 model_inferences_per_minute = 10
 always = true
 
-[models]
-
 [models."dummy"]
 routing = ["dummy"]
 
 [models."dummy".providers.dummy]
 type = "dummy"
 model_name = "dummy"
-
-[functions]
 
 [functions.basic_test]
 type = "chat"

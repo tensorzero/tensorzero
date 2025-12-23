@@ -1,13 +1,13 @@
-use std::sync::{atomic::AtomicU64, Arc};
+use std::sync::{Arc, atomic::AtomicU64};
 
 use anyhow::Result;
 use clap::Parser;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 mod benchmark;
 
-use benchmark::{create_bucket_settings, create_postgres_pool, Contention, RateLimitBenchmark};
+use benchmark::{Contention, RateLimitBenchmark, create_bucket_settings, create_postgres_pool};
 
 #[derive(Parser)]
 pub struct Args {
@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
     // Create connection pool
     let pool_size = args.pool_size.unwrap_or(50);
     let pool = create_postgres_pool(pool_size).await?;
-    let client = PostgresConnectionInfo::new_with_pool(pool, None);
+    let client = PostgresConnectionInfo::new_with_pool(pool);
 
     // Create bucket settings
     let bucket_settings = Arc::new(create_bucket_settings(args.capacity, args.refill_amount));

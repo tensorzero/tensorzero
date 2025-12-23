@@ -7,28 +7,30 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
 import { toEpisodeUrl } from "~/utils/urls";
 import type {
   WorkflowEvaluationRunEpisodeWithFeedback,
-  WorkflowEvaluationRunStatisticsByMetricName,
-} from "~/utils/clickhouse/workflow_evaluations";
+  WorkflowEvaluationRunStatistics,
+} from "~/types/tensorzero";
 import { TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
 import { useConfig } from "~/context/config";
-import { formatMetricSummaryValue } from "~/utils/config/feedback";
-import { TableItemShortUuid } from "~/components/ui/TableItems";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import KVChip from "~/components/ui/KVChip";
 import MetricValue from "~/components/metric/MetricValue";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
-import type { FeedbackRow } from "tensorzero-node";
+import type { FeedbackRow } from "~/types/tensorzero";
 
 export default function WorkflowEvaluationRunEpisodesTable({
   episodes,
   statistics,
 }: {
   episodes: WorkflowEvaluationRunEpisodeWithFeedback[];
-  statistics: WorkflowEvaluationRunStatisticsByMetricName[];
+  statistics: WorkflowEvaluationRunStatistics[];
 }) {
   // Extract all unique metric names from all episodes
   const allMetricNames = new Set<string>();
@@ -74,11 +76,15 @@ export default function WorkflowEvaluationRunEpisodesTable({
                     link={toEpisodeUrl(episode.episode_id)}
                   />
                 </TableCell>
-                <TableCell>{formatDate(new Date(episode.timestamp))}</TableCell>
+                <TableCell>
+                  <TableItemTime timestamp={episode.timestamp} />
+                </TableCell>
                 <TableCell>
                   {(() => {
                     const filteredTags = Object.entries(episode.tags).filter(
-                      ([k]) => !k.startsWith("tensorzero::"),
+                      (entry): entry is [string, string] =>
+                        !entry[0].startsWith("tensorzero::") &&
+                        entry[1] !== undefined,
                     );
                     if (filteredTags.length === 0) {
                       return "-";
@@ -175,7 +181,7 @@ function MetricHeader({
   statistics,
 }: {
   metricName: string;
-  statistics: WorkflowEvaluationRunStatisticsByMetricName[];
+  statistics: WorkflowEvaluationRunStatistics[];
 }) {
   const metricStats = statistics.find(
     (stat) => stat.metric_name === metricName,
@@ -201,13 +207,14 @@ function MetricHeader({
             <div className="text-muted-foreground mt-2 text-xs">
               <span>
                 {formatMetricSummaryValue(metricStats.avg_metric, metricConfig)}
-                {/* Display CI error if it's non-zero and available */}
-                {metricStats.ci_error != null && metricStats.ci_error !== 0 ? (
+                {/* Display CI bounds as a range */}
+                {metricStats.ci_lower != null &&
+                metricStats.ci_upper != null ? (
                   <>
                     {" "}
-                    ±{" "}
-                    {formatMetricSummaryValue(
-                      metricStats.ci_error,
+                    {formatConfidenceInterval(
+                      metricStats.ci_lower,
+                      metricStats.ci_upper,
                       metricConfig,
                     )}
                   </>

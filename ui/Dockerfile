@@ -1,19 +1,11 @@
+# Global build args
+ARG DEBUG_BUILD=0
+
 # ========== base ==========
 
-FROM node:23-bookworm-slim AS base
-
-COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
+FROM node:24.12.0-trixie-slim AS base
 
 RUN npm install -g pnpm
-
-# ========== cargo-chef-planner ==========
-
-FROM lukemathwalker/cargo-chef:latest-rust-1.90-bookworm AS chef
-WORKDIR /app
-
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
 
 # ========== package-jsons-layer ==========
 
@@ -52,6 +44,7 @@ RUN pnpm install --frozen-lockfile --prod
 # ========== tensorzero-node-build-env ==========
 
 FROM rust:1.88.0 AS tensorzero-node-build-env
+ARG DEBUG_BUILD
 
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
@@ -59,7 +52,7 @@ RUN npm install -g pnpm
 COPY . /build
 WORKDIR /build/internal/tensorzero-node
 
-RUN pnpm install --frozen-lockfile && pnpm run build
+RUN pnpm install --frozen-lockfile && if [ "$DEBUG_BUILD" = "1" ]; then pnpm run build:debug; else pnpm run build; fi
 
 # ========== build-env ==========
 
@@ -85,7 +78,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl wget python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -117,7 +110,6 @@ ENV HOST=0.0.0.0
 ENV NODE_ENV=production
 ENV PORT=4000
 ENV RUST_LOG=warn
-ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
 HEALTHCHECK --start-period=10s --start-interval=1s --timeout=1s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health

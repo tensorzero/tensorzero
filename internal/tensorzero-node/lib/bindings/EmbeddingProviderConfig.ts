@@ -2,8 +2,10 @@
 import type { AzureProvider } from "./AzureProvider";
 import type { DummyProvider } from "./DummyProvider";
 import type { OpenAIProvider } from "./OpenAIProvider";
+import type { OpenRouterProvider } from "./OpenRouterProvider";
 
 export type EmbeddingProviderConfig =
   | { OpenAI: OpenAIProvider }
   | { Azure: AzureProvider }
+  | { OpenRouter: OpenRouterProvider }
   | { Dummy: DummyProvider };

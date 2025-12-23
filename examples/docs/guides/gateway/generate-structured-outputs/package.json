@@ -1,0 +1,15 @@
+{
+  "name": "tensorzero-examples-docs-guides-gateway-generate-structured-outputs-json-mode",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "openai_sdk": "tsx openai_sdk.ts"
+  },
+  "dependencies": {
+    "openai": "^6.4.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

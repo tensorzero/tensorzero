@@ -1,3 +1,4 @@
+# pyright: reportDeprecated=false
 import inspect
 import json
 import os
@@ -12,21 +13,29 @@ from openai import AsyncOpenAI
 from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatCompletionInferenceParams,
     ChatDatapointInsert,
+    ContentBlockChatOutputText,
+    FunctionTool,
+    InferenceParams,
     JsonDatapointInsert,
     JsonInferenceOutput,
     RenderedSample,
-    StoredInference,
+    StoredInferenceChat,
+    StoredInferenceJson,
+    StoredInput,
+    StoredInputMessage,
+    StoredInputMessageContentTemplate,
+    StoredInputMessageContentText,
+    StoredInputMessageContentThought,
     TensorZeroGateway,
-    Text,
-    Tool,
     patch_openai_client,
 )
 from tensorzero.util import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-core/tests/e2e/tensorzero.toml",
+    "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
 CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
@@ -98,28 +107,28 @@ def sync_client(request: FixtureRequest):
 def mixed_rendered_samples(
     embedded_sync_client: TensorZeroGateway,
 ) -> List[RenderedSample]:
-    chat_inference = StoredInference(
-        type="chat",
+    chat_inference = StoredInferenceChat(
         function_name="basic_test",
         variant_name="default",
-        input={
-            "system": {"assistant_name": "foo"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "thought", "text": "hmmm"},
-                        {"type": "text", "value": "bar"},
+        input=StoredInput(
+            system={"assistant_name": "foo"},
+            messages=[
+                StoredInputMessage(
+                    role="user",
+                    content=[
+                        StoredInputMessageContentThought(type="thought", text="hmmm"),
+                        StoredInputMessageContentText(type="text", text="bar"),
                     ],
-                },
+                )
             ],
-        },
-        output=[Text(text="Hello world")],
-        episode_id=uuid7(),
-        inference_id=uuid7(),
+        ),
+        output=[ContentBlockChatOutputText(text="Hello world")],
+        episode_id=str(uuid7()),
+        inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
         additional_tools=[
-            Tool(
+            FunctionTool(
                 name="test",
                 description="test",
                 parameters={
@@ -132,27 +141,27 @@ def mixed_rendered_samples(
         ],
         tool_choice="auto",
         parallel_tool_calls=False,
-        output_schema=None,
         dispreferred_outputs=[],
         tags={"test_key": "test_value"},
     )
-    json_inference = StoredInference(
-        type="json",
+    json_inference = StoredInferenceJson(
         function_name="json_success",
         variant_name="dummy",
-        input={
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}],
-                },
+        input=StoredInput(
+            system={"assistant_name": "Dr. Mehta"},
+            messages=[
+                StoredInputMessage(
+                    role="user",
+                    content=[StoredInputMessageContentText(type="text", text='{"country": "Japan"}')],
+                )
             ],
-        },
+        ),
         output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
-        episode_id=uuid7(),
-        inference_id=uuid7(),
+        episode_id=str(uuid7()),
+        inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
+        extra_body=[],
         output_schema={
             "type": "object",
             "properties": {"answer": {"type": "string"}},
@@ -172,26 +181,25 @@ def chat_function_rendered_samples(
     embedded_sync_client: TensorZeroGateway,
 ) -> List[RenderedSample]:
     """Fixture for optimization tests - chat function samples without tools."""
-    chat_inference = StoredInference(
-        type="chat",
+    chat_inference = StoredInferenceChat(
         function_name="basic_test",
         variant_name="default",
-        input={
-            "system": {"assistant_name": "foo"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "value": "What is the capital of France?"}],
-                },
+        input=StoredInput(
+            system={"assistant_name": "foo"},
+            messages=[
+                StoredInputMessage(
+                    role="user",
+                    content=[StoredInputMessageContentText(type="text", text="What is the capital of France?")],
+                )
             ],
-        },
-        output=[Text(text="The capital of France is Paris.")],
-        episode_id=uuid7(),
-        inference_id=uuid7(),
+        ),
+        output=[ContentBlockChatOutputText(text="The capital of France is Paris.")],
+        episode_id=str(uuid7()),
+        inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
         tool_choice="none",
         parallel_tool_calls=False,
-        output_schema=None,
         dispreferred_outputs=[],
         tags={"test_key": "test_value"},
     )
@@ -208,23 +216,26 @@ def json_function_rendered_samples(
     embedded_sync_client: TensorZeroGateway,
 ) -> List[RenderedSample]:
     """Fixture for optimization tests - JSON function samples."""
-    json_inference = StoredInference(
-        type="json",
+    json_inference = StoredInferenceJson(
         function_name="json_success",
         variant_name="dummy",
-        input={
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}],
-                },
+        input=StoredInput(
+            system={"assistant_name": "Dr. Mehta"},
+            messages=[
+                StoredInputMessage(
+                    role="user",
+                    content=[
+                        StoredInputMessageContentTemplate(type="template", name="user", arguments={"country": "Japan"})
+                    ],
+                )
             ],
-        },
+        ),
         output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
-        episode_id=uuid7(),
-        inference_id=uuid7(),
+        episode_id=str(uuid7()),
+        inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
+        extra_body=[],
         output_schema={
             "type": "object",
             "properties": {"answer": {"type": "string"}},
@@ -350,7 +361,7 @@ def evaluation_datasets(
     json_fixture_path = fixtures_dir / "json_datapoint_fixture.jsonl"
     json_datapoints = _load_json_datapoints_from_fixture(json_fixture_path, "extract_entities_0.8")
     if json_datapoints:
-        embedded_sync_client.create_datapoints(
+        embedded_sync_client.create_datapoints_legacy(
             dataset_name=dataset_mapping["extract_entities_0.8"],
             datapoints=cast(
                 Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
@@ -362,7 +373,7 @@ def evaluation_datasets(
     chat_fixture_path = fixtures_dir / "chat_datapoint_fixture.jsonl"
     chat_datapoints = _load_chat_datapoints_from_fixture(chat_fixture_path, "good-haikus-no-output")
     if chat_datapoints:
-        embedded_sync_client.create_datapoints(
+        embedded_sync_client.create_datapoints_legacy(
             dataset_name=dataset_mapping["good-haikus-no-output"],
             datapoints=cast(
                 Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],

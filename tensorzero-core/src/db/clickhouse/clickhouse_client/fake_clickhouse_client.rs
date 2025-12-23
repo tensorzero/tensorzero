@@ -13,7 +13,7 @@ use crate::db::clickhouse::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, Rows, TableName,
 };
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 
 lazy_static! {
     static ref FAKE_DATABASE_URL: SecretString = SecretString::from("fake");
@@ -64,6 +64,10 @@ async fn write_fake<T: serde::Serialize + Send + Sync>(
 
 #[async_trait]
 impl ClickHouseClient for FakeClickHouseClient {
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error> {
+        Ok(Arc::new(FakeClickHouseClient::new(self.healthy)))
+    }
+
     fn database_url(&self) -> &SecretString {
         &FAKE_DATABASE_URL
     }
@@ -124,12 +128,11 @@ impl ClickHouseClient for FakeClickHouseClient {
         })
     }
 
-    async fn run_query_synchronous_with_err_logging(
+    async fn run_query_synchronous_delayed_err(
         &self,
         _query: String,
         _parameters: &HashMap<&str, &str>,
-        _err_logging: bool,
-    ) -> Result<ClickHouseResponse, Error> {
+    ) -> Result<ClickHouseResponse, DelayedError> {
         Ok(ClickHouseResponse {
             response: String::new(),
             metadata: ClickHouseResponseMetadata {

@@ -1,18 +1,15 @@
 use crate::config::UninitializedVariantConfig;
-use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::model_table::ProviderTypeDefaultCredentials;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
-use crate::config::Config;
-use crate::db::clickhouse::ClickHouseConnectionInfo;
-use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
 use crate::optimization::dicl::{
@@ -24,6 +21,7 @@ use crate::optimization::fireworks_sft::{
 use crate::optimization::gcp_vertex_gemini_sft::{
     GCPVertexGeminiSFTConfig, GCPVertexGeminiSFTJobHandle, UninitializedGCPVertexGeminiSFTConfig,
 };
+use crate::optimization::gepa::{GEPAConfig, GEPAJobHandle, UninitializedGEPAConfig};
 use crate::optimization::openai_rft::{
     OpenAIRFTConfig, OpenAIRFTJobHandle, UninitializedOpenAIRFTConfig,
 };
@@ -33,37 +31,35 @@ use crate::optimization::openai_sft::{
 use crate::optimization::together_sft::{
     TogetherSFTConfig, TogetherSFTJobHandle, UninitializedTogetherSFTConfig,
 };
-use crate::stored_inference::RenderedSample;
 
 pub mod dicl;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod gepa;
 pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
 
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OptimizerInfo {
-    inner: OptimizerConfig,
+    pub inner: OptimizerConfig,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-enum OptimizerConfig {
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub enum OptimizerConfig {
     Dicl(DiclOptimizationConfig),
     OpenAISFT(OpenAISFTConfig),
     OpenAIRFT(Box<OpenAIRFTConfig>),
     FireworksSFT(FireworksSFTConfig),
     GCPVertexGeminiSFT(Box<GCPVertexGeminiSFTConfig>),
+    GEPA(GEPAConfig),
     TogetherSFT(Box<TogetherSFTConfig>),
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizationJobHandle {
@@ -77,6 +73,8 @@ pub enum OptimizationJobHandle {
     FireworksSFT(FireworksSFTJobHandle),
     #[serde(rename = "gcp_vertex_gemini_sft")]
     GCPVertexGeminiSFT(GCPVertexGeminiSFTJobHandle),
+    #[serde(rename = "gepa")]
+    GEPA(GEPAJobHandle),
     #[serde(rename = "together_sft")]
     TogetherSFT(TogetherSFTJobHandle),
 }
@@ -115,65 +113,30 @@ impl std::fmt::Display for OptimizationJobHandle {
     }
 }
 
-impl JobHandle for OptimizationJobHandle {
-    async fn poll(
-        &self,
-        client: &TensorzeroHttpClient,
-        credentials: &InferenceCredentials,
-        default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<OptimizationJobInfo, Error> {
-        match self {
-            OptimizationJobHandle::Dicl(job_handle) => {
-                job_handle
-                    .poll(client, credentials, default_credentials)
-                    .await
-            }
-            OptimizationJobHandle::OpenAISFT(job_handle) => {
-                job_handle
-                    .poll(client, credentials, default_credentials)
-                    .await
-            }
-            OptimizationJobHandle::OpenAIRFT(job_handle) => {
-                job_handle
-                    .poll(client, credentials, default_credentials)
-                    .await
-            }
-            OptimizationJobHandle::FireworksSFT(job_handle) => {
-                job_handle
-                    .poll(client, credentials, default_credentials)
-                    .await
-            }
-            OptimizationJobHandle::GCPVertexGeminiSFT(job_handle) => {
-                job_handle
-                    .poll(client, credentials, default_credentials)
-                    .await
-            }
-            OptimizationJobHandle::TogetherSFT(job_handle) => {
-                job_handle
-                    .poll(client, credentials, default_credentials)
-                    .await
-            }
-        }
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl OptimizationJobHandle {
+    fn __repr__(&self) -> String {
+        self.to_string()
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
+#[ts(export)]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 pub enum OptimizerOutput {
     Variant(Box<UninitializedVariantConfig>),
+    Variants(HashMap<String, Box<UninitializedVariantConfig>>),
     Model(UninitializedModelConfig),
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum OptimizationJobInfo {
     Pending {
         message: String,
-        #[cfg_attr(test, ts(type = "Date | null"))]
+        #[ts(type = "Date | null")]
         estimated_finish: Option<DateTime<Utc>>,
         trained_tokens: Option<u64>,
         error: Option<Value>,
@@ -223,6 +186,14 @@ impl std::fmt::Display for OptimizationJobStatus {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
+impl OptimizationJobStatus {
+    fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
 impl OptimizationJobInfoPyClass {
     #[getter]
     fn get_message(&self) -> &str {
@@ -262,116 +233,14 @@ impl OptimizationJobInfoPyClass {
             _ => None,
         }
     }
-}
 
-pub trait JobHandle {
-    async fn poll(
-        &self,
-        client: &TensorzeroHttpClient,
-        credentials: &InferenceCredentials,
-        default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<OptimizationJobInfo, Error>;
-}
-
-pub trait Optimizer {
-    type Handle: JobHandle;
-
-    async fn launch(
-        &self,
-        client: &TensorzeroHttpClient,
-        train_examples: Vec<RenderedSample>,
-        val_examples: Option<Vec<RenderedSample>>,
-        credentials: &InferenceCredentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo,
-        config: &Config,
-    ) -> Result<Self::Handle, Error>;
-}
-
-impl Optimizer for OptimizerInfo {
-    type Handle = OptimizationJobHandle;
-    async fn launch(
-        &self,
-        client: &TensorzeroHttpClient,
-        train_examples: Vec<RenderedSample>,
-        val_examples: Option<Vec<RenderedSample>>,
-        credentials: &InferenceCredentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo,
-        config: &Config,
-    ) -> Result<Self::Handle, Error> {
-        match &self.inner {
-            OptimizerConfig::Dicl(optimizer_config) => optimizer_config
-                .launch(
-                    client,
-                    train_examples,
-                    val_examples,
-                    credentials,
-                    clickhouse_connection_info,
-                    config,
-                )
-                .await
-                .map(OptimizationJobHandle::Dicl),
-            OptimizerConfig::OpenAISFT(optimizer_config) => optimizer_config
-                .launch(
-                    client,
-                    train_examples,
-                    val_examples,
-                    credentials,
-                    clickhouse_connection_info,
-                    config,
-                )
-                .await
-                .map(OptimizationJobHandle::OpenAISFT),
-            OptimizerConfig::OpenAIRFT(optimizer_config) => optimizer_config
-                .launch(
-                    client,
-                    train_examples,
-                    val_examples,
-                    credentials,
-                    clickhouse_connection_info,
-                    config,
-                )
-                .await
-                .map(OptimizationJobHandle::OpenAIRFT),
-            OptimizerConfig::FireworksSFT(optimizer_config) => optimizer_config
-                .launch(
-                    client,
-                    train_examples,
-                    val_examples,
-                    credentials,
-                    clickhouse_connection_info,
-                    config,
-                )
-                .await
-                .map(OptimizationJobHandle::FireworksSFT),
-            OptimizerConfig::GCPVertexGeminiSFT(optimizer_config) => optimizer_config
-                .launch(
-                    client,
-                    train_examples,
-                    val_examples,
-                    credentials,
-                    clickhouse_connection_info,
-                    config,
-                )
-                .await
-                .map(OptimizationJobHandle::GCPVertexGeminiSFT),
-            OptimizerConfig::TogetherSFT(optimizer_config) => optimizer_config
-                .launch(
-                    client,
-                    train_examples,
-                    val_examples,
-                    credentials,
-                    clickhouse_connection_info,
-                    config,
-                )
-                .await
-                .map(OptimizationJobHandle::TogetherSFT),
-        }
+    fn __repr__(&self) -> String {
+        self.to_string()
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize)]
+#[ts(export)]
 pub struct UninitializedOptimizerInfo {
     #[serde(flatten)]
     pub inner: UninitializedOptimizerConfig,
@@ -388,9 +257,8 @@ impl UninitializedOptimizerInfo {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedOptimizerConfig {
     #[serde(rename = "dicl")]
@@ -403,6 +271,8 @@ pub enum UninitializedOptimizerConfig {
     FireworksSFT(UninitializedFireworksSFTConfig),
     #[serde(rename = "gcp_vertex_gemini_sft")]
     GCPVertexGeminiSFT(UninitializedGCPVertexGeminiSFTConfig),
+    #[serde(rename = "gepa")]
+    GEPA(UninitializedGEPAConfig),
     #[serde(rename = "together_sft")]
     TogetherSFT(Box<UninitializedTogetherSFTConfig>),
 }
@@ -429,6 +299,9 @@ impl UninitializedOptimizerConfig {
                 OptimizerConfig::GCPVertexGeminiSFT(Box::new(
                     config.load(default_credentials).await?,
                 ))
+            }
+            UninitializedOptimizerConfig::GEPA(config) => {
+                OptimizerConfig::GEPA(config.load(default_credentials).await?)
             }
             UninitializedOptimizerConfig::TogetherSFT(config) => {
                 OptimizerConfig::TogetherSFT(Box::new(config.load(default_credentials).await?))

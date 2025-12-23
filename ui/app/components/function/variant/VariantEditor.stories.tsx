@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { VariantEditor } from "./VariantEditor";
 import { useState } from "react";
-import type { VariantInfo } from "tensorzero-node";
+import type { VariantInfo } from "~/types/tensorzero";
 import { Button } from "~/components/ui/button";
 import { safeStringify } from "~/utils/serialization";
 
@@ -43,10 +43,7 @@ const VariantEditorWrapper = ({
 
       <VariantEditor
         variantInfo={info}
-        confirmVariantInfo={(newInfo) => {
-          setInfo(newInfo);
-          console.log("Updated info:", newInfo);
-        }}
+        confirmVariantInfo={(newInfo) => setInfo(newInfo)}
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         variantName="example-variant"

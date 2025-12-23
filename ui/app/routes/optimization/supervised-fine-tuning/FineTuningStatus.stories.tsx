@@ -3,7 +3,7 @@ import FineTuningStatus from "./FineTuningStatus";
 import type {
   OptimizationJobInfo,
   OptimizationJobHandle,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 const meta = {
   title: "SFT/FineTuningStatus",
@@ -111,6 +111,7 @@ export const Completed: Story = {
               ttft_ms: null,
             },
           },
+          skip_relay: false,
         },
       },
     },
@@ -181,6 +182,7 @@ export const LongJobId: Story = {
               ttft_ms: 300000n,
             },
           },
+          skip_relay: false,
         },
       },
     },

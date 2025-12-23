@@ -47,11 +47,14 @@ user_template = "functions/draft_email/promptB/user.minijinja"
 [functions.draft_email.variants.best_of_n]
 type = "experimental_best_of_n"
 candidates = ["promptA", "promptA", "promptB"]
-weight = 1
 
 [functions.draft_email.variants.best_of_n.evaluator]
 model = "gpt-4o-mini"
 user_template = "functions/draft_email/best_of_n/user.minijinja"
+
+[functions.draft_email.experimentation]
+type = "uniform"
+candidate_variants = ["best_of_n"]  # so we don't sample `promptA` or `promptB` directly
 ```
 
 In this configuration:
@@ -78,26 +81,6 @@ We also provide a complete runnable example:
 This example showcases how best-of-N sampling can significantly enhance an LLM's chess-playing abilities by selecting the most promising moves from multiple generated options.
 
 </Tip>
-
-## Chain-of-Thought (CoT)
-
-<img
-  src="./inference-time-optimizations-chain-of-thought.svg"
-  alt="Inference-Time Optimization: Chain-of-Thought (CoT)"
-  height={480}
-/>
-
-Chain-of-Thought (CoT) is an inference-time optimization strategy that enhances LLM performance by encouraging the model to reason step by step before producing a final answer.
-This technique encourages the model to think through the problem, making it more likely to produce a correct and coherent response.
-
-The `experimental_chain_of_thought` variant type is only available for non-streaming requests to JSON functions.
-For chat functions, we recommend using reasoning models instead (e.g. OpenAI o3, DeepSeek R1).
-
-To use CoT in TensorZero, you need to configure a variant with the `experimental_chain_of_thought` type.
-It uses the same configuration as a `chat_completion` variant.
-
-Under the hood, TensorZero will prepend an additional field to the desired output schema to include the chain-of-thought reasoning and remove it from the final output.
-The reasoning is stored in the database for downstream observability and optimization.
 
 ## Dynamic In-Context Learning (DICL)
 
@@ -192,22 +175,23 @@ Here's a simple example configuration:
 type = "chat_completion"
 model = "gpt-4o-mini"
 user_template = "functions/draft_email/promptA/user.minijinja"
-weight = 0
 
 [functions.draft_email.variants.promptB]
 type = "chat_completion"
 model = "gpt-4o-mini"
 user_template = "functions/draft_email/promptB/user.minijinja"
-weight = 0
 
 [functions.draft_email.variants.mixture_of_n]
 type = "experimental_mixture_of_n"
 candidates = ["promptA", "promptA", "promptB"]
-weight = 1
 
 [functions.draft_email.variants.mixture_of_n.fuser]
 model = "gpt-4o-mini"
 user_template = "functions/draft_email/mixture_of_n/user.minijinja"
+
+[functions.draft_email.experimentation]
+type = "uniform"
+candidate_variants = ["mixture_of_n"]  # so we don't sample `promptA` or `promptB` directly
 ```
 
 In this configuration:

@@ -1,5 +1,6 @@
-use futures::future::try_join_all;
 use futures::StreamExt;
+use futures::future::try_join_all;
+use indexmap::IndexMap;
 use secrecy::SecretString;
 use serde_json::Value;
 use std::borrow::Cow;
@@ -10,18 +11,19 @@ use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::error::Elapsed;
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use tracing::{span, Level, Span};
+use tracing::{Level, Span, span};
 use tracing_futures::{Instrument, Instrumented};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 
 use crate::cache::{
-    cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, CacheValidationInfo, ModelProviderRequest, NonStreamingCacheData,
-    StreamingCacheData,
+    StreamingCacheData, cache_lookup, cache_lookup_streaming, start_cache_write,
+    start_cache_write_streaming,
 };
+use crate::config::with_skip_credential_validation;
 use crate::config::{
-    provider_types::ProviderTypesConfig, OtlpConfig, OtlpTracesFormat, TimeoutsConfig,
+    OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -31,6 +33,7 @@ use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
+use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
@@ -38,11 +41,10 @@ use crate::inference::types::batch::{
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
-    current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Thought,
-    Usage,
+    ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
+    current_timestamp,
 };
-use crate::inference::WrappedProvider;
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
     GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OpenAIKind, OpenRouterKind,
@@ -59,8 +61,8 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::{
-        types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
         InferenceProvider,
+        types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
 };
 use serde::{Deserialize, Serialize};
@@ -74,24 +76,25 @@ use crate::providers::{
     xai::XAIProvider,
 };
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
     pub timeouts: TimeoutsConfig,
+    pub skip_relay: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, UninitializedModelProvider>, // provider name => provider config
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
+    #[serde(default)]
+    pub skip_relay: Option<bool>,
 }
 
 impl UninitializedModelConfig {
@@ -100,33 +103,48 @@ impl UninitializedModelConfig {
         model_name: &str,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
+        relay_mode: bool,
     ) -> Result<ModelConfig, Error> {
+        let skip_relay = self.skip_relay.unwrap_or(false);
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
-        let providers = try_join_all(self.providers.into_iter().map(
-            |(name, provider)| async move {
+        let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
+            let http_client = http_client.clone();
+            async move {
+                let load_future = provider.config.load(
+                    provider_types,
+                    provider_type_default_credentials,
+                    http_client,
+                );
+
+                // In relay mode, don't run credential validation for providers,
+                // since requests to the parent model get redirected to the downstream gateway.
+                // The exception is `skip_relay` models - we'll still use their providers,
+                // so we want to run credential validation for them.
+                let config = if relay_mode && !skip_relay {
+                    Box::pin(with_skip_credential_validation(load_future)).await
+                } else {
+                    load_future.await
+                };
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
                         name: name.clone(),
-                        config: provider
-                            .config
-                            .load(provider_types, provider_type_default_credentials)
-                            .await
-                            .map_err(|e| {
-                                Error::new(ErrorDetails::Config {
-                                    message: format!("models.{model_name}.providers.{name}: {e}"),
-                                })
-                            })?,
+                        config: config.map_err(|e| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!("models.{model_name}.providers.{name}: {e}"),
+                            })
+                        })?,
                         extra_body: provider.extra_body,
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
                         discard_unknown_chunks: provider.discard_unknown_chunks,
                     },
                 ))
-            },
-        ))
+            }
+        }))
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
@@ -134,6 +152,7 @@ impl UninitializedModelConfig {
             routing: self.routing,
             providers,
             timeouts: self.timeouts,
+            skip_relay,
         })
     }
 }
@@ -190,27 +209,56 @@ impl StreamResponse {
     }
 }
 
-/// Creates a fully-qualified name from a model and provider name, suitable for using
-/// in `ContentBlock::Unknown.model_provider_name`
-/// Note that 'model_name' is a name from `[models]`, which is not necessarily
-/// the same as the underlying name passed to a specific provider api
+/// Creates a fully-qualified name from a model and provider name.
+/// This format was previously used in `ContentBlock::Unknown.model_provider_name`
+/// and is still used for the deprecated `DynamicExtraBody::Provider` variant.
 pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
     format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")
 }
 
 impl ModelConfig {
+    /// Checks if an Unknown content block should be filtered out based on model_name and provider_name.
+    /// Returns true if the block should be filtered (removed), false if it should be kept.
+    fn should_filter_unknown_block(
+        block_model_name: &Option<String>,
+        block_provider_name: &Option<String>,
+        target_model_name: &str,
+        target_provider_name: &str,
+    ) -> bool {
+        // If model_name is specified and doesn't match, filter it out
+        if let Some(m) = block_model_name
+            && m != target_model_name
+        {
+            return true;
+        }
+        // If provider_name is specified and doesn't match, filter it out
+        if let Some(p) = block_provider_name
+            && p != target_provider_name
+        {
+            return true;
+        }
+        // Keep the block if both match (or are None)
+        false
+    }
+
     fn filter_content_blocks<'a>(
         request: &'a ModelInferenceRequest<'a>,
         model_name: &str,
         provider: &ModelProvider,
     ) -> Cow<'a, ModelInferenceRequest<'a>> {
-        let name = fully_qualified_name(model_name, provider.name.as_ref());
+        let provider_name = provider.name.as_ref();
         let needs_filter = request.messages.iter().any(|m| {
             m.content.iter().any(|c| match c {
-                ContentBlock::Unknown {
-                    model_provider_name,
+                ContentBlock::Unknown(Unknown {
+                    model_name: block_model_name,
+                    provider_name: block_provider_name,
                     data: _,
-                } => model_provider_name.as_ref().is_some_and(|n| n != &name),
+                }) => Self::should_filter_unknown_block(
+                    block_model_name,
+                    block_provider_name,
+                    model_name,
+                    provider_name,
+                ),
                 ContentBlock::Thought(Thought {
                     text: _,
                     signature: _,
@@ -231,11 +279,17 @@ impl ModelConfig {
                         .content
                         .iter()
                         .flat_map(|c| match c {
-                            ContentBlock::Unknown {
-                                model_provider_name,
+                            ContentBlock::Unknown(Unknown {
+                                model_name: block_model_name,
+                                provider_name: block_provider_name,
                                 data: _,
-                            } => {
-                                if model_provider_name.as_ref().is_some_and(|n| n != &name) {
+                            }) => {
+                                if Self::should_filter_unknown_block(
+                                    block_model_name,
+                                    block_provider_name,
+                                    model_name,
+                                    provider_name,
+                                ) {
                                     None
                                 } else {
                                     Some(c.clone())
@@ -395,8 +449,25 @@ impl ModelConfig {
         let span = tracing::Span::current();
         clients.otlp_config.mark_openinference_chain_span(&span);
 
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
+            if let Some(relay) = &clients.relay
+                && !self.skip_relay
+            {
+                let response = relay
+                    .relay_non_streaming(model_name, request, clients)
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Relay {
+                            message: e.to_string(),
+                        })
+                    })?;
+                return Ok(ModelInferenceResponse::new(
+                    response,
+                    "tensorzero::relay".into(),
+                    false,
+                ));
+            }
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
                     Error::new(ErrorDetails::ProviderNotFound {
@@ -500,8 +571,31 @@ impl ModelConfig {
         clients
             .otlp_config
             .mark_openinference_chain_span(&tracing::Span::current());
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
+            if let Some(relay) = &clients.relay
+                && !self.skip_relay
+            {
+                // Note - we do *not* call wrap_provider_stream,
+                // since we don't want caching or (model provider) OTEL attributes
+                let (stream, raw_request) = relay
+                    .relay_streaming(model_name, request, clients)
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Relay {
+                            message: e.to_string(),
+                        })
+                    })?;
+                return Ok(StreamResponseAndMessages {
+                    response: StreamResponse {
+                        stream: stream.instrument(Span::current()),
+                        raw_request,
+                        model_provider_name: "tensorzero::relay".into(),
+                        cached: false,
+                    },
+                    messages: request.messages.clone(),
+                });
+            }
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
                     Error::new(ErrorDetails::ProviderNotFound {
@@ -571,7 +665,7 @@ impl ModelConfig {
         client: &'request TensorzeroHttpClient,
         api_keys: &'request InferenceCredentials,
     ) -> Result<StartBatchModelInferenceResponse, Error> {
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         for provider_name in &self.routing {
             let provider = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
@@ -610,6 +704,8 @@ impl ModelConfig {
 ///
 /// This is used for functionality that needs access to individual chunks, which requires
 /// us to wrap the underlying stream.
+///
+/// Note - this function is *not* called in relay mode
 async fn wrap_provider_stream(
     raw_request: String,
     model_request: ModelProviderRequest<'_>,
@@ -632,19 +728,23 @@ async fn wrap_provider_stream(
     let otlp_config = clients.otlp_config.clone();
     let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
+    let span_clone = span.clone();
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
-        let mut total_usage = Usage {
-            input_tokens: 0,
-            output_tokens: 0,
-        };
+        // `total_usage` is `None` until we receive a chunk with usage information
+        let mut total_usage: Option<Usage> = None;
         while let Some(chunk) = stream.next().await {
-            if let Ok(chunk) = chunk.as_ref() {
-                if let Some(chunk_usage) = &chunk.usage {
-                    total_usage = total_usage + *chunk_usage;
+            if let Ok(chunk) = chunk.as_ref()
+                && let Some(chunk_usage) = &chunk.usage {
+                    // `total_usage` will be `None` if this is the first chunk with usage information....
+                    if total_usage.is_none() {
+                        // ... so initialize it to zero ...
+                        total_usage = Some(Usage::zero());
+                    }
+                    // ...and then add the chunk usage to it (handling `None` fields)
+                    if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
                 }
-            }
             // We can skip cloning the chunk if we know we're not going to write to the cache
             if write_to_cache && !errored {
                 match chunk.as_ref() {
@@ -666,18 +766,25 @@ async fn wrap_provider_stream(
             }
             yield chunk;
         }
-        otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
+
+        // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
+        let total_usage = total_usage.unwrap_or_default();
+
+        otlp_config.apply_usage_to_model_provider_span(&span_clone, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            let usage = if errored {
-                RateLimitResourceUsage::UnderEstimate {
-                    model_inferences: 1,
-                    tokens: total_usage.total_tokens() as u64,
+            let usage = match (total_usage.total_tokens(), errored) {
+                (Some(tokens), false) => {
+                    RateLimitResourceUsage::Exact {
+                        model_inferences: 1,
+                        tokens: tokens as u64,
+                    }
                 }
-             } else {
-                RateLimitResourceUsage::Exact {
-                    model_inferences: 1,
-                    tokens: total_usage.total_tokens() as u64,
+                _ => {
+                    RateLimitResourceUsage::UnderEstimate {
+                        model_inferences: 1,
+                        tokens: total_usage.total_tokens().unwrap_or(0) as u64,
+                    }
                 }
             };
 
@@ -687,7 +794,7 @@ async fn wrap_provider_stream(
             {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
-        }.instrument(span));
+        }.instrument(span_clone.clone()));
 
 
         if write_to_cache && !errored {
@@ -700,7 +807,7 @@ async fn wrap_provider_stream(
                 tool_config
             );
         }
-    };
+    }.instrument(span);
     // We unconditionally create a stream, and forward items into it from a separate task
     // This ensures that we keep processing chunks (and call `return_tickets` to update rate-limiting information)
     // even if the top-level HTTP request is later dropped.
@@ -721,9 +828,8 @@ async fn wrap_provider_stream(
     )
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
@@ -742,9 +848,8 @@ pub struct UninitializedModelProvider {
     pub discard_unknown_chunks: bool,
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
@@ -758,6 +863,10 @@ pub struct ModelProvider {
 }
 
 impl ModelProvider {
+    fn validate(&self, global_outbound_http_timeout: &chrono::Duration) -> Result<(), Error> {
+        self.timeouts.validate(global_outbound_http_timeout)?;
+        Ok(())
+    }
     fn non_streaming_total_timeout(&self) -> Option<Duration> {
         Some(Duration::from_millis(self.timeouts.non_streaming.total_ms?))
     }
@@ -843,8 +952,8 @@ pub struct ModelProviderRequestInfo {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     #[serde(rename = "aws_bedrock")]
@@ -932,9 +1041,8 @@ impl ProviderConfig {
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
@@ -942,9 +1050,9 @@ pub enum HostedProviderKind {
     TGI,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-#[derive(Debug, TensorZeroDeserialize, VariantNames, Serialize)]
+#[derive(ts_rs::TS)]
+#[ts(export)]
+#[derive(Clone, Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
@@ -956,6 +1064,8 @@ pub enum UninitializedProviderConfig {
         api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        #[serde(default)]
+        beta_structured_outputs: bool,
     },
     #[strum(serialize = "aws_bedrock")]
     #[serde(rename = "aws_bedrock")]
@@ -1097,12 +1207,14 @@ impl UninitializedProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
     ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
                 model_name,
                 api_base,
                 api_key_location,
+                beta_structured_outputs,
             } => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
                 api_base,
@@ -1112,6 +1224,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                beta_structured_outputs,
             )),
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
@@ -1123,7 +1236,9 @@ impl UninitializedProviderConfig {
                     return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
-                ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, region).await?)
+                ProviderConfig::AWSBedrock(
+                    AWSBedrockProvider::new(model_id, region, http_client).await?,
+                )
             }
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -1220,8 +1335,8 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new(
+            } => {
+                let provider = GCPVertexGeminiProvider::new(
                     model_id,
                     endpoint_id,
                     location,
@@ -1230,8 +1345,10 @@ impl UninitializedProviderConfig {
                     provider_types,
                     provider_type_default_credentials,
                 )
-                .await?,
-            ),
+                .await?;
+
+                ProviderConfig::GCPVertexGemini(provider)
+            }
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
@@ -1287,19 +1404,29 @@ impl UninitializedProviderConfig {
                 api_type,
                 include_encrypted_reasoning,
                 provider_tools,
-            } => ProviderConfig::OpenAI(OpenAIProvider::new(
-                model_name,
-                api_base,
-                OpenAIKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                api_type,
-                include_encrypted_reasoning,
-                provider_tools,
-            )?),
+            } => {
+                // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
+                #[cfg(feature = "e2e_tests")]
+                let api_base = provider_types
+                    .openai
+                    .batch_inference_api_base
+                    .clone()
+                    .or(api_base);
+
+                ProviderConfig::OpenAI(OpenAIProvider::new(
+                    model_name,
+                    api_base,
+                    OpenAIKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                    api_type,
+                    include_encrypted_reasoning,
+                    provider_tools,
+                )?)
+            }
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,
@@ -1997,14 +2124,16 @@ pub enum CredentialLocation {
 }
 
 /// Credential location with optional fallback support
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, ts_rs::TS)]
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
-    Single(CredentialLocation),
+    Single(#[ts(type = "string")] CredentialLocation),
     /// Credential location with fallback
     WithFallback {
+        #[ts(type = "string")]
         default: CredentialLocation,
+        #[ts(type = "string")]
         fallback: CredentialLocation,
     },
 }
@@ -2027,9 +2156,8 @@ impl CredentialLocationWithFallback {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
 pub enum EndpointLocation {
     /// Environment variable containing the actual endpoint URL
     Env(String),
@@ -2198,7 +2326,7 @@ pub enum Credential {
     },
 }
 
-const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
+pub const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
     "deepseek::",
     "fireworks::",
@@ -2233,6 +2361,8 @@ impl ShorthandModelConfig for ModelConfig {
                 AnthropicKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                // We don't support beta structured output for shorthand models
+                false,
             )),
             "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(
                 model_name,
@@ -2346,10 +2476,16 @@ impl ShorthandModelConfig for ModelConfig {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         })
     }
 
-    fn validate(&self, model_name: &str) -> Result<(), Error> {
+    fn validate(
+        &self,
+        model_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
+    ) -> Result<(), Error> {
+        self.timeouts.validate(global_outbound_http_timeout)?;
         // Ensure that the model has at least one provider
         if self.routing.is_empty() {
             return Err(ErrorDetails::Config {
@@ -2385,7 +2521,7 @@ impl ShorthandModelConfig for ModelConfig {
         }
 
         // Validate each provider
-        for provider_name in self.providers.keys() {
+        for (provider_name, provider) in &self.providers {
             if !seen_providers.contains(provider_name) {
                 return Err(ErrorDetails::Config {
                     message: format!(
@@ -2394,6 +2530,7 @@ impl ShorthandModelConfig for ModelConfig {
                 }
                 .into());
             }
+            provider.validate(global_outbound_http_timeout)?;
         }
         Ok(())
     }
@@ -2404,7 +2541,7 @@ mod tests {
     use std::borrow::Cow;
 
     use crate::cache::CacheEnabledMode;
-    use crate::config::SKIP_CREDENTIAL_VALIDATION;
+    use crate::config::with_skip_credential_validation;
     use crate::rate_limiting::ScopeInfo;
     use crate::tool::ToolCallConfig;
     use crate::{
@@ -2416,14 +2553,13 @@ mod tests {
         model_table::RESERVED_MODEL_PREFIXES,
         providers::anthropic::AnthropicCredentials,
         providers::dummy::{
-            DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-            DUMMY_STREAMING_RESPONSE,
+            DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
+            DummyCredentials,
         },
         rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -2452,10 +2588,11 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
@@ -2472,7 +2609,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
 
         // Try inferring the good model only
@@ -2510,8 +2649,8 @@ mod tests {
         assert_eq!(
             usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -2531,6 +2670,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -2539,7 +2679,7 @@ mod tests {
         assert_eq!(
             response,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
@@ -2557,7 +2697,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_model_provider_infer_max_tokens_check() {
         let provider = ModelProvider {
             name: "test_provider".into(),
@@ -2571,7 +2710,7 @@ mod tests {
             discard_unknown_chunks: false,
         };
 
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let postgres_mock = PostgresConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
@@ -2602,7 +2741,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(tags.clone()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -2657,8 +2798,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_model_config_infer_routing_fallback() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Test that fallback works with bad --> good model provider
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
@@ -2670,7 +2811,7 @@ mod tests {
             credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
@@ -2687,7 +2828,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2739,6 +2882,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
 
         let model_name = "test model";
@@ -2761,8 +2905,8 @@ mod tests {
         assert_eq!(
             usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -2813,6 +2957,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let StreamResponseAndMessages {
             response:
@@ -2827,7 +2972,7 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
                     clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(api_keys.clone()),
@@ -2841,7 +2986,9 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
+                    relay: None,
                 },
                 "my_model",
             )
@@ -2894,12 +3041,13 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let response = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
                     clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(api_keys.clone()),
@@ -2913,7 +3061,9 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
+                    relay: None,
                 },
                 "my_model",
             )
@@ -2926,7 +3076,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
@@ -2944,8 +3094,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_model_config_infer_stream_routing_fallback() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Test that fallback works with bad --> good model provider (streaming)
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
@@ -3004,6 +3154,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let StreamResponseAndMessages {
             response:
@@ -3018,7 +3169,7 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
                     clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(api_keys.clone()),
@@ -3032,7 +3183,9 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
+                    relay: None,
                 },
                 "my_model",
             )
@@ -3093,10 +3246,11 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
@@ -3113,7 +3267,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
 
         let request = ModelInferenceRequest {
@@ -3142,7 +3298,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string(),
@@ -3173,7 +3329,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3182,7 +3340,7 @@ mod tests {
         assert_eq!(
             response,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
@@ -3215,10 +3373,11 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
@@ -3235,7 +3394,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
 
         let request = ModelInferenceRequest {
@@ -3263,7 +3424,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string(),
@@ -3294,7 +3455,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3336,13 +3499,15 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
+        let anthropic_provider_config = with_skip_credential_validation(async {
             ProviderConfig::Anthropic(AnthropicProvider::new(
                 "claude".to_string(),
                 None,
                 AnthropicCredentials::None,
+                false,
             ))
-        });
+        })
+        .await;
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".into()],
             providers: HashMap::from([(
@@ -3357,11 +3522,13 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let provider_types = ProviderTypesConfig::default();
         let model_table: ModelTable = ModelTable::new(
             HashMap::from([("claude".into(), anthropic_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            chrono::Duration::seconds(120),
         )
         .unwrap();
 
@@ -3516,10 +3683,12 @@ mod tests {
         let json = r#"{"fallback":"env::FALLBACK_KEY"}"#;
         let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("missing field `default`"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("missing field `default`")
+        );
     }
 
     #[test]
@@ -3528,10 +3697,12 @@ mod tests {
         let json = r#"{"default":"env::DEFAULT_KEY"}"#;
         let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("missing field `fallback`"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("missing field `fallback`")
+        );
     }
 
     #[test]

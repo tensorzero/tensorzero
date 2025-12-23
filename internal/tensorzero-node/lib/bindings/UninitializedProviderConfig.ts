@@ -10,6 +10,7 @@ export type UninitializedProviderConfig =
       model_name: string;
       api_base: string | null;
       api_key_location: string | null;
+      beta_structured_outputs: boolean;
     }
   | {
       type: "aws_bedrock";

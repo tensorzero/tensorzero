@@ -1,26 +1,31 @@
-use std::{
-    cmp::Ordering, env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration,
-};
+use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config::ConfigFileGlob;
-use crate::http::TensorzeroHttpClient;
+use crate::config::RuntimeOverlay;
+use crate::config::snapshot::ConfigSnapshot;
+use crate::config::unwritten::UnwrittenConfig;
+use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
+use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
+use crate::http::TensorzeroResponseWrapper;
+use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
+use crate::utils::gateway::DropWrapper;
 use crate::{
     config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
+    db::postgres::PostgresConnectionInfo,
     error::{Error, ErrorDetails},
-    utils::gateway::{setup_clickhouse, setup_postgres, GatewayHandle},
+    utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres},
 };
 use reqwest::header::HeaderMap;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use serde_json::Value;
+use reqwest_eventsource::Event;
+use secrecy::{ExposeSecret, SecretString};
 use std::fmt::Debug;
-use thiserror::Error;
-use tokio::{sync::Mutex, time::error::Elapsed};
+use tokio::time::error::Elapsed;
 use tokio_stream::StreamExt;
 use url::Url;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
-pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 pub use input_handling::resolved_input_to_client_input;
 
 pub use crate::cache::CacheParamsOptions;
@@ -38,7 +43,6 @@ pub use crate::inference::types::{
 pub use crate::tool::{DynamicToolParams, Tool};
 
 pub mod client_inference_params;
-pub mod client_input;
 pub mod input_handling;
 
 pub enum ClientMode {
@@ -63,33 +67,233 @@ impl Debug for ClientMode {
     }
 }
 
+pub struct HttpResponse<T> {
+    pub response: T,
+    pub raw_request: String,
+    pub raw_response: Option<String>,
+}
+
 pub struct HTTPGateway {
     pub base_url: Url,
-    pub http_client: reqwest::Client,
-    pub gateway_version: Mutex<Option<String>>, // Needs interior mutability so it can be set on every request
+    pub http_client: TensorzeroHttpClient,
+    headers: HeaderMap,
+    timeout: Option<Duration>,
+    verbose_errors: bool,
 }
 
 impl HTTPGateway {
-    /// Sets the gateway version on the HTTPGateway struct.
-    /// This should be called if the HTTPGateway is constructed within an async context.
-    pub async fn discover_initialize_gateway_version(
+    pub async fn check_http_response(
         &self,
-        client: &Client,
-    ) -> Result<(), ClientBuilderError> {
-        let status_url = self.base_url.join("status").map_err(|_| {
-            ClientBuilderError::GatewayVersion("Failed to construct /status URL".to_string())
+        resp: Result<TensorzeroResponseWrapper, reqwest::Error>,
+    ) -> Result<TensorzeroResponseWrapper, TensorZeroError> {
+        let resp = resp.map_err(|e| {
+            if e.is_timeout() {
+                TensorZeroError::RequestTimeout
+            } else {
+                TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::JsonRequest {
+                        message: format!(
+                            "Error from server: {}",
+                            DisplayOrDebug {
+                                val: e,
+                                debug: self.verbose_errors,
+                            }
+                        ),
+                    })
+                    .into(),
+                }
+            }
         })?;
-        // If the client is initialized and the ping for version fails, we simply don't set it.
-        let status_response = match self.http_client.get(status_url).send().await {
-            Ok(status_response) => status_response,
-            Err(_) => return Ok(()),
-        };
 
-        client
-            .update_gateway_version_from_headers(status_response.headers())
-            .await;
+        if let Err(e) = resp.error_for_status_ref() {
+            let status_code = resp.status().as_u16();
+            let text = resp.text().await.ok();
+            return Err(TensorZeroError::Http {
+                status_code,
+                text,
+                source: Error::new(ErrorDetails::JsonRequest {
+                    message: format!(
+                        "Request failed: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
+                })
+                .into(),
+            });
+        }
+        Ok(resp)
+    }
 
-        Ok(())
+    fn customize_builder<'a>(
+        &self,
+        mut builder: TensorzeroRequestBuilder<'a>,
+    ) -> TensorzeroRequestBuilder<'a> {
+        if let Some(timeout) = self.timeout {
+            builder = builder.timeout(timeout);
+        }
+        builder.headers(self.headers.clone())
+    }
+
+    pub async fn send_request(
+        &self,
+        builder: TensorzeroRequestBuilder<'_>,
+    ) -> Result<String, TensorZeroError> {
+        let builder = self.customize_builder(builder);
+        let resp = builder.send().await;
+        self.check_http_response(resp)
+            .await?
+            .text()
+            .await
+            .map_err(|e| TensorZeroError::Other {
+                source: Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error deserializing response: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
+                })
+                .into(),
+            })
+    }
+
+    pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
+        &self,
+        builder: TensorzeroRequestBuilder<'_>,
+    ) -> Result<(T, String), TensorZeroError> {
+        let builder = self.customize_builder(builder);
+        let resp = self.check_http_response(builder.send().await).await?;
+        let raw_response = resp.text().await.map_err(|e| TensorZeroError::Other {
+            source: Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error deserializing response: {}",
+                    DisplayOrDebug {
+                        val: e,
+                        debug: self.verbose_errors,
+                    }
+                ),
+            })
+            .into(),
+        })?;
+
+        let response: T =
+            serde_json::from_str(&raw_response).map_err(|e| TensorZeroError::Other {
+                source: Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error deserializing response: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
+                })
+                .into(),
+            })?;
+        Ok((response, raw_response))
+    }
+
+    async fn send_http_stream_inference(
+        &self,
+        builder: TensorzeroRequestBuilder<'_>,
+    ) -> Result<InferenceStream, TensorZeroError> {
+        let event_source =
+            self.customize_builder(builder)
+                .eventsource()
+                .map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::JsonRequest {
+                        message: format!("Error constructing event stream: {e:?}"),
+                    })
+                    .into(),
+                })?;
+
+        let mut event_source = event_source.peekable();
+        let first = event_source.peek().await;
+        if let Some(Err(_)) = first {
+            // Discard the stream if it has an error
+            let res = event_source.next().await;
+            #[expect(clippy::panic)]
+            let Some(Err(e)) = res else {
+                panic!("Peeked error but got non-err {res:?}");
+            };
+            let err_str = format!("Error in streaming response: {e:?}");
+            let inner_err = Error::new(ErrorDetails::StreamError {
+                source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
+            });
+            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = e {
+                return Err(TensorZeroError::Http {
+                    status_code: code.as_u16(),
+                    text: resp.text().await.ok(),
+                    source: inner_err.into(),
+                });
+            }
+            return Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::StreamError {
+                    source: Box::new(inner_err),
+                })
+                .into(),
+            });
+        }
+        let verbose_errors = self.verbose_errors;
+        Ok(Box::pin(async_stream::stream! {
+            while let Some(ev) = event_source.next().await {
+                match ev {
+                    Err(e) => {
+                        if matches!(e, reqwest_eventsource::Error::StreamEnded) {
+                            break;
+                        }
+                        yield Err(Error::new(ErrorDetails::StreamError {
+                            source: Box::new(Error::new(ErrorDetails::Serialization {
+                                message: format!("Error in streaming response: {}", DisplayOrDebug {
+                                    val: e,
+                                    debug: verbose_errors,
+                                })
+                            }))
+                        }))
+                    }
+                    Ok(e) => match e {
+                        Event::Open => continue,
+                        Event::Message(message) => {
+                            if message.data == "[DONE]" {
+                                break;
+                            }
+                            let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
+                                Error::new(ErrorDetails::Serialization {
+                                    message: format!("Error deserializing inference response chunk: {}", DisplayOrDebug {
+                                        val: e,
+                                        debug: verbose_errors,
+                                    }),
+                                })
+                            })?;
+                            if let Some(err) = json.get("error") {
+                                yield Err(Error::new(ErrorDetails::StreamError {
+                                    source: Box::new(Error::new(ErrorDetails::Serialization {
+                                        message: format!("Stream produced an error: {}", DisplayOrDebug {
+                                            val: err,
+                                            debug: verbose_errors,
+                                        }),
+                                    }))
+                                }));
+                            } else {
+                                let data: InferenceResponseChunk =
+                                serde_json::from_value(json).map_err(|e| {
+                                    Error::new(ErrorDetails::Serialization {
+                                        message: format!("Error deserializing json value as InferenceResponseChunk: {}", DisplayOrDebug {
+                                            val: e,
+                                            debug: verbose_errors,
+                                        }),
+                                    })
+                                })?;
+                                yield Ok(data);
+                            }
+
+                        }
+                    }
+                }
+            }
+        }))
     }
 }
 
@@ -102,42 +306,62 @@ pub struct EmbeddedGateway {
 /// in either `HTTPGateway` or `EmbeddedGateway` mode
 pub struct ClientBuilder {
     mode: ClientBuilderMode,
-    http_client: Option<reqwest::Client>,
+    http_client: Option<TensorzeroHttpClient>,
     verbose_errors: bool,
-    api_key: Option<String>,
+    api_key: Option<SecretString>,
     timeout: Option<Duration>,
+    drop_wrapper: Option<DropWrapper>,
 }
 
 /// An error type representing an error from within the TensorZero gateway
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum TensorZeroError {
-    #[error("HTTP Error (status code {status_code}): {text:?}")]
     Http {
         status_code: u16,
         text: Option<String>,
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("{source}")] // the `source` has already been formatted (below)
     Other {
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("HTTP Error: request timed out")]
     RequestTimeout,
-    #[error("Failed to get git info: {source}")]
+    #[cfg(feature = "git")]
     Git {
         #[source]
         source: git2::Error,
     },
 }
 
-#[derive(Debug, Error)]
-#[error("Internal TensorZero Error: {0}")]
-pub struct TensorZeroInternalError(#[from] crate::error::Error);
+impl Display for TensorZeroError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TensorZeroError::Http {
+                status_code,
+                text,
+                source: _,
+            } => {
+                if let Some(text) = text {
+                    write!(f, "HTTP Error (status code {status_code}): {text}")
+                } else {
+                    write!(f, "HTTP Error (status code {status_code})")
+                }
+            }
+            TensorZeroError::Other { source } => write!(f, "{source}"),
+            TensorZeroError::RequestTimeout => write!(f, "HTTP Error: request timed out"),
+            #[cfg(feature = "git")]
+            TensorZeroError::Git { source } => write!(f, "Failed to get git info: {source}"),
+        }
+    }
+}
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("Internal TensorZero Error: {0}")]
+pub struct TensorZeroInternalError(#[from] Error);
+
+#[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum ClientBuilderError {
     #[error(
@@ -207,6 +431,26 @@ pub enum ClientBuilderMode {
         // there.
         allow_batch_writes: bool,
     },
+    /// Construct a client from already-initialized components.
+    /// Used when the gateway infrastructure is already set up (e.g., in optimizers).
+    /// This avoids re-parsing config files or re-initializing database connections.
+    FromComponents {
+        /// Pre-parsed TensorZero configuration
+        config: Arc<Config>,
+        /// Use the settings from this `ClickHouseConnectionInfo` to create a *new* ClickHouseConnectionInfo
+        /// We do *not* re-use this directly,since we block when an embedded client `GatewayHandle` is dropped,
+        /// waiting on all outstanding `ClickHouseConnectionInfo` to get dropped.
+        /// This does not work if two different embedded clients can use the same `ClickHouseConnectionInfo`,
+        /// since one might be in use by Python code with the GIL held
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        /// Already-initialized Postgres connection
+        postgres_connection_info: PostgresConnectionInfo,
+        /// Pre-configured HTTP client for model inference
+        http_client: TensorzeroHttpClient,
+        /// A timeout for all TensorZero gateway processing.
+        /// If this timeout is hit, any in-progress LLM requests may be aborted.
+        timeout: Option<Duration>,
+    },
 }
 
 /// A `ClientBuilder` is used to construct a `Client`.
@@ -218,14 +462,15 @@ impl ClientBuilder {
             verbose_errors: false,
             api_key: None,
             timeout: None,
+            drop_wrapper: None,
         }
     }
 
-    /// Sets the `reqwest::Client` to be used when making any HTTP requests.
+    /// Sets the `TensorzeroHttpClient` to be used when making any HTTP requests.
     /// In `EmbeddedGateway` mode, this is used for making requests to model endpoints,
     /// as well as ClickHouse.
     /// In `HTTPGateway` mode, this is used for making requests to the gateway.
-    pub fn with_http_client(mut self, client: reqwest::Client) -> Self {
+    pub fn with_http_client(mut self, client: TensorzeroHttpClient) -> Self {
         self.http_client = Some(client);
         self
     }
@@ -244,7 +489,7 @@ impl ClientBuilder {
     /// This is only used in `HTTPGateway` mode.
     /// If not set, the client will attempt to read from the `TENSORZERO_API_KEY` environment variable.
     pub fn with_api_key(mut self, api_key: String) -> Self {
-        self.api_key = Some(api_key);
+        self.api_key = Some(api_key.into());
         self
     }
 
@@ -255,14 +500,23 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets the drop wrapper for embedded gateway mode.
+    /// This is used internally by the Python client, since we need to enter the Tokio runtime
+    /// and release the Python GIL (the drop may have been originally triggered from the Python
+    /// interpreter performing garbage collection of the wrapping Python object)
+    /// When the embedded gateway shuts down, the provided `DropWrapper` will be called
+    /// with a closure representing the actual drop logic (e.g. waiting for the ClickHouse batch insert task to complete)
+    #[cfg(feature = "pyo3")]
+    pub fn with_drop_wrapper(mut self, drop_wrapper: DropWrapper) -> Self {
+        self.drop_wrapper = Some(drop_wrapper);
+        self
+    }
+
     /// Constructs a `Client`, returning an error if the configuration is invalid.
     pub async fn build(self) -> Result<Client, ClientBuilderError> {
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => {
                 let client = self.build_http()?;
-                if let ClientMode::HTTPGateway(mode) = &*client.mode {
-                    mode.discover_initialize_gateway_version(&client).await?;
-                }
                 Ok(client)
             }
             ClientBuilderMode::EmbeddedGateway {
@@ -272,67 +526,50 @@ impl ClientBuilder {
                 timeout,
                 verify_credentials,
                 allow_batch_writes,
-            } => {
-                let config = if let Some(config_file) = config_file {
+            } => Box::pin(async move {
+                let unwritten_config = if let Some(config_file) = config_file {
                     let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
                         .map_err(|e| {
                             ClientBuilderError::ConfigParsingPreGlob(TensorZeroError::Other {
                                 source: e.into(),
                             })
                         })?;
-                    Arc::new(
-                        Config::load_from_path_optional_verify_credentials(
-                            &glob,
-                            *verify_credentials,
-                        )
-                        .await
-                        .map_err(|e| {
-                            ClientBuilderError::ConfigParsing {
-                                error: TensorZeroError::Other { source: e.into() },
-                                glob,
-                            }
-                        })?,
-                    )
+                    Box::pin(Config::load_from_path_optional_verify_credentials(
+                        &glob,
+                        *verify_credentials,
+                    ))
+                    .await
+                    .map_err(|e| ClientBuilderError::ConfigParsing {
+                        error: TensorZeroError::Other { source: e.into() },
+                        glob,
+                    })?
                 } else {
-                    tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
-                    Arc::new(Config::new_empty().await.map_err(|e| {
-                        ClientBuilderError::ConfigParsing {
+                    tracing::info!(
+                        "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
+                    );
+                    Config::new_empty()
+                        .await
+                        .map_err(|e| ClientBuilderError::ConfigParsing {
                             error: TensorZeroError::Other { source: e.into() },
                             glob: ConfigFileGlob::new_empty(),
-                        }
-                    })?)
+                        })?
                 };
-                if !allow_batch_writes
-                    && config.gateway.observability.batch_writes.enabled
-                    && !config
-                        .gateway
-                        .observability
-                        .batch_writes
-                        .__force_allow_embedded_batch_writes
-                {
-                    return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::Config {
-                            message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
-                        })
-                        .into(),
-                    }));
-                }
-                if config.gateway.auth.enabled {
-                    return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::Config {
-                            message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
-                        })
-                        .into(),
-                    }));
-                }
                 let clickhouse_connection_info =
-                    setup_clickhouse(&config, clickhouse_url.clone(), true)
+                    setup_clickhouse(&unwritten_config, clickhouse_url.clone(), true)
                         .await
                         .map_err(|e| {
                             ClientBuilderError::Clickhouse(TensorZeroError::Other {
                                 source: e.into(),
                             })
                         })?;
+                let config = unwritten_config
+                    .into_config(&clickhouse_connection_info)
+                    .await
+                    .map_err(|e| {
+                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+                    })?;
+                let config = Arc::new(config);
+                Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = setup_postgres(&config, postgres_url.clone())
                     .await
                     .map_err(|e| {
@@ -342,21 +579,14 @@ impl ClientBuilder {
                 let http_client = if self.http_client.is_some() {
                     return Err(ClientBuilderError::HTTPClientBuild(
                         TensorZeroError::Other {
-                            source: TensorZeroInternalError(crate::error::Error::new(
-                                ErrorDetails::AppState {
-                                    message:
-                                        "HTTP client cannot be provided in EmbeddedGateway mode"
-                                            .to_string(),
-                                },
-                            )),
+                            source: TensorZeroInternalError(Error::new(ErrorDetails::AppState {
+                                message: "HTTP client cannot be provided in EmbeddedGateway mode"
+                                    .to_string(),
+                            })),
                         },
                     ));
                 } else {
-                    TensorzeroHttpClient::new().map_err(|e| {
-                        ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
-                            source: e.into(),
-                        })
-                    })?
+                    config.http_client.clone()
                 };
                 Ok(Client {
                     mode: Arc::new(ClientMode::EmbeddedGateway {
@@ -366,6 +596,7 @@ impl ClientBuilder {
                                 clickhouse_connection_info,
                                 postgres_connection_info,
                                 http_client,
+                                self.drop_wrapper,
                             )
                             .await
                             .map_err(|e| {
@@ -377,37 +608,51 @@ impl ClientBuilder {
                         timeout: *timeout,
                     }),
                     verbose_errors: self.verbose_errors,
-                    #[cfg(feature = "e2e_tests")]
-                    last_body: Default::default(),
+                })
+            }).await,
+            ClientBuilderMode::FromComponents {
+                config,
+                clickhouse_connection_info,
+                postgres_connection_info,
+                http_client,
+                timeout,
+            } => {
+                // Validate embedded gateway configuration
+                // Note: FromComponents doesn't have an allow_batch_writes parameter,
+                // so we pass false to enforce that batch writes must be explicitly forced
+                // via __force_allow_embedded_batch_writes if enabled.
+                Self::validate_embedded_gateway_config(config, false)?;
+
+                // Construct Client directly from provided components
+                Ok(Client {
+                    mode: Arc::new(ClientMode::EmbeddedGateway {
+                        gateway: EmbeddedGateway {
+                            handle: GatewayHandle::new_with_database_and_http_client(
+                                config.clone(),
+                                // We create a new independent `ClickHouseConnectionInfo` here,
+                                // and do *not* directly use the existing `clickhouse_connection_info`
+                                // See `ClientBuilderMode::FromComponents` for more details
+                                clickhouse_connection_info.recreate().await.map_err(|e| {
+                                    ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                                        source: e.into(),
+                                    })
+                                })?,
+                                postgres_connection_info.clone(),
+                                http_client.clone(),
+                                self.drop_wrapper,
+                            )
+                            .await
+                            .map_err(|e| {
+                                ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
+                                    source: e.into(),
+                                })
+                            })?,
+                        },
+                        timeout: *timeout,
+                    }),
+                    verbose_errors: self.verbose_errors,
                 })
             }
-        }
-    }
-
-    /// Builds a dummy client for use in pyo3. Should not otherwise be used
-    /// This avoids logging any messages
-    ///
-    /// # Panics
-    /// This will panic if a `TensorzeroHttpClient` cannot be constructed
-    /// due to an error when building a `reqwest::Client`
-    /// (e.g. if a TLS backend cannot be initialized)
-    #[cfg(feature = "pyo3")]
-    pub fn build_dummy() -> Client {
-        let handle = GatewayHandle::new_dummy(
-            // NOTE - we previously called `reqwest::Client::new()`, which panics
-            // if a TLS backend cannot be initialized.
-            // This explicit `expect` does not actually increase the risk of panics,
-            #[expect(clippy::expect_used)]
-            TensorzeroHttpClient::new().expect("Failed to construct TensorzeroHttpClient"),
-        );
-        Client {
-            mode: Arc::new(ClientMode::EmbeddedGateway {
-                gateway: EmbeddedGateway { handle },
-                timeout: None,
-            }),
-            verbose_errors: false,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         }
     }
 
@@ -419,9 +664,131 @@ impl ClientBuilder {
                 timeout: None,
             }),
             verbose_errors: false,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         })
+    }
+
+    /// Creates a client from a historical ConfigSnapshot.
+    ///
+    /// This allows replaying inferences with the exact configuration that was used
+    /// at the time the snapshot was created. The semantic configuration (functions,
+    /// models, variants, templates, etc.) comes from the snapshot, while runtime
+    /// infrastructure settings are overlaid from the live config.
+    ///
+    /// # Parameters
+    /// - `snapshot`: The ConfigSnapshot to load from (historical semantic config)
+    /// - `live_config`: Reference to the current live gateway config. Runtime fields
+    ///   (`gateway`, `object_store_info`, `postgres`, `rate_limiting`, `http_client`)
+    ///   are copied from this config to override the snapshot's values, since these
+    ///   represent current infrastructure rather than historical behavior.
+    /// - `clickhouse_url`: Current ClickHouse connection (not from snapshot)
+    /// - `postgres_url`: Current Postgres connection (not from snapshot)
+    /// - `verify_credentials`: Whether to validate model provider credentials
+    /// - `timeout`: Optional timeout for gateway operations
+    ///
+    /// # Returns
+    /// A Client configured with historical semantic settings but current runtime parameters
+    pub async fn from_config_snapshot(
+        snapshot: ConfigSnapshot,
+        live_config: &Config,
+        clickhouse_url: Option<String>,
+        postgres_url: Option<String>,
+        verify_credentials: bool,
+        timeout: Option<Duration>,
+    ) -> Result<Client, ClientBuilderError> {
+        // Create runtime overlay from live config.
+        // This ensures infrastructure settings (gateway, postgres, rate limiting, etc.)
+        // reflect the current environment rather than historical snapshot values.
+        let runtime_overlay = RuntimeOverlay::from_config(live_config);
+
+        // Load config from snapshot with runtime overlay applied
+        let unwritten_config = Box::pin(Config::load_from_snapshot(
+            snapshot,
+            runtime_overlay,
+            verify_credentials,
+        ))
+        .await
+        .map_err(|e| ClientBuilderError::ConfigParsing {
+            error: TensorZeroError::Other { source: e.into() },
+            glob: ConfigFileGlob::new_empty(),
+        })?;
+
+        // Setup ClickHouse with runtime URL
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url, true)
+            .await
+            .map_err(|e| {
+                ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        // Convert config_load_info into Config with hash
+        let config = unwritten_config
+            .into_config(&clickhouse_connection_info)
+            .await
+            .map_err(|e| {
+                ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        let config = Arc::new(config);
+
+        // Validate embedded gateway configuration
+        Self::validate_embedded_gateway_config(&config, false)?;
+
+        // Setup Postgres with runtime URL
+        let postgres_connection_info =
+            setup_postgres(&config, postgres_url).await.map_err(|e| {
+                ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        // Use HTTP client from config (now overlaid from live_config)
+        let http_client = config.http_client.clone();
+
+        // Build client using FromComponents pattern
+        let builder = ClientBuilder::new(ClientBuilderMode::FromComponents {
+            config,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+            timeout,
+        });
+
+        Box::pin(builder.build()).await
+    }
+
+    /// Validates configuration for embedded gateway mode.
+    /// Checks for unsupported features like batch writes and authentication.
+    fn validate_embedded_gateway_config(
+        config: &Config,
+        allow_batch_writes: bool,
+    ) -> Result<(), ClientBuilderError> {
+        // Validate batch writes configuration
+        if !allow_batch_writes
+            && config.gateway.observability.batch_writes.enabled
+            && !config
+                .gateway
+                .observability
+                .batch_writes
+                .__force_allow_embedded_batch_writes
+        {
+            return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::Config {
+                    message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
+                })
+                .into(),
+            }));
+        }
+
+        // Validate auth configuration
+        if config.gateway.auth.enabled {
+            return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(
+                TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::Config {
+                        message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
+                    })
+                    .into(),
+                },
+            ));
+        }
+
+        Ok(())
     }
 
     /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
@@ -430,6 +797,20 @@ impl ClientBuilder {
         let ClientBuilderMode::HTTPGateway { mut url } = self.mode else {
             return Err(ClientBuilderError::NotHTTPGateway);
         };
+        // This is only used when dropping a `GatewayHandle` in embedded gateway mode,
+        // and does not currently make sense in HTTPGateway mode.
+        if self.drop_wrapper.is_some() {
+            return Err(ClientBuilderError::HTTPClientBuild(
+                TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InternalError {
+                        message:
+                            "ClientBuilder.with_drop_wrapper is not allowed in HTTPGateway mode"
+                                .to_string(),
+                    })
+                    .into(),
+                },
+            ));
+        }
         // Enforce that the URL has a trailing slash, so that joining endpoints works correctly
         // This means that passing in a url that looks like 'http://example.com/some/prefix'
         // will result in inference requests being sent to 'http://example.com/some/prefix/inference'
@@ -438,52 +819,19 @@ impl ClientBuilder {
         }
 
         // Try to get API key from constructor parameter, otherwise try environment variable
-        let api_key = self.api_key.or_else(|| env::var("TENSORZERO_API_KEY").ok());
+        let api_key = self
+            .api_key
+            .or_else(|| env::var("TENSORZERO_API_KEY").ok().map(|s| s.into()));
 
         // Build the HTTP client, applying timeout and/or API key
-        let http_client = if let Some(client) = self.http_client {
-            // Use custom client provided by advanced users
-
-            // TODO: Later we can decide if we want to override the custom HTTP clients.
-
-            if self.timeout.is_some() {
-                tracing::warn!("A timeout is set but a custom HTTP client is being used. The TensorZero SDK will not automatically apply the timeout to the custom client.");
-            }
-
-            if api_key.is_some() {
-                tracing::warn!("A TensorZero API key is available but a custom HTTP client is being used. The TensorZero SDK will not automatically apply the authentication header to the custom client.");
-            }
-
-            client
+        let http_client = if let Some(http_client) = self.http_client {
+            http_client
         } else {
-            // Build client from scratch, composing timeout and api_key
-            let mut builder = reqwest::Client::builder();
-
-            // Apply timeout if provided
-            if let Some(timeout) = self.timeout {
-                builder = builder.timeout(timeout);
-            }
-
-            // Apply API key as default Authorization header if provided
-            if let Some(ref key) = api_key {
-                let mut headers = HeaderMap::new();
-                headers.insert(
-                    reqwest::header::AUTHORIZATION,
-                    reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")).map_err(
-                        |e| {
-                            ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
-                                source: Error::new(ErrorDetails::InternalError {
-                                    message: format!("Failed to create authorization header: {e}"),
-                                })
-                                .into(),
-                            })
-                        },
-                    )?,
-                );
-                builder = builder.default_headers(headers);
-            }
-
-            builder.build().map_err(|e| {
+            TensorzeroHttpClient::new(
+                // The timeout may be overridden in `send_and_parse_http_response`
+                DEFAULT_HTTP_CLIENT_TIMEOUT,
+            )
+            .map_err(|e| {
                 ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
                     source: Error::new(ErrorDetails::InternalError {
                         message: format!("Failed to build HTTP client: {e}"),
@@ -493,15 +841,30 @@ impl ClientBuilder {
             })?
         };
 
+        let mut headers = HeaderMap::new();
+        if let Some(key) = api_key {
+            headers.insert(
+                reqwest::header::AUTHORIZATION,
+                reqwest::header::HeaderValue::from_str(&format!("Bearer {}", key.expose_secret()))
+                    .map_err(|e| {
+                        ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                            source: Error::new(ErrorDetails::InternalError {
+                                message: format!("Failed to create authorization header: {e}"),
+                            })
+                            .into(),
+                        })
+                    })?,
+            );
+        }
         Ok(Client {
             mode: Arc::new(ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
                 http_client,
-                gateway_version: Mutex::new(None),
+                headers,
+                timeout: self.timeout,
+                verbose_errors: self.verbose_errors,
             })),
             verbose_errors: self.verbose_errors,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         })
     }
 }
@@ -511,8 +874,6 @@ impl ClientBuilder {
 pub struct Client {
     mode: Arc<ClientMode>,
     pub verbose_errors: bool,
-    #[cfg(feature = "e2e_tests")]
-    pub last_body: Arc<Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {
@@ -547,7 +908,7 @@ impl Client {
                     .base_url
                     .join("feedback")
                     .map_err(|e| TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
                             message: format!(
                                 "Failed to join base URL with /feedback endpoint: {e}"
                             ),
@@ -555,37 +916,99 @@ impl Client {
                         .into(),
                     })?;
                 let builder = client.http_client.post(url).json(&params);
-                self.parse_http_response(builder.send().await).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
+                // We currently ban auth-enabled configs in embedded gateway mode,
+                // so we don't have an API key here
                 Ok(with_embedded_timeout(*timeout, async {
-                    crate::endpoints::feedback::feedback(gateway.handle.app_state.clone(), params)
-                        .await
-                        .map_err(err_to_http)
+                    crate::endpoints::feedback::feedback(
+                        gateway.handle.app_state.clone(),
+                        params,
+                        None,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }
         }
     }
 
-    // Runs a TensorZero inference.
-    // See https://www.tensorzero.com/docs/gateway/api-reference#post-inference
-    pub async fn inference(
+    pub async fn http_embeddings(
         &self,
-        mut params: ClientInferenceParams,
-    ) -> Result<InferenceOutput, TensorZeroError> {
+        params: OpenAICompatibleEmbeddingParams,
+        api_key: Option<SecretString>,
+    ) -> Result<HttpResponse<OpenAIEmbeddingResponse>, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
-                let gateway_version = { client.gateway_version.lock().await.clone() };
-                // We only perform this adjustment in HTTP gateway mode, since the embedded gateway
-                // version always matches our client version.
-                try_adjust_tool_call_arguments(gateway_version.as_deref(), &mut params.input)?;
+                let url = client.base_url.join("/openai/v1/embeddings").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /openai/v1/embeddings endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let body = serde_json::to_string(&params).map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Failed to serialize embedding params: {}",
+                            DisplayOrDebug {
+                                val: e,
+                                debug: self.verbose_errors,
+                            }
+                        ),
+                    })
+                    .into(),
+                })?;
+                let mut builder = client
+                    .http_client
+                    .post(url)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(body.clone());
+
+                if let Some(api_key) = api_key {
+                    builder = builder.header(
+                        reqwest::header::AUTHORIZATION,
+                        format!("Bearer {}", api_key.expose_secret()),
+                    );
+                }
+                let (response, raw_response) = client.send_and_parse_http_response(builder).await?;
+                Ok(HttpResponse {
+                    response,
+                    raw_request: body,
+                    raw_response: Some(raw_response),
+                })
+            }
+            ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InternalError {
+                    message: "HTTP embeddings is not supported in embedded gateway mode"
+                        .to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// Runs a TensorZero inference over HTTP
+    /// This is like `inference`, but only works in HTTPGateway mode
+    /// The `HttpResponse` struct contains extra http-specific information (e.g. raw_request and raw_response),
+    /// which would not be available when calling `inference` on an embedded gateway.
+    pub async fn http_inference(
+        &self,
+        params: ClientInferenceParams,
+    ) -> Result<HttpResponse<InferenceOutput>, TensorZeroError> {
+        match &*self.mode {
+            ClientMode::HTTPGateway(client) => {
                 let url =
                     client
                         .base_url
                         .join("inference")
                         .map_err(|e| TensorZeroError::Other {
-                            source: crate::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                            source: Error::new(ErrorDetails::InvalidBaseUrl {
                                 message: format!(
                                     "Failed to join base URL with /inference endpoint: {e}"
                                 ),
@@ -593,7 +1016,7 @@ impl Client {
                             .into(),
                         })?;
                 let body = serde_json::to_string(&params).map_err(|e| TensorZeroError::Other {
-                    source: crate::error::Error::new(ErrorDetails::Serialization {
+                    source: Error::new(ErrorDetails::Serialization {
                         message: format!(
                             "Failed to serialize inference params: {}",
                             DisplayOrDebug {
@@ -604,15 +1027,18 @@ impl Client {
                     })
                     .into(),
                 })?;
-                #[cfg(feature = "e2e_tests")]
-                {
-                    *self.last_body.lock().await = Some(body.clone());
-                }
                 let mut builder = client
                     .http_client
                     .post(url)
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
-                    .body(body);
+                    .body(body.clone());
+
+                if let Some(api_key) = params.api_key {
+                    builder = builder.header(
+                        reqwest::header::AUTHORIZATION,
+                        format!("Bearer {}", api_key.expose_secret()),
+                    );
+                }
 
                 // Add OTLP trace headers with the required prefix
                 for (key, value) in &params.otlp_traces_extra_headers {
@@ -621,34 +1047,56 @@ impl Client {
                 }
 
                 if params.stream.unwrap_or(false) {
-                    let event_source =
-                        builder.eventsource().map_err(|e| TensorZeroError::Other {
-                            source: crate::error::Error::new(ErrorDetails::JsonRequest {
-                                message: format!("Error constructing event stream: {e:?}"),
-                            })
-                            .into(),
-                        })?;
-                    Ok(InferenceOutput::Streaming(
-                        self.http_inference_stream(event_source).await?,
-                    ))
+                    Ok(HttpResponse {
+                        response: InferenceOutput::Streaming(
+                            client.send_http_stream_inference(builder).await?,
+                        ),
+                        raw_request: body,
+                        raw_response: None,
+                    })
                 } else {
-                    Ok(InferenceOutput::NonStreaming(
-                        self.parse_http_response(builder.send().await).await?,
-                    ))
+                    let (response, raw_response) =
+                        client.send_and_parse_http_response(builder).await?;
+                    Ok(HttpResponse {
+                        response: InferenceOutput::NonStreaming(response),
+                        raw_request: body,
+                        raw_response: Some(raw_response),
+                    })
                 }
             }
+            ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InternalError {
+                    message: "HTTP inference is not supported in embedded gateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    // Runs a TensorZero inference.
+    // See https://www.tensorzero.com/docs/gateway/api-reference#post-inference
+    pub async fn inference(
+        &self,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceOutput, TensorZeroError> {
+        match &*self.mode {
+            ClientMode::HTTPGateway(_) => Ok(self.http_inference(params).await?.response),
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    let res = crate::endpoints::inference::inference(
+                    let res = Box::pin(crate::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         gateway.handle.app_state.postgres_connection_info.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
                         params.try_into().map_err(err_to_http)?,
-                    )
+                        // We currently ban auth-enabled configs in embedded gateway mode,
+                        // so we don't have an API key here
+                        None,
+                    ))
                     .await
-                    .map_err(err_to_http)?;
+                    .map_err(err_to_http)?
+                    .output;
                     match res {
                         InferenceOutput::NonStreaming(response) => {
                             Ok(InferenceOutput::NonStreaming(response))
@@ -673,7 +1121,7 @@ impl Client {
                     .base_url
                     .join("internal/object_storage")
                     .map_err(|e| TensorZeroError::Other {
-                        source: crate::error::Error::new(
+                        source: Error::new(
                             ErrorDetails::InvalidBaseUrl {
                                 message: format!(
                                     "Failed to join base URL with /internal/object_storage endpoint: {e}"
@@ -684,7 +1132,7 @@ impl Client {
                     })?;
                 let storage_path_json =
                     serde_json::to_string(&storage_path).map_err(|e| TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::Serialization {
+                        source: Error::new(ErrorDetails::Serialization {
                             message: format!("Failed to serialize storage path: {e}"),
                         })
                         .into(),
@@ -693,7 +1141,7 @@ impl Client {
                     .http_client
                     .get(url)
                     .query(&[("storage_path", storage_path_json)]);
-                self.parse_http_response(builder.send().await).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -706,209 +1154,6 @@ impl Client {
                 })
                 .await?)
             }
-        }
-    }
-
-    pub async fn check_http_response(
-        &self,
-        resp: Result<reqwest::Response, reqwest::Error>,
-    ) -> Result<reqwest::Response, TensorZeroError> {
-        let resp = resp.map_err(|e| {
-            if e.is_timeout() {
-                TensorZeroError::RequestTimeout
-            } else {
-                TensorZeroError::Other {
-                    source: crate::error::Error::new(ErrorDetails::JsonRequest {
-                        message: format!(
-                            "Error from server: {}",
-                            DisplayOrDebug {
-                                val: e,
-                                debug: self.verbose_errors,
-                            }
-                        ),
-                    })
-                    .into(),
-                }
-            }
-        })?;
-
-        self.update_gateway_version_from_headers(resp.headers())
-            .await;
-
-        if let Err(e) = resp.error_for_status_ref() {
-            let status_code = resp.status().as_u16();
-            let text = resp.text().await.ok();
-            return Err(TensorZeroError::Http {
-                status_code,
-                text,
-                source: crate::error::Error::new(ErrorDetails::JsonRequest {
-                    message: format!(
-                        "Request failed: {}",
-                        DisplayOrDebug {
-                            val: e,
-                            debug: self.verbose_errors,
-                        }
-                    ),
-                })
-                .into(),
-            });
-        }
-        Ok(resp)
-    }
-
-    pub async fn parse_http_response<T: serde::de::DeserializeOwned>(
-        &self,
-        resp: Result<reqwest::Response, reqwest::Error>,
-    ) -> Result<T, TensorZeroError> {
-        self.check_http_response(resp)
-            .await?
-            .json()
-            .await
-            .map_err(|e| TensorZeroError::Other {
-                source: crate::error::Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error deserializing response: {}",
-                        DisplayOrDebug {
-                            val: e,
-                            debug: self.verbose_errors,
-                        }
-                    ),
-                })
-                .into(),
-            })
-    }
-
-    async fn http_inference_stream(
-        &self,
-        event_source: EventSource,
-    ) -> Result<InferenceStream, TensorZeroError> {
-        let mut event_source = event_source.peekable();
-        let first = event_source.peek().await;
-        if let Some(Err(_)) = first {
-            // Discard the stream if it has an error
-            let res = event_source.next().await;
-            #[expect(clippy::panic)]
-            let Some(Err(e)) = res
-            else {
-                panic!("Peeked error but got non-err {res:?}");
-            };
-            let err_str = format!("Error in streaming response: {e:?}");
-            let inner_err = crate::error::Error::new(ErrorDetails::StreamError {
-                source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
-                    message: err_str,
-                })),
-            });
-            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = e {
-                return Err(TensorZeroError::Http {
-                    status_code: code.as_u16(),
-                    text: resp.text().await.ok(),
-                    source: inner_err.into(),
-                });
-            }
-            return Err(TensorZeroError::Other {
-                source: crate::error::Error::new(ErrorDetails::StreamError {
-                    source: Box::new(inner_err),
-                })
-                .into(),
-            });
-        }
-        let verbose_errors = self.verbose_errors;
-        Ok(Box::pin(async_stream::stream! {
-            while let Some(ev) = event_source.next().await {
-                match ev {
-                    Err(e) => {
-                        if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                            break;
-                        }
-                        yield Err(crate::error::Error::new(ErrorDetails::StreamError {
-                            source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
-                                message: format!("Error in streaming response: {}", DisplayOrDebug {
-                                    val: e,
-                                    debug: verbose_errors,
-                                })
-                            }))
-                        }))
-                    }
-                    Ok(e) => match e {
-                        Event::Open => continue,
-                        Event::Message(message) => {
-                            if message.data == "[DONE]" {
-                                break;
-                            }
-                            let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
-                                crate::error::Error::new(ErrorDetails::Serialization {
-                                    message: format!("Error deserializing inference response chunk: {}", DisplayOrDebug {
-                                        val: e,
-                                        debug: verbose_errors,
-                                    }),
-                                })
-                            })?;
-                            if let Some(err) = json.get("error") {
-                                yield Err(crate::error::Error::new(ErrorDetails::StreamError {
-                                    source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Stream produced an error: {}", DisplayOrDebug {
-                                            val: err,
-                                            debug: verbose_errors,
-                                        }),
-                                    }))
-                                }));
-                            } else {
-                                let data: InferenceResponseChunk =
-                                serde_json::from_value(json).map_err(|e| {
-                                    crate::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Error deserializing json value as InferenceResponseChunk: {}", DisplayOrDebug {
-                                            val: e,
-                                            debug: verbose_errors,
-                                        }),
-                                    })
-                                })?;
-                                yield Ok(data);
-                            }
-
-                        }
-                    }
-                }
-            }
-        }))
-    }
-
-    async fn update_gateway_version_from_headers(&self, headers: &HeaderMap) {
-        let mut version = headers
-            .get("x-tensorzero-gateway-version")
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_string);
-        if cfg!(feature = "e2e_tests") {
-            if let Ok(version_override) = env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE") {
-                version = Some(version_override);
-            }
-        };
-        if let Some(version) = version {
-            self.update_gateway_version(version).await;
-        }
-    }
-
-    async fn update_gateway_version(&self, version: String) {
-        match &*self.mode {
-            ClientMode::HTTPGateway(client) => {
-                // Acquire the lock on the gateway version
-                let mut gateway_version = client.gateway_version.lock().await;
-                *gateway_version = Some(version);
-            }
-            // Should never be called
-            ClientMode::EmbeddedGateway { .. } => {}
-        }
-    }
-
-    #[cfg(feature = "e2e_tests")]
-    pub async fn e2e_update_gateway_version(&self, version: String) {
-        self.update_gateway_version(version).await;
-    }
-
-    #[cfg(feature = "e2e_tests")]
-    pub async fn get_gateway_version(&self) -> Option<String> {
-        match &*self.mode {
-            ClientMode::HTTPGateway(client) => client.gateway_version.lock().await.clone(),
-            ClientMode::EmbeddedGateway { .. } => None,
         }
     }
 }
@@ -934,95 +1179,26 @@ pub async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroErr
 /// If the path is None, it returns the default config.
 pub async fn get_config_no_verify_credentials(
     path: Option<PathBuf>,
-) -> Result<Config, TensorZeroError> {
+) -> Result<UnwrittenConfig, TensorZeroError> {
     match path {
-        Some(path) => Config::load_from_path_optional_verify_credentials(
+        Some(path) => Box::pin(Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new(path.to_string_lossy().to_string())
                 .map_err(|e| TensorZeroError::Other { source: e.into() })?,
             false,
-        )
+        ))
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() }),
-        None => Ok(Config::new_empty()
+        None => Ok(Box::pin(Config::new_empty())
             .await
             .map_err(|e| TensorZeroError::Other { source: e.into() })?),
     }
-}
-
-/// Compares two TensorZero version strings, returning `None`
-/// if the versions cannot be meaningfully compared
-/// (e.g. at least one is not in the <year>.<month>.<number> format).
-fn compare_versions(first: &str, second: &str) -> Result<Ordering, TensorZeroError> {
-    let extract_numbers = |s: &str| {
-        s.split('.')
-            .map(str::parse::<u32>)
-            .collect::<Result<Vec<_>, _>>()
-    };
-    let first_components = extract_numbers(first).map_err(|e| TensorZeroError::Other {
-        source: Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to parse first version string `{first}`: {e}"),
-        })
-        .into(),
-    })?;
-    let second_components = extract_numbers(second).map_err(|e| TensorZeroError::Other {
-        source: Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to parse second version string `{second}`: {e}"),
-        })
-        .into(),
-    })?;
-    if first_components.len() != second_components.len() {
-        return Err(TensorZeroError::Other {
-            source: Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "Version strings `{first}` and `{second}` have different number of components"
-                ),
-            })
-            .into(),
-        });
-    }
-    // Compare in lexicographical order
-    Ok(first_components.cmp(&second_components))
-}
-
-fn supports_tool_call_arguments_object(gateway_version: &str) -> Result<bool, TensorZeroError> {
-    // This is the first release that includes commit https://github.com/tensorzero/tensorzero/commit/0bb8832b88e767287eed6d1c7e4502ea5d2397fa
-    const MIN_VERSION: &str = "2025.03.3";
-    Ok(compare_versions(gateway_version, MIN_VERSION)?.is_ge())
-}
-
-fn try_adjust_tool_call_arguments(
-    gateway_version: Option<&str>,
-    input: &mut ClientInput,
-) -> Result<(), TensorZeroError> {
-    // If we know the gateway version, and it's recent enough, we skip adjusting tool call arguments.
-    // We perform the adjustment if the version is known to be too old, or if we didn't get a
-    // version header at all (old enough gateways don't send a version header).
-
-    // TODO (#1410): Deprecate this behavior
-
-    if let Some(gateway_version) = gateway_version {
-        if supports_tool_call_arguments_object(gateway_version)? {
-            return Ok(());
-        }
-    }
-    for msg in &mut input.messages {
-        for content in &mut msg.content {
-            if let ClientInputMessageContent::ToolCall(tool_call) = content {
-                if let Some(args @ Value::Object(_)) = &mut tool_call.arguments {
-                    // Stringify 'arguments' to support older gateways
-                    tool_call.arguments = Some(Value::String(args.to_string()));
-                }
-            }
-        }
-    }
-    Ok(())
 }
 
 // This is intentionally not a `From` impl, since we only want to make fake HTTP
 // errors for certain embedded gateway errors. For example, a config parsing error
 // should be `TensorZeroError::Other`, not `TensorZeroError::Http`.
 #[doc(hidden)]
-pub fn err_to_http(e: crate::error::Error) -> TensorZeroError {
+pub fn err_to_http(e: Error) -> TensorZeroError {
     TensorZeroError::Http {
         status_code: e.status_code().as_u16(),
         text: Some(serde_json::json!({"error": e.to_string()}).to_string()),
@@ -1037,8 +1213,6 @@ pub use crate::observability;
 mod tests {
     use super::*;
     use tempfile::NamedTempFile;
-    use tracing_test::traced_test;
-
     #[tokio::test]
     async fn test_missing_clickhouse() {
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
@@ -1089,8 +1263,110 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
+    async fn test_from_components_rejects_auth() {
+        // Create a config that enables auth, which is not supported in embedded mode
+        let config_str = r"
+        [gateway.auth]
+        enabled = true
+        ";
+        let tmp_config = NamedTempFile::new().unwrap();
+        std::fs::write(tmp_config.path(), config_str).unwrap();
+
+        // Load config
+        let config = Arc::new(
+            Config::load_from_path_optional_verify_credentials(
+                &ConfigFileGlob::new(tmp_config.path().to_string_lossy().to_string()).unwrap(),
+                false,
+            )
+            .await
+            .unwrap()
+            .into_config_without_writing_for_tests(),
+        );
+
+        // Create mock components
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+
+        // Attempt to build client with FromComponents mode
+        let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
+            config,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+            timeout: None,
+        })
+        .build()
+        .await
+        .expect_err("ClientBuilder should have failed");
+
+        // Verify it returns the correct error
+        assert!(
+            matches!(err, ClientBuilderError::AuthNotSupportedInEmbeddedMode(_)),
+            "Expected AuthNotSupportedInEmbeddedMode error, got: {err:?}"
+        );
+
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("`[gateway.auth]` is not supported in embedded gateway"),
+            "Bad error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_from_components_rejects_batch_writes() {
+        // Create a config that enables batch writes, which is not supported in embedded mode
+        let config_str = r"
+        [gateway.observability.batch_writes]
+        enabled = true
+        ";
+        let tmp_config = NamedTempFile::new().unwrap();
+        std::fs::write(tmp_config.path(), config_str).unwrap();
+
+        // Load config
+        let config = Arc::new(
+            Config::load_from_path_optional_verify_credentials(
+                &ConfigFileGlob::new(tmp_config.path().to_string_lossy().to_string()).unwrap(),
+                false,
+            )
+            .await
+            .unwrap()
+            .into_config_without_writing_for_tests(),
+        );
+
+        // Create mock components
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+
+        // Attempt to build client with FromComponents mode
+        let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
+            config,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+            timeout: None,
+        })
+        .build()
+        .await
+        .expect_err("ClientBuilder should have failed");
+
+        // Verify it returns the correct error
+        assert!(
+            matches!(err, ClientBuilderError::Clickhouse(_)),
+            "Expected Clickhouse error, got: {err:?}"
+        );
+
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("`[gateway.observability.batch_writes]` is not yet supported"),
+            "Bad error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
     async fn test_log_no_clickhouse() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from(
@@ -1108,12 +1384,14 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
+        assert!(logs_contain(
+            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+        ));
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_log_no_config() {
+        let logs_contain = crate::utils::testing::capture_logs();
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,
             clickhouse_url: None,
@@ -1128,134 +1406,11 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"));
-        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
-    }
-
-    use std::cmp::Ordering;
-
-    use super::compare_versions;
-    use super::try_adjust_tool_call_arguments;
-    use crate::tool::ToolCallInput;
-    use serde_json::Value;
-
-    #[test]
-    fn test_compare_versions() {
-        assert_eq!(
-            compare_versions("2025.01.1", "2025.01.1").unwrap(),
-            Ordering::Equal
-        );
-        assert_eq!(
-            compare_versions("2025.01.1", "2025.01.01").unwrap(),
-            Ordering::Equal
-        );
-        assert_eq!(
-            compare_versions("2025.01.1", "2025.01.10").unwrap(),
-            Ordering::Less
-        );
-        assert_eq!(
-            compare_versions("2026.01.1", "2025.07.8").unwrap(),
-            Ordering::Greater
-        );
-
-        let missing_component = compare_versions("2025.01", "2025.01.1").unwrap_err();
-        assert!(
-            missing_component.to_string().contains("component"),
-            "Unexpected error: {missing_component}"
-        );
-
-        let invalid_version = compare_versions("2025.01.1", "2025.01.a").unwrap_err();
-        assert!(
-            invalid_version.to_string().contains("invalid digit"),
-            "Unexpected error: {invalid_version}"
-        );
-    }
-
-    #[test]
-    fn test_adjust_tool_call_args() {
-        let input = ClientInput {
-            system: None,
-            messages: vec![ClientInputMessage {
-                role: Role::User,
-                content: vec![
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("test_name".to_string()),
-                        arguments: Some(serde_json::json!({
-                            "key": "value"
-                        })),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("other_test_name".to_string()),
-                        arguments: Some(Value::String("Initial string args".to_string())),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("other_test_name".to_string()),
-                        arguments: Some(Value::Array(vec![
-                            Value::String("First entry".to_string()),
-                            Value::Bool(true),
-                        ])),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                ],
-            }],
-        };
-
-        let expected_adjusted = ClientInput {
-            system: None,
-            messages: vec![ClientInputMessage {
-                role: Role::User,
-                content: vec![
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("test_name".to_string()),
-                        arguments: Some(Value::String(r#"{"key":"value"}"#.to_string())),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("other_test_name".to_string()),
-                        arguments: Some(Value::String("Initial string args".to_string())),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("other_test_name".to_string()),
-                        arguments: Some(Value::Array(vec![
-                            Value::String("First entry".to_string()),
-                            Value::Bool(true),
-                        ])),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                ],
-            }],
-        };
-
-        // Versions greater or equal to `2025.03.3` should not cause the input to be adjusted
-        let mut non_adjusted = input.clone();
-        try_adjust_tool_call_arguments(Some("2025.03.3"), &mut non_adjusted).unwrap();
-        assert_eq!(input, non_adjusted);
-        try_adjust_tool_call_arguments(Some("2026.01.01"), &mut non_adjusted).unwrap();
-        assert_eq!(input, non_adjusted);
-
-        // When we don't provide a gateway version, the input should be adjusted
-        let mut adjusted_no_version = input.clone();
-        try_adjust_tool_call_arguments(None, &mut adjusted_no_version).unwrap();
-        assert_eq!(expected_adjusted, adjusted_no_version);
-
-        // When we provide a version lower than `2025.03.3`, the input should be adjusted
-        let mut adjusted_with_version = input.clone();
-        try_adjust_tool_call_arguments(Some("2025.03.2"), &mut adjusted_with_version).unwrap();
-        assert_eq!(expected_adjusted, adjusted_with_version);
+        assert!(logs_contain(
+            "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
+        ));
+        assert!(logs_contain(
+            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+        ));
     }
 }

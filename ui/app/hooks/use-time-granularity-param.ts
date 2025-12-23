@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams } from "react-router";
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
 
 /**
  * A hook to manage a time granularity URL parameter

@@ -1,11 +1,13 @@
+use chrono::Duration;
 use futures::future::try_join_all;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::config::path::ResolvedTomlPath;
+use crate::config::path::ResolvedTomlPathData;
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -19,9 +21,11 @@ use crate::inference::types::resolved_input::{
 use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
+    ContentBlock, InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
+    Unknown,
     batch::StartBatchModelInferenceWithMetadata,
-    chat_completion_inference_params::ChatCompletionInferenceParamsV2, ContentBlock,
-    InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
+    chat_completion_inference_params::{ChatCompletionInferenceParamsV2, ServiceTier},
+    role::{ASSISTANT_TEXT_TEMPLATE_VAR, SYSTEM_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR},
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -33,17 +37,16 @@ mod templates;
 pub use templates::ChatTemplates;
 
 use super::{
-    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant, infer_model_request,
+    infer_model_request_stream, prepare_model_inference_request,
 };
 
 /// If we have a schema, then we forward the 'arguments' object as-is to the template.
 /// If we don't have a schema, then we create a single variable corresponding to the template
 /// kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
 /// string contents of the input block.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
     pub schema: Option<StaticJSONSchema>,
@@ -56,9 +59,8 @@ pub struct TemplateWithSchema {
     pub legacy_definition: bool,
 }
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ChatCompletionConfig {
     weight: Option<f64>,
     model: Arc<str>,
@@ -135,6 +137,10 @@ impl ChatCompletionConfig {
         self.inference_params_v2.thinking_budget_tokens
     }
 
+    pub fn service_tier(&self) -> Option<&ServiceTier> {
+        self.inference_params_v2.service_tier.as_ref()
+    }
+
     pub fn verbosity(&self) -> Option<&String> {
         self.inference_params_v2.verbosity.as_ref()
     }
@@ -154,41 +160,84 @@ impl ChatCompletionConfig {
     pub fn extra_headers(&self) -> Option<&ExtraHeadersConfig> {
         self.extra_headers.as_ref()
     }
+
+    /// Converts this initialized config back to its uninitialized form.
+    /// Note: Schema associations and original file paths are not preserved.
+    /// All templates are placed in the new-style templates map, regardless of whether
+    /// they were originally defined using legacy fields (system_template, user_template, etc.).
+    pub fn as_uninitialized(&self) -> UninitializedChatCompletionConfig {
+        let mut templates_map = HashMap::new();
+
+        // Extract all templates into the new-style templates map
+        for (name, template_with_schema) in self.templates.iter_templates() {
+            let path = template_with_schema.template.path.clone();
+            templates_map.insert(name.clone(), UninitializedChatTemplate { path });
+        }
+
+        UninitializedChatCompletionConfig {
+            weight: self.weight,
+            model: Arc::clone(&self.model),
+            system_template: None,
+            user_template: None,
+            assistant_template: None,
+            input_wrappers: None, // input_wrappers are deprecated and converted to templates
+            templates: UninitializedChatTemplates {
+                inner: templates_map,
+            },
+            temperature: self.temperature,
+            top_p: self.top_p,
+            max_tokens: self.max_tokens,
+            presence_penalty: self.presence_penalty,
+            frequency_penalty: self.frequency_penalty,
+            seed: self.seed,
+            stop_sequences: self.stop_sequences.clone(),
+            reasoning_effort: self.inference_params_v2.reasoning_effort.clone(),
+            service_tier: self.inference_params_v2.service_tier.clone(),
+            thinking_budget_tokens: self.inference_params_v2.thinking_budget_tokens,
+            verbosity: self.inference_params_v2.verbosity.clone(),
+            json_mode: self.json_mode,
+            retries: self.retries,
+            extra_body: self.extra_body.clone(),
+            extra_headers: self.extra_headers.clone(),
+        }
+    }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
-    user: Option<ResolvedTomlPath>,
-    assistant: Option<ResolvedTomlPath>,
-    system: Option<ResolvedTomlPath>,
+    user: Option<ResolvedTomlPathData>,
+    assistant: Option<ResolvedTomlPathData>,
+    system: Option<ResolvedTomlPathData>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatTemplate {
-    pub path: ResolvedTomlPath,
+    pub path: ResolvedTomlPathData,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
-    inner: HashMap<String, UninitializedChatTemplate>,
+    /// Internal map of chat templates, made public for GEPA optimizer integration.
+    /// External users should use provided methods rather than accessing directly.
+    pub inner: HashMap<String, UninitializedChatTemplate>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
     pub model: Arc<str>,
-    pub system_template: Option<ResolvedTomlPath>,
-    pub user_template: Option<ResolvedTomlPath>,
-    pub assistant_template: Option<ResolvedTomlPath>,
+    pub system_template: Option<ResolvedTomlPathData>,
+    pub user_template: Option<ResolvedTomlPathData>,
+    pub assistant_template: Option<ResolvedTomlPathData>,
     pub input_wrappers: Option<UninitializedInputWrappers>,
     #[serde(default)]
     pub templates: UninitializedChatTemplates,
@@ -202,6 +251,9 @@ pub struct UninitializedChatCompletionConfig {
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<ServiceTier>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
@@ -240,6 +292,7 @@ impl UninitializedChatCompletionConfig {
             stop_sequences: self.stop_sequences,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: self.reasoning_effort,
+                service_tier: self.service_tier,
                 thinking_budget_tokens: self.thinking_budget_tokens,
                 verbosity: self.verbosity,
             },
@@ -355,7 +408,7 @@ pub async fn prepare_model_input(
     )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
     for message in messages {
-        let lazy_message = message.clone().into_lazy_resolved_input_message()?;
+        let lazy_message = message.clone().into_lazy_resolved_input_message();
         templated_messages
             .push(prepare_request_message(&lazy_message, templates_config, chat_templates).await?);
     }
@@ -398,14 +451,14 @@ pub fn prepare_system_message(
                 }))
             } else {
                 // Otherwise, we use the system message as-is.
-                let system_value = match system {
+
+                match system {
                     Some(System::Text(text)) => Cow::Owned(Value::String(text.clone())),
                     Some(System::Template(arguments)) => {
                         Cow::Owned(Value::Object(arguments.0.clone()))
                     }
                     None => Cow::Owned(Value::Null),
-                };
-                system_value
+                }
             };
             Some(templates.template_message(&template.template.path.get_template_key(), &context)?)
         }
@@ -457,7 +510,11 @@ pub async fn prepare_request_message(
                     })?;
                 if template.schema.is_none() && template.legacy_definition {
                     return Err(Error::new(ErrorDetails::InvalidMessage {
-                        message: format!("Request message content {} is not a string but `input_wrappers.{}` is set in the variant config", serde_json::to_string(&template_input.arguments).unwrap_or_default(), message.role)
+                        message: format!(
+                            "Request message content {} is not a string but `input_wrappers.{}` is set in the variant config",
+                            serde_json::to_string(&template_input.arguments).unwrap_or_default(),
+                            message.role
+                        ),
                     }));
                 }
                 let text_content = templates_config.template_message(
@@ -486,10 +543,11 @@ pub async fn prepare_request_message(
                 content.push(ContentBlock::Thought(thought.clone()));
             }
             LazyResolvedInputMessageContent::Unknown(unknown) => {
-                content.push(ContentBlock::Unknown {
+                content.push(ContentBlock::Unknown(Unknown {
                     data: unknown.data.clone(),
-                    model_provider_name: unknown.model_provider_name.clone(),
-                });
+                    model_name: unknown.model_name.clone(),
+                    provider_name: unknown.provider_name.clone(),
+                }));
             }
         }
     }
@@ -590,6 +648,7 @@ impl Variant for ChatCompletionConfig {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        _global_outbound_http_timeout: &Duration,
     ) -> Result<(), Error> {
         // Validate that weight is non-negative
         if self.weight.is_some_and(|w| w < 0.0) {
@@ -658,6 +717,19 @@ impl Variant for ChatCompletionConfig {
                 ),
             })
         })?;
+
+        // Validate that json_mode = "tool" is not used with chat functions that have tools configured
+        if let Some(JsonMode::Tool) = self.json_mode
+            && function.tools().next().is_some()
+        {
+            return Err(ErrorDetails::Config {
+                    message: format!(
+                        "`functions.{function_name}.variants.{variant_name}`: Cannot use `json_mode = \"tool\"` with chat functions that have tools configured. Please remove tools from the function or use a JSON function instead."
+                    ),
+                }
+                .into());
+        }
+
         Ok(())
     }
 
@@ -713,12 +785,6 @@ impl Variant for ChatCompletionConfig {
         ))
     }
 }
-
-/// The template variable names used when applying a legacy template with no schema
-/// Only one of these variables is used per template, based on the `TemplateKind`
-pub const SYSTEM_TEXT_TEMPLATE_VAR: &str = "system_text";
-pub const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
-pub const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
 
 #[derive(Copy, Clone, Debug)]
 pub enum TemplateKind {
@@ -794,6 +860,7 @@ pub fn validate_all_schemas_have_templates(
 #[cfg(test)]
 mod tests {
     use crate::rate_limiting::ScopeInfo;
+    use indexmap::IndexMap;
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -805,7 +872,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas};
+    use crate::config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig};
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
@@ -827,7 +894,7 @@ mod tests {
     };
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
     use crate::model_table::ProviderTypeDefaultCredentials;
-    use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
+    use crate::providers::dummy::{DUMMY_JSON_RESPONSE_RAW, DummyProvider};
     use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
@@ -838,7 +905,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_request_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         // Part 1: test without templates
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
@@ -1074,9 +1141,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_prepare_system_message() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_prepare_system_message() {
+        let templates = get_test_template_config().await;
 
         // Test without templates, string message
         let chat_completion_config = ChatCompletionConfig {
@@ -1201,7 +1268,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_infer_chat_completion() {
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -1219,9 +1286,11 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
-        let templates = Arc::new(get_test_template_config());
+        let templates = Arc::new(get_test_template_config().await);
         let system_template = get_system_template();
         let user_template = get_greeting_with_age_template();
         let chat_completion_config = UninitializedChatCompletionConfig {
@@ -1293,6 +1362,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let json_model_config = ModelConfig {
             routing: vec!["json_provider".into()],
@@ -1308,6 +1378,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".into(),
@@ -1327,6 +1398,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let error_model_config = ModelConfig {
             routing: vec!["error".into()],
@@ -1342,6 +1414,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         // Test case 1: invalid message (String passed when template required)
         let messages = vec![LazyResolvedInputMessage {
@@ -1411,6 +1484,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("invalid_model".into(), text_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1480,6 +1554,7 @@ mod tests {
         let models = ModelTable::new(
             models,
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1488,6 +1563,7 @@ mod tests {
                 EmbeddingModelTable::new(
                     HashMap::new(),
                     ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                    crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
                 )
                 .unwrap(),
             ),
@@ -1522,7 +1598,7 @@ mod tests {
         assert_eq!(
             *details,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     Error::new(ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
@@ -1580,11 +1656,13 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
             HashMap::from([("good".into(), text_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1621,8 +1699,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1667,6 +1745,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("tool".into(), tool_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1704,8 +1783,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1752,7 +1831,7 @@ mod tests {
             "required": ["answer"],
             "additionalProperties": false
         });
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
@@ -1766,7 +1845,7 @@ mod tests {
             )
             .unwrap(),
             output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1801,8 +1880,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1844,6 +1923,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("json".into(), json_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1904,8 +1984,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1939,7 +2019,7 @@ mod tests {
             "required": ["response"],
             "additionalProperties": false
         });
-        let implicit_tool_call_config =
+        let json_mode_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
@@ -1955,7 +2035,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: hardcoded_output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -2037,8 +2117,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -2072,7 +2152,7 @@ mod tests {
             "required": ["answer"],
             "additionalProperties": false
         });
-        let implicit_tool_call_config =
+        let json_mode_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
@@ -2088,7 +2168,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: hardcoded_output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -2163,8 +2243,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -2204,7 +2284,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -2222,9 +2302,11 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
-        let templates = Box::leak(Box::new(get_test_template_config()));
+        let templates = Box::leak(Box::new(get_test_template_config().await));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
@@ -2268,6 +2350,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let error_model_config = ModelConfig {
             routing: vec!["error_provider".into()],
@@ -2283,6 +2366,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();
@@ -2339,6 +2423,7 @@ mod tests {
             ModelTable::new(
                 HashMap::from([("error".into(), error_model_config)]),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .unwrap(),
         );
@@ -2346,6 +2431,7 @@ mod tests {
             EmbeddingModelTable::new(
                 HashMap::new(),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .unwrap(),
         );
@@ -2427,6 +2513,7 @@ mod tests {
             ModelTable::new(
                 HashMap::from([("good".into(), text_model_config)]),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .unwrap(),
         );
@@ -2484,8 +2571,8 @@ mod tests {
                 assert_eq!(
                     chunk.usage(),
                     Some(&Usage {
-                        input_tokens: 10,
-                        output_tokens: 16
+                        input_tokens: Some(10),
+                        output_tokens: Some(16),
                     })
                 );
                 break;
@@ -2517,7 +2604,7 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let templates = Box::leak(Box::new(get_test_template_config()));
+        let templates = Box::leak(Box::new(get_test_template_config().await));
         let stream = false;
         // We will vary temperature, max_tokens, and seed
         let chat_completion_config = ChatCompletionConfig {
@@ -2762,18 +2849,18 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_validate_template_and_schema_both_none() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_validate_template_and_schema_both_none() {
+        let templates = get_test_template_config().await;
         let result =
             validate_legacy_template_and_schema(TemplateKind::System, None, None, &templates);
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_validate_template_and_schema_both_some() {
-        let templates = get_test_template_config();
-        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
+    #[tokio::test]
+    async fn test_validate_template_and_schema_both_some() {
+        let templates = get_test_template_config().await;
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))
@@ -2783,7 +2870,7 @@ mod tests {
             TemplateKind::System,
             Some(&schema),
             Some(&TemplateWithSchema {
-                template: PathWithContents::from_path(ResolvedTomlPath::new_for_tests(
+                template: PathWithContents::from_path(ResolvedTomlPathData::new_for_tests(
                     template,
                     Some("fake_data".to_string()),
                 ))
@@ -2796,15 +2883,15 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
-    fn test_validate_template_and_schema_template_no_needs_variables() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_validate_template_and_schema_template_no_needs_variables() {
+        let templates = get_test_template_config().await;
         let template = PathBuf::from("system_filled");
         let result = validate_legacy_template_and_schema(
             TemplateKind::System,
             None,
             Some(&TemplateWithSchema {
-                template: PathWithContents::from_path(ResolvedTomlPath::new_for_tests(
+                template: PathWithContents::from_path(ResolvedTomlPathData::new_for_tests(
                     template,
                     Some("fake_data".to_string()),
                 ))
@@ -2817,15 +2904,15 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_validate_template_and_schema_template_needs_variables() {
-        let templates = get_test_template_config(); // Template needing variables
+    #[tokio::test]
+    async fn test_validate_template_and_schema_template_needs_variables() {
+        let templates = get_test_template_config().await; // Template needing variables
         let template = PathBuf::from("greeting");
         let err = validate_legacy_template_and_schema(
             TemplateKind::System,
             None,
             Some(&TemplateWithSchema {
-                template: PathWithContents::from_path(ResolvedTomlPath::new_for_tests(
+                template: PathWithContents::from_path(ResolvedTomlPathData::new_for_tests(
                     template,
                     Some("fake_data".to_string()),
                 ))
@@ -2848,10 +2935,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_validate_template_and_schema_schema_some_template_none() {
-        let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
+    #[tokio::test]
+    async fn test_validate_template_and_schema_schema_some_template_none() {
+        let templates = get_test_template_config().await; // Default TemplateConfig
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))
@@ -2873,5 +2960,130 @@ mod tests {
         } else {
             panic!("Expected Error::Config");
         }
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedChatCompletionConfig {
+            model: "gpt-4".into(),
+            weight: Some(0.8),
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+            max_tokens: Some(150),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            seed: Some(42),
+            stop_sequences: Some(vec!["STOP".to_string(), "END".to_string()]),
+            ..Default::default()
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.model, "gpt-4".into());
+        assert_eq!(exported.weight, Some(0.8));
+        assert_eq!(exported.temperature, Some(0.7));
+        assert_eq!(exported.top_p, Some(0.9));
+        assert_eq!(exported.max_tokens, Some(150));
+        assert_eq!(exported.presence_penalty, Some(0.1));
+        assert_eq!(exported.frequency_penalty, Some(0.2));
+        assert_eq!(exported.seed, Some(42));
+        assert_eq!(
+            exported.stop_sequences,
+            Some(vec!["STOP".to_string(), "END".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_inference_params_v2() {
+        let uninitialized = UninitializedChatCompletionConfig {
+            model: "gpt-4".into(),
+            reasoning_effort: Some("high".to_string()),
+            service_tier: Some(ServiceTier::Auto),
+            thinking_budget_tokens: Some(1000),
+            verbosity: Some("verbose".to_string()),
+            ..Default::default()
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.reasoning_effort, Some("high".to_string()));
+        assert_eq!(exported.service_tier, Some(ServiceTier::Auto));
+        assert_eq!(exported.thinking_budget_tokens, Some(1000));
+        assert_eq!(exported.verbosity, Some("verbose".to_string()));
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_none_values() {
+        let uninitialized = UninitializedChatCompletionConfig {
+            model: "gpt-4".into(),
+            weight: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
+            reasoning_effort: None,
+            service_tier: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+            ..Default::default()
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.weight, None);
+        assert_eq!(exported.temperature, None);
+        assert_eq!(exported.top_p, None);
+        assert_eq!(exported.max_tokens, None);
+        assert_eq!(exported.stop_sequences, None);
+        assert_eq!(exported.reasoning_effort, None);
+        assert_eq!(exported.service_tier, None);
+        assert_eq!(exported.thinking_budget_tokens, None);
+        assert_eq!(exported.verbosity, None);
+    }
+
+    #[test]
+    fn test_as_uninitialized_serialization_round_trip() {
+        let original = UninitializedChatCompletionConfig {
+            model: "gpt-4".into(),
+            weight: Some(0.5),
+            temperature: Some(0.9),
+            max_tokens: Some(100),
+            seed: Some(123),
+            ..Default::default()
+        };
+
+        let config = original
+            .clone()
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedChatCompletionConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        assert_eq!(reloaded.model(), &Arc::from("gpt-4"));
+        assert_eq!(reloaded.weight(), Some(0.5));
+        assert_eq!(reloaded.temperature(), Some(0.9));
+        assert_eq!(reloaded.max_tokens(), Some(100));
+        assert_eq!(reloaded.seed(), Some(123));
     }
 }

@@ -3,19 +3,16 @@ use std::time::{Duration, Instant};
 use http::StatusCode;
 use reqwest::Client;
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
-use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
-};
+use serde_json::{Value, json};
+use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
         select_model_inference_clickhouse, select_model_inferences_clickhouse,
     },
-    inference::types::TextKind,
+    inference::types::Text,
 };
 use tokio_stream::StreamExt;
-use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -567,8 +564,8 @@ async fn slow_second_chunk_streaming(payload: Value) {
 
 // Test timeouts that occur at both the model and model-provider level
 #[tokio::test]
-#[traced_test]
 async fn test_double_model_timeout() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let config = r#"
 [functions.double_timeout]
 type = "chat"
@@ -606,11 +603,11 @@ timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
         .inference(ClientInferenceParams {
             function_name: Some("double_timeout".to_string()),
             variant_name: Some("slow_variant".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],

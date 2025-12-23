@@ -5,7 +5,7 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
   UninitializedOptimizerInfo,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { getConfig } from "~/utils/config/index.server";
 import { getNativeTensorZeroClient } from "../tensorzero/native_client.server";
 import { getEnv } from "../env.server";
@@ -28,9 +28,9 @@ export async function launch_sft_job(
   const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
   const togetherNativeSFTBase = getEnv().TOGETHER_BASE_URL;
   let filters: InferenceFilter | null = null;
-  let output_source: InferenceOutputSource = "Inference";
+  let output_source: InferenceOutputSource = "inference";
   if (data.metric === "demonstration") {
-    output_source = "Demonstration";
+    output_source = "demonstration";
   } else if (data.metric) {
     const threshold =
       typeof data.threshold === "string"
@@ -130,8 +130,8 @@ export async function launch_sft_job(
     query_variant_name: null,
     filters: filters,
     output_source: output_source,
-    limit: data.maxSamples ? BigInt(data.maxSamples) : BigInt(0),
-    offset: BigInt(0),
+    limit: data.maxSamples ? data.maxSamples : 0,
+    offset: 0,
     val_fraction: data.validationSplitPercent / 100,
     optimizer_config: optimizerConfig,
     order_by: null,

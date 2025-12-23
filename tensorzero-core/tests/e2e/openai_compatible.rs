@@ -6,11 +6,12 @@ use tensorzero::ClientExt;
 use axum::extract::State;
 use http_body_util::BodyExt;
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
-use tracing_test::traced_test;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+
+use tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
@@ -21,9 +22,9 @@ use tensorzero_core::{
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_route_new_format() {
-    test_openai_compatible_route_with_function_name_as_model(
+    Box::pin(test_openai_compatible_route_with_function_name_as_model(
         "tensorzero::function_name::basic_test_no_system_schema",
-    )
+    ))
     .await;
 }
 
@@ -32,8 +33,9 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
     let state = client.get_app_state_data().unwrap().clone();
     let episode_id = Uuid::now_v7();
 
-    let response = tensorzero_core::endpoints::openai_compatible::inference_handler(
+    let response = chat_completions_handler(
         State(state),
+        None,
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "model": model,
@@ -71,7 +73,10 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
     let message = choice.get("message").unwrap();
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
-    assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    assert_eq!(
+        content,
+        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    );
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
     let response_model = response_json.get("model").unwrap().as_str().unwrap();
@@ -514,7 +519,10 @@ async fn test_openai_compatible_route_with_json_mode_on() {
     let message = choice.get("message").unwrap();
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
-    assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    assert_eq!(
+        content,
+        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    );
     let response_model = response_json.get("model").unwrap().as_str().unwrap();
     assert_eq!(
         response_model,
@@ -649,7 +657,10 @@ async fn test_openai_compatible_route_with_json_schema() {
     let message = choice.get("message").unwrap();
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
-    assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    assert_eq!(
+        content,
+        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    );
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
     let response_model = response_json.get("model").unwrap().as_str().unwrap();
@@ -852,9 +863,11 @@ async fn test_openai_compatible_streaming_tool_call() {
         }
         if i == chunks.len() - 2 {
             assert!(parsed_chunk["choices"][0]["delta"].get("content").is_none());
-            assert!(parsed_chunk["choices"][0]["delta"]
-                .get("tool_calls")
-                .is_none());
+            assert!(
+                parsed_chunk["choices"][0]["delta"]
+                    .get("tool_calls")
+                    .is_none()
+            );
         }
         if i == chunks.len() - 1 {
             let usage = parsed_chunk["usage"].as_object().unwrap();
@@ -867,12 +880,13 @@ async fn test_openai_compatible_streaming_tool_call() {
 }
 
 #[tokio::test]
-#[traced_test]
 async fn test_openai_compatible_warn_unknown_fields() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
-    tensorzero_core::endpoints::openai_compatible::inference_handler(
+    chat_completions_handler(
         State(state),
+        None,
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
@@ -894,8 +908,9 @@ async fn test_openai_compatible_warn_unknown_fields() {
 async fn test_openai_compatible_deny_unknown_fields() {
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
-    let err = tensorzero_core::endpoints::openai_compatible::inference_handler(
+    let err = chat_completions_handler(
         State(state),
+        None,
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
@@ -969,14 +984,18 @@ async fn test_openai_compatible_streaming() {
     let _content = parsed_chunk["choices"][0]["delta"]["content"]
         .as_str()
         .unwrap();
-    assert!(parsed_chunk["choices"][0]["delta"]
-        .get("tool_calls")
-        .is_none());
+    assert!(
+        parsed_chunk["choices"][0]["delta"]
+            .get("tool_calls")
+            .is_none()
+    );
     for (i, chunk) in chunks.iter().enumerate() {
         let parsed_chunk: Value = serde_json::from_str(chunk).unwrap();
-        assert!(parsed_chunk["choices"][0]["delta"]
-            .get("tool_calls")
-            .is_none());
+        assert!(
+            parsed_chunk["choices"][0]["delta"]
+                .get("tool_calls")
+                .is_none()
+        );
         if i < chunks.len() - 2 {
             let _content = parsed_chunk["choices"][0]["delta"]["content"]
                 .as_str()
@@ -1000,7 +1019,7 @@ async fn test_openai_compatible_stop_sequence() {
     let client = Client::new();
 
     let payload = json!({
-        "model": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219",
+        "model": "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929",
         "messages": [
             {
                 "role": "user",
@@ -1035,4 +1054,220 @@ async fn test_openai_compatible_stop_sequence() {
     );
 
     // We don't bother checking ClickHouse, as we do that in lots of other tests
+}
+
+#[tokio::test]
+async fn test_openai_compatible_file_with_custom_filename() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let state = client.get_app_state_data().unwrap().clone();
+    let episode_id = Uuid::now_v7();
+
+    let response = chat_completions_handler(
+        State(state),
+        None,
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "model": "tensorzero::function_name::basic_test_no_system_schema",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "What is in this file?"
+                            },
+                            {
+                                "type": "file",
+                                "file": {
+                                    "file_data": "data:application/pdf;base64,JVBERi0xLjQK",
+                                    "filename": "myfile.pdf"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "stream": false,
+                "tensorzero::episode_id": episode_id.to_string(),
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap();
+
+    // Check Response is OK
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.into_body().collect().await.unwrap().to_bytes();
+    let response_json: Value = serde_json::from_slice(&response_json).unwrap();
+    let inference_id: Uuid = response_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    // Verify the input was stored correctly with the custom filename
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    // Check that the file content block has the custom filename
+    let messages = input.get("messages").unwrap().as_array().unwrap();
+    assert_eq!(messages.len(), 1);
+    let content = messages[0].get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 2);
+
+    // Second content block should be the file
+    let file_block = &content[1];
+    assert_eq!(file_block.get("type").unwrap().as_str().unwrap(), "file");
+
+    // Verify filename is present in the stored file (fields are at top level, not nested)
+    assert_eq!(
+        file_block.get("filename").unwrap().as_str().unwrap(),
+        "myfile.pdf"
+    );
+}
+
+#[tokio::test]
+async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // First request: Get parallel tool calls
+    let body = json!({
+        "stream": false,
+        "model": "tensorzero::function_name::weather_helper_parallel",
+        "messages": [
+            { "role": "system", "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Dr.Mehta"}}]},
+            {
+                "role": "user",
+                "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+            }
+        ],
+        "parallel_tool_calls": true,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::variant_name": "gpt-5-mini",
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("First request response: {response_json:#?}");
+    // Sleep to allow ClickHouse writes
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Extract inference_id from response
+    let inference_id: Uuid = response_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // ClickHouse validation
+    let clickhouse = get_clickhouse().await;
+
+    // Validate ChatInference table
+    let chat_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {chat_inference:#?}");
+
+    // Validate ModelInference table
+    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {model_inference:#?}");
+
+    // Extract tool calls from response
+    let first_message = response_json["choices"][0]["message"].clone();
+    let tool_calls = first_message["tool_calls"].as_array().unwrap();
+    assert_eq!(tool_calls.len(), 2);
+
+    // Build messages with tool results (one tool message per tool call)
+    let mut messages = vec![
+        json!({ "role": "system", "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Dr.Mehta"}}]}),
+        json!({
+            "role": "user",
+            "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+        }),
+        first_message.clone(),
+    ];
+
+    // Add one tool message for each tool call
+    for tool_call in tool_calls {
+        let tool_id = tool_call["id"].as_str().unwrap();
+        let tool_name = tool_call["function"]["name"].as_str().unwrap();
+
+        let result_content = match tool_name {
+            "get_temperature" => "22°C",
+            "get_humidity" => "65%",
+            _ => panic!("Unexpected tool: {tool_name}"),
+        };
+
+        messages.push(json!({
+            "role": "tool",
+            "tool_call_id": tool_id,
+            "content": result_content
+        }));
+    }
+
+    // Second request: Submit tool results and get final response
+    let second_body = json!({
+        "stream": false,
+        "model": "tensorzero::function_name::weather_helper_parallel",
+        "messages": messages,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::variant_name": "openai",
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&second_body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let final_response_json = response.json::<Value>().await.unwrap();
+
+    println!("Final response: {final_response_json:#?}");
+
+    // Validate final response
+    let final_choice = &final_response_json["choices"][0];
+    let finish_reason = final_choice["finish_reason"].as_str().unwrap();
+    // Should be "stop" (normal completion) not "tool_calls" since we provided results
+    assert_eq!(finish_reason, "stop");
+
+    // Should have text content in the response
+    let content = final_choice["message"]["content"].as_str();
+    assert!(content.is_some());
+    assert!(!content.unwrap().is_empty());
+
+    // Should not have tool_calls in final response
+    let tool_calls = final_choice["message"]["tool_calls"].as_array().unwrap();
+    assert!(tool_calls.is_empty());
+
+    println!(
+        "Multi-turn test passed! Got final response: {}",
+        content.unwrap()
+    );
 }

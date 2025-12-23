@@ -1,16 +1,15 @@
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         select_feedback_clickhouse, select_feedback_tags_clickhouse,
         select_inference_evaluation_human_feedback_clickhouse,
     },
     inference::types::{
-        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind,
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text,
     },
 };
-use tokio::time::{sleep, Duration};
-use tracing_test::traced_test;
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -677,7 +676,7 @@ async fn e2e_test_demonstration_feedback_tool() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
-    let expected_value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}, "raw_name": "get_temperature", "raw_arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}", "id": "tool_call_id" }]);
+    let expected_value = json!([{"type": "tool_call", "id": "tool_call_id", "raw_name": "get_temperature", "raw_arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}}]);
     assert_eq!(retrieved_value, expected_value);
 }
 
@@ -836,7 +835,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
-    let expected_value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "Tokyo"}, "raw_name": "get_humidity", "raw_arguments": "{\"location\":\"Tokyo\"}", "id": "tool_call_id" }]);
+    let expected_value = json!([{"type": "tool_call", "id": "tool_call_id", "raw_name": "get_humidity", "raw_arguments": "{\"location\":\"Tokyo\"}", "name": "get_humidity", "arguments": {"location": "Tokyo"}}]);
     assert_eq!(retrieved_value, expected_value);
 }
 
@@ -1198,8 +1197,8 @@ async fn e2e_test_boolean_feedback() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 async fn test_fast_inference_then_feedback() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     use serde_json::json;
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -1219,16 +1218,16 @@ async fn test_fast_inference_then_feedback() {
                     model_name: None,
                     variant_name: None,
                     episode_id: None,
-                    input: tensorzero::ClientInput {
+                    input: tensorzero::Input {
                         system: Some(System::Template(Arguments(
                             json!({"assistant_name": "Alfred Pennyworth"})
                                 .as_object()
                                 .unwrap()
                                 .clone(),
                         ))),
-                        messages: vec![tensorzero::ClientInputMessage {
+                        messages: vec![tensorzero::InputMessage {
                             role: Role::User,
-                            content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                            content: vec![tensorzero::InputMessageContent::Text(Text {
                                 text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                                     .to_string()
                             })],

@@ -2,14 +2,15 @@ use async_trait::async_trait;
 use secrecy::SecretString;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 
+use crate::db::HealthCheckable;
 use crate::db::clickhouse::BatchWriterHandle;
 use crate::db::clickhouse::ClickHouseResponse;
 use crate::db::clickhouse::ExternalDataInfo;
 use crate::db::clickhouse::GetMaybeReplicatedTableEngineNameArgs;
 use crate::db::clickhouse::TableName;
-use crate::db::HealthCheckable;
-use crate::error::Error;
+use crate::error::{DelayedError, Error};
 
 #[cfg(test)]
 use mockall::mock;
@@ -51,6 +52,10 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
     /// Returns the batch writer join handle if batching is enabled
     fn batcher_join_handle(&self) -> Option<BatchWriterHandle>;
 
+    /// Creates a new, independent ClickHouse client with the same settings
+    /// In batch mode, this will create a separate batch sender
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error>;
+
     /// Writes rows to ClickHouse using batched writes (if enabled)
     async fn write_batched_internal(
         &self,
@@ -72,13 +77,12 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
         parameters: &HashMap<&str, &str>,
     ) -> Result<ClickHouseResponse, Error>;
 
-    /// Runs a query with parameters and configurable error logging
-    async fn run_query_synchronous_with_err_logging(
+    /// Runs a query with parameters, returning a `DelayedError` rather than an `Error`
+    async fn run_query_synchronous_delayed_err(
         &self,
         query: String,
         parameters: &HashMap<&str, &str>,
-        err_logging: bool,
-    ) -> Result<ClickHouseResponse, Error>;
+    ) -> Result<ClickHouseResponse, DelayedError>;
 
     /// Runs a query with external data
     async fn run_query_with_external_data(
@@ -117,6 +121,7 @@ mock! {
 
     #[async_trait]
     impl ClickHouseClient for ClickHouseClient {
+        async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error>;
         fn database_url(&self) -> &SecretString;
         fn cluster_name(&self) -> &Option<String>;
         fn database(&self) -> &str;
@@ -137,12 +142,11 @@ mock! {
             query: String,
             parameters: &'b HashMap<&'c str, &'d str>,
         ) -> Result<ClickHouseResponse, Error>;
-        async fn run_query_synchronous_with_err_logging<'a, 'b, 'c, 'd>(
+        async fn run_query_synchronous_delayed_err<'a, 'b, 'c, 'd>(
             &'a self,
             query: String,
             parameters: &'b HashMap<&'c str, &'d str>,
-            err_logging: bool,
-        ) -> Result<ClickHouseResponse, Error>;
+        ) -> Result<ClickHouseResponse, DelayedError>;
         async fn run_query_with_external_data(
             &self,
             external_data: ExternalDataInfo,

@@ -4,7 +4,7 @@ import type { Text } from "./Text";
 import type { Thought } from "./Thought";
 import type { ToolCall } from "./ToolCall";
 import type { ToolResult } from "./ToolResult";
-import type { JsonValue } from "./serde_json/JsonValue";
+import type { Unknown } from "./Unknown";
 
 /**
  * The version of `ContentBlock` that is stored in ClickHouse.
@@ -16,22 +16,4 @@ export type StoredContentBlock =
   | ({ type: "tool_result" } & ToolResult)
   | ({ type: "file" } & StoredFile)
   | ({ type: "thought" } & Thought)
-  | {
-      type: "unknown";
-      /**
-       * The underlying content block to be passed to the model provider.
-       */
-      data: JsonValue;
-      /**
-       * A fully-qualified name specifying when this content block should
-       * be included in the model provider input.
-       * E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-       *
-       * If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
-       * a model provider, and stripped from the input if it doesn't match.
-       * If set to `None, then this is passed to all model providers.
-       * Individual model provider implementation never need to check this field themselves -
-       * they only need to produce it with the proper `fully_qualified_name` set.
-       */
-      model_provider_name: string | null;
-    };
+  | ({ type: "unknown" } & Unknown);

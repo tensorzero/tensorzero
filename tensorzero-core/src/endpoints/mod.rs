@@ -1,23 +1,28 @@
 use std::collections::HashMap;
 
 use crate::error::{Error, ErrorDetails};
+use crate::utils::gateway::AppStateData;
+use axum::routing::MethodRouter;
+use std::convert::Infallible;
 
 pub mod batch_inference;
 pub mod datasets;
 pub mod embeddings;
+pub mod episodes;
 pub mod fallback;
 pub mod feedback;
+pub mod functions;
 pub mod inference;
+pub mod internal;
 pub mod object_storage;
 pub mod openai_compatible;
-pub mod optimization;
+pub mod shared_types;
 pub mod status;
-pub mod stored_inference;
+pub mod stored_inferences;
+pub mod ui;
 pub mod variant_probabilities;
 pub mod workflow_evaluation_run;
-use crate::utils::gateway::AppStateData;
-use axum::routing::MethodRouter;
-use std::convert::Infallible;
+pub mod workflow_evaluations;
 
 /// Helper struct to hold the data needed for a call to `Router.route`
 /// We use this to pass the route names to middleware before they register the routes
@@ -39,6 +44,8 @@ pub fn validate_tags(tags: &HashMap<String, String>, internal: bool) -> Result<(
     }
     Ok(())
 }
+
+pub use tensorzero_auth::middleware::TensorzeroAuthMiddlewareState;
 
 #[cfg(test)]
 mod tests {

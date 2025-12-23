@@ -1,9 +1,10 @@
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use axum::{debug_handler, Json};
+use axum::{Extension, Json, debug_handler};
 use futures::future::{join_all, try_join_all};
-use itertools::{izip, Itertools};
+use indexmap::IndexMap;
+use itertools::{Itertools, izip};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -24,6 +25,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::RequestMessage;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
     BatchInferenceParams, BatchInferenceParamsWithSize, BatchModelInferenceRow,
@@ -31,14 +33,12 @@ use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
-use crate::inference::types::RequestMessage;
-use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
-    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
-    FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch,
-    Usage,
+    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason,
+    InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, current_timestamp,
 };
+use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::rate_limiting::ScopeInfo;
@@ -48,6 +48,7 @@ use crate::tool::{
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 /// The expected payload to the `/start_batch_inference` endpoint.
 /// It will be a JSON object with the following fields:
@@ -111,9 +112,10 @@ pub type BatchOutputSchemas = Vec<Option<Value>>;
 #[debug_handler(state = AppStateData)]
 pub async fn start_batch_inference_handler(
     State(app_state): State<AppStateData>,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
 ) -> Result<Response<Body>, Error> {
-    Ok(Json(start_batch_inference(app_state, params).await?).into_response())
+    Ok(Json(start_batch_inference(app_state, params, api_key_ext).await?).into_response())
 }
 
 pub async fn start_batch_inference(
@@ -126,7 +128,13 @@ pub async fn start_batch_inference(
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<PrepareBatchInferenceOutput, Error> {
+    if config.gateway.relay.is_some() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "start_batch_inference is not supported in relay mode".to_string(),
+        }));
+    }
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
     let num_inferences = params.inputs.len();
@@ -219,7 +227,7 @@ pub async fn start_batch_inference(
     .increment(num_inferences as u64);
 
     // Keep track of which variants failed
-    let mut variant_errors = std::collections::HashMap::new();
+    let mut variant_errors = IndexMap::new();
 
     let cache_options = CacheOptions {
         max_age_s: None,
@@ -238,7 +246,8 @@ pub async fn start_batch_inference(
         tags: tags.clone(),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
-        scope_info: ScopeInfo { tags: tags.clone() },
+        scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
+        relay: config.gateway.relay.clone(),
     };
 
     let inference_models = InferenceModels {
@@ -256,7 +265,7 @@ pub async fn start_batch_inference(
     let resolved_inputs = params
         .inputs
         .into_iter()
-        .map(|input| input.into_lazy_resolved_input(context))
+        .map(|input| input.into_lazy_resolved_input(&context))
         .collect::<Result<Vec<LazyResolvedInput>, Error>>()?;
 
     // If we have a pinned variant (only one candidate), skip sampling and directly start the batch inference
@@ -493,6 +502,11 @@ pub async fn poll_batch_inference_handler(
     }): AppState,
     Path(path_params): Path<PollPathParams>,
 ) -> Result<Response<Body>, Error> {
+    if config.gateway.relay.is_some() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "poll_batch_inference is not supported in relay mode".to_string(),
+        }));
+    }
     let batch_request = get_batch_request(&clickhouse_connection_info, &path_params).await?;
     match batch_request.status {
         BatchStatus::Pending => {
@@ -772,7 +786,7 @@ async fn write_start_batch_inference<'a>(
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[i],
-            input: resolved_input.into_stored_input()?,
+            input: resolved_input.into_stored_input(),
             input_messages: try_join_all(
                 row.input_messages
                     .into_iter()
@@ -988,7 +1002,7 @@ pub async fn write_completed_batch_inference<'a>(
             raw_request,
             model_name: _,
             model_provider_name: _,
-            tags: _,
+            tags,
         } = batch_model_inference;
         let ProviderBatchInferenceOutput {
             id: _,
@@ -1081,13 +1095,17 @@ pub async fn write_completed_batch_inference<'a>(
             tool_config,
             processing_time: None,
             ttft_ms: None,
-            tags: HashMap::new(),
+            tags,
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            snapshot_hash: config.hash.clone(),
         };
-        model_inference_rows_to_write
-            .extend(inference_result.get_serialized_model_inferences().await);
+        model_inference_rows_to_write.extend(
+            inference_result
+                .get_serialized_model_inferences(config.hash.clone())
+                .await,
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);
@@ -1373,8 +1391,8 @@ struct ChatInferenceResponseDatabaseRead {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub output: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,
 }
 
@@ -1411,8 +1429,8 @@ struct JsonInferenceResponseDatabaseRead {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub output: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,
 }
 

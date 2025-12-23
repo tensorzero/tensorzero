@@ -5,25 +5,25 @@ use std::{
     time::{Duration, Instant},
 };
 
-use opentelemetry::{trace::Status, KeyValue, SpanId, Value};
+use opentelemetry::{KeyValue, SpanId, Value, trace::Status};
 use opentelemetry_sdk::{
     error::OTelSdkResult,
     trace::{SpanData, SpanExporter},
 };
 use tensorzero::{
+    Client, ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse,
+    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role, Usage,
+};
+use tensorzero::{
+    InferenceParams,
     test_helpers::{
         make_embedded_gateway_with_config, make_embedded_gateway_with_config_and_postgres,
     },
-    InferenceParams,
-};
-use tensorzero::{
-    Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    FeedbackParams, InferenceOutput, InferenceResponse, InferenceResponseChunk, Role,
 };
 use tensorzero_core::observability::{
     enter_fake_http_request_otel, setup_observability_with_exporter_override,
 };
-use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
+use tensorzero_core::{config::OtlpTracesFormat, inference::types::Text};
 use tensorzero_core::{
     endpoints::inference::ChatCompletionInferenceParams, observability::LogFormat,
 };
@@ -52,13 +52,11 @@ impl SpanExporter for CapturingOtelExporter {
 
 impl CapturingOtelExporter {
     pub fn take_spans(&self) -> Vec<SpanData> {
-        let spans = self
-            .spans
+        self.spans
             .lock()
             .expect("Failed to lock spans mutex")
             .replace(Vec::new())
-            .expect("CapturingExporter is already shut down");
-        spans
+            .expect("CapturingExporter is already shut down")
     }
 }
 
@@ -73,7 +71,7 @@ pub async fn install_capturing_otel_exporter() -> CapturingOtelExporter {
         spans: Arc::new(Mutex::new(Some(vec![]))),
     };
     let handle =
-        setup_observability_with_exporter_override(LogFormat::Pretty, Some(exporter.clone()))
+        setup_observability_with_exporter_override(LogFormat::Pretty, Some(exporter.clone()), true)
             .await
             .unwrap();
     handle.delayed_otel.unwrap().enable_otel().unwrap();
@@ -112,6 +110,42 @@ pub fn attrs_to_map(attrs: &[KeyValue]) -> HashMap<String, Value> {
     map
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct OTelUsage {
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+}
+
+impl OTelUsage {
+    fn zero() -> Self {
+        OTelUsage {
+            input_tokens: Some(0),
+            output_tokens: Some(0),
+        }
+    }
+
+    fn total_tokens(&self) -> Option<i64> {
+        match (self.input_tokens, self.output_tokens) {
+            (Some(prompt), Some(completion)) => Some(prompt + completion),
+            _ => None,
+        }
+    }
+
+    /// Sum `OTelUsage` and `Usage` instances.
+    /// `None` contaminates on both sides.
+    fn sum_usage_strict(&mut self, other: &Usage) {
+        self.input_tokens = match (self.input_tokens, other.input_tokens) {
+            (Some(a), Some(b)) => Some(a + b as i64),
+            _ => None,
+        };
+
+        self.output_tokens = match (self.output_tokens, other.output_tokens) {
+            (Some(a), Some(b)) => Some(a + b as i64),
+            _ => None,
+        };
+    }
+}
+
 // The tracing bug (https://github.com/tokio-rs/tracing/issues/2519) is sufficiently subtle that
 // we want to ensure that we know how to reproduce it (so that we know our fix is actually doing something).
 // See https://github.com/tensorzero/tensorzero/issues/3715
@@ -136,11 +170,11 @@ pub async fn test_reproduce_tracing_bug() {
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -164,11 +198,11 @@ pub async fn test_reproduce_tracing_bug() {
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -214,22 +248,21 @@ struct ResponseData {
     streaming: bool,
     inference_id: Uuid,
     episode_id: Uuid,
-    input_tokens: i64,
-    output_tokens: i64,
-    total_tokens: i64,
+    usage: OTelUsage,
     estimated_tokens: i64,
     underestimate: bool,
+    model_inference_error: bool,
 }
 
 async fn make_non_streaming_inference(client: &Client) -> ResponseData {
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -263,11 +296,13 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
         streaming: false,
         inference_id: response.inference_id,
         episode_id: response.episode_id,
-        input_tokens: response.usage.input_tokens as i64,
-        output_tokens: response.usage.output_tokens as i64,
-        total_tokens: (response.usage.input_tokens + response.usage.output_tokens) as i64,
+        usage: OTelUsage {
+            input_tokens: response.usage.input_tokens.map(|x| x as i64),
+            output_tokens: response.usage.output_tokens.map(|x| x as i64),
+        },
         underestimate: false,
         estimated_tokens: 1009,
+        model_inference_error: false,
     }
 }
 
@@ -275,12 +310,12 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
 
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -307,32 +342,39 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
 
     let mut inference_id = None;
     let mut episode_id = None;
-    let mut input_tokens = 0;
-    let mut output_tokens = 0;
-    let mut total_tokens = 0;
+    // `usage` is `None` until we receive a chunk with usage information
+    let mut usage: Option<OTelUsage> = None;
     while let Some(chunk) = stream.next().await {
         let InferenceResponseChunk::Chat(response) = chunk.clone().unwrap() else {
             panic!("Expected chat response, got: {chunk:#?}");
         };
         inference_id = Some(response.inference_id);
         episode_id = Some(response.episode_id);
-        if let Some(usage) = response.usage {
-            input_tokens += usage.input_tokens as i64;
-            output_tokens += usage.output_tokens as i64;
-            total_tokens += (usage.input_tokens + usage.output_tokens) as i64;
+        if let Some(chunk_usage) = response.usage {
+            // `usage` will be `None` if this is the first chunk with usage information....
+            if usage.is_none() {
+                // ... so initialize it to zero ...
+                usage = Some(OTelUsage::zero());
+            }
+            // ...and then add the chunk usage to it (handling `None` fields)
+            if let Some(ref mut u) = usage {
+                u.sum_usage_strict(&chunk_usage);
+            }
         }
     }
+
+    // `usage` will be None if we don't see usage in any chunks, in which case we take the default value (fields as `None`)
+    let usage = usage.unwrap_or_default();
 
     ResponseData {
         model_name: "dummy::good".to_string(),
         streaming: true,
         inference_id: inference_id.unwrap(),
         episode_id: episode_id.unwrap(),
-        input_tokens,
-        output_tokens,
-        total_tokens,
+        usage,
         estimated_tokens: 1009,
         underestimate: false,
+        model_inference_error: false,
     }
 }
 
@@ -365,11 +407,11 @@ async fn test_stream_fatal_error_usage() {
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
             model_name: Some(model_name.to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -396,9 +438,8 @@ async fn test_stream_fatal_error_usage() {
 
     let mut inference_id = None;
     let mut episode_id = None;
-    let mut input_tokens = 0;
-    let mut output_tokens = 0;
-    let mut total_tokens = 0;
+    // `usage` is `None` until we receive a chunk with usage information
+    let mut usage: Option<OTelUsage> = None;
     let mut all_chunks = vec![];
     while let Some(chunk) = stream.next().await {
         all_chunks.push(chunk.clone());
@@ -406,10 +447,17 @@ async fn test_stream_fatal_error_usage() {
             Ok(InferenceResponseChunk::Chat(response)) => {
                 inference_id = Some(response.inference_id);
                 episode_id = Some(response.episode_id);
-                if let Some(usage) = response.usage {
-                    input_tokens += usage.input_tokens as i64;
-                    output_tokens += usage.output_tokens as i64;
-                    total_tokens += (usage.input_tokens + usage.output_tokens) as i64;
+
+                if let Some(response_usage) = response.usage {
+                    // `usage` will be `None` if this is the first chunk with usage information....
+                    if usage.is_none() {
+                        // ... so initialize it to zero ...
+                        usage = Some(OTelUsage::zero());
+                    }
+                    // ...and then add the chunk usage to it (handling `None` fields)
+                    if let Some(ref mut u) = usage {
+                        u.sum_usage_strict(&response_usage);
+                    }
                 }
             }
             Ok(_) => panic!("Expected chat response, got: {chunk:#?}"),
@@ -439,11 +487,10 @@ async fn test_stream_fatal_error_usage() {
                         streaming: true,
                         inference_id: inference_id.unwrap(),
                         episode_id: episode_id.unwrap(),
-                        input_tokens,
-                        output_tokens,
-                        total_tokens,
+                        usage: usage.unwrap_or_default(),
                         estimated_tokens: 1009,
                         underestimate: true,
+                        model_inference_error: true,
                     },
                     OtlpTracesFormat::OpenTelemetry,
                 );
@@ -462,13 +509,12 @@ fn check_spans(
     let ResponseData {
         inference_id,
         episode_id,
-        input_tokens,
-        output_tokens,
-        total_tokens,
+        usage,
         estimated_tokens,
         model_name,
         streaming,
         underestimate,
+        model_inference_error,
     } = response_data;
 
     let all_spans = exporter.take_spans();
@@ -538,7 +584,16 @@ fn check_spans(
         panic!("Expected one child span: {model_children:#?}");
     };
     assert_eq!(model_provider_span.name, "model_provider_inference");
-    assert_eq!(model_provider_span.status, Status::Ok);
+    if model_inference_error {
+        assert_eq!(
+            model_provider_span.status,
+            Status::Error {
+                description: "".into()
+            }
+        );
+    } else {
+        assert_eq!(model_provider_span.status, Status::Ok);
+    }
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
 
@@ -561,18 +616,30 @@ fn check_spans(
             assert!(!model_provider_attr_map.contains_key("llm.system"));
             assert!(!model_provider_attr_map.contains_key("llm.model_name"));
 
-            assert_eq!(
-                model_provider_attr_map["gen_ai.usage.input_tokens"],
-                input_tokens.into()
-            );
-            assert_eq!(
-                model_provider_attr_map["gen_ai.usage.output_tokens"],
-                output_tokens.into()
-            );
-            assert_eq!(
-                model_provider_attr_map["gen_ai.usage.total_tokens"],
-                total_tokens.into()
-            );
+            if let Some(input_tokens) = usage.input_tokens {
+                assert_eq!(
+                    model_provider_attr_map["gen_ai.usage.input_tokens"],
+                    input_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("gen_ai.usage.input_tokens"));
+            }
+            if let Some(output_tokens) = usage.output_tokens {
+                assert_eq!(
+                    model_provider_attr_map["gen_ai.usage.output_tokens"],
+                    output_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("gen_ai.usage.output_tokens"));
+            }
+            if let Some(total_tokens) = usage.total_tokens() {
+                assert_eq!(
+                    model_provider_attr_map["gen_ai.usage.total_tokens"],
+                    total_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("gen_ai.usage.total_tokens"));
+            }
             assert!(!model_provider_attr_map.contains_key("llm.token_count.prompt"));
             assert!(!model_provider_attr_map.contains_key("llm.token_count.completion"));
             assert!(!model_provider_attr_map.contains_key("llm.token_count.total"));
@@ -597,18 +664,30 @@ fn check_spans(
             assert!(!model_provider_attr_map.contains_key("gen_ai.system"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.request.model"));
 
-            assert_eq!(
-                model_provider_attr_map["llm.token_count.prompt"],
-                input_tokens.into()
-            );
-            assert_eq!(
-                model_provider_attr_map["llm.token_count.completion"],
-                output_tokens.into()
-            );
-            assert_eq!(
-                model_provider_attr_map["llm.token_count.total"],
-                total_tokens.into()
-            );
+            if let Some(input_tokens) = usage.input_tokens {
+                assert_eq!(
+                    model_provider_attr_map["llm.token_count.prompt"],
+                    input_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("llm.token_count.prompt"));
+            }
+            if let Some(output_tokens) = usage.output_tokens {
+                assert_eq!(
+                    model_provider_attr_map["llm.token_count.completion"],
+                    output_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("llm.token_count.completion"));
+            }
+            if let Some(total_tokens) = usage.total_tokens() {
+                assert_eq!(
+                    model_provider_attr_map["llm.token_count.total"],
+                    total_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("llm.token_count.total"));
+            }
             // We currently don't have input/output attributes implemented for streaming inferences
             if streaming {
                 // When we implement input/output attributes for streaming inferences, remove these checks
@@ -678,7 +757,10 @@ fn check_spans(
     assert_eq!(
         return_ticket_attr_map,
         HashMap::from([
-            ("actual_usage.tokens".to_string(), total_tokens.into()),
+            (
+                "actual_usage.tokens".to_string(),
+                usage.total_tokens().unwrap_or_default().into()
+            ),
             ("actual_usage.model_inferences".to_string(), 1.into()),
             ("underestimate".to_string(), underestimate.into()),
             ("level".to_string(), "INFO".into()),
@@ -787,11 +869,11 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
             .inference(ClientInferenceParams {
                 episode_id: Some(episode_uuid),
                 model_name: Some("openai::missing-model-name".to_string()),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "What is your name?".to_string(),
                         })],
                     }],
@@ -1013,11 +1095,11 @@ pub fn test_capture_rate_limit_error() {
             .inference(ClientInferenceParams {
                 episode_id: Some(episode_uuid),
                 model_name: Some("dummy::good".to_string()),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "What is your name?".to_string(),
                         })],
                     }],
@@ -1130,9 +1212,18 @@ pub fn test_capture_rate_limit_error() {
         panic!("Expected one rate limit span: {rate_limit_spans:#?}");
     };
     assert_eq!(consume_ticket_span.name, "rate_limiting_consume_tickets");
-    assert_eq!(consume_ticket_span.status, Status::Error {
-        description: format!(r#"TensorZero rate limit exceeded for rule {{"resource":"token","scope_key":[{{"type":"TagEach","key":"user_id","value":"{user_id}"}}]}}. Requested 1009 units but only 2 available."#).into()
-    });
+    assert_eq!(
+        consume_ticket_span.status,
+        Status::Error {
+            description: format!(
+                r#"TensorZero rate limit exceeded for `token` resource.
+Scope: tag_key="user_id", tag_value="tensorzero::each" (matched: "{user_id}")
+Requested: 1009
+Available: 2"#
+            )
+            .into()
+        }
+    );
     let mut consume_ticket_attr_map = attrs_to_map(&consume_ticket_span.attributes);
     remove_unstable_attrs(&mut consume_ticket_attr_map);
 
@@ -1170,11 +1261,11 @@ pub async fn test_suppress_otel_spans() {
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -1218,11 +1309,11 @@ pub async fn test_capture_feedback_spans() {
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],

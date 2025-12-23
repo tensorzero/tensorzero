@@ -2,6 +2,7 @@
 import type { DiclOptimizationJobHandle } from "./DiclOptimizationJobHandle";
 import type { FireworksSFTJobHandle } from "./FireworksSFTJobHandle";
 import type { GCPVertexGeminiSFTJobHandle } from "./GCPVertexGeminiSFTJobHandle";
+import type { GEPAJobHandle } from "./GEPAJobHandle";
 import type { OpenAIRFTJobHandle } from "./OpenAIRFTJobHandle";
 import type { OpenAISFTJobHandle } from "./OpenAISFTJobHandle";
 import type { TogetherSFTJobHandle } from "./TogetherSFTJobHandle";
@@ -12,4 +13,5 @@ export type OptimizationJobHandle =
   | ({ type: "openai_rft" } & OpenAIRFTJobHandle)
   | ({ type: "fireworks_sft" } & FireworksSFTJobHandle)
   | ({ type: "gcp_vertex_gemini_sft" } & GCPVertexGeminiSFTJobHandle)
+  | ({ type: "gepa" } & GEPAJobHandle)
   | ({ type: "together_sft" } & TogetherSFTJobHandle);

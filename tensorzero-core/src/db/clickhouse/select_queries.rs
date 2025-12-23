@@ -1,7 +1,7 @@
 use crate::{
     db::{
-        clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
         EpisodeByIdRow, TableBoundsWithCount,
+        clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
     },
     serde_util::deserialize_u64,
 };
@@ -32,23 +32,33 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let (time_grouping, time_filter) = match time_window {
             TimeWindow::Minute => (
                 "toStartOfMinute(minute)",
-                format!("minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"),
+                format!(
+                    "minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"
+                ),
             ),
             TimeWindow::Hour => (
                 "toStartOfHour(minute)",
-                format!("minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
+                format!(
+                    "minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"
+                ),
             ),
             TimeWindow::Day => (
                 "toStartOfDay(minute)",
-                format!("minute >= (SELECT max(toStartOfDay(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"),
+                format!(
+                    "minute >= (SELECT max(toStartOfDay(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"
+                ),
             ),
             TimeWindow::Week => (
                 "toStartOfWeek(minute)",
-                format!("minute >= (SELECT max(toStartOfWeek(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"),
+                format!(
+                    "minute >= (SELECT max(toStartOfWeek(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"
+                ),
             ),
             TimeWindow::Month => (
                 "toStartOfMonth(minute)",
-                format!("minute >= (SELECT max(toStartOfMonth(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"),
+                format!(
+                    "minute >= (SELECT max(toStartOfMonth(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"
+                ),
             ),
             TimeWindow::Cumulative => (
                 "toDateTime('1970-01-01 00:00:00')",
@@ -166,7 +176,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
 
     async fn query_episode_table(
         &self,
-        page_size: u32,
+        limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
     ) -> Result<Vec<EpisodeByIdRow>, Error> {
@@ -175,7 +185,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Cannot specify both before and after in query_episode_table"
                         .to_string(),
-                }))
+                }));
             }
             (Some(before), None) => (
                 "episode_id_uint < toUInt128({before:UUID})",
@@ -193,10 +203,10 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // Clickhouse will not optimize queries with either GROUP BY or FINAL
         // when reading the primary key with a LIMIT
         // https://clickhouse.com/docs/sql-reference/statements/select/order-by#optimization-of-data-reading
-        // So, we select the last page_size_overestimate episodes in descending order
+        // So, we select the last limit_overestimate episodes in descending order
         // Then we group by episode_id_uint and count the number of inferences
-        // Finally, we order by episode_id_uint correctly and limit the result to page_size
-        let page_size_overestimate = 5 * page_size;
+        // Finally, we order by episode_id_uint correctly and limit the result to limit
+        let limit_overestimate = 5 * limit;
 
         let query = if is_after {
             format!(
@@ -205,7 +215,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     FROM EpisodeById
                     WHERE {where_clause}
                     ORDER BY episode_id_uint ASC
-                    LIMIT {page_size_overestimate}
+                    LIMIT {limit_overestimate}
                 )
                 SELECT
                     episode_id,
@@ -225,7 +235,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
                     GROUP BY episode_id_uint
                     ORDER BY episode_id_uint ASC
-                    LIMIT {page_size}
+                    LIMIT {limit}
                 )
                 ORDER BY episode_id_uint DESC
                 FORMAT JSONEachRow
@@ -239,7 +249,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     FROM EpisodeById
                     WHERE {where_clause}
                     ORDER BY episode_id_uint DESC
-                    LIMIT {page_size_overestimate}
+                    LIMIT {limit_overestimate}
                 )
                 SELECT
                     uint_to_uuid(episode_id_uint) as episode_id,
@@ -251,7 +261,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
                 GROUP BY episode_id_uint
                 ORDER BY episode_id_uint DESC
-                LIMIT {page_size}
+                LIMIT {limit}
                 FORMAT JSONEachRow
                 "
             )

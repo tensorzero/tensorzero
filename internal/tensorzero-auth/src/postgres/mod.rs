@@ -21,9 +21,7 @@ pub struct MigrationsData {
 
 /// Helper function to retrieve the set of applied migrations from the database.
 /// We pull this out so that the error can be mapped in one place.
-/// This is almost the same as the corresponding `get_applied_migrations` function in 'tensorzero_core', but with a different table name,
-/// and using sqlx_alpha
-/// TODO - consolidate these functions into a single `get_applied_migrations`function  once we're using a single sqlx version.
+/// This is almost the same as the corresponding `get_applied_migrations` function in 'tensorzero_core', but with a different table name.
 async fn get_applied_migrations(pool: &PgPool) -> Result<HashSet<i64>, sqlx::Error> {
     let mut applied_migrations: HashSet<i64> = HashSet::new();
     let mut rows =
@@ -78,9 +76,8 @@ pub enum AuthResult {
     MissingKey,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct KeyInfo {
     pub public_id: String,
     pub organization: String,
@@ -134,6 +131,27 @@ pub async fn disable_key(
     .execute(pool)
     .await?;
     Ok(now)
+}
+
+/// Updates the description for the API key with the given public_id
+pub async fn update_key_description(
+    public_id: &str,
+    description: Option<&str>,
+    pool: &PgPool,
+) -> Result<KeyInfo, TensorZeroAuthError> {
+    let key = sqlx::query_as!(
+        KeyInfo,
+        "UPDATE tensorzero_auth_api_key
+           SET description = $1, updated_at = NOW()
+           WHERE public_id = $2
+           RETURNING public_id, organization, workspace, description, created_at, disabled_at",
+        description,
+        public_id,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(key)
 }
 
 /// Lists all API keys in the database, optionally filtered by organization,

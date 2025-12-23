@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use axum::Extension;
 use serde::Deserialize;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
@@ -15,11 +16,15 @@ use crate::{
     inference::types::Usage,
     rate_limiting::ScopeInfo,
 };
+use tensorzero_auth::middleware::RequestApiKeyExtension;
+
+#[cfg(test)]
+use crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT;
 
 use super::inference::InferenceCredentials;
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Params {
+pub struct EmbeddingsParams {
     pub input: EmbeddingInput,
     pub model_name: String,
     pub dimensions: Option<u32>,
@@ -39,11 +44,15 @@ pub async fn embeddings(
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
-    params: Params,
+    params: EmbeddingsParams,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<EmbeddingResponse, Error> {
     let span = tracing::Span::current();
     span.record("model", &params.model_name);
     span.record("num_inputs", params.input.num_inputs());
+    if let Some(relay) = &config.gateway.relay {
+        return relay.relay_embeddings(params).await;
+    }
     let embedding_model = config
         .embedding_models
         .get(&params.model_name)
@@ -53,12 +62,12 @@ pub async fn embeddings(
                 model_name: params.model_name.clone(),
             })
         })?;
-    if let EmbeddingInput::Batch(array) = &params.input {
-        if array.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: "Input cannot be empty".to_string(),
-            }));
-        }
+    if let EmbeddingInput::Batch(array) = &params.input
+        && array.is_empty()
+    {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Input cannot be empty".to_string(),
+        }));
     }
 
     let request = EmbeddingRequest {
@@ -81,7 +90,8 @@ pub async fn embeddings(
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
-        scope_info: ScopeInfo { tags: tags.clone() },
+        scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
+        relay: None,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
@@ -103,17 +113,15 @@ pub struct EmbeddingResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::provider_types::ProviderTypesConfig;
     use crate::config::Config;
+    use crate::config::provider_types::ProviderTypesConfig;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;
     use std::collections::HashMap;
-    use tracing_test::traced_test;
-
-    #[traced_test]
     #[tokio::test]
     async fn test_no_warning_when_model_exists() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Create a config with a valid embedding model
         let dummy_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good-model".into(),
@@ -141,6 +149,7 @@ mod tests {
                 crate::embeddings::EmbeddingModelTable::new(
                     embedding_models,
                     Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
+                    DEFAULT_HTTP_CLIENT_TIMEOUT,
                 )
                 .unwrap(),
             ),
@@ -149,8 +158,8 @@ mod tests {
 
         let config = Arc::new(config);
 
-        let http_client = TensorzeroHttpClient::new().unwrap();
-        let params = Params {
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let params = EmbeddingsParams {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "test-model".to_string(),
             dimensions: None,
@@ -169,6 +178,7 @@ mod tests {
             PostgresConnectionInfo::Disabled,
             tokio_util::task::TaskTracker::new(),
             params,
+            None,
         )
         .await;
 
@@ -178,15 +188,14 @@ mod tests {
         // Check that no warnings were logged for model not found
         assert!(!logs_contain("Model not found"));
     }
-
-    #[traced_test]
     #[tokio::test]
     async fn test_warning_when_model_not_found() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Create an empty config with no embedding models
         let config = Arc::new(Config::default());
 
-        let http_client = TensorzeroHttpClient::new().unwrap();
-        let params = Params {
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let params = EmbeddingsParams {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "nonexistent-model".to_string(),
             dimensions: None,
@@ -205,6 +214,7 @@ mod tests {
             PostgresConnectionInfo::Disabled,
             tokio_util::task::TaskTracker::new(),
             params,
+            None,
         )
         .await;
 

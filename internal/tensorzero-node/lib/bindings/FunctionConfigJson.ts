@@ -9,7 +9,7 @@ export type FunctionConfigJson = {
   variants: { [key in string]?: VariantInfo };
   schemas: SchemaData;
   output_schema: StaticJSONSchema;
-  implicit_tool_call_config: ToolCallConfig;
+  json_mode_tool_call_config: ToolCallConfig;
   description: string | null;
   experimentation: ExperimentationConfig;
 };

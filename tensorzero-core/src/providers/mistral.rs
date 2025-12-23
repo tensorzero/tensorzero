@@ -4,7 +4,7 @@ use crate::{
     http::{TensorZeroEventSource, TensorzeroHttpClient},
     providers::openai::OpenAIMessagesConfig,
 };
-use futures::{future::try_join_all, StreamExt};
+use futures::{StreamExt, future::try_join_all};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
@@ -16,33 +16,33 @@ use url::Url;
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
-    error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
+        InferenceProvider,
         types::{
-            batch::{
-                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
-            },
-            chat_completion_inference_params::{
-                warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-            },
             ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
             ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
             ProviderInferenceResponse, ProviderInferenceResponseArgs,
             ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, Usage,
+            batch::{
+                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
+            },
+            chat_completion_inference_params::{
+                ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
+            },
         },
-        InferenceProvider,
     },
     model::{Credential, ModelProvider},
     providers::helpers::{
         check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
     },
-    tool::{ToolCall, ToolCallChunk, ToolChoice},
+    tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
 };
 
 use super::openai::{
-    get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
-    OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
+    OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolType, get_chat_url,
+    tensorzero_to_openai_messages,
 };
 
 lazy_static! {
@@ -55,9 +55,14 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Mistral";
 pub const PROVIDER_TYPE: &str = "mistral";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+type PreparedMistralToolsResult<'a> = (
+    Option<Vec<MistralTool<'a>>>,
+    Option<MistralToolChoice<'a>>,
+    Option<bool>,
+);
+
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct MistralProvider {
     model_name: String,
     #[serde(skip)]
@@ -113,33 +118,34 @@ impl MistralCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             MistralCredentials::Static(api_key) => Ok(api_key),
             MistralCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             MistralCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            MistralCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            MistralCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -169,7 +175,10 @@ impl InferenceProvider for MistralProvider {
             })
         })?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
@@ -263,7 +272,10 @@ impl InferenceProvider for MistralProvider {
             })
         })?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
@@ -279,7 +291,7 @@ impl InferenceProvider for MistralProvider {
             builder,
         )
         .await?;
-        let stream = stream_mistral(event_source, start_time).peekable();
+        let stream = stream_mistral(event_source, start_time, &raw_request).peekable();
         Ok((stream, raw_request))
     }
 
@@ -337,13 +349,15 @@ fn handle_mistral_error(
 pub fn stream_mistral(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             let mut last_tool_name = None;
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -358,7 +372,7 @@ pub fn stream_mistral(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }.into());
                         let latency = start_time.elapsed();
@@ -370,8 +384,6 @@ pub fn stream_mistral(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 
@@ -413,66 +425,89 @@ enum MistralResponseFormat {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
+#[serde(untagged)]
+pub(super) enum MistralToolChoice<'a> {
+    String(MistralToolChoiceString),
+    Specific(MistralSpecificToolChoice<'a>),
+}
+
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-enum MistralToolChoice {
+pub(super) enum MistralToolChoiceString {
     Auto,
     None,
     Any,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
-struct MistralTool<'a> {
-    r#type: OpenAIToolType,
-    function: OpenAIFunction<'a>,
+#[derive(Debug, Serialize, PartialEq)]
+pub(super) struct MistralSpecificToolChoice<'a> {
+    r#type: &'static str,
+    function: MistralSpecificToolFunction<'a>,
 }
 
-impl<'a> From<OpenAITool<'a>> for MistralTool<'a> {
-    fn from(tool: OpenAITool<'a>) -> Self {
-        MistralTool {
-            r#type: tool.r#type,
-            function: tool.function,
+#[derive(Debug, Serialize, PartialEq)]
+struct MistralSpecificToolFunction<'a> {
+    name: &'a str,
+}
+
+impl<'a> From<&'a ToolChoice> for MistralToolChoice<'a> {
+    fn from(tool_choice: &'a ToolChoice) -> Self {
+        match tool_choice {
+            ToolChoice::Auto => MistralToolChoice::String(MistralToolChoiceString::Auto),
+            ToolChoice::Required => MistralToolChoice::String(MistralToolChoiceString::Any),
+            ToolChoice::None => MistralToolChoice::String(MistralToolChoiceString::None),
+            ToolChoice::Specific(tool_name) => {
+                MistralToolChoice::Specific(MistralSpecificToolChoice {
+                    r#type: "function",
+                    function: MistralSpecificToolFunction { name: tool_name },
+                })
+            }
         }
     }
 }
 
-fn prepare_mistral_tools<'a>(
+#[derive(Debug, PartialEq, Serialize)]
+pub(super) struct MistralTool<'a> {
+    r#type: OpenAIToolType,
+    function: OpenAIFunction<'a>,
+}
+
+impl<'a> From<&'a FunctionToolConfig> for MistralTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
+        MistralTool {
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: tool.name(),
+                description: Some(tool.description()),
+                parameters: tool.parameters(),
+            },
+        }
+    }
+}
+
+/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
+/// Otherwise convert the tool choice and tools to Mistral format
+pub(super) fn prepare_mistral_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
-) -> Result<(Option<Vec<MistralTool<'a>>>, Option<MistralToolChoice>), Error> {
+) -> Result<PreparedMistralToolsResult<'a>, Error> {
     match &request.tool_config {
-        None => Ok((None, None)),
-        Some(tool_config) => match &tool_config.tool_choice {
-            ToolChoice::Specific(tool_name) => {
-                let tool = tool_config
-                    .tools_available()
-                    .find(|t| t.name() == tool_name)
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::ToolNotFound {
-                            name: tool_name.clone(),
-                        })
-                    })?;
-                let tools = vec![MistralTool::from(OpenAITool::from(tool))];
-                Ok((Some(tools), Some(MistralToolChoice::Any)))
+        None => Ok((None, None, None)),
+        Some(tool_config) => {
+            if !tool_config.any_tools_available() {
+                return Ok((None, None, None));
             }
-            ToolChoice::Auto | ToolChoice::Required => {
-                let tools = tool_config
-                    .tools_available()
-                    .map(|t| MistralTool::from(OpenAITool::from(t)))
-                    .collect();
-                let tool_choice = match tool_config.tool_choice {
-                    ToolChoice::Auto => MistralToolChoice::Auto,
-                    ToolChoice::Required => MistralToolChoice::Any,
-                    _ => {
-                        return Err(ErrorDetails::InvalidTool {
-                            message: "Tool choice must be Auto or Required. This is impossible."
-                                .to_string(),
-                        }
-                        .into())
-                    }
-                };
-                Ok((Some(tools), Some(tool_choice)))
-            }
-            ToolChoice::None => Ok((None, Some(MistralToolChoice::None))),
-        },
+            let tools = Some(
+                tool_config
+                    .strict_tools_available()?
+                    .map(Into::into)
+                    .collect(),
+            );
+            let parallel_tool_calls = tool_config.parallel_tool_calls;
+
+            // Mistral does not support allowed_tools constraint, use regular tool_choice
+            let tool_choice = Some((&tool_config.tool_choice).into());
+            Ok((tools, tool_choice, parallel_tool_calls))
+        }
     }
 }
 
@@ -505,7 +540,7 @@ struct MistralRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<MistralTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<MistralToolChoice>,
+    tool_choice: Option<MistralToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
 }
@@ -516,12 +551,17 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -554,7 +594,7 @@ impl<'a> MistralRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice) = prepare_mistral_tools(request)?;
+        let (tools, tool_choice, _) = prepare_mistral_tools(request)?;
 
         let mut mistral_request = MistralRequest {
             messages,
@@ -587,8 +627,8 @@ struct MistralUsage {
 impl From<MistralUsage> for Usage {
     fn from(usage: MistralUsage) -> Self {
         Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens: usage.completion_tokens,
+            input_tokens: Some(usage.prompt_tokens),
+            output_tokens: Some(usage.completion_tokens),
         }
     }
 }
@@ -707,10 +747,10 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
-        if let Some(text) = message.content {
-            if !text.is_empty() {
-                content.push(text.into());
-            }
+        if let Some(text) = message.content
+            && !text.is_empty()
+        {
+            content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
@@ -796,13 +836,13 @@ fn mistral_to_tensorzero_chunk(
         if let Some(choice_finish_reason) = choice.finish_reason {
             finish_reason = Some(choice_finish_reason.into());
         }
-        if let Some(text) = choice.delta.content {
-            if !text.is_empty() {
-                content.push(ContentBlockChunk::Text(TextChunk {
-                    text,
-                    id: "0".to_string(),
-                }));
-            }
+        if let Some(text) = choice.delta.content
+            && !text.is_empty()
+        {
+            content.push(ContentBlockChunk::Text(TextChunk {
+                text,
+                id: "0".to_string(),
+            }));
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
             for tool_call in tool_calls {
@@ -834,9 +874,8 @@ mod tests {
     use super::*;
 
     use crate::inference::types::{FunctionType, RequestMessage, Role};
-    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use tracing_test::traced_test;
-
+    use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::tool::{AllowedTools, ToolCallConfig};
     #[tokio::test]
     async fn test_mistral_request_new() {
         let request_with_tools = ModelInferenceRequest {
@@ -879,7 +918,276 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        assert_eq!(mistral_request.tool_choice, Some(MistralToolChoice::Any));
+        assert_eq!(
+            mistral_request.tool_choice,
+            Some(MistralToolChoice::Specific(MistralSpecificToolChoice {
+                r#type: "function",
+                function: MistralSpecificToolFunction {
+                    name: "get_temperature"
+                },
+            }))
+        );
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_with_allowed_tools() {
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+
+        // Test with allowed_tools specified - Mistral doesn't support allowed_tools constraint
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(false),
+            allowed_tools: AllowedTools {
+                tools: vec![WEATHER_TOOL.name().to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify only allowed tools are returned (strict_tools_available respects allowed_tools)
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+
+        // Verify tool_choice
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::String(MistralToolChoiceString::Auto)
+        );
+
+        // Verify parallel_tool_calls
+        assert_eq!(parallel_tool_calls, Some(false));
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_auto_mode() {
+        // Test Auto mode with default allowed_tools
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify tools
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 2);
+
+        // Verify tool_choice is Auto
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::String(MistralToolChoiceString::Auto)
+        );
+
+        // Verify parallel_tool_calls is None (default behavior)
+        assert!(parallel_tool_calls.is_none());
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_required_mode() {
+        use crate::tool::AllowedTools;
+
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify tools
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+
+        // Verify tool_choice is Any (Required maps to Any)
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::String(MistralToolChoiceString::Any)
+        );
+
+        // Verify parallel_tool_calls is None
+        assert!(parallel_tool_calls.is_none());
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_none_mode() {
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify tools are still returned
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+
+        // Verify tool_choice is None
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::String(MistralToolChoiceString::None)
+        );
+
+        // Verify parallel_tool_calls is None
+        assert!(parallel_tool_calls.is_none());
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_specific_mode() {
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify tools
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+
+        // Verify tool_choice is Specific
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::Specific(MistralSpecificToolChoice {
+                r#type: "function",
+                function: MistralSpecificToolFunction {
+                    name: "get_temperature"
+                },
+            })
+        );
+
+        // Verify parallel_tool_calls is None (WEATHER_TOOL_CONFIG doesn't set parallel_tool_calls)
+        assert!(parallel_tool_calls.is_none());
     }
 
     #[test]
@@ -954,8 +1262,8 @@ mod tests {
             inference_response.output,
             vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1051,8 +1359,8 @@ mod tests {
                 arguments: "{}".to_string(),
             })]
         );
-        assert_eq!(inference_response.usage.input_tokens, 15);
-        assert_eq!(inference_response.usage.output_tokens, 25);
+        assert_eq!(inference_response.usage.input_tokens, Some(15));
+        assert_eq!(inference_response.usage.output_tokens, Some(25));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1274,10 +1582,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_mistral_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

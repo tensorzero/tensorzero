@@ -2,6 +2,7 @@ import {
   Dialog,
   DialogBody,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -25,7 +26,7 @@ export function HumanFeedbackModal({
   const isReadOnly = useReadOnly();
 
   return (
-    <ReadOnlyGuard>
+    <ReadOnlyGuard asChild>
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
         {!!trigger && (
           <DialogTrigger asChild disabled={isReadOnly}>
@@ -35,6 +36,9 @@ export function HumanFeedbackModal({
         <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
           <DialogHeader>
             <DialogTitle>Add Feedback</DialogTitle>
+            <DialogDescription>
+              Assign feedback to improve future responses.
+            </DialogDescription>
           </DialogHeader>
           <DialogBody>{children}</DialogBody>
         </DialogContent>

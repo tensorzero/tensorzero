@@ -19,7 +19,7 @@ async def test_dynamic_json_mode_inference_openai():
     async_client = await tensorzero.patch_openai_client(
         async_client,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
-        config_file="../../tensorzero-core/tests/e2e/tensorzero.toml",
+        config_file="../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         async_setup=True,
     )
 
@@ -178,9 +178,19 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
     lines = list(captured.out.splitlines())
     print("Output lines: ", lines)
     # Allow various env vars to be set when running this test
-    assert len(lines) <= 2
+    assert len(lines) <= 4
     for line in lines:
-        assert "Pseudonymous usage analytic" in line or "Using proxy URL from TENSORZERO_E2E_PROXY" in line
+        assert any(
+            [
+                expected in line
+                for expected in [
+                    "Pseudonymous usage analytic",
+                    "Using proxy URL from TENSORZERO_E2E_PROXY",
+                    "Waiting for deferred tasks to finish",
+                    "Deferred tasks finished",
+                ]
+            ]
+        )
     assert captured.err == ""
 
 

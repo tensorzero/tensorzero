@@ -6,8 +6,9 @@ use std::time::Duration;
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio_stream::StreamExt;
+use tracing_futures::Instrument;
 use uuid::Uuid;
 
 use crate::inference::InferenceProvider;
@@ -19,29 +20,31 @@ use crate::embeddings::{
 };
 
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
+use crate::inference::types::{ContentBlock, FinishReason};
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, current_timestamp, ContentBlockChunk,
-    ContentBlockOutput, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
+    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, Usage, batch::StartBatchProviderInferenceResponse,
+    current_timestamp,
 };
-use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
+use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::providers::helpers::inject_extra_request_data;
-use crate::rate_limiting::ActiveRateLimitKey;
-use crate::rate_limiting::FailedRateLimit;
+use crate::rate_limiting::{
+    ActiveRateLimitKey, FailedRateLimit, RateLimitResource, RateLimitingScopeKey,
+};
 use crate::tool::{ToolCall, ToolCallChunk};
 
 const PROVIDER_NAME: &str = "Dummy";
 pub const PROVIDER_TYPE: &str = "dummy";
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DummyProvider {
     pub model_name: String,
     #[serde(skip)]
@@ -78,24 +81,24 @@ impl DummyProvider {
     fn get_model_usage(&self, output_tokens: u32) -> Usage {
         match self.model_name.as_str() {
             "input_tokens_zero" => Usage {
-                input_tokens: 0,
-                output_tokens,
+                input_tokens: Some(0),
+                output_tokens: Some(output_tokens),
             },
             "output_tokens_zero" => Usage {
-                input_tokens: 10,
-                output_tokens: 0,
+                input_tokens: Some(10),
+                output_tokens: Some(0),
             },
             "input_tokens_output_tokens_zero" => Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
             },
             "input_five_output_six" => Usage {
-                input_tokens: 5,
-                output_tokens: 6,
+                input_tokens: Some(5),
+                output_tokens: Some(6),
             },
             _ => Usage {
-                input_tokens: 10,
-                output_tokens,
+                input_tokens: Some(10),
+                output_tokens: Some(output_tokens),
             },
         }
     }
@@ -170,16 +173,15 @@ impl DummyCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Option<&'a SecretString>, Error> {
+    ) -> Result<Option<&'a SecretString>, DelayedError> {
         match self {
             DummyCredentials::None => Ok(None),
             DummyCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 }))
                 .transpose()
             }
@@ -245,10 +247,31 @@ pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
     r#""}"#,
 ];
 
+pub static DUMMY_STREAMING_GOOD_TOOL_RESPONSE: [&str; 5] = [
+    r#"{"sentiment""#,
+    r#":"positive""#,
+    r#","confidence""#,
+    r":0.95",
+    r"}",
+];
+
 pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
     [r#"{"name""#, r#":"John""#, r#","age""#, r":30", r"}"];
 
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
+
+/// Like `tokio::time::sleep`, but attaches a span that excludes
+/// this time for our `tensorzero_inference_latency_overhead_seconds` metric
+/// We use this to simulate slow HTTP requests (which also have
+/// their latency excluded via `TensorzeroHttpClient`)
+async fn sleep_excluding_latency(duration: Duration) {
+    tokio::time::sleep(duration)
+        .instrument(tracing::debug_span!(
+            "dummy_sleep",
+            { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true,
+        ))
+        .await;
+}
 
 impl InferenceProvider for DummyProvider {
     async fn infer<'a>(
@@ -264,10 +287,10 @@ impl InferenceProvider for DummyProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         if self.model_name == "slow" {
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            sleep_excluding_latency(Duration::from_secs(5)).await;
         }
         // Just so they don't seem like 0ms inferences
-        tokio::time::sleep(Duration::from_millis(1)).await;
+        sleep_excluding_latency(Duration::from_millis(1)).await;
 
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
@@ -279,13 +302,17 @@ impl InferenceProvider for DummyProvider {
             *counter += 1;
 
             // Fail on even-numbered calls
-            if *counter % 2 == 0 {
+            if counter.is_multiple_of(2) {
                 if self.model_name.contains("rate_limit") {
                     return Err(ErrorDetails::RateLimitExceeded {
                         failed_rate_limits: vec![FailedRateLimit {
                             key: ActiveRateLimitKey(String::from("key")),
                             requested: 100,
                             available: 0,
+                            resource: RateLimitResource::Token,
+                            scope_key: vec![RateLimitingScopeKey::TagTotal {
+                                key: "test".to_string(),
+                            }],
                         }],
                     }
                     .into());
@@ -337,20 +364,22 @@ impl InferenceProvider for DummyProvider {
             }
         }
 
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        if self.model_name == "test_key" {
-            if let Some(api_key) = api_key {
-                if api_key.expose_secret() != "good_key" {
-                    return Err(ErrorDetails::InferenceClient {
-                        message: "Invalid API key for Dummy provider".to_string(),
-                        raw_request: Some("raw request".to_string()),
-                        raw_response: None,
-                        status_code: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    }
-                    .into());
-                }
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
+        if self.model_name == "test_key"
+            && let Some(api_key) = api_key
+            && api_key.expose_secret() != "good_key"
+        {
+            return Err(ErrorDetails::InferenceClient {
+                message: "Invalid API key for Dummy provider".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
+                status_code: None,
+                provider_type: PROVIDER_TYPE.to_string(),
             }
+            .into());
         }
         let id = Uuid::now_v7();
         let created = current_timestamp();
@@ -360,6 +389,11 @@ impl InferenceProvider for DummyProvider {
                 name: "get_temperature".to_string(),
                 #[expect(clippy::unwrap_used)]
                 arguments: serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
+                id: "0".to_string(),
+            })],
+            "good_tool" => vec![ContentBlockOutput::ToolCall(ToolCall {
+                name: "output_schema_tool".to_string(),
+                arguments: r#"{"sentiment":"positive","confidence":0.95}"#.to_string(),
                 id: "0".to_string(),
             })],
             "invalid_tool_arguments" => vec![ContentBlockOutput::ToolCall(ToolCall {
@@ -550,6 +584,7 @@ impl InferenceProvider for DummyProvider {
         let raw_response = match self.model_name.as_str() {
             #[expect(clippy::unwrap_used)]
             "tool" => serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
+            "good_tool" => r#"{"sentiment":"positive","confidence":0.95}"#.to_string(),
             "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
             "json_goodbye" => DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string(),
             "json_cot" => DUMMY_JSON_COT_RESPONSE_RAW.to_string(),
@@ -566,7 +601,7 @@ impl InferenceProvider for DummyProvider {
         };
         let system = request.system.clone();
         let input_messages = request.messages.clone();
-        let finish_reason = if self.model_name.contains("tool") {
+        let finish_reason = if self.model_name.contains("tool") || self.model_name == "good_tool" {
             Some(FinishReason::ToolCall)
         } else {
             Some(FinishReason::Stop)
@@ -598,10 +633,10 @@ impl InferenceProvider for DummyProvider {
         _model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         if self.model_name == "slow" {
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            sleep_excluding_latency(Duration::from_secs(5)).await;
         }
         // Just so they don't seem like 0ms inferences
-        tokio::time::sleep(Duration::from_millis(1)).await;
+        sleep_excluding_latency(Duration::from_millis(1)).await;
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
             #[expect(clippy::expect_used)]
@@ -612,7 +647,7 @@ impl InferenceProvider for DummyProvider {
             *counter += 1;
 
             // Fail on even-numbered calls
-            if *counter % 2 == 0 {
+            if counter.is_multiple_of(2) {
                 return Err(ErrorDetails::InferenceClient {
                     raw_request: Some("raw request".to_string()),
                     raw_response: None,
@@ -669,6 +704,7 @@ impl InferenceProvider for DummyProvider {
 
         let (content_chunks, is_tool_call) = match self.model_name.as_str() {
             "tool" | "tool_split_name" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
+            "good_tool" => (DUMMY_STREAMING_GOOD_TOOL_RESPONSE.to_vec(), true),
             "reasoner" => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
             _ => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
         };
@@ -684,7 +720,7 @@ impl InferenceProvider for DummyProvider {
         let stream = async_stream::stream! {
             for (i, chunk) in content_chunks.into_iter().enumerate() {
                 if slow_second_chunk && i == 1 {
-                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    sleep_excluding_latency(Duration::from_secs(2)).await;
                 }
                 if fatal_stream_error && i == 2 {
                     yield Err(Error::new(ErrorDetails::FatalStreamError {
@@ -693,7 +729,7 @@ impl InferenceProvider for DummyProvider {
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }));
-                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    sleep_excluding_latency(Duration::from_secs(5)).await;
                     continue;
                 }
                 if err_in_stream && i == 3 {
@@ -741,23 +777,29 @@ impl InferenceProvider for DummyProvider {
                 });
             }
         };
-        let stream: ProviderInferenceResponseStreamInner = Box::pin(
-            stream
-                .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
-                    created,
-                    content: vec![],
-                    usage: Some(self.get_model_usage(content_chunk_len as u32)),
-                    finish_reason,
-                    raw_response: String::new(),
-                    latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
-                })))
-                .throttle(std::time::Duration::from_millis(10)),
-        );
+
+        let base_stream = stream.chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
+            created,
+            content: vec![],
+            usage: Some(self.get_model_usage(content_chunk_len as u32)),
+            finish_reason,
+            raw_response: String::new(),
+            latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
+        })));
+
+        // We don't use the tokio `throttled` combinator, since we want to use `sleep_excluding_latency`
+        let throttled_stream = Box::pin(async_stream::stream! {
+            futures::pin_mut!(base_stream);
+            while let Some(chunk) = base_stream.next().await {
+                yield chunk;
+                sleep_excluding_latency(Duration::from_millis(10)).await;
+            }
+        });
 
         Ok((
             // We need this verbose path to avoid using `tokio_stream::StreamExt::peekable`,
             // which produces a different types
-            futures::stream::StreamExt::peekable(stream),
+            futures::stream::StreamExt::peekable(throttled_stream),
             DUMMY_RAW_REQUEST.to_string(),
         ))
     }
@@ -804,7 +846,7 @@ impl EmbeddingProvider for DummyProvider {
         &self,
         request: &EmbeddingRequest,
         _http_client: &TensorzeroHttpClient,
-        _dynamic_api_keys: &InferenceCredentials,
+        dynamic_api_keys: &InferenceCredentials,
         _model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         if self.model_name.starts_with("error") {
@@ -821,7 +863,25 @@ impl EmbeddingProvider for DummyProvider {
             .into());
         }
         if self.model_name.contains("slow") {
-            tokio::time::sleep(Duration::from_secs(30)).await;
+            sleep_excluding_latency(Duration::from_secs(30)).await;
+        }
+
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
+        if self.model_name == "test_key"
+            && let Some(api_key) = api_key
+            && api_key.expose_secret() != "good_key"
+        {
+            return Err(ErrorDetails::InferenceClient {
+                message: "Invalid API key for Dummy provider".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
+                status_code: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            }
+            .into());
         }
         let id = Uuid::now_v7();
         let created = current_timestamp();
@@ -829,8 +889,8 @@ impl EmbeddingProvider for DummyProvider {
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = DUMMY_RAW_REQUEST.to_string();
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 1,
+            input_tokens: Some(10),
+            output_tokens: Some(0),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),

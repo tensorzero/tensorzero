@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use axum::extract::{Query, State};
-use axum::{debug_handler, Json};
+use axum::extract::{Path, Query, State};
+use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -23,12 +23,24 @@ pub struct GetVariantSamplingProbabilitiesResponse {
     pub probabilities: HashMap<String, f64>,
 }
 
-/// HTTP handler for the variant sampling probabilities endpoint
+/// HTTP handler for the variant sampling probabilities endpoint (query-based)
 #[debug_handler(state = AppStateData)]
 pub async fn get_variant_sampling_probabilities_handler(
     State(app_state): AppState,
     Query(params): Query<GetVariantSamplingProbabilitiesParams>,
 ) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, Error> {
+    Ok(Json(
+        get_variant_sampling_probabilities(app_state, params).await?,
+    ))
+}
+
+/// HTTP handler for the variant sampling probabilities endpoint (path-based)
+#[debug_handler(state = AppStateData)]
+pub async fn get_variant_sampling_probabilities_by_function_handler(
+    State(app_state): AppState,
+    Path(function_name): Path<String>,
+) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, Error> {
+    let params = GetVariantSamplingProbabilitiesParams { function_name };
     Ok(Json(
         get_variant_sampling_probabilities(app_state, params).await?,
     ))
@@ -118,7 +130,8 @@ mod tests {
             false,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .into_config_without_writing_for_tests();
 
         let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
 

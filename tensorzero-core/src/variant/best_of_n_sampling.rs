@@ -6,26 +6,26 @@ use std::sync::Arc;
 use futures::future::{join_all, try_join_all};
 use lazy_static::lazy_static;
 use rand::Rng;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use tokio::time::{timeout, Duration};
+use serde_json::{Value, json};
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
+use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
-use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role, System,
+    FunctionType, ModelInferenceRequest, ModelInferenceResponseWithMetadata, RequestMessage, Role,
+    System, batch::StartBatchModelInferenceWithMetadata,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
-use crate::tool::create_implicit_tool_call_config_with_allowed_tools;
+use crate::tool::create_json_mode_tool_call_config_with_allowed_tools;
 use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
 use crate::utils::unbounded_recursion_wrapper;
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
@@ -41,12 +41,10 @@ use crate::{
 use super::chat_completion::UninitializedChatCompletionConfig;
 use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct BestOfNSamplingConfig {
     weight: Option<f64>,
-    timeout_s: f64,
     candidates: Vec<String>,
     evaluator: BestOfNEvaluatorConfig,
 }
@@ -60,10 +58,6 @@ impl BestOfNSamplingConfig {
         self.weight = weight;
     }
 
-    pub fn timeout_s(&self) -> f64 {
-        self.timeout_s
-    }
-
     pub fn candidates(&self) -> &Vec<String> {
         &self.candidates
     }
@@ -71,34 +65,43 @@ impl BestOfNSamplingConfig {
     pub fn evaluator(&self) -> &BestOfNEvaluatorConfig {
         &self.evaluator
     }
+
+    /// Converts this initialized config back to its uninitialized form.
+    #[expect(deprecated)]
+    pub fn as_uninitialized(self) -> UninitializedBestOfNSamplingConfig {
+        UninitializedBestOfNSamplingConfig {
+            weight: self.weight,
+            timeout_s: None,
+            candidates: self.candidates,
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: self.evaluator.inner.as_uninitialized(),
+            },
+        }
+    }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
     pub weight: Option<f64>,
-    #[serde(default = "default_timeout")]
-    pub timeout_s: f64,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
     pub candidates: Vec<String>,
     pub evaluator: UninitializedBestOfNEvaluatorConfig,
 }
 
-fn default_timeout() -> f64 {
-    300.0
-}
-
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct BestOfNEvaluatorConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNEvaluatorConfig {
     #[serde(flatten)]
@@ -113,7 +116,6 @@ impl UninitializedBestOfNSamplingConfig {
     ) -> Result<BestOfNSamplingConfig, Error> {
         Ok(BestOfNSamplingConfig {
             weight: self.weight,
-            timeout_s: self.timeout_s,
             candidates: self.candidates,
             evaluator: BestOfNEvaluatorConfig {
                 inner: self.evaluator.inner.load(
@@ -127,6 +129,12 @@ impl UninitializedBestOfNSamplingConfig {
                 )?,
             },
         })
+    }
+
+    /// Returns the deprecated `timeout_s` value if set.
+    #[expect(deprecated)]
+    pub fn timeout_s(&self) -> Option<f64> {
+        self.timeout_s
     }
 }
 
@@ -146,11 +154,11 @@ lazy_static! {
         }))
         .expect("Failed to create schema for evaluator output")
     };
-    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = {
-        create_implicit_tool_call_config_with_allowed_tools(
+    static ref JSON_MODE_TOOL_CALL_CONFIG: ToolCallConfig = {
+        create_json_mode_tool_call_config_with_allowed_tools(
             EVALUATOR_OUTPUT_SCHEMA.clone(),
             AllowedTools {
-                tools: vec![IMPLICIT_TOOL_NAME.to_string()],
+                tools: [IMPLICIT_TOOL_NAME.to_string()].into_iter().collect(),
                 choice: AllowedToolsChoice::FunctionDefault,
             },
         )
@@ -233,6 +241,7 @@ impl Variant for BestOfNSamplingConfig {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
@@ -248,6 +257,7 @@ impl Variant for BestOfNSamplingConfig {
                 templates,
                 function_name,
                 candidate,
+                global_outbound_http_timeout,
             ))
             .await
             .map_err(|e| {
@@ -267,6 +277,7 @@ impl Variant for BestOfNSamplingConfig {
                 templates,
                 function_name,
                 variant_name,
+                global_outbound_http_timeout,
             )
             .await?;
         Ok(())
@@ -351,21 +362,18 @@ impl BestOfNSamplingConfig {
             let input = Arc::new(input.clone());
             inference_futures.push((
                 candidate_name.clone(),
-                timeout(
-                    Duration::from_secs_f64(self.timeout_s),
-                    unbounded_recursion_wrapper(async move {
-                        candidate_variant
-                            .infer(
-                                input,
-                                models,
-                                function,
-                                config,
-                                clients,
-                                InferenceParams::default(),
-                            )
-                            .await
-                    }),
-                ),
+                unbounded_recursion_wrapper(async move {
+                    candidate_variant
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            config,
+                            clients,
+                            InferenceParams::default(),
+                        )
+                        .await
+                }),
             ));
         }
 
@@ -379,20 +387,9 @@ impl BestOfNSamplingConfig {
 
         // Collect the successful results
         let mut successful_results = Vec::new();
-        for (candidate_name, result) in inference_results {
-            match result {
-                Ok(inner_result) => {
-                    if let Ok(res) = inner_result {
-                        successful_results.push(res);
-                    }
-                }
-                Err(_timeout_error) => {
-                    // Map the Tokio timeout error to our own TimeoutError type
-                    // It logs on construction
-                    Error::new(ErrorDetails::InferenceTimeout {
-                        variant_name: candidate_name.clone(),
-                    });
-                }
+        for (_candidate_name, result) in inference_results {
+            if let Ok(res) = result {
+                successful_results.push(res);
             }
         }
 
@@ -543,7 +540,7 @@ async fn inner_select_best_candidate<'a>(
         .find_map(|block| match block {
             ContentBlockOutput::Text(text) => Some(&text.text),
             ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
-            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown { .. } => None,
+            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown(_) => None,
         }) {
         Some(text) => text,
         None => {
@@ -751,10 +748,10 @@ impl BestOfNEvaluatorConfig {
         let json_mode = inference_params
             .chat_completion
             .json_mode
-            .or_else(|| self.inner.json_mode().cloned())
+            .or_else(|| self.inner.json_mode().copied())
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {
-            JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
+            JsonMode::Tool => Some(Cow::Borrowed(&*JSON_MODE_TOOL_CALL_CONFIG)),
             JsonMode::Off | JsonMode::On | JsonMode::Strict => None,
         };
         if !inference_config.extra_body.is_empty() {
@@ -800,6 +797,7 @@ impl BestOfNEvaluatorConfig {
                 extra_cache_key: inference_config.extra_cache_key.clone(),
                 inference_params_v2: ChatCompletionInferenceParamsV2 {
                     reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    service_tier: inference_params.chat_completion.service_tier.clone(),
                     thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
                     verbosity: inference_params.chat_completion.verbosity.clone(),
                 },
@@ -835,7 +833,7 @@ mod tests {
     use crate::rate_limiting::ScopeInfo;
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{provider_types::ProviderTypesConfig, UninitializedSchemas},
+        config::{UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         http::TensorzeroHttpClient,
@@ -864,9 +862,9 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_prepare_system_message() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_prepare_system_message() {
+        let templates = get_test_template_config().await;
 
         let system_schema = StaticJSONSchema::from_value(serde_json::json!({
             "type": "object",
@@ -1050,7 +1048,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Create an EvaluatorConfig
         // Prepare some candidate InferenceResults
@@ -1066,11 +1064,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: Some(50),
+                output_tokens: Some(100),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1085,6 +1083,7 @@ mod tests {
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1102,11 +1101,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
-                input_tokens: 15,
-                output_tokens: 25,
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
@@ -1121,6 +1120,7 @@ mod tests {
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1142,7 +1142,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message_json() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
@@ -1157,11 +1157,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: Some(50),
+                output_tokens: Some(100),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1184,9 +1184,11 @@ mod tests {
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            output: vec!["{\"response\": \"Malformed JSON response\""
-                .to_string()
-                .into()], // missing closing brace
+            output: vec![
+                "{\"response\": \"Malformed JSON response\""
+                    .to_string()
+                    .into(),
+            ], // missing closing brace
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
@@ -1195,11 +1197,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
-                input_tokens: 15,
-                output_tokens: 25,
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
@@ -1249,12 +1251,11 @@ mod tests {
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
         };
 
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -1268,11 +1269,11 @@ mod tests {
                 content: vec!["test_assistant".to_string().into()],
             }]),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: Some(50),
+                output_tokens: Some(100),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1287,6 +1288,7 @@ mod tests {
                 vec![model_inference_response0],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1304,11 +1306,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {
-                input_tokens: 15,
-                output_tokens: 25,
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
@@ -1323,6 +1325,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1349,12 +1352,14 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            chrono::Duration::seconds(120),
         )
         .expect("Failed to create model table");
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
@@ -1372,7 +1377,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1409,8 +1416,8 @@ mod tests {
         // based on "answer": 1 in best_of_n_1
         let expected_id = inference_id1;
         let expected_usage = Usage {
-            input_tokens: 75,
-            output_tokens: 126,
+            input_tokens: Some(75),
+            output_tokens: Some(126),
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
         assert_eq!(selected.usage_considering_cached(), expected_usage);
@@ -1436,7 +1443,6 @@ mod tests {
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
         };
@@ -1462,12 +1468,14 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
             ModelTable::new(
                 map,
                 ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .expect("Failed to create model table")
         };
@@ -1510,7 +1518,6 @@ mod tests {
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
         };
@@ -1536,12 +1543,14 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
             ModelTable::new(
                 map,
                 ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
             )
             .expect("Failed to create model table")
         };
@@ -1595,7 +1604,6 @@ mod tests {
         // Test case: Index returned too large (should return an error)
         let best_of_n_big_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             evaluator: BestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1628,12 +1636,14 @@ mod tests {
                     },
                 )]),
                 timeouts: Default::default(),
+                skip_relay: false,
             },
         );
         let provider_types = ProviderTypesConfig::default();
         let big_models = ModelTable::new(
             big_models,
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .expect("Failed to create model table");
 
@@ -1677,5 +1687,133 @@ mod tests {
         // Case 5: Skipped indices out of range
         let skipped = vec![10, 20];
         assert_eq!(map_evaluator_to_actual_index(5, &skipped), 5);
+    }
+
+    #[test]
+    #[expect(deprecated)]
+    fn test_as_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedBestOfNSamplingConfig {
+            weight: Some(1.0),
+            timeout_s: Some(60.0), // deprecated, will be None in exported
+            candidates: vec!["variant1".to_string(), "variant2".to_string()],
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    temperature: Some(0.3),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.weight, Some(1.0));
+        // timeout_s is deprecated and not stored in initialized config, so it's None in exported
+        assert_eq!(
+            exported.timeout_s, None,
+            "timeout_s should be None in exported config"
+        );
+        assert_eq!(
+            exported.candidates,
+            vec!["variant1".to_string(), "variant2".to_string()]
+        );
+        assert_eq!(exported.evaluator.inner.model, "gpt-4".into());
+        assert_eq!(exported.evaluator.inner.temperature, Some(0.3));
+    }
+
+    #[test]
+    #[expect(deprecated)]
+    fn test_as_uninitialized_preserves_nested_evaluator() {
+        let uninitialized = UninitializedBestOfNSamplingConfig {
+            weight: None,
+            timeout_s: None,
+            candidates: vec!["v1".to_string()],
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "judge-model".into(),
+                    temperature: Some(0.1),
+                    max_tokens: Some(50),
+                    seed: Some(99),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.evaluator.inner.model, "judge-model".into());
+        assert_eq!(exported.evaluator.inner.temperature, Some(0.1));
+        assert_eq!(exported.evaluator.inner.max_tokens, Some(50));
+        assert_eq!(exported.evaluator.inner.seed, Some(99));
+    }
+
+    #[test]
+    #[expect(deprecated)]
+    fn test_as_uninitialized_with_empty_candidates() {
+        let uninitialized = UninitializedBestOfNSamplingConfig {
+            weight: None,
+            timeout_s: None,
+            candidates: vec![],
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert!(exported.candidates.is_empty());
+    }
+
+    #[test]
+    #[expect(deprecated)]
+    fn test_as_uninitialized_serialization_round_trip() {
+        let original = UninitializedBestOfNSamplingConfig {
+            weight: Some(0.7),
+            timeout_s: None, // deprecated field
+            candidates: vec!["a".to_string(), "b".to_string()],
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-3.5-turbo".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = original
+            .clone()
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedBestOfNSamplingConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        assert_eq!(reloaded.weight(), Some(0.7));
+        assert_eq!(
+            reloaded.candidates(),
+            &vec!["a".to_string(), "b".to_string()]
+        );
     }
 }

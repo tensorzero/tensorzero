@@ -1,13 +1,13 @@
 //! Code is based on <https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs> (MIT-licensed)
 #![expect(clippy::unwrap_used)]
 
-use crate::tls::{generate_cert, CertifiedKeyDer};
-use http_body_util::{combinators::BoxBody, BodyExt, Empty};
+use crate::tls::{CertifiedKeyDer, generate_cert};
+use http_body_util::{BodyExt, Empty, combinators::BoxBody};
 use hyper::{
+    Method, Request, Response, StatusCode,
     body::{Body, Incoming},
     server,
-    service::{service_fn, HttpService},
-    Method, Request, Response, StatusCode,
+    service::{HttpService, service_fn},
 };
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use moka::sync::Cache;

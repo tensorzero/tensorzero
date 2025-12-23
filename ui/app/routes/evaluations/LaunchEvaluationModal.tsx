@@ -1,8 +1,11 @@
 import { useLayoutEffect, useState, useEffect } from "react";
 import { useFetcher, Link } from "react-router";
+import { CircleHelp } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -10,18 +13,19 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
-import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_function.route";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { Combobox } from "~/components/ui/combobox";
+import { Evaluation } from "~/components/icons/Icons";
+import { GitBranch } from "lucide-react";
 import { useDatasetCounts } from "~/hooks/use-dataset-counts";
 import { toFunctionUrl } from "~/utils/urls";
 
@@ -53,13 +57,23 @@ function EvaluationForm({
   const [inferenceCache, setInferenceCache] = useState<InferenceCacheSetting>(
     initialFormState?.inference_cache ?? "on",
   );
+  const [maxDatapoints, setMaxDatapoints] = useState<string>(
+    initialFormState?.max_datapoints ?? "",
+  );
+  const [precisionTargets, setPrecisionTargets] = useState<
+    Record<string, string>
+  >(initialFormState?.precision_targets ?? {});
 
   let count = null;
   let isLoading = false;
   let function_name = null;
+  let evaluatorNames: string[] = [];
   if (selectedEvaluationName) {
     function_name =
       config.evaluations[selectedEvaluationName]?.function_name ?? null;
+    evaluatorNames = Object.keys(
+      config.evaluations[selectedEvaluationName]?.evaluators ?? {},
+    );
   }
   const functionConfig = useFunctionConfig(function_name);
 
@@ -67,10 +81,12 @@ function EvaluationForm({
     function_name ?? undefined,
   );
 
-  const { count: datasetCount, isLoading: datasetLoading } =
-    useDatasetCountFetcher(selectedDatasetName, function_name);
-  count = datasetCount;
-  isLoading = datasetLoading;
+  // Get the count for the selected dataset from the datasets array
+  const selectedDataset = selectedDatasetName
+    ? datasets.find((d) => d.name === selectedDatasetName)
+    : undefined;
+  count = selectedDataset?.count ?? null;
+  isLoading = datasetsLoading;
 
   // Validate that stored values still exist in the current config/datasets
   useEffect(() => {
@@ -81,6 +97,7 @@ function EvaluationForm({
     ) {
       setSelectedEvaluationName(null);
       setSelectedVariantName(null);
+      setPrecisionTargets({});
     }
 
     // Validate dataset name - if datasets have loaded and the dataset doesn't exist, clear it
@@ -110,15 +127,56 @@ function EvaluationForm({
     functionConfig,
   ]);
 
-  // Check if all fields are filled
+  // Initialize precision targets with empty string for all evaluators when evaluation changes
+  useEffect(() => {
+    if (selectedEvaluationName) {
+      const currentEvaluatorNames = Object.keys(
+        config.evaluations[selectedEvaluationName]?.evaluators ?? {},
+      );
+      const newLimits: Record<string, string> = {};
+
+      // Always initialize all evaluators with empty string (reset when evaluation changes)
+      for (const evaluatorName of currentEvaluatorNames) {
+        newLimits[evaluatorName] = "";
+      }
+
+      // Only update if the structure changed
+      const currentKeys = Object.keys(precisionTargets).sort().join(",");
+      const newKeys = Object.keys(newLimits).sort().join(",");
+      if (currentKeys !== newKeys) {
+        setPrecisionTargets(newLimits);
+      }
+    }
+  }, [selectedEvaluationName, config.evaluations, precisionTargets]);
+
+  // Validate max_datapoints: must be empty or a positive integer
+  const isMaxDatapointsValid =
+    maxDatapoints === "" ||
+    (Number.isInteger(Number(maxDatapoints)) &&
+      Number(maxDatapoints) > 0 &&
+      !maxDatapoints.includes("."));
+
+  // Validate precision_targets: all values must be non-negative numbers
+  const arePrecisionTargetsValid = Object.values(precisionTargets).every(
+    (value) => {
+      if (value === "") return true;
+      // Check if the entire string is a valid number
+      const num = Number(value);
+      return !isNaN(num) && num >= 0 && value.trim() !== "";
+    },
+  );
+
+  // Check if all fields are filled and valid
   const isFormValid =
     selectedEvaluationName !== null &&
     selectedVariantName !== null &&
     selectedDatasetName !== null &&
-    datasetCount !== null &&
-    datasetCount > 0 &&
+    count !== null &&
+    count > 0 &&
     inferenceCache !== null &&
-    concurrencyLimit !== "";
+    concurrencyLimit !== "" &&
+    isMaxDatapointsValid &&
+    arePrecisionTargetsValid;
 
   return (
     <fetcher.Form
@@ -136,25 +194,20 @@ function EvaluationForm({
           Evaluation
         </label>
       </div>
-      <Select
+
+      <Combobox
         name="evaluation_name"
-        value={selectedEvaluationName ?? undefined}
-        onValueChange={(value) => {
+        selected={selectedEvaluationName}
+        onSelect={(value) => {
           setSelectedEvaluationName(value);
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
         }}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Select an evaluation" />
-        </SelectTrigger>
-        <SelectContent>
-          {evaluation_names.map((evaluation_name) => (
-            <SelectItem key={evaluation_name} value={evaluation_name}>
-              {evaluation_name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        items={evaluation_names}
+        icon={Evaluation}
+        placeholder="Select evaluation"
+        emptyMessage="No evaluations found"
+        monospace
+      />
       <div className="mt-4">
         <label
           htmlFor="dataset_name"
@@ -171,6 +224,7 @@ function EvaluationForm({
       />
 
       <DatasetSelector
+        label="Select a dataset"
         functionName={function_name ?? undefined}
         selected={selectedDatasetName ?? undefined}
         onSelect={setSelectedDatasetName}
@@ -206,36 +260,40 @@ function EvaluationForm({
           Variant
         </label>
       </div>
-      <Select
+
+      <Combobox
         name="variant_name"
-        value={selectedVariantName ?? undefined}
+        selected={selectedVariantName}
+        onSelect={setSelectedVariantName}
+        items={functionConfig ? Object.keys(functionConfig.variants) : []}
+        icon={GitBranch}
+        placeholder="Select variant"
+        emptyMessage="No variants found"
         disabled={!selectedEvaluationName}
-        onValueChange={(value) => setSelectedVariantName(value)}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Select a variant" />
-        </SelectTrigger>
-        <SelectContent>
-          {(() => {
-            if (!selectedEvaluationName || !functionConfig) return null;
-
-            const variant_names = Object.keys(functionConfig.variants);
-
-            return variant_names.map((variant_name) => (
-              <SelectItem key={variant_name} value={variant_name}>
-                {variant_name}
-              </SelectItem>
-            ));
-          })()}
-        </SelectContent>
-      </Select>
+        monospace
+      />
       <div className="mt-4">
-        <label
-          htmlFor="concurrency_limit"
-          className="mb-1 block text-sm font-medium"
-        >
-          Concurrency
-        </label>
+        <div className="mb-1 flex items-center gap-1.5">
+          <label htmlFor="concurrency_limit" className="text-sm font-medium">
+            Concurrency
+          </label>
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-help">
+                  <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="text-xs">
+                  The number of datapoints to evaluate in parallel. Increasing
+                  this value can speed up the evaluation run, but may trigger
+                  rate limiting from model providers.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
         <input
           type="number"
           id="concurrency_limit"
@@ -249,12 +307,76 @@ function EvaluationForm({
         />
       </div>
       <div className="mt-4">
+        <div className="mb-2 flex items-center gap-1.5">
+          <label htmlFor="max_datapoints" className="text-sm font-medium">
+            Max Datapoints
+          </label>
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-help">
+                  <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                Maximum number of datapoints to evaluate (optional)
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        <Input
+          type="text"
+          id="max_datapoints"
+          name="max_datapoints"
+          value={maxDatapoints}
+          onChange={(e) => setMaxDatapoints(e.target.value)}
+          placeholder="No limit"
+          className={
+            !isMaxDatapointsValid && maxDatapoints !== ""
+              ? "border-red-500 focus:ring-red-500"
+              : ""
+          }
+        />
+        {!isMaxDatapointsValid && maxDatapoints !== "" && (
+          <p className="mt-1 text-xs text-red-500">
+            Must be a positive integer
+          </p>
+        )}
+      </div>
+      <div className="mt-4">
         <AdvancedParametersAccordion
           inferenceCache={inferenceCache}
           setInferenceCache={setInferenceCache}
+          precisionTargets={precisionTargets}
+          setPrecisionTargets={setPrecisionTargets}
+          arePrecisionTargetsValid={arePrecisionTargetsValid}
+          evaluatorNames={evaluatorNames}
           defaultOpen={inferenceCache !== "on"}
         />
         <input type="hidden" name="inference_cache" value={inferenceCache} />
+        <input
+          type="hidden"
+          name="precision_targets"
+          value={
+            // Serialize precision targets to JSON for form submission.
+            // Precision targets enable adaptive stopping: an evaluator stops running
+            // once both sides of its 95% confidence interval are within the specified
+            // threshold of the mean. Only positive values are submitted: setting to 0.0
+            // disables adaptive stopping for that evaluator.
+            Object.keys(precisionTargets).length > 0
+              ? JSON.stringify(
+                  Object.fromEntries(
+                    Object.entries(precisionTargets)
+                      .filter(([_, value]) => {
+                        const num = parseFloat(value);
+                        return value !== "" && !isNaN(num) && num > 0;
+                      })
+                      .map(([key, value]) => [key, parseFloat(value)]),
+                  ),
+                )
+              : ""
+          }
+        />
       </div>
       <DialogFooter>
         <Button className="mt-2" type="submit" disabled={!isFormValid}>
@@ -285,17 +407,19 @@ export default function LaunchEvaluationModal({
   }, []);
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Launch Evaluation</DialogTitle>
           <DialogDescription>
             Run an evaluation on a dataset to measure variant performance.
           </DialogDescription>
         </DialogHeader>
-        <EvaluationForm
-          key={initialFormState?.renderKey}
-          initialFormState={initialFormState}
-        />
+        <DialogBody>
+          <EvaluationForm
+            key={initialFormState?.renderKey}
+            initialFormState={initialFormState}
+          />
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );
@@ -307,6 +431,8 @@ interface EvaluationsFormValues {
   variant_name: string | null;
   concurrency_limit: string;
   inference_cache: InferenceCacheSetting;
+  max_datapoints: string;
+  precision_targets: Record<string, string>;
 }
 
 interface EvaluationsFormState extends Partial<EvaluationsFormValues> {
@@ -343,6 +469,28 @@ function getFromLocalStorage() {
     return null;
   }
 
+  const data = parsed as Record<string, unknown>;
+
+  // Parse precision_targets from stored JSON string format to object,
+  // and convert numeric values to strings for form inputs
+  if (typeof data.precision_targets === "string" && data.precision_targets) {
+    try {
+      const parsedLimits = JSON.parse(data.precision_targets);
+      if (typeof parsedLimits === "object" && parsedLimits !== null) {
+        // Convert numbers to strings for the form
+        data.precision_targets = Object.fromEntries(
+          Object.entries(parsedLimits).map(([k, v]) => [k, String(v)]),
+        );
+      } else {
+        data.precision_targets = {};
+      }
+    } catch {
+      data.precision_targets = {};
+    }
+  } else if (typeof data.precision_targets !== "object") {
+    data.precision_targets = {};
+  }
+
   // TODO: add validation
-  return parsed as Partial<EvaluationsFormValues>;
+  return data as Partial<EvaluationsFormValues>;
 }

@@ -1,0 +1,5 @@
+[provider_types.gcp_vertex_gemini]
+batch_inference_api_base = "http://localhost:3030/"
+
+[provider_types.openai]
+batch_inference_api_base = "http://localhost:3030/openai"

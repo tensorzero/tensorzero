@@ -1,9 +1,0 @@
-[project]
-name = "tensorzero-examples-tutorial-04-email-data-extraction"
-version = "0.0.0"
-readme = "README.md"
-requires-python = ">=3.9"
-dependencies = [
-    "openai",
-    "tensorzero",
-]

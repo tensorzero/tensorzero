@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { VariantInfo, ChatCompletionConfig } from "tensorzero-node";
+import type { VariantInfo, ChatCompletionConfig } from "~/types/tensorzero";
 import { Sheet, SheetContent, SheetFooter } from "~/components/ui/sheet";
 import { PageHeader } from "~/components/layout/PageLayout";
 import { Button } from "~/components/ui/button";

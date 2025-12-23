@@ -3,7 +3,7 @@
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    image: clickhouse:lts
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -24,7 +24,7 @@ services:
       timeout: 1s
 
   postgres:
-    image: postgres:14-alpine
+    image: postgres:14
     environment:
       POSTGRES_DB: tensorzero
       POSTGRES_USER: postgres
@@ -65,10 +65,7 @@ services:
 
   ui:
     image: tensorzero/ui
-    volumes:
-      - ./config:/app/config:ro
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000

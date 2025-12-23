@@ -10,19 +10,27 @@ members = [
     "clients/python",
     "provider-proxy",
     "evaluations",
+    "tensorzero-optimizers",
     "internal/tensorzero-derive",
-     "internal/tensorzero-auth",
-    "examples/integrations/cursor/feedback",
+    "internal/tensorzero-auth",
+    "internal/tensorzero-unsafe-helpers",
+    "internal/minijinja-utils",
+    "internal/autopilot-client",
+    "internal/durable-tools-spawn",
+    "internal/autopilot-tools",
+    "internal/durable-tools",
+    "internal/tensorzero-types",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2025.11.0"
-rust-version = "1.86.0"
+version = "2025.12.5"
+rust-version = "1.88.0"
 license = "Apache-2.0"
+edition = "2024"
 
 [workspace.dependencies]
-reqwest = { version = "0.12.24", features = [
+reqwest = { version = "0.12.28", features = [
     "json",
     "multipart",
     "rustls-tls",
@@ -30,26 +38,36 @@ reqwest = { version = "0.12.24", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-uuid = { version = "1.18.1", features = ["serde", "v7"] }
+uuid = { version = "1.19.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
-tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
-toml = "0.9.8"
+toml = { version = "0.9.8", features = ["preserve_order"] }
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 async-trait = "0.1.89"
-http = "1.3.1"
+http = "1.4.0"
+infer = "0.19.0"
 tokio-stream = "0.1.15"
 tokio = { version = "1.48.0", features = ["full"] }
-tracing = { version = "0.1.40", features = ["log"] }
-pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py39"] }
+tracing = { version = "0.1.43", features = ["log"] }
+pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.49", features = ["derive"] }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
+clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.30"
+thiserror = "2.0.17"
 lazy_static = { version = "1.5.0" }
+minijinja = { version = "2.14.0", features = [
+    "loader",
+    "debug",
+    "json",
+    "loop_controls",
+    "builtins",
+    "unstable_machinery",
+] }
 url = "2.5.4"
+google-cloud-auth = "1.3.0"
 serde-untagged = "0.1.8"
 object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
@@ -63,19 +81,35 @@ ts-rs = { version = "11.1.0", features = [
 ] }
 pin-project = "1.1.10"
 chrono = { version = "0.4.41", features = ["serde"] }
-git2 = { version = "0.20.2", default-features = false }
+git2 = { version = "0.20.3", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.1", features = [
     "tracing_level_info",
 ] }
-tower-http = { version = "0.6.6", features = ["trace"] }
+tower-http = { version = "0.6.7", features = ["trace"] }
 mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
     "serde1",
 ] }
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "chrono", "uuid"] }
+sqlx = { version = "0.9.0-alpha.1", features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "migrate",
+    "chrono",
+    "uuid",
+    "sqlx-toml",
+] }
 rlt = "0.2.1"
-metrics-exporter-prometheus = { version = "0.17.2", features = [
+metrics-exporter-prometheus = { version = "0.18.1", features = [
     "http-listener",
 ], default-features = false }
+schemars = "1.1.0"
+blake3 = "1.8.2"
+moka = { version = "0.12.10", features = ["sync"] }
+durable = { git = "https://github.com/tensorzero/durable", rev = "6984ee936b8315ead4199cc66646bfaf0c76e134" }
+durable-tools-spawn = { path = "internal/durable-tools-spawn" }
+tensorzero = { path = "clients/rust" }
+tensorzero-core = { path = "tensorzero-core" }
+regex = "1.12.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -101,7 +135,6 @@ or_fun_call = "deny"
 panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"
-redundant_closure_for_method_calls = "deny"
 semicolon-if-nothing-returned = "deny"
 todo = "deny"
 trivially_copy_pass_by_ref = "deny"
@@ -111,6 +144,11 @@ unnecessary_wraps = "deny"
 unreachable = "deny"
 unused_self = "deny"
 unwrap_used = "deny"
+large_futures = "deny"
+explicit_into_iter_loop = "deny"
+cloned_instead_of_copied = "deny"
+inefficient_to_string = "deny"
+assigning_clones = "deny"
 
 # The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
 default_trait_access = "allow"
@@ -120,6 +158,9 @@ single_match_else = "allow"
 
 # This lint cannot be fixed with 'cargo fmt', and we don't currently generate docs
 doc_lazy_continuation = "allow"
+
+[profile.dev]
+debug = "line-tables-only"
 
 [profile.performance]
 inherits = "release"

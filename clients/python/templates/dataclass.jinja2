@@ -1,0 +1,43 @@
+{% for decorator in decorators -%}
+{{ decorator }}
+{% endfor -%}
+@dataclass
+{%- if keyword_only or frozen -%}
+(
+{%- if keyword_only -%}kw_only=True{%- endif -%}
+{%- if keyword_only and frozen -%}, {% endif -%}
+{%- if frozen -%}frozen=True{%- endif -%}
+)
+{%- endif %}
+{%- if base_class %}
+class {{ class_name }}({{ base_class }}):
+{%- else %}
+class {{ class_name }}:
+{%- endif %}
+{%- if description %}
+    """
+    {{ description | indent(4) }}
+    """
+{%- endif %}
+{%- if not fields and not description %}
+    pass
+{%- endif %}
+{%- for field in fields -%}
+    {%- if field.field %}
+    {{ field.name }}: {{ field.type_hint }} = {{ field.field }}
+    {%- else %}
+    {%- if field.extras and field.extras.get('x_double_option') %}
+    {{ field.name }}: {{ field.type_hint }} | OmitType = OMIT
+    {%- else %}
+    {{ field.name }}: {{ field.type_hint }}
+    {%- if not (field.required or (field.represented_default == 'None' and field.strip_default_none))
+            %} = {{ field.represented_default }}
+    {%- endif -%}
+    {%- endif -%}
+    {%- endif %}
+    {%- if field.docstring %}
+    """
+    {{ field.docstring | indent(4) }}
+    """
+    {%- endif %}
+{%- endfor -%}

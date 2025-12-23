@@ -2,11 +2,12 @@ use std::borrow::Cow;
 
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::{
-    http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID, tool::Tool,
+    http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID,
+    tool::FunctionTool,
 };
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -24,30 +25,30 @@ use super::helpers::{
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
-    error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
+        InferenceProvider,
         types::{
-            batch::{
-                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
-            },
             ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
             ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
             ProviderInferenceResponse, ProviderInferenceResponseArgs,
             ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
             Text, TextChunk, Thought, ThoughtChunk,
+            batch::{
+                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
+            },
         },
-        InferenceProvider,
     },
     model::{Credential, ModelProvider},
-    tool::{ToolCall, ToolCallChunk},
+    tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
 };
 
 use super::{
-    helpers_thinking_block::{process_think_blocks, ThinkingState},
+    helpers_thinking_block::{ThinkingState, process_think_blocks},
     openai::{
-        get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-        OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool,
-        OpenAIToolChoice, OpenAIToolType, OpenAIUsage,
+        OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolChoice,
+        OpenAIToolType, OpenAIUsage, get_chat_url, handle_openai_error,
+        tensorzero_to_openai_messages,
     },
 };
 
@@ -66,9 +67,8 @@ lazy_static! {
 pub const PROVIDER_NAME: &str = "Fireworks";
 pub const PROVIDER_TYPE: &str = "fireworks";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FireworksProvider {
     model_name: String,
     #[serde(skip)]
@@ -134,33 +134,34 @@ impl FireworksCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             FireworksCredentials::Static(api_key) => Ok(api_key),
             FireworksCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             FireworksCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            &FireworksCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            &FireworksCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -196,7 +197,7 @@ impl InferenceProvider for FireworksProvider {
         })?;
         let request_url = get_chat_url(&FIREWORKS_API_INFERENCE_BASE)?;
         let start_time = Instant::now();
-        let api_key = self.credentials.get_api_key(api_key)?;
+        let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
         let builder = http_client
             .post(request_url)
             .bearer_auth(api_key.expose_secret());
@@ -260,6 +261,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -288,7 +290,7 @@ impl InferenceProvider for FireworksProvider {
             })
         })?;
         let request_url = get_chat_url(&FIREWORKS_API_INFERENCE_BASE)?;
-        let api_key = self.credentials.get_api_key(api_key)?;
+        let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
@@ -379,18 +381,55 @@ struct FireworksRequest<'a> {
     reasoning_effort: Option<String>,
 }
 
+type PreparedFireworksToolsResult<'a> = (
+    Option<Vec<FireworksTool<'a>>>,
+    Option<OpenAIToolChoice<'a>>,
+    Option<bool>,
+);
+
+/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
+/// Otherwise convert the tool choice and tools to Fireworks format
+pub(super) fn prepare_fireworks_tools<'a>(
+    request: &'a ModelInferenceRequest,
+) -> Result<PreparedFireworksToolsResult<'a>, Error> {
+    match &request.tool_config {
+        None => Ok((None, None, None)),
+        Some(tool_config) => {
+            if !tool_config.any_tools_available() {
+                return Ok((None, None, None));
+            }
+            let tools = Some(
+                tool_config
+                    .strict_tools_available()?
+                    .map(Into::into)
+                    .collect(),
+            );
+            let parallel_tool_calls = tool_config.parallel_tool_calls;
+
+            // Fireworks does not support allowed_tools constraint, use regular tool_choice
+            let tool_choice = Some((&tool_config.tool_choice).into());
+            Ok((tools, tool_choice, parallel_tool_calls))
+        }
+    }
+}
+
 fn apply_inference_params(
     request: &mut FireworksRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -432,8 +471,7 @@ impl<'a> FireworksRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
-        let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
+        let (tools, tool_choice, _) = prepare_fireworks_tools(request)?;
 
         let mut fireworks_request = FireworksRequest {
             messages,
@@ -488,8 +526,8 @@ pub struct FireworksTool<'a> {
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a Tool> for FireworksTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
+impl<'a> From<&'a FunctionTool> for FireworksTool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
         FireworksTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
@@ -501,11 +539,15 @@ impl<'a> From<&'a Tool> for FireworksTool<'a> {
     }
 }
 
-impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
-    fn from(tool: OpenAITool<'a>) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for FireworksTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         FireworksTool {
-            r#type: tool.r#type,
-            function: tool.function,
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: tool.name(),
+                description: Some(tool.description()),
+                parameters: tool.parameters(),
+            },
         }
     }
 }
@@ -668,8 +710,6 @@ fn stream_fireworks(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 
@@ -878,8 +918,6 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
 mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
-    use tracing_test::traced_test;
-
     use uuid::Uuid;
 
     use super::*;
@@ -926,8 +964,8 @@ mod tests {
                 },
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
 
@@ -1113,8 +1151,8 @@ mod tests {
                 },
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1162,8 +1200,8 @@ mod tests {
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1249,8 +1287,8 @@ mod tests {
         let chunk = FireworksChatChunk {
             choices: vec![],
             usage: Some(OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             }),
         };
         let message = fireworks_to_tensorzero_chunk(
@@ -1267,8 +1305,8 @@ mod tests {
         assert_eq!(
             message.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             })
         );
     }
@@ -1526,10 +1564,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_fireworks_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

@@ -1,12 +1,12 @@
-use std::sync::{atomic::AtomicU64, Arc};
+use std::sync::{Arc, atomic::AtomicU64};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use rlt::{BenchSuite, IterInfo, IterReport, Status};
-use sqlx::postgres::types::PgInterval;
 use sqlx::PgPool;
+use sqlx::postgres::types::PgInterval;
 use tensorzero_core::{
-    db::{postgres::PostgresConnectionInfo, ConsumeTicketsRequest, RateLimitQueries},
+    db::{ConsumeTicketsRequest, RateLimitQueries, postgres::PostgresConnectionInfo},
     rate_limiting::ActiveRateLimitKey,
 };
 use tokio::time::Instant;
@@ -114,7 +114,8 @@ impl BenchSuite for RateLimitBenchmark {
                 if successful != total && successful != 0 {
                     tracing::error!(
                         "Partial success in rate limiting: {} out of {} requests succeeded. This should not happen.",
-                        successful, total
+                        successful,
+                        total
                     );
                     return Ok(IterReport {
                         duration,

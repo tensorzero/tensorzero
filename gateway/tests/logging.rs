@@ -16,7 +16,7 @@ async fn test_logging_no_rust_log_default_debug() {
     let health_response = child_data.call_health_endpoint().await;
     assert!(health_response.status().is_success());
     let _err: tokio::time::error::Elapsed =
-        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.next_line())
+        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.recv())
             .await
             .expect_err("Gateway wrote to stdout after /health endpoint in non-debug mode");
 }
@@ -28,20 +28,18 @@ async fn test_logging_no_rust_log_debug_on() {
     let health_response = child_data.call_health_endpoint().await;
     assert!(health_response.status().is_success());
 
-    let gateway_log_line =
-        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.next_line())
-            .await
-            .expect("Gateway didn't write to stdout after /health endpoint in debug mode")
-            .expect("Error reading gateway log line")
-            .expect("Gateway stdout was closed");
+    let gateway_log_line = tokio::time::timeout(Duration::from_secs(1), child_data.stdout.recv())
+        .await
+        .expect("Gateway didn't write to stdout after /health endpoint in debug mode")
+        .expect("Error reading gateway log line");
     println!("gateway log line: {gateway_log_line}");
     assert!(
         gateway_log_line.contains("/health"),
         "Unexpected log line: {gateway_log_line}",
     );
     assert!(
-        gateway_log_line.contains("tower_http::trace"),
-        "Missing tower_http::trace in log line: {gateway_log_line}",
+        gateway_log_line.contains("tensorzero_core::observability"),
+        "Missing tensorzero_core::observability in log line: {gateway_log_line}",
     );
 }
 
@@ -53,19 +51,21 @@ async fn test_logging_rust_log_debug_on() {
     assert!(health_response.status().is_success());
 
     let _err: tokio::time::error::Elapsed =
-        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.next_line())
+        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.recv())
             .await
             .expect_err("Gateway wrote to stdout after /health endpoint in non-debug mode");
 }
 
-async fn test_log_early_drop_streaming(model_name: &str) {
+async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
     let mut child_data = start_gateway_on_random_port(
         r"debug = true",
-        Some("gateway=debug,tower_http::trace=debug,warn"),
+        Some("gateway=debug,tensorzero_core::observability=debug,warn"),
     )
     .await;
 
-    let mut stream = reqwest::Client::new()
+    let client = reqwest::Client::new();
+
+    let mut stream = client
         .post(format!("http://{}/inference", child_data.addr))
         .json(&serde_json::json!({
             "model_name": model_name,
@@ -82,60 +82,41 @@ async fn test_log_early_drop_streaming(model_name: &str) {
         .eventsource()
         .unwrap();
 
+    println!("Started stream");
+
     // Cancel the request early, and verify that the gateway logs a warning.
     let _elapsed = tokio::time::timeout(Duration::from_millis(500), async move {
         while let Some(event) = stream.next().await {
             let event = event.unwrap();
             println!("Event: {event:?}");
-            if let Event::Message(event) = event {
-                if event.data == "[DONE]" {
-                    break;
-                }
+            if let Event::Message(event) = event
+                && event.data == "[DONE]"
+            {
+                break;
             }
         }
     })
     .await
     .unwrap_err();
-
-    println!("Getting next line");
+    drop(client);
 
     let start_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after cancelling the request");
     assert!(
         start_line.contains("started processing request"),
         "Log line missing start: {start_line}"
     );
-
-    // Tower will log a somewhat misleading 'finished processing request' line when our *route handler* finishes -
-    // that is, when we return the stream body object to axum.
-    // The actual processing will continue on indefinitely, since we still need to pull chunks from the remote
-    // server, transform them, and send them to the client.
-    // We expect to see this line, but then still see a 'Client closed the connection before the response was sent' line,
-    // since our detector logic correctly detects that we didn't finish sending the entire stream to the client.
-    // We may want to adjust the 'finished processing request' line in the case of streaming requests.
-    if model_name == "dummy::slow_second_chunk" {
-        let next_line = child_data
-            .stdout
-            .next_line()
-            .await
-            .unwrap()
-            .expect("Didn't find a log line after cancelling the request");
-        assert!(
-            next_line.contains("finished processing request"),
-            "Unexpected log line: {next_line}"
-        );
-    }
+    println!("Got start line");
 
     let next_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after cancelling the request");
+    println!("Got next line: {next_line}");
     assert!(
         next_line.contains("Client closed the connection before the response was sent"),
         "Unexpected log line: {next_line}"
@@ -144,18 +125,33 @@ async fn test_log_early_drop_streaming(model_name: &str) {
         next_line.contains("WARN"),
         "Log line missing WARN: {next_line}"
     );
+
+    if expect_finish {
+        // We should get a 'finished processing request' line after the 'Client closed the connection before the response was sent' line,
+        // (so that users can see the request status code for dropped SSE streams)
+        // when request processing got far enough to produce a status code
+        let finish_line = child_data
+            .stdout
+            .recv()
+            .await
+            .expect("Didn't find a log line after cancelling the request");
+        assert!(
+            finish_line.contains("finished processing request"),
+            "Unexpected log line: {finish_line}"
+        );
+    }
 }
 
 /// Test that the gateway logs a warning when a client connection is closed early.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_log_early_drop_streaming_dummy_slow_initial_chunk() {
-    test_log_early_drop_streaming("dummy::slow").await;
+    test_log_early_drop_streaming("dummy::slow", false).await;
 }
 
 /// Test that the gateway logs a warning when a client connection is closed early.
 #[tokio::test]
 async fn test_log_early_drop_streaming_dummy_slow_delay_second_chunk() {
-    test_log_early_drop_streaming("dummy::slow_second_chunk").await;
+    test_log_early_drop_streaming("dummy::slow_second_chunk", true).await;
 }
 
 /// Test that the gateway logs a warning when a client connection is closed early.
@@ -179,25 +175,26 @@ async fn test_log_early_drop_non_streaming() {
 
     // Cancel the request early, and verify that the gateway logs a warning,
     // even though we aren't logging the request start/stop
-    let _elapsed = tokio::time::timeout(Duration::from_millis(500), response_fut)
+    let _elapsed = tokio::time::timeout(Duration::from_millis(200), response_fut)
         .await
         .unwrap_err();
 
     let next_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after cancelling the request");
     assert!(
         next_line.contains("Client closed the connection before the response was sent"),
         "Unexpected log line: {next_line}"
     );
     assert!(
-        next_line.contains(
-            r#""method":"POST","uri":"/inference","version":"HTTP/1.1","name":"request""#
-        ),
+        next_line.contains(r#""uri":"/inference","version":"HTTP/1.1","name":"request""#),
         "Log line missing request information: {next_line}"
+    );
+    assert!(
+        !next_line.contains("overhead"),
+        "Tensorzero overhead attributes should not be logged to console: {next_line}"
     );
     assert!(
         next_line.contains("WARN"),
@@ -210,7 +207,7 @@ async fn test_log_early_drop_non_streaming() {
 async fn test_no_early_drop_warning_on_head() {
     let mut child_data = start_gateway_on_random_port(
         r"debug = true",
-        Some("gateway=debug,tower_http::trace=debug,warn"),
+        Some("gateway=debug,tensorzero_core::observability=debug,warn"),
     )
     .await;
     let response = reqwest::Client::new()
@@ -223,29 +220,30 @@ async fn test_no_early_drop_warning_on_head() {
 
     let start_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after sending HEAD request");
     assert!(
         start_line.contains("started processing request"),
         "Log line missing start: {start_line}"
     );
 
+    println!("Getting finish line");
+
     let next_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after HEAD request finished");
     assert!(
         next_line.contains("finished processing request"),
         "Unexpected log line: {next_line}"
     );
 
+    println!("Got finish line");
+
     // We should not get any more lines
-    let _: Elapsed =
-        tokio::time::timeout(Duration::from_millis(100), child_data.stdout.next_line())
-            .await
-            .unwrap_err();
+    let _: Elapsed = tokio::time::timeout(Duration::from_millis(100), child_data.stdout.recv())
+        .await
+        .unwrap_err();
 }

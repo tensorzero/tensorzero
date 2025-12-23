@@ -43,8 +43,3 @@ services:
       RUST_LOG: debug
     ports:
       - "3030:3030"
-    healthcheck:
-      test: wget --spider --tries 1 http://localhost:3030/status
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s

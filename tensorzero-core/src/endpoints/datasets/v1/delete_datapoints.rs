@@ -1,5 +1,5 @@
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use serde::Deserialize;
 use tracing::instrument;
 
@@ -49,7 +49,7 @@ pub async fn delete_dataset_handler(
 /// This function stales all datapoints in the dataset without fetching them.
 ///
 /// Returns the number of deleted datapoints, or an error if the dataset name is invalid.
-async fn delete_dataset(
+pub async fn delete_dataset(
     clickhouse: &impl DatasetQueries,
     dataset_name: &str,
 ) -> Result<DeleteDatapointsResponse, Error> {
@@ -66,7 +66,7 @@ async fn delete_dataset(
 /// This function validates the request and stales the datapoints.
 ///
 /// Returns the number of deleted datapoints, or an error if there are no datapoints or if the dataset name is invalid.
-async fn delete_datapoints(
+pub async fn delete_datapoints(
     clickhouse: &impl DatasetQueries,
     dataset_name: &str,
     request: DeleteDatapointsRequest,
@@ -147,10 +147,12 @@ mod tests {
 
         let result = delete_datapoints(&mock_clickhouse, invalid_name, request).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid dataset name"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid dataset name")
+        );
     }
 
     #[tokio::test]
@@ -160,9 +162,11 @@ mod tests {
 
         let result = delete_dataset(&mock_clickhouse, invalid_name).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid dataset name"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid dataset name")
+        );
     }
 }

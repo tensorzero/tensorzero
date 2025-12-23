@@ -9,7 +9,7 @@ import {
 } from "~/components/ui/table";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
-import type { FeedbackRow } from "tensorzero-node";
+import type { FeedbackRow } from "~/types/tensorzero";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { TagsBadges } from "~/components/feedback/TagsBadges";
 import { useConfig } from "~/context/config";
@@ -82,7 +82,7 @@ export default function FeedbackTable({
         {feedback.length === 0 ? (
           <TableEmptyState message="No feedback found" />
         ) : (
-          feedback.map((item) => {
+          feedback.map((item, index) => {
             const isLatestOfType =
               item.type === "comment"
                 ? item.id === latestCommentId
@@ -91,7 +91,7 @@ export default function FeedbackTable({
                   : latestFeedbackIdByMetric?.[item.metric_name] === item.id;
 
             return (
-              <TableRow key={item.id}>
+              <TableRow key={`${item.id}-${index}`}>
                 <TableCell className="max-w-[200px]">
                   <TableItemShortUuid id={item.id} />
                 </TableCell>

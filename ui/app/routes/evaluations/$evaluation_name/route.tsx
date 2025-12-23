@@ -1,13 +1,11 @@
 import type { Route } from "./+types/route";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
-  getEvaluationStatistics,
   getEvaluationResults,
-  getEvaluationRunInfos,
-  countDatapointsForEvaluation,
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
+import type { ParsedEvaluationResult } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable, type SelectedRowData } from "./EvaluationTable";
 import {
   PageHeader,
@@ -26,8 +24,10 @@ import {
   EvaluationErrorInfo,
   type EvaluationErrorDisplayInfo,
 } from "./EvaluationErrorInfo";
-import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
-import { Toaster } from "~/components/ui/toaster";
+import {
+  addEvaluationHumanFeedback,
+  getTensorZeroClient,
+} from "~/utils/tensorzero.server";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
@@ -67,7 +67,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     : [];
 
   const offset = parseInt(searchParams.get("offset") || "0");
-  const pageSize = parseInt(searchParams.get("pageSize") || "15");
+  const limit = parseInt(searchParams.get("limit") || "15");
 
   const evaluator_names = Object.keys(evaluationConfig.evaluators);
 
@@ -75,34 +75,33 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
   );
 
+  const tensorZeroClient = getTensorZeroClient();
+
   // Set up all promises to run concurrently
-  const evaluationRunInfosPromise = getEvaluationRunInfos(
-    selected_evaluation_run_ids_array,
-    function_name,
-  );
+  const evaluationRunInfosPromise = tensorZeroClient
+    .getEvaluationRunInfos(selected_evaluation_run_ids_array, function_name)
+    .then((response) => response.run_infos);
 
   // Create placeholder promises for results and statistics that will be used conditionally
-  let resultsPromise;
+  let resultsPromise: Promise<ParsedEvaluationResult[]>;
   if (selected_evaluation_run_ids_array.length > 0) {
     // If there is a freshly inserted feedback, ClickHouse may take some time to
     // update the evaluation results as it is eventually consistent.
     // In this case, we poll for the evaluation results until the feedback is found.
     resultsPromise = newFeedbackId
       ? pollForEvaluationResults(
+          params.evaluation_name,
           function_name,
-          function_type,
-          metric_names,
           selected_evaluation_run_ids_array,
           newFeedbackId,
-          pageSize,
+          limit,
           offset,
         )
       : getEvaluationResults(
+          params.evaluation_name,
           function_name,
-          function_type,
-          metric_names,
           selected_evaluation_run_ids_array,
-          pageSize,
+          limit,
           offset,
         );
   } else {
@@ -111,21 +110,22 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   let statisticsPromise;
   if (selected_evaluation_run_ids_array.length > 0) {
-    statisticsPromise = getEvaluationStatistics(
-      function_name,
-      function_type,
-      metric_names,
-      selected_evaluation_run_ids_array,
-    );
+    statisticsPromise = tensorZeroClient
+      .getEvaluationStatistics(
+        function_name,
+        function_type,
+        metric_names,
+        selected_evaluation_run_ids_array,
+      )
+      .then((response) => response.statistics);
   } else {
     statisticsPromise = Promise.resolve([]);
   }
 
   let total_datapoints_promise;
   if (selected_evaluation_run_ids_array.length > 0) {
-    total_datapoints_promise = countDatapointsForEvaluation(
+    total_datapoints_promise = tensorZeroClient.countDatapointsForEvaluation(
       function_name,
-      function_type,
       selected_evaluation_run_ids_array,
     );
   } else {
@@ -189,7 +189,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     evaluation_statistics,
     has_selected_runs: selected_evaluation_run_ids_array.length > 0,
     offset,
-    pageSize,
+    limit,
     total_datapoints,
     evaluator_names,
     any_evaluation_is_running,
@@ -266,7 +266,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     evaluation_statistics,
     has_selected_runs,
     offset,
-    pageSize,
+    limit,
     total_datapoints,
     evaluator_names,
     any_evaluation_is_running,
@@ -296,12 +296,12 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const function_name = evaluation_config.function_name;
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("offset", String(offset - limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -315,10 +315,10 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   // Handle feedback toast
   useEffect(() => {
     if (newFeedbackId) {
-      toast({
-        title: "Feedback Added",
-      });
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
     }
+    return;
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
   // Handle fetcher response for bulk add to dataset
@@ -336,10 +336,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     const selectedData = Array.from(selectedRows.values());
 
     if (selectedData.length === 0) {
-      toast({
-        title: "No rows selected",
-        variant: "destructive",
-      });
+      toast.error({ title: "No rows selected" });
       return;
     }
 
@@ -363,7 +360,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             onSelect={handleDatasetSelect}
             functionName={function_name}
             disabled={isReadOnly || selectedRows.size === 0}
-            placeholder={
+            label={
               selectedRows.size > 0
                 ? `Add ${selectedRows.size} selected ${selectedRows.size === 1 ? "inference" : "inferences"} to dataset`
                 : "Add selected inferences to dataset"
@@ -406,7 +403,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             onPreviousPage={handlePreviousPage}
             onNextPage={handleNextPage}
             disablePrevious={offset <= 0}
-            disableNext={offset + pageSize >= total_datapoints}
+            disableNext={offset + limit >= total_datapoints}
           />
           {!has_selected_runs && (
             <div className="mt-4 text-center text-gray-500">
@@ -415,7 +412,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           )}
         </SectionLayout>
       </SectionsGroup>
-      <Toaster />
     </PageLayout>
   );
 }

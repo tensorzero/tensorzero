@@ -1,4 +1,4 @@
-import type { VariantConfig } from "tensorzero-node";
+import type { VariantConfig } from "~/types/tensorzero";
 import {
   SnippetLayout,
   SnippetContent,
@@ -92,7 +92,7 @@ export default function VariantTemplate({
   }
 
   if (variantConfig.type === "dicl") {
-    const content = variantConfig.system_instructions;
+    const content = variantConfig.system_instructions.__data;
 
     const tabs = [
       {

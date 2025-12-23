@@ -1,30 +1,31 @@
+use chrono::Duration;
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use futures::future::try_join_all;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config::path::ResolvedTomlPath;
 use crate::config::LoadableConfig;
 use crate::config::PathWithContents;
+use crate::config::path::ResolvedTomlPathData;
 use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
-use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
-use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
-use crate::inference::types::resolved_input::LazyResolvedInputMessageContent;
-use crate::inference::types::resolved_input::{LazyResolvedInput, LazyResolvedInputMessage};
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredInput;
 use crate::inference::types::StoredInputMessageContent;
+use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
+use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
+use crate::inference::types::resolved_input::LazyResolvedInputMessageContent;
+use crate::inference::types::resolved_input::{LazyResolvedInput, LazyResolvedInputMessage};
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata,
-    chat_completion_inference_params::ChatCompletionInferenceParamsV2, ModelInferenceRequest,
-    RequestMessage, Role, Text,
+    ModelInferenceRequest, RequestMessage, Role, Text, batch::StartBatchModelInferenceWithMetadata,
+    chat_completion_inference_params::ChatCompletionInferenceParamsV2,
 };
 use crate::model::ModelTable;
 use crate::model_table::ShorthandModelConfig;
@@ -41,24 +42,23 @@ use crate::{
 };
 
 use super::{
-    chat_completion::{prepare_request_message, ChatTemplates},
-    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, Variant,
+    chat_completion::{ChatTemplates, prepare_request_message},
+    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
 };
 
 /// The primary configuration for the Dicl variant
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DiclConfig {
     weight: Option<f64>,
     embedding_model: Arc<str>,
     k: u32, // k as in k-nearest neighbors
     model: Arc<str>,
-    system_instructions: String,
+    system_instructions: ResolvedTomlPathData,
     temperature: Option<f32>,
     top_p: Option<f32>,
     stop_sequences: Option<Vec<String>>,
@@ -99,7 +99,7 @@ impl DiclConfig {
     }
 
     pub fn system_instructions(&self) -> &str {
-        &self.system_instructions
+        self.system_instructions.data()
     }
 
     pub fn temperature(&self) -> Option<f32> {
@@ -157,9 +157,41 @@ impl DiclConfig {
     pub fn max_distance(&self) -> Option<f32> {
         self.max_distance
     }
+
+    /// Converts this initialized config back to its uninitialized form.
+    /// Note: Real file paths for system_instructions are preserved. Fake paths
+    /// (like defaults) are converted to None and will be regenerated on load.
+    pub fn as_uninitialized(self) -> UninitializedDiclConfig {
+        UninitializedDiclConfig {
+            weight: self.weight,
+            embedding_model: self.embedding_model.to_string(),
+            k: self.k,
+            model: self.model.to_string(),
+            system_instructions: if self.system_instructions.is_real_path() {
+                Some(self.system_instructions)
+            } else {
+                None
+            },
+            temperature: self.temperature,
+            top_p: self.top_p,
+            stop_sequences: self.stop_sequences,
+            presence_penalty: self.presence_penalty,
+            frequency_penalty: self.frequency_penalty,
+            max_tokens: self.max_tokens,
+            seed: self.seed,
+            reasoning_effort: self.inference_params_v2.reasoning_effort,
+            thinking_budget_tokens: self.inference_params_v2.thinking_budget_tokens,
+            verbosity: self.inference_params_v2.verbosity,
+            json_mode: self.json_mode,
+            extra_body: self.extra_body,
+            retries: self.retries,
+            extra_headers: self.extra_headers,
+            max_distance: self.max_distance,
+        }
+    }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
@@ -168,7 +200,7 @@ pub struct UninitializedDiclConfig {
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
-    pub system_instructions: Option<ResolvedTomlPath>,
+    pub system_instructions: Option<ResolvedTomlPathData>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub stop_sequences: Option<Vec<String>>,
@@ -333,6 +365,7 @@ impl Variant for DiclConfig {
         _templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &Duration,
     ) -> Result<(), Error> {
         // TODO (#360): Add the clickhouse connection to this interface
         // Run a count() query on the DynamicInContextLearningExample table
@@ -359,7 +392,7 @@ impl Variant for DiclConfig {
             }))?;
 
         embedding_model
-            .validate(self.embedding_model())
+            .validate(self.embedding_model(), global_outbound_http_timeout)
             .map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!(
@@ -370,15 +403,15 @@ impl Variant for DiclConfig {
             })?;
 
         // Validate that max_distance is non-negative if specified
-        if let Some(max_distance) = self.max_distance() {
-            if max_distance < 0.0 {
-                return Err(ErrorDetails::Config {
+        if let Some(max_distance) = self.max_distance()
+            && max_distance < 0.0
+        {
+            return Err(ErrorDetails::Config {
                     message: format!(
                         "`functions.{function_name}.variants.{variant_name}`: `max_distance` must be non-negative (got {max_distance})"
                     ),
                 }
                 .into());
-            }
         }
 
         Ok(())
@@ -514,7 +547,7 @@ impl DiclConfig {
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
         let serialized_input = serde_json::to_string(
-            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input()?,
+            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input(),
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -625,15 +658,16 @@ impl DiclConfig {
         let filtered_count = raw_examples.len();
 
         // Debug log if max_distance reduced examples below k
-        if let Some(max_distance) = max_distance_value {
-            if initial_count >= self.k() as usize && filtered_count < self.k() as usize {
-                tracing::debug!(
-                    "Dynamic in-context learning: max_distance={} filtered examples from {} to {}",
-                    max_distance,
-                    initial_count,
-                    filtered_count
-                );
-            }
+        if let Some(max_distance) = max_distance_value
+            && initial_count >= self.k() as usize
+            && filtered_count < self.k() as usize
+        {
+            tracing::debug!(
+                "Dynamic in-context learning: max_distance={} filtered examples from {} to {}",
+                max_distance,
+                initial_count,
+                filtered_count
+            );
         }
 
         // Convert RawExamples into Examples (parses those serialized JSON strings)
@@ -690,7 +724,8 @@ impl DiclConfig {
     }
 
     fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
-        let content = vec![serde_json::to_string(&input.clone().into_stored_input()?)
+        let content =
+            vec![serde_json::to_string(&input.clone().into_stored_input())
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -824,7 +859,7 @@ impl DiclConfig {
             inference_config,
             stream,
             inference_params,
-            self.json_mode().cloned(),
+            self.json_mode().copied(),
             extra_body,
             extra_headers,
         )
@@ -899,8 +934,11 @@ pub fn default_system_instructions() -> String {
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     fn load(self) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
-            Some(path) => path.read()?,
-            None => default_system_instructions(),
+            Some(path) => path,
+            None => ResolvedTomlPathData::new_fake_path(
+                "tensorzero::dicl::default_system_instructions".to_string(),
+                default_system_instructions(),
+            ),
         };
 
         Ok(DiclConfig {
@@ -917,6 +955,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             seed: self.seed,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: self.reasoning_effort,
+                service_tier: None,
                 thinking_budget_tokens: self.thinking_budget_tokens,
                 verbosity: self.verbosity,
             },
@@ -936,20 +975,20 @@ mod tests {
     use crate::config::SchemaData;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceIds};
     use crate::experimentation::ExperimentationConfig;
+    use crate::inference::types::StoredInputMessage;
+    use crate::inference::types::System;
     use crate::inference::types::file::ObjectStoragePointer;
     use crate::inference::types::resolved_input::LazyResolvedInputMessage;
     use crate::inference::types::stored_input::StoredFile;
-    use crate::inference::types::StoredInputMessage;
-    use crate::inference::types::System;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::tool::ToolChoice;
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            storage::{StorageKind, StoragePath},
             Arguments, ResolvedInputMessage, ResolvedInputMessageContent, Role, Template, Text,
+            storage::{StorageKind, StoragePath},
         },
-        tool::{ToolCall, ToolCallOutput},
+        tool::{InferenceResponseToolCall, ToolCall},
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -988,7 +1027,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: "This is a test response.".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 id: "tool_call_1".to_string(),
                 raw_name: "search_tool".to_string(),
                 raw_arguments: "{\"query\": \"rust programming\"}".to_string(),
@@ -1102,7 +1141,7 @@ mod tests {
 
         // The content should contain the serialized Input as a Text ContentBlock
         let expected_serialized_input =
-            serde_json::to_string(&input_data.clone().into_stored_input().unwrap()).unwrap();
+            serde_json::to_string(&input_data.clone().into_stored_input()).unwrap();
         let expected_content = vec![ContentBlock::Text(Text {
             text: expected_serialized_input.clone(),
         })];
@@ -1157,6 +1196,8 @@ mod tests {
                                         kind: StorageKind::Disabled,
                                         path: Default::default(),
                                     },
+                                    detail: None,
+                                    filename: None,
                                 },
                             ))),
                         ],
@@ -1382,7 +1423,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "DICL system instructions that should NOT be used".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "DICL system instructions that should NOT be used".to_string(),
+            ),
             temperature: Some(0.7),
             top_p: None,
             max_tokens: Some(100),
@@ -1418,7 +1462,7 @@ mod tests {
         };
 
         // Setup inference config
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let inference_config = InferenceConfig {
             templates: Arc::new(templates),
             tool_config: None,
@@ -1497,7 +1541,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "DICL system instructions".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "DICL system instructions".to_string(),
+            ),
             temperature: Some(0.7),
             top_p: None,
             max_tokens: Some(100),
@@ -1545,7 +1592,7 @@ mod tests {
         });
 
         // Setup inference config
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let inference_config = InferenceConfig {
             templates: Arc::new(templates),
             tool_config: None,
@@ -1628,7 +1675,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "test".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "test".to_string(),
+            ),
             temperature: None,
             top_p: None,
             max_tokens: None,
@@ -1656,7 +1706,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "test".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "test".to_string(),
+            ),
             temperature: None,
             top_p: None,
             max_tokens: None,
@@ -1683,7 +1736,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "test".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "test".to_string(),
+            ),
             temperature: None,
             top_p: None,
             max_tokens: None,
@@ -1782,5 +1838,176 @@ mod tests {
             }
             _ => panic!("Expected Text content after template stringification"),
         }
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedDiclConfig {
+            weight: Some(0.9),
+            embedding_model: "text-embedding-ada-002".to_string(),
+            k: 5,
+            model: "gpt-4".to_string(),
+            system_instructions: Some(ResolvedTomlPathData::new_fake_path(
+                "test.txt".to_string(),
+                "Custom instructions".to_string(),
+            )),
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+            max_tokens: Some(150),
+            seed: Some(42),
+            stop_sequences: Some(vec!["STOP".to_string()]),
+            max_distance: Some(0.8),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.weight, Some(0.9));
+        assert_eq!(exported.embedding_model, "text-embedding-ada-002");
+        assert_eq!(exported.k, 5);
+        assert_eq!(exported.model, "gpt-4");
+        assert_eq!(exported.temperature, Some(0.7));
+        assert_eq!(exported.top_p, Some(0.9));
+        assert_eq!(exported.max_tokens, Some(150));
+        assert_eq!(exported.seed, Some(42));
+        assert_eq!(exported.stop_sequences, Some(vec!["STOP".to_string()]));
+        assert_eq!(exported.max_distance, Some(0.8));
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_real_path_system_instructions() {
+        let instructions_content = "These are system instructions";
+        // Using from_path_and_data to create a real path
+        let real_path = ResolvedTomlPathData::new_for_tests(
+            "test.txt".into(),
+            Some(instructions_content.to_string()),
+        );
+
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed-model".to_string(),
+            k: 3,
+            model: "gpt-3.5-turbo".to_string(),
+            system_instructions: Some(real_path),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.as_uninitialized();
+
+        // Verify real path is preserved
+        assert!(exported.system_instructions.is_some());
+        assert_eq!(
+            exported.system_instructions.unwrap().data(),
+            instructions_content
+        );
+    }
+
+    #[test]
+    fn test_as_uninitialized_fake_path_becomes_none() {
+        let instructions_content = "These are system instructions";
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed-model".to_string(),
+            k: 3,
+            model: "gpt-3.5-turbo".to_string(),
+            system_instructions: Some(ResolvedTomlPathData::new_fake_path(
+                "tensorzero::test".to_string(),
+                instructions_content.to_string(),
+            )),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.as_uninitialized();
+
+        // Verify fake path becomes None
+        assert_eq!(exported.system_instructions, None);
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_inference_params_v2() {
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed".to_string(),
+            k: 1,
+            model: "gpt-4".to_string(),
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1000),
+            verbosity: Some("verbose".to_string()),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.reasoning_effort, Some("high".to_string()));
+        assert_eq!(exported.thinking_budget_tokens, Some(1000));
+        assert_eq!(exported.verbosity, Some("verbose".to_string()));
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_none_values() {
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed".to_string(),
+            k: 1,
+            model: "gpt-4".to_string(),
+            system_instructions: None,
+            weight: None,
+            temperature: None,
+            max_tokens: None,
+            stop_sequences: None,
+            max_distance: None,
+            reasoning_effort: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.weight, None);
+        assert_eq!(exported.temperature, None);
+        assert_eq!(exported.max_tokens, None);
+        assert_eq!(exported.stop_sequences, None);
+        assert_eq!(exported.max_distance, None);
+        assert_eq!(exported.reasoning_effort, None);
+        assert_eq!(exported.thinking_budget_tokens, None);
+        assert_eq!(exported.verbosity, None);
+        // system_instructions becomes None because the default is a fake path
+        assert_eq!(exported.system_instructions, None);
+    }
+
+    #[test]
+    fn test_as_uninitialized_serialization_round_trip() {
+        let original = UninitializedDiclConfig {
+            weight: Some(0.6),
+            embedding_model: "ada-002".to_string(),
+            k: 10,
+            model: "gpt-3.5-turbo".to_string(),
+            temperature: Some(0.5),
+            ..Default::default()
+        };
+
+        let config = original.clone().load().unwrap();
+
+        let exported = config.as_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedDiclConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized.load().unwrap();
+
+        assert_eq!(reloaded.weight(), Some(0.6));
+        assert_eq!(reloaded.embedding_model(), &Arc::from("ada-002"));
+        assert_eq!(reloaded.k(), 10);
+        assert_eq!(reloaded.model(), &Arc::from("gpt-3.5-turbo"));
+        assert_eq!(reloaded.temperature(), Some(0.5));
     }
 }

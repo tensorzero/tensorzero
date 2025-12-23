@@ -17,7 +17,8 @@ impl PostgresClient {
         // The default pool size is 10 which should be reasonable
         let config = Config::new_empty()
             .await
-            .map_err(|e| napi::Error::from_reason(format!("Failed to setup Postgres: {e}")))?;
+            .map_err(|e| napi::Error::from_reason(format!("Failed to setup Postgres: {e}")))?
+            .dangerous_into_config_without_writing();
 
         let connection_info = setup_postgres(&config, Some(postgres_url))
             .await
@@ -30,7 +31,7 @@ impl PostgresClient {
     pub async fn create_api_key(&self, description: Option<String>) -> Result<String, napi::Error> {
         let pool = self
             .connection_info
-            .get_alpha_pool()
+            .get_pool()
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
         let key = tensorzero_auth::postgres::create_key(
@@ -53,7 +54,7 @@ impl PostgresClient {
     ) -> Result<String, napi::Error> {
         let pool = self
             .connection_info
-            .get_alpha_pool()
+            .get_pool()
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
         let keys = tensorzero_auth::postgres::list_key_info(None, limit, offset, pool)
@@ -69,7 +70,7 @@ impl PostgresClient {
     pub async fn disable_api_key(&self, public_id: String) -> Result<String, napi::Error> {
         let pool = self
             .connection_info
-            .get_alpha_pool()
+            .get_pool()
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
         let disabled_at = tensorzero_auth::postgres::disable_key(&public_id, pool)
@@ -78,6 +79,32 @@ impl PostgresClient {
 
         serde_json::to_string(&disabled_at).map_err(|e| {
             napi::Error::from_reason(format!("Failed to serialize disabled_at timestamp: {e}"))
+        })
+    }
+
+    #[napi]
+    pub async fn update_api_key_description(
+        &self,
+        public_id: String,
+        description: Option<String>,
+    ) -> Result<String, napi::Error> {
+        let pool = self
+            .connection_info
+            .get_pool()
+            .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
+
+        let key = tensorzero_auth::postgres::update_key_description(
+            &public_id,
+            description.as_deref(),
+            pool,
+        )
+        .await
+        .map_err(|e| {
+            napi::Error::from_reason(format!("Failed to update API key description: {e}"))
+        })?;
+
+        serde_json::to_string(&key).map_err(|e| {
+            napi::Error::from_reason(format!("Failed to serialize updated API key: {e}"))
         })
     }
 }

@@ -1,6 +1,4 @@
 import {
-  getEvaluationRunInfos,
-  getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   pollForEvaluations,
 } from "~/utils/clickhouse/evaluations.server";
@@ -14,6 +12,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 import {
   data,
@@ -23,9 +22,10 @@ import {
   useFetcher,
   type RouteHandle,
 } from "react-router";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
-  consolidate_evaluation_results,
+  consolidateEvaluationResults,
   getEvaluatorMetricName,
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
@@ -50,18 +50,16 @@ import type {
   EvaluatorConfig,
   ContentBlockChatOutput,
   JsonInferenceOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { renameDatapoint } from "~/routes/datasets/$dataset_name/datapoint/$id/datapointOperations.server";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
-import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -95,15 +93,22 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     return redirect(toEvaluationUrl(evaluation_name));
   }
 
+  // Validate datapoint exists using v1 API
+  const tensorZeroClient = getTensorZeroClient();
+  const tensorZeroDatapoint = await tensorZeroClient.getDatapoint(datapoint_id);
+  if (!tensorZeroDatapoint) {
+    throw data(`No datapoint found for ID \`${datapoint_id}\`.`, {
+      status: 404,
+    });
+  }
+
   // Define all promises
-  const selectedEvaluationRunInfosPromise = getEvaluationRunInfos(
-    selectedRunIds,
-    function_name,
-  );
-  const allowedEvaluationRunInfosPromise = getEvaluationRunInfosForDatapoint(
-    datapoint_id,
-    function_name,
-  );
+  const selectedEvaluationRunInfosPromise = tensorZeroClient
+    .getEvaluationRunInfos(selectedRunIds, function_name)
+    .then((response) => response.run_infos);
+  const allowedEvaluationRunInfosPromise = tensorZeroClient
+    .getEvaluationRunInfosForDatapoint(datapoint_id, function_name)
+    .then((response) => response.run_infos);
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the evaluation results as it is eventually consistent.
@@ -129,7 +134,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   const consolidatedEvaluationResults =
-    consolidate_evaluation_results(evaluationResults);
+    await consolidateEvaluationResults(evaluationResults);
   if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
     // Find which evaluation run IDs are missing from the results
     const foundEvaluationRunIds = new Set(
@@ -189,31 +194,11 @@ export async function action({ request }: Route.ActionArgs) {
       const dataset_name = formData.get("dataset_name") as string;
       const newName = formData.get("newName") as string;
 
-      // We need to get the datapoint to pass to renameDatapoint
-      const datapoint = await getDatapoint({
-        dataset_name,
-        datapoint_id,
-        allow_stale: true,
-      });
-      if (!datapoint) {
-        return data(
-          {
-            success: false,
-            error:
-              "Datapoint not found; please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-          },
-          { status: 404 },
-        );
-      }
-
-      // A bit of a hack in the evaluation page, we don't have the function type in the datapoint, so we check if the datapoint contains an output schema (which indicates it's JSON).
-      const functionType = "output_schema" in datapoint ? "json" : "chat";
       await renameDatapoint({
-        functionType,
         datasetName: dataset_name,
-        // TODO: convert to Rust-generated bindings
-        datapoint,
-        newName,
+        datapointId: datapoint_id,
+        // Explicitly set to null to unset the name
+        name: newName ?? null,
       });
 
       return data({ success: true });
@@ -275,10 +260,10 @@ export default function EvaluationDatapointPage({
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {
-      toast({
-        title: "Feedback Added",
-      });
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
     }
+    return;
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
   const handleRenameDatapoint = async (newName: string) => {
@@ -327,7 +312,6 @@ export default function EvaluationDatapointPage({
             datapointId={datapoint_id}
           />
         </SectionsGroup>
-        <Toaster />
       </PageLayout>
     </ColorAssignerProvider>
   );
@@ -399,7 +383,7 @@ const MetricRow = ({
   evaluatorConfig: EvaluatorConfig;
   datapointId: string;
   inferenceId: string | null;
-  evaluatorInferenceId: string | null;
+  evaluatorInferenceId?: string;
   evalRunId: string;
   variantName: string;
   isHumanFeedback: boolean;
@@ -585,7 +569,11 @@ function OutputsSection({
             </div>
 
             <section className="row-start-2">
-              <Output output={result.output} />
+              {Array.isArray(result.output) ? (
+                <ChatOutputElement output={result.output} />
+              ) : (
+                <JsonOutputElement output={result.output} />
+              )}
             </section>
 
             {result.id !== "Reference" &&

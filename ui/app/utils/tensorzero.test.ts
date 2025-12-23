@@ -1,100 +1,184 @@
 import { describe, expect, test, beforeAll } from "vitest";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { getDatapoint } from "~/utils/clickhouse/datasets.server";
-import { type JsonInferenceDatapoint } from "~/utils/tensorzero";
+import type { TensorZeroClient } from "~/utils/tensorzero/tensorzero";
 
-let tensorZeroClient: ReturnType<typeof getTensorZeroClient>;
+let tensorZeroClient: TensorZeroClient;
 
 describe("update datapoints", () => {
   beforeAll(() => {
     tensorZeroClient = getTensorZeroClient();
   });
 
-  test("should preserve original source_inference_id and is_custom when updating datapoint", async () => {
-    const datapoint: JsonInferenceDatapoint = {
-      function_name: "extract_entities",
-      name: null,
-      episode_id: null,
-      staled_at: null,
-      input: {
-        messages: [
-          {
-            role: "user" as const,
-            content: [
-              {
-                type: "text" as const,
-                text: "nds] ) :",
-              },
-            ],
-          },
-        ],
-      },
-      output: {
-        person: [],
-        organization: [],
-        location: [],
-        miscellaneous: [],
-      },
-      tags: {},
-      auxiliary: "",
-      output_schema: {
-        $schema: "http://json-schema.org/draft-07/schema#",
-        type: "object",
-        properties: {
-          person: {
-            type: "array",
-            items: {
-              type: "string",
-            },
-          },
-          organization: {
-            type: "array",
-            items: {
-              type: "string",
-            },
-          },
-          location: {
-            type: "array",
-            items: {
-              type: "string",
-            },
-          },
-          miscellaneous: {
-            type: "array",
-            items: {
-              type: "string",
-            },
-          },
-        },
-        required: ["person", "organization", "location", "miscellaneous"],
-        additionalProperties: false,
-      },
-      source_inference_id: "01982323-3460-71dd-8cc8-bc4d44a0c88f",
-      is_custom: false,
-      id: "01960832-7028-743c-8c44-a598aa5130fd",
+  test("should preserve source_inference_id, generate a new ID, and set is_custom to true when updating a datapoint", async () => {
+    // Create datapoint from inference
+    const inferenceId = "0196368e-5505-7721-88d2-644a2da892a7";
+    const createResult =
+      await tensorZeroClient.createDatapointFromInferenceLegacy(
+        "test",
+        inferenceId,
+        "inherit",
+        "extract_entities",
+        "gpt4o_initial_prompt",
+        "0196368e-5505-7721-88d2-645619b42142",
+      );
+
+    // Verify initial state: is_custom should be false, source_inference_id should match
+    const initialDatapoint = await tensorZeroClient.getDatapoint(
+      createResult.id,
+      /*datasetName=*/ "test",
+    );
+    expect(initialDatapoint).toBeDefined();
+    expect(initialDatapoint?.is_custom).toBe(false);
+    expect(initialDatapoint?.source_inference_id).toBe(inferenceId);
+
+    // TypeScript refinement: we've verified initialDatapoint is defined
+    if (!initialDatapoint || initialDatapoint.type !== "json") {
+      throw new Error("Expected JSON datapoint");
+    }
+
+    // Update the datapoint (e.g., modify the output)
+    const updatedOutput = {
+      person: ["Updated Person"],
+      organization: ["Updated Org"],
+      location: ["Updated Location"],
+      miscellaneous: ["Updated Misc"],
     };
 
-    await tensorZeroClient.updateDatapoint("test", datapoint);
-
-    const retrievedDatapoint = await getDatapoint({
-      dataset_name: "test",
-      datapoint_id: "01960832-7028-743c-8c44-a598aa5130fd",
+    const updateResult = await tensorZeroClient.updateDatapoint("test", {
+      type: "json",
+      id: initialDatapoint.id,
+      input: initialDatapoint.input,
+      output: {
+        raw: JSON.stringify(updatedOutput),
+      },
+      output_schema: initialDatapoint.output_schema,
     });
-    expect(retrievedDatapoint?.source_inference_id).toBe(
-      datapoint.source_inference_id,
+
+    // Verify updated state
+    const updatedDatapoint = await tensorZeroClient.getDatapoint(
+      updateResult.id,
+      /*datasetName=*/ "test",
     );
-    expect(retrievedDatapoint?.is_custom).toBe(false);
+
+    // New ID should be created
+    expect(updateResult.id).not.toBe(createResult.id);
+
+    // source_inference_id should be preserved
+    expect(updatedDatapoint?.source_inference_id).toBe(inferenceId);
+
+    // is_custom should now be true (custom modification)
+    expect(updatedDatapoint?.is_custom).toBe(true);
   });
 
   test("should list datapoints", async () => {
-    const datapoints = await tensorZeroClient.listDatapoints(
-      "foo",
-      "extract_entities",
-      10,
-    );
-    expect(datapoints.length).toBe(10);
-    for (const datapoint of datapoints) {
+    const datapoints = await tensorZeroClient.listDatapoints("foo", {
+      function_name: "extract_entities",
+      limit: 10,
+      offset: 0,
+    });
+    expect(datapoints.datapoints.length).toBe(10);
+    for (const datapoint of datapoints.datapoints) {
       expect(datapoint.function_name).toBe("extract_entities");
     }
+  });
+});
+
+describe("getInferenceCount", () => {
+  beforeAll(() => {
+    tensorZeroClient = getTensorZeroClient();
+  });
+
+  test("should return inference count for a function", async () => {
+    const stats = await tensorZeroClient.getInferenceCount("extract_entities");
+    expect(stats.inference_count).toBeGreaterThanOrEqual(604);
+  });
+
+  test("should return inference count for a function and variant", async () => {
+    const stats = await tensorZeroClient.getInferenceCount("extract_entities", {
+      variantName: "gpt4o_initial_prompt",
+    });
+    expect(stats.inference_count).toBeGreaterThanOrEqual(132);
+  });
+
+  test("should throw error for unknown function", async () => {
+    await expect(
+      tensorZeroClient.getInferenceCount("nonexistent_function"),
+    ).rejects.toThrow();
+  });
+
+  test("should throw error for unknown variant", async () => {
+    await expect(
+      tensorZeroClient.getInferenceCount("extract_entities", {
+        variantName: "nonexistent_variant",
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("getFeedbackCount", () => {
+  beforeAll(() => {
+    tensorZeroClient = getTensorZeroClient();
+  });
+
+  test("should return feedback stats for boolean metric", async () => {
+    const stats = await tensorZeroClient.getFeedbackCount(
+      "extract_entities",
+      "exact_match",
+    );
+    expect(stats.feedback_count).toBeGreaterThanOrEqual(99);
+    expect(stats.inference_count).toBeGreaterThanOrEqual(41);
+  });
+
+  test("should return feedback stats for float metric with threshold", async () => {
+    const stats = await tensorZeroClient.getFeedbackCount(
+      "extract_entities",
+      "jaccard_similarity",
+      0.8,
+    );
+    expect(stats.feedback_count).toBeGreaterThanOrEqual(99);
+    expect(stats.inference_count).toBeGreaterThanOrEqual(54);
+  });
+
+  test("should return feedback stats for demonstration metric", async () => {
+    const stats = await tensorZeroClient.getFeedbackCount(
+      "extract_entities",
+      "demonstration",
+    );
+    expect(stats.feedback_count).toBeGreaterThanOrEqual(100);
+    // For demonstrations, feedback_count equals inference_count
+    expect(stats.inference_count).toBe(stats.feedback_count);
+  });
+
+  test("should throw error for unknown function", async () => {
+    await expect(
+      tensorZeroClient.getFeedbackCount("nonexistent_function", "exact_match"),
+    ).rejects.toThrow();
+  });
+
+  test("should throw error for unknown metric", async () => {
+    await expect(
+      tensorZeroClient.getFeedbackCount(
+        "extract_entities",
+        "nonexistent_metric",
+      ),
+    ).rejects.toThrow();
+  });
+});
+
+describe("getUsedVariants", () => {
+  test("getUsedVariants for extract_entities", async () => {
+    const functionName = "extract_entities";
+    const result = await tensorZeroClient.getUsedVariants(functionName);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        "baseline",
+        "dicl",
+        "llama_8b_initial_prompt",
+        "gpt4o_mini_initial_prompt",
+        "gpt4o_initial_prompt",
+        "turbo",
+      ]),
+    );
+    expect(result.length).toBe(6);
   });
 });

@@ -3,7 +3,7 @@ include:
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
+    image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-lts}
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -31,7 +31,7 @@ services:
       target: gateway
     volumes:
       - ./config:/app/config:ro
-    command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-/app/config/tensorzero.e2e.toml}
+    command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-'/app/config/tensorzero*.toml'}
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
@@ -71,11 +71,13 @@ services:
       - .:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PASSWORD: chpassword
-      CLICKHOUSE_USER: chuser
-      TENSORZERO_SKIP_LARGE_FIXTURES: 1
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PASSWORD=chpassword
+      - CLICKHOUSE_USER=chuser
+      - TENSORZERO_SKIP_LARGE_FIXTURES=1
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
     depends_on:
       gateway:
         condition: service_healthy
@@ -108,8 +110,6 @@ services:
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
       TOGETHER_BASE_URL: http://mock-inference-provider:3030/together/
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
-    volumes:
-      - ./config:/app/config:ro
     env_file:
       - .env
     ports:
@@ -155,8 +155,6 @@ services:
       OPENAI_BASE_URL: http://mock-inference-provider:3030/openai
       FIREWORKS_BASE_URL: http://mock-inference-provider:3030/fireworks
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
-      # Config paths
-      TENSORZERO_UI_CONFIG_PATH: /app/ui/fixtures/config/tensorzero.toml
       # Force cache on for tests
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
     volumes:

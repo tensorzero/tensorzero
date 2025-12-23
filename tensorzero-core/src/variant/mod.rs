@@ -4,13 +4,13 @@ use itertools::izip;
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::time::error::Elapsed;
-use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -23,6 +23,8 @@ use crate::error::ErrorDetails;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::function::FunctionConfig;
+#[cfg(feature = "pyo3")]
+use crate::inference::types::Role;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
@@ -30,8 +32,6 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
-#[cfg(feature = "pyo3")]
-use crate::inference::types::Role;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -41,7 +41,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
-use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
+use crate::tool::{ToolCallConfig, create_dynamic_implicit_tool_config};
 use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -54,9 +54,8 @@ pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
@@ -68,15 +67,16 @@ impl VariantInfo {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, ts(export))]
+/// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
+    /// DEPRECATED (#5298 / 2026.2+): Use `chat_completion` with reasoning instead.
     ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
 }
 
@@ -114,7 +114,7 @@ pub struct ChainOfThoughtConfigPyClass {
 /// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -122,7 +122,8 @@ pub enum JsonMode {
     Off,
     On,
     Strict,
-    ImplicitTool,
+    #[serde(alias = "implicit_tool")] // Legacy name (stored in CH --> permanent alias)
+    Tool,
 }
 
 /// Configuration that applies to the current inference request.
@@ -224,6 +225,7 @@ pub trait Variant {
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error>;
 
+    #[expect(clippy::too_many_arguments)]
     async fn validate(
         &self,
         function: Arc<FunctionConfig>,
@@ -232,6 +234,7 @@ pub trait Variant {
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error>;
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
@@ -356,7 +359,7 @@ impl Variant for VariantInfo {
             }
         };
         if let Some(timeout) = self.timeouts.non_streaming.total_ms {
-            let timeout = Duration::from_millis(timeout);
+            let timeout = tokio::time::Duration::from_millis(timeout);
             tokio::time::timeout(timeout, fut)
                 .await
                 // Convert the outer `Elapsed` error into a TensorZero error,
@@ -458,7 +461,7 @@ impl Variant for VariantInfo {
         // This future includes a call to `peek_first_chunk`, so applying
         // `streaming_ttft_timeout` is correct.
         if let Some(timeout) = self.timeouts.streaming.ttft_ms {
-            let timeout = Duration::from_millis(timeout);
+            let timeout = tokio::time::Duration::from_millis(timeout);
             tokio::time::timeout(timeout, fut)
                 .await
                 .unwrap_or_else(|_: Elapsed| {
@@ -511,7 +514,9 @@ impl Variant for VariantInfo {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error> {
+        self.timeouts.validate(global_outbound_http_timeout)?;
         match &self.inner {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -522,6 +527,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -534,6 +540,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -546,6 +553,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -558,6 +566,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -570,6 +579,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -598,7 +608,6 @@ impl Variant for VariantInfo {
 }
 
 #[expect(clippy::too_many_arguments)]
-#[expect(clippy::unnecessary_wraps)]
 fn prepare_model_inference_request<'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
@@ -617,14 +626,33 @@ fn prepare_model_inference_request<'request>(
 
     Ok(match function {
         FunctionConfig::Chat(_) => {
+            // For chat functions with `json_mode="tool"`, create a tool config based on the output schema
+            let tool_config = match json_mode {
+                Some(JsonMode::Tool) => {
+                    // We know dynamic_output_schema exists because validation already checked this
+                    match &inference_config.dynamic_output_schema {
+                        Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
+                            schema.value.clone(),
+                        ))),
+                        None => {
+                            return Err(ErrorDetails::InvalidRequest {
+                                message: "JSON mode `tool` requires `output_schema` to be provided at inference time.".to_string(),
+                            }
+                            .into());
+                        }
+                    }
+                }
+                _ => inference_config
+                    .tool_config
+                    .as_ref()
+                    .map(|arc| Cow::Borrowed(arc.as_ref())),
+            };
+
             ModelInferenceRequest {
                 messages,
                 system,
                 inference_id: inference_config.ids.inference_id,
-                tool_config: inference_config
-                    .tool_config
-                    .as_ref()
-                    .map(|arc| Cow::Borrowed(arc.as_ref())),
+                tool_config,
                 temperature: inference_params.chat_completion.temperature,
                 top_p: inference_params.chat_completion.top_p,
                 max_tokens: inference_params.chat_completion.max_tokens,
@@ -652,6 +680,7 @@ fn prepare_model_inference_request<'request>(
                 extra_cache_key: inference_config.extra_cache_key.clone(),
                 inference_params_v2: ChatCompletionInferenceParamsV2 {
                     reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    service_tier: inference_params.chat_completion.service_tier.clone(),
                     thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
                     verbosity: inference_params.chat_completion.verbosity.clone(),
                 },
@@ -659,11 +688,11 @@ fn prepare_model_inference_request<'request>(
         }
         FunctionConfig::Json(json_config) => {
             let tool_config = match json_mode {
-                Some(JsonMode::ImplicitTool) => match &inference_config.dynamic_output_schema {
+                Some(JsonMode::Tool) => match &inference_config.dynamic_output_schema {
                     Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
                         schema.value.clone(),
                     ))),
-                    None => Some(Cow::Borrowed(&json_config.implicit_tool_call_config)),
+                    None => Some(Cow::Borrowed(&json_config.json_mode_tool_call_config)),
                 },
                 _ => None,
             };
@@ -700,6 +729,7 @@ fn prepare_model_inference_request<'request>(
                 extra_cache_key: inference_config.extra_cache_key.clone(),
                 inference_params_v2: ChatCompletionInferenceParamsV2 {
                     reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    service_tier: inference_params.chat_completion.service_tier.clone(),
                     thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
                     verbosity: inference_params.chat_completion.verbosity.clone(),
                 },
@@ -892,20 +922,18 @@ mod tests {
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::providers::dummy::{
-        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
-        DUMMY_STREAMING_RESPONSE,
+        DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
+        DummyProvider,
     };
     use crate::rate_limiting::ScopeInfo;
     use crate::tool::{ToolCallConfig, ToolChoice};
 
     use serde_json::json;
     use std::collections::HashMap;
-    use tracing_test::traced_test;
-
     #[tokio::test]
     async fn test_prepare_model_inference_request() {
         // Setup common variables
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let stream = false;
 
         // Define a dummy tool config for testing
@@ -1006,13 +1034,13 @@ mod tests {
             "required": ["answer"],
         });
         let output_schema = StaticJSONSchema::from_value(output_schema_value.clone()).unwrap();
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
 
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: output_schema.clone(),
-            implicit_tool_call_config: implicit_tool_call_config.clone(),
+            json_mode_tool_call_config: json_mode_tool_call_config.clone(),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1068,7 +1096,7 @@ mod tests {
             extra_headers: Default::default(),
             extra_cache_key: None,
         };
-        let json_mode = JsonMode::ImplicitTool;
+        let json_mode = JsonMode::Tool;
 
         let result = prepare_model_inference_request(
             messages.clone(),
@@ -1136,7 +1164,7 @@ mod tests {
     async fn test_infer_model_request() {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -1153,9 +1181,11 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
-        let templates = Arc::new(get_test_template_config());
+        let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
             templates,
@@ -1233,6 +1263,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1255,8 +1286,8 @@ mod tests {
         assert_eq!(
             inference_result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match inference_result {
@@ -1292,7 +1323,7 @@ mod tests {
                 "required": ["answer"]
             }))
             .unwrap(),
-            implicit_tool_call_config: ToolCallConfig::default(),
+            json_mode_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1345,6 +1376,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
 
         // Create the arguments struct
@@ -1366,8 +1398,8 @@ mod tests {
         assert_eq!(
             inference_result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match inference_result {
@@ -1411,6 +1443,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
 
         // Create the arguments struct
@@ -1437,11 +1470,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_infer_model_request_errors() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -1458,9 +1491,11 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
-        let templates = Arc::new(get_test_template_config());
+        let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
             templates,
@@ -1556,6 +1591,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1578,8 +1614,8 @@ mod tests {
         assert_eq!(
             inference_result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match inference_result {
@@ -1602,14 +1638,14 @@ mod tests {
             InferenceResult::Json(_) => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
     #[tokio::test]
     async fn test_infer_model_request_stream() {
         // Set up the HTTP client and ClickHouse connection info
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -1627,7 +1663,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1669,6 +1707,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         }));
 
         // Prepare the model inference request
@@ -1743,8 +1782,11 @@ mod tests {
                 }
             } else if let Some(usage) = chunk.usage() {
                 // Verify the usage information
-                assert_eq!(usage.input_tokens, 10);
-                assert_eq!(usage.output_tokens, DUMMY_STREAMING_RESPONSE.len() as u32);
+                assert_eq!(usage.input_tokens, Some(10));
+                assert_eq!(
+                    usage.output_tokens,
+                    Some(DUMMY_STREAMING_RESPONSE.len() as u32)
+                );
             } else {
                 panic!("Unexpected inference result chunk.");
             }
@@ -1755,16 +1797,16 @@ mod tests {
         full_response.push_str(&received_text);
 
         // Verify the full response
-        let expected_response: String = DUMMY_STREAMING_RESPONSE.iter().cloned().collect();
+        let expected_response: String = DUMMY_STREAMING_RESPONSE.concat();
         assert_eq!(full_response, expected_response);
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_infer_model_request_errors_stream() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -1781,7 +1823,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
         let inference_params = InferenceParams::default();
 
@@ -1863,6 +1907,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         }));
         let retry_config = RetryConfig::default();
 
@@ -1914,8 +1959,11 @@ mod tests {
                 }
             } else if let Some(usage) = chunk.usage() {
                 // Verify the usage information
-                assert_eq!(usage.input_tokens, 10);
-                assert_eq!(usage.output_tokens, DUMMY_STREAMING_RESPONSE.len() as u32);
+                assert_eq!(usage.input_tokens, Some(10));
+                assert_eq!(
+                    usage.output_tokens,
+                    Some(DUMMY_STREAMING_RESPONSE.len() as u32)
+                );
             } else {
                 panic!("Unexpected inference result chunk.");
             }
@@ -1926,11 +1974,11 @@ mod tests {
         full_response.push_str(&received_text);
 
         // Verify the full response
-        let expected_response: String = DUMMY_STREAMING_RESPONSE.iter().cloned().collect();
+        let expected_response: String = DUMMY_STREAMING_RESPONSE.concat();
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

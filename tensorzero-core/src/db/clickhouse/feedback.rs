@@ -1,26 +1,36 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
+    config::MetricConfigLevel,
     db::{
+        FeedbackQueries, TableBounds, TimeWindow,
         feedback::{
             BooleanMetricFeedbackRow, CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint,
             DemonstrationFeedbackRow, FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant,
-            FeedbackRow, FloatMetricFeedbackRow,
+            FeedbackRow, FloatMetricFeedbackRow, GetVariantPerformanceParams, LatestFeedbackRow,
+            MetricType, MetricWithFeedback, VariantPerformanceRow,
         },
-        FeedbackQueries, TableBounds, TimeWindow,
     },
     error::{Error, ErrorDetails},
     experimentation::asymptotic_confidence_sequences::asymp_cs,
 };
 
 use super::{
-    escape_string_for_clickhouse_literal,
+    ClickHouseConnectionInfo, escape_string_for_clickhouse_literal,
     select_queries::{build_pagination_clause, parse_count, parse_json_rows},
-    ClickHouseConnectionInfo,
 };
+
+/// Raw database result for metrics with feedback (without metric_type)
+#[derive(Debug, Deserialize)]
+struct MetricWithFeedbackRaw {
+    function_name: String,
+    metric_name: String,
+    feedback_count: u32,
+}
 
 // Configuration for feedback table queries
 struct FeedbackTableConfig {
@@ -60,14 +70,14 @@ fn build_params_map(
     id_column: &str,
     id_value: Uuid,
     pagination_params: Vec<(&str, String)>,
-    page_size: u32,
+    limit: u32,
 ) -> HashMap<String, String> {
     let mut params_map: HashMap<String, String> = pagination_params
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
     params_map.insert(id_column.to_string(), id_value.to_string());
-    params_map.insert("page_size".to_string(), page_size.to_string());
+    params_map.insert("limit".to_string(), limit.to_string());
     params_map
 }
 
@@ -77,12 +87,12 @@ fn build_feedback_query(
     id_value: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     let (where_clause, params) = build_pagination_clause(before, after, config.id_column);
     let order_clause = if after.is_some() { "ASC" } else { "DESC" };
 
-    let params_map = build_params_map(config.id_column, id_value, params, page_size);
+    let params_map = build_params_map(config.id_column, id_value, params, limit);
 
     let columns_str = config.columns.join(", ");
     let id_param = format!("{{{id_column}:UUID}}", id_column = config.id_column);
@@ -100,7 +110,7 @@ fn build_feedback_query(
                 FROM {table_name}
                 WHERE {id_column} = {id_param} {where_clause}
                 ORDER BY toUInt128(id) {order_clause}
-                LIMIT {{page_size:UInt32}}
+                LIMIT {{limit:UInt32}}
             )
             ORDER BY toUInt128(id) DESC
             FORMAT JSONEachRow
@@ -121,7 +131,7 @@ fn build_feedback_query(
             FROM {table_name}
             WHERE {id_column} = {id_param} {where_clause}
             ORDER BY toUInt128(id) {order_clause}
-            LIMIT {{page_size:UInt32}}
+            LIMIT {{limit:UInt32}}
             FORMAT JSONEachRow
             ",
             columns_str = columns_str,
@@ -140,14 +150,14 @@ pub(crate) fn build_boolean_metrics_query(
     target_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     build_feedback_query(
         &FeedbackTableConfig::BOOLEAN_METRICS,
         target_id,
         before,
         after,
-        page_size,
+        limit,
     )
 }
 
@@ -155,14 +165,14 @@ pub(crate) fn build_float_metrics_query(
     target_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     build_feedback_query(
         &FeedbackTableConfig::FLOAT_METRICS,
         target_id,
         before,
         after,
-        page_size,
+        limit,
     )
 }
 
@@ -170,14 +180,14 @@ pub(crate) fn build_comment_feedback_query(
     target_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     build_feedback_query(
         &FeedbackTableConfig::COMMENT_FEEDBACK,
         target_id,
         before,
         after,
-        page_size,
+        limit,
     )
 }
 
@@ -185,14 +195,14 @@ pub(crate) fn build_demonstration_feedback_query(
     inference_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     build_feedback_query(
         &FeedbackTableConfig::DEMONSTRATION_FEEDBACK,
         inference_id,
         before,
         after,
-        page_size,
+        limit,
     )
 }
 
@@ -284,10 +294,9 @@ impl ClickHouseConnectionInfo {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: u32,
+        limit: u32,
     ) -> Result<Vec<BooleanMetricFeedbackRow>, Error> {
-        let (query, params_owned) =
-            build_boolean_metrics_query(target_id, before, after, page_size);
+        let (query, params_owned) = build_boolean_metrics_query(target_id, before, after, limit);
         execute_feedback_query(self, query, params_owned).await
     }
 
@@ -296,9 +305,9 @@ impl ClickHouseConnectionInfo {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: u32,
+        limit: u32,
     ) -> Result<Vec<FloatMetricFeedbackRow>, Error> {
-        let (query, params_owned) = build_float_metrics_query(target_id, before, after, page_size);
+        let (query, params_owned) = build_float_metrics_query(target_id, before, after, limit);
         execute_feedback_query(self, query, params_owned).await
     }
 
@@ -307,10 +316,9 @@ impl ClickHouseConnectionInfo {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: u32,
+        limit: u32,
     ) -> Result<Vec<CommentFeedbackRow>, Error> {
-        let (query, params_owned) =
-            build_comment_feedback_query(target_id, before, after, page_size);
+        let (query, params_owned) = build_comment_feedback_query(target_id, before, after, limit);
         execute_feedback_query(self, query, params_owned).await
     }
 
@@ -382,6 +390,271 @@ impl ClickHouseConnectionInfo {
         );
         execute_count_query(self, query, params_owned).await
     }
+}
+
+/// Builds the SQL query for querying metrics with feedback for a function
+///
+/// This query uses FeedbackByVariantStatistics (a pre-aggregated table) for
+/// boolean/float metrics, making it very fast. Demonstrations are queried
+/// separately with a simple join. The metric_type is not returned from the
+/// database - it should be looked up from the config at the endpoint level.
+fn build_metrics_with_feedback_query(
+    function_name: &str,
+    inference_table: &str,
+    variant_name: Option<&str>,
+) -> (String, HashMap<String, String>) {
+    let mut query_params = HashMap::new();
+    query_params.insert("function_name".to_string(), function_name.to_string());
+
+    let variant_clause = if let Some(vname) = variant_name {
+        query_params.insert("variant_name".to_string(), vname.to_string());
+        "AND variant_name = {variant_name:String}"
+    } else {
+        ""
+    };
+
+    // Use FeedbackByVariantStatistics for boolean/float metrics (pre-aggregated, fast)
+    // and a simple query for demonstrations
+    let query = format!(
+        r"
+        SELECT
+          function_name,
+          metric_name,
+          feedback_count
+        FROM (
+          -- Boolean/float metrics from pre-aggregated table (very fast)
+          SELECT
+            function_name,
+            metric_name,
+            toUInt32(sum(count)) as feedback_count
+          FROM FeedbackByVariantStatistics
+          WHERE function_name = {{function_name:String}} {variant_clause}
+          GROUP BY function_name, metric_name
+          HAVING feedback_count > 0
+
+          UNION ALL
+
+          -- Demonstration metrics (need to join with inference table)
+          SELECT
+            {{function_name:String}} as function_name,
+            'demonstration' as metric_name,
+            toUInt32(COUNT(*)) as feedback_count
+          FROM DemonstrationFeedback
+          WHERE inference_id IN (SELECT id FROM {inference_table} WHERE function_name = {{function_name:String}} {variant_clause})
+          HAVING feedback_count > 0
+        )
+        ORDER BY metric_name
+        FORMAT JSONEachRow"
+    );
+
+    (query, query_params)
+}
+
+/// Builds the SQL query for getting the latest feedback ID for each metric for a target
+fn build_latest_feedback_id_by_metric_query(target_id: Uuid) -> (String, HashMap<String, String>) {
+    let mut query_params = HashMap::new();
+    query_params.insert("target_id".to_string(), target_id.to_string());
+
+    let query = r"
+        SELECT
+          metric_name,
+          argMax(id, toUInt128(id)) as latest_id
+        FROM BooleanMetricFeedbackByTargetId
+        WHERE target_id = {target_id:String}
+        GROUP BY metric_name
+
+        UNION ALL
+
+        SELECT
+          metric_name,
+          argMax(id, toUInt128(id)) as latest_id
+        FROM FloatMetricFeedbackByTargetId
+        WHERE target_id = {target_id:String}
+        GROUP BY metric_name
+
+        ORDER BY metric_name
+        FORMAT JSONEachRow"
+        .to_string();
+
+    (query, query_params)
+}
+
+/// Builds the SQL query for getting variant performance statistics.
+///
+/// Supports both inference-level and episode-level metrics, with cumulative or time-windowed grouping.
+fn build_variant_performance_query(
+    params: &GetVariantPerformanceParams<'_>,
+) -> (String, HashMap<String, String>) {
+    let mut query_params = HashMap::new();
+    query_params.insert(
+        "function_name".to_string(),
+        params.function_name.to_string(),
+    );
+    query_params.insert("metric_name".to_string(), params.metric_name.to_string());
+
+    let inference_table = params.inference_table_name();
+    let metric_table = params.metric_table_name();
+
+    // Build variant filter if specified
+    let variant_filter = match params.variant_name {
+        Some(variant_name) => {
+            query_params.insert("variant_name".to_string(), variant_name.to_string());
+            " AND i.variant_name = {variant_name:String}"
+        }
+        None => "",
+    };
+
+    let query = match (params.metric_level(), &params.time_window) {
+        // Episode-level metric with cumulative time window
+        (MetricConfigLevel::Episode, TimeWindow::Cumulative) => format!(
+            r"
+            WITH sub AS (
+                SELECT
+                    i.variant_name AS variant_name,
+                    i.episode_id AS episode_id,
+                    any(f.value) AS value_per_episode
+                FROM {inference_table} i
+                JOIN (
+                    SELECT
+                        target_id,
+                        value,
+                        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+                    FROM {metric_table}
+                    WHERE metric_name = {{metric_name:String}}
+                ) f ON i.episode_id = f.target_id AND f.rn = 1
+                WHERE
+                    i.function_name = {{function_name:String}}
+                    {variant_filter}
+                GROUP BY
+                    variant_name,
+                    episode_id
+            )
+            SELECT
+                '1970-01-01T00:00:00.000Z' AS period_start,
+                variant_name,
+                toUInt32(count()) AS count,
+                avg(value_per_episode) AS avg_metric,
+                stddevSamp(value_per_episode) AS stdev,
+                1.96 * (stddevSamp(value_per_episode) / sqrt(count())) AS ci_error
+            FROM sub
+            GROUP BY
+                variant_name
+            ORDER BY
+                variant_name ASC
+            FORMAT JSONEachRow"
+        ),
+
+        // Episode-level metric with time window
+        (MetricConfigLevel::Episode, time_window) => {
+            let time_window_str = time_window.to_clickhouse_string();
+            query_params.insert("time_window_unit".to_string(), time_window_str.to_string());
+            format!(
+                r"
+                WITH sub AS (
+                    SELECT
+                        dateTrunc({{time_window_unit:String}}, i.timestamp) AS period_start,
+                        i.variant_name AS variant_name,
+                        i.episode_id AS episode_id,
+                        any(f.value) AS value_per_episode
+                    FROM {inference_table} i
+                    JOIN (
+                        SELECT
+                            target_id,
+                            value,
+                            ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+                        FROM {metric_table}
+                        WHERE metric_name = {{metric_name:String}}
+                    ) f ON i.episode_id = f.target_id AND f.rn = 1
+                    WHERE
+                        i.function_name = {{function_name:String}}
+                        {variant_filter}
+                    GROUP BY
+                        period_start,
+                        variant_name,
+                        episode_id
+                )
+                SELECT
+                    formatDateTime(period_start, '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
+                    variant_name,
+                    toUInt32(count()) AS count,
+                    avg(value_per_episode) AS avg_metric,
+                    stddevSamp(value_per_episode) AS stdev,
+                    1.96 * (stddevSamp(value_per_episode) / sqrt(count())) AS ci_error
+                FROM sub
+                GROUP BY
+                    period_start,
+                    variant_name
+                ORDER BY
+                    period_start ASC,
+                    variant_name ASC
+                FORMAT JSONEachRow"
+            )
+        }
+
+        // Inference-level metric with cumulative time window
+        (MetricConfigLevel::Inference, TimeWindow::Cumulative) => format!(
+            r"
+            SELECT
+                '1970-01-01T00:00:00.000Z' AS period_start,
+                i.variant_name AS variant_name,
+                toUInt32(count()) AS count,
+                avg(f.value) AS avg_metric,
+                stddevSamp(f.value) AS stdev,
+                1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
+            FROM {inference_table} i
+            JOIN (
+                SELECT
+                    target_id,
+                    value,
+                    ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+                FROM {metric_table}
+                WHERE metric_name = {{metric_name:String}}
+            ) f ON i.id = f.target_id AND f.rn = 1
+            WHERE
+                i.function_name = {{function_name:String}}{variant_filter}
+            GROUP BY
+                variant_name
+            ORDER BY
+                variant_name ASC
+            FORMAT JSONEachRow"
+        ),
+
+        // Inference-level metric with time window
+        (MetricConfigLevel::Inference, time_window) => {
+            let time_window_str = time_window.to_clickhouse_string();
+            query_params.insert("time_window_unit".to_string(), time_window_str.to_string());
+            format!(
+                r"
+                SELECT
+                    formatDateTime(dateTrunc({{time_window_unit:String}}, i.timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
+                    i.variant_name AS variant_name,
+                    toUInt32(count()) AS count,
+                    avg(f.value) AS avg_metric,
+                    stddevSamp(f.value) AS stdev,
+                    1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
+                FROM {inference_table} i
+                JOIN (
+                    SELECT
+                        target_id,
+                        value,
+                        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+                    FROM {metric_table}
+                    WHERE metric_name = {{metric_name:String}}
+                ) f ON i.id = f.target_id AND f.rn = 1
+                WHERE
+                    i.function_name = {{function_name:String}}{variant_filter}
+                GROUP BY
+                    period_start,
+                    variant_name
+                ORDER BY
+                    period_start ASC,
+                    variant_name ASC
+                FORMAT JSONEachRow"
+            )
+        }
+    };
+
+    (query, query_params)
 }
 
 // Implementation of FeedbackQueries trait
@@ -466,7 +739,7 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Cumulative time window is not supported for feedback timeseries"
                         .to_string(),
-                }))
+                }));
             }
         };
 
@@ -665,7 +938,7 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<FeedbackRow>, Error> {
         if before.is_some() && after.is_some() {
             return Err(Error::new(crate::error::ErrorDetails::InvalidRequest {
@@ -674,18 +947,18 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
             }));
         }
 
-        let page_size = page_size.unwrap_or(100).min(100);
+        let limit = limit.unwrap_or(100);
 
         // Query all 4 feedback tables in parallel
         let (boolean_metrics, float_metrics, comment_feedback, demonstration_feedback) = tokio::join!(
-            self.query_boolean_metrics_by_target_id(target_id, before, after, page_size),
-            self.query_float_metrics_by_target_id(target_id, before, after, page_size),
-            self.query_comment_feedback_by_target_id(target_id, before, after, page_size),
+            self.query_boolean_metrics_by_target_id(target_id, before, after, limit),
+            self.query_float_metrics_by_target_id(target_id, before, after, limit),
+            self.query_comment_feedback_by_target_id(target_id, before, after, limit),
             self.query_demonstration_feedback_by_inference_id(
                 target_id,
                 before,
                 after,
-                Some(page_size)
+                Some(limit)
             )
         );
 
@@ -720,11 +993,11 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         // Apply pagination
         let result = if after.is_some() {
             // If 'after' is specified, take earliest elements (reverse order from sorted)
-            let start = all_feedback.len().saturating_sub(page_size as usize);
+            let start = all_feedback.len().saturating_sub(limit as usize);
             all_feedback.drain(start..).collect()
         } else {
             // If 'before' is specified or no pagination params, take latest elements
-            all_feedback.truncate(page_size as usize);
+            all_feedback.truncate(limit as usize);
             all_feedback
         };
 
@@ -799,11 +1072,17 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         inference_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error> {
-        let page_size = page_size.unwrap_or(100).min(100);
+        if before.is_some() && after.is_some() {
+            return Err(Error::new(crate::error::ErrorDetails::InvalidRequest {
+                message: "Cannot specify both before and after in query_feedback_by_target_id"
+                    .to_string(),
+            }));
+        }
+        let limit = limit.unwrap_or(100);
         let (query, params_owned) =
-            build_demonstration_feedback_query(inference_id, before, after, page_size);
+            build_demonstration_feedback_query(inference_id, before, after, limit);
 
         let query_params: HashMap<&str, &str> = params_owned
             .iter()
@@ -813,6 +1092,89 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous(query, &query_params).await?;
 
         parse_json_rows(response.response.as_str())
+    }
+
+    async fn query_metrics_with_feedback(
+        &self,
+        function_name: &str,
+        inference_table: &str,
+        variant_name: Option<&str>,
+    ) -> Result<Vec<MetricWithFeedback>, Error> {
+        let (query, params_owned) =
+            build_metrics_with_feedback_query(function_name, inference_table, variant_name);
+
+        let query_params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        // Parse raw results and convert to MetricWithFeedback
+        let raw_results: Vec<MetricWithFeedbackRaw> = parse_json_rows(response.response.as_str())?;
+
+        Ok(raw_results
+            .into_iter()
+            .map(|raw| {
+                // Demonstrations have a known type, others need config lookup at endpoint
+                let metric_type = if raw.metric_name == "demonstration" {
+                    Some(MetricType::Demonstration)
+                } else {
+                    None
+                };
+                MetricWithFeedback {
+                    function_name: raw.function_name,
+                    metric_name: raw.metric_name,
+                    metric_type,
+                    feedback_count: raw.feedback_count,
+                }
+            })
+            .collect())
+    }
+
+    async fn query_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<Vec<LatestFeedbackRow>, Error> {
+        let (query, params_owned) = build_latest_feedback_id_by_metric_query(target_id);
+
+        let query_params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_variant_performances(
+        &self,
+        params: GetVariantPerformanceParams<'_>,
+    ) -> Result<Vec<VariantPerformanceRow>, Error> {
+        let (query, params_owned) = build_variant_performance_query(&params);
+
+        let query_params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        let result: Vec<VariantPerformanceRow> = response
+            .response
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                serde_json::from_str(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize VariantPerformanceRow: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(result)
     }
 }
 
@@ -835,8 +1197,8 @@ fn parse_table_bounds(response: &str) -> Result<TableBounds, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use Uuid;
+    use std::sync::Arc;
 
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
     use crate::db::clickhouse::{ClickHouseResponse, ClickHouseResponseMetadata};
@@ -879,10 +1241,10 @@ mod tests {
         assert_query_contains(&query, &format!("FROM {table_name}"));
         assert_query_contains(&query, &format!("WHERE {id_column} = {{{id_column}:UUID}}"));
         assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
-        assert_query_contains(&query, "LIMIT {page_size:UInt32}");
+        assert_query_contains(&query, "LIMIT {limit:UInt32}");
         assert_query_does_not_contain(&query, "AND toUInt128(id)");
         assert_eq!(params.get(id_column), Some(&id.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"100".to_string()));
+        assert_eq!(params.get("limit"), Some(&"100".to_string()));
         assert!(!params.contains_key("before"));
         assert!(!params.contains_key("after"));
     }
@@ -903,7 +1265,7 @@ mod tests {
         assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
         assert_eq!(params.get(id_column), Some(&id.to_string()));
         assert_eq!(params.get("before"), Some(&before.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"50".to_string()));
+        assert_eq!(params.get("limit"), Some(&"50".to_string()));
     }
 
     fn test_feedback_query_after_pagination(
@@ -923,22 +1285,29 @@ mod tests {
             &query,
             "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))",
         );
-        assert_query_contains(
-            &query,
-            "ORDER BY toUInt128(id) ASC LIMIT {page_size:UInt32} )",
-        );
+        assert_query_contains(&query, "ORDER BY toUInt128(id) ASC LIMIT {limit:UInt32} )");
         assert_query_contains(&query, ") ORDER BY toUInt128(id) DESC");
         assert_eq!(params.get(id_column), Some(&id.to_string()));
         assert_eq!(params.get("after"), Some(&after.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"25".to_string()));
+        assert_eq!(params.get("limit"), Some(&"25".to_string()));
     }
 
     fn test_bounds_query(table_name: &str, id_column: &str) {
         let id = Uuid::now_v7();
         let (query, params) = build_bounds_query(table_name, id_column, id);
 
-        assert_query_contains(&query, &format!("(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id"));
-        assert_query_contains(&query, &format!("(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id"));
+        assert_query_contains(
+            &query,
+            &format!(
+                "(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id"
+            ),
+        );
+        assert_query_contains(
+            &query,
+            &format!(
+                "(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id"
+            ),
+        );
         assert_query_contains(&query, "FORMAT JSONEachRow");
         assert_eq!(params.get(id_column), Some(&id.to_string()));
     }
@@ -1130,7 +1499,7 @@ mod tests {
                 assert_query_contains(query, "FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
-                assert_eq!(parameters.get("page_size"), Some(&"100"));
+                assert_eq!(parameters.get("limit"), Some(&"100"));
 
                 true
             })
@@ -1169,7 +1538,7 @@ mod tests {
                 assert_query_contains(query, "FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
-                assert_eq!(parameters.get("page_size"), Some(&"100"));
+                assert_eq!(parameters.get("limit"), Some(&"100"));
 
                 true
             })
@@ -1208,7 +1577,7 @@ mod tests {
                 assert_query_contains(query, "FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
-                assert_eq!(parameters.get("page_size"), Some(&"100"));
+                assert_eq!(parameters.get("limit"), Some(&"100"));
 
                 true
             })
@@ -1251,7 +1620,7 @@ mod tests {
                 assert_query_contains(query, "FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("inference_id"), Some(&inference_id.to_string().as_str()));
-                assert_eq!(parameters.get("page_size"), Some(&"100"));
+                assert_eq!(parameters.get("limit"), Some(&"100"));
 
                 true
             })
@@ -1583,9 +1952,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Cannot specify both before and after"));
+        assert!(
+            err.to_string()
+                .contains("Cannot specify both before and after")
+        );
     }
 
     #[tokio::test]
@@ -1739,5 +2109,419 @@ mod tests {
         assert_eq!(result[0].mean, 0.85);
         assert_eq!(result[1].variant_name, "variant2");
         assert_eq!(result[1].mean, 0.90);
+    }
+
+    #[test]
+    fn test_build_metrics_with_feedback_query_no_variant() {
+        let (query, params) =
+            build_metrics_with_feedback_query("test_function", "ChatInference", None);
+
+        // Check that we query from FeedbackByVariantStatistics for boolean/float metrics
+        assert_query_contains(&query, "FROM FeedbackByVariantStatistics");
+
+        // Check that we query DemonstrationFeedback for demonstrations
+        assert_query_contains(&query, "FROM DemonstrationFeedback");
+
+        // Check demonstration metrics use inference_id with IN subquery
+        assert_query_contains(
+            &query,
+            "WHERE inference_id IN (SELECT id FROM ChatInference WHERE function_name = {function_name:String}",
+        );
+
+        // Check no variant filter when variant_name is None
+        assert_query_does_not_contain(&query, "variant_name");
+
+        // Check UNION ALL
+        assert_query_contains(&query, "UNION ALL");
+
+        // Check ORDER BY
+        assert_query_contains(&query, "ORDER BY metric_name");
+
+        // Check params
+        assert_eq!(
+            params.get("function_name"),
+            Some(&"test_function".to_string())
+        );
+        assert_eq!(params.get("variant_name"), None);
+    }
+
+    #[test]
+    fn test_build_metrics_with_feedback_query_with_variant() {
+        let (query, params) = build_metrics_with_feedback_query(
+            "test_function",
+            "JsonInference",
+            Some("test_variant"),
+        );
+
+        // Check variant filter is present
+        assert_query_contains(&query, "AND variant_name = {variant_name:String}");
+
+        // Check uses JsonInference table for demonstrations
+        assert_query_contains(&query, "FROM JsonInference WHERE");
+
+        // Check params include variant_name
+        assert_eq!(
+            params.get("function_name"),
+            Some(&"test_function".to_string())
+        );
+        assert_eq!(
+            params.get("variant_name"),
+            Some(&"test_variant".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_latest_feedback_id_by_metric_query() {
+        let target_id = Uuid::now_v7();
+        let (query, query_params) = build_latest_feedback_id_by_metric_query(target_id);
+
+        // Verify the query structure
+        assert_query_contains(&query, "SELECT");
+        assert_query_contains(&query, "FROM BooleanMetricFeedbackByTargetId");
+        assert_query_contains(&query, "FROM FloatMetricFeedbackByTargetId");
+        assert_query_contains(&query, "argMax(id, toUInt128(id)) as latest_id");
+        assert_query_contains(&query, "WHERE target_id = {target_id:String}");
+        assert_query_contains(&query, "UNION ALL");
+        assert_query_contains(&query, "GROUP BY metric_name");
+        assert_query_contains(&query, "ORDER BY metric_name");
+        assert_query_contains(&query, "FORMAT JSONEachRow");
+
+        // Verify params
+        assert_eq!(query_params.get("target_id"), Some(&target_id.to_string()));
+    }
+
+    // =====================================================================
+    // Tests for get_variant_performances query building
+    // =====================================================================
+
+    use crate::config::{MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType};
+    use crate::function::FunctionConfigType;
+
+    fn make_inference_level_float_metric() -> MetricConfig {
+        MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+        }
+    }
+
+    fn make_episode_level_float_metric() -> MetricConfig {
+        MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Episode,
+        }
+    }
+
+    fn make_inference_level_boolean_metric() -> MetricConfig {
+        MetricConfig {
+            r#type: MetricConfigType::Boolean,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+        }
+    }
+
+    #[test]
+    fn test_build_variant_performance_query_inference_level_cumulative() {
+        let metric_config = make_inference_level_float_metric();
+        let params = GetVariantPerformanceParams {
+            function_name: "test_function",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "test_metric",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Cumulative,
+            variant_name: None,
+        };
+
+        let (query, query_params) = build_variant_performance_query(&params);
+
+        // Verify cumulative query structure
+        assert_query_contains(&query, "'1970-01-01T00:00:00.000Z' AS period_start");
+        assert_query_contains(&query, "FROM ChatInference i");
+        assert_query_contains(&query, "FROM FloatMetricFeedback");
+        assert_query_contains(&query, "WHERE metric_name = {metric_name:String}");
+        assert_query_contains(&query, "ON i.id = f.target_id AND f.rn = 1"); // inference level join
+        assert_query_contains(&query, "i.function_name = {function_name:String}");
+        assert_query_contains(&query, "avg(f.value) AS avg_metric");
+        assert_query_contains(&query, "stddevSamp(f.value) AS stdev");
+        assert_query_contains(
+            &query,
+            "1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error",
+        );
+        assert_query_contains(&query, "GROUP BY variant_name");
+        assert_query_contains(&query, "ORDER BY variant_name ASC");
+        assert_query_does_not_contain(&query, "AND i.variant_name = {variant_name:String}");
+
+        // Verify params
+        assert_eq!(
+            query_params.get("function_name"),
+            Some(&"test_function".to_string())
+        );
+        assert_eq!(
+            query_params.get("metric_name"),
+            Some(&"test_metric".to_string())
+        );
+        assert!(!query_params.contains_key("time_window_unit"));
+    }
+
+    #[test]
+    fn test_build_variant_performance_query_inference_level_week() {
+        let metric_config = make_inference_level_float_metric();
+        let params = GetVariantPerformanceParams {
+            function_name: "test_function",
+            function_type: FunctionConfigType::Json,
+            metric_name: "accuracy",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Week,
+            variant_name: None,
+        };
+
+        let (query, query_params) = build_variant_performance_query(&params);
+
+        // Verify time-windowed query structure
+        assert_query_contains(
+            &query,
+            "formatDateTime(dateTrunc({time_window_unit:String}, i.timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start",
+        );
+        assert_query_contains(&query, "FROM JsonInference i");
+        assert_query_contains(&query, "FROM FloatMetricFeedback");
+        assert_query_contains(&query, "ON i.id = f.target_id AND f.rn = 1");
+        assert_query_contains(&query, "GROUP BY period_start, variant_name");
+        assert_query_contains(&query, "ORDER BY period_start ASC, variant_name ASC");
+
+        // Verify params
+        assert_eq!(
+            query_params.get("time_window_unit"),
+            Some(&"week".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_variant_performance_query_episode_level_cumulative() {
+        let metric_config = make_episode_level_float_metric();
+        let params = GetVariantPerformanceParams {
+            function_name: "test_function",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "episode_score",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Cumulative,
+            variant_name: None,
+        };
+
+        let (query, query_params) = build_variant_performance_query(&params);
+
+        // Verify episode-level cumulative query structure
+        assert_query_contains(&query, "'1970-01-01T00:00:00.000Z' AS period_start");
+        assert_query_contains(&query, "WITH sub AS");
+        assert_query_contains(&query, "i.episode_id AS episode_id");
+        assert_query_contains(&query, "any(f.value) AS value_per_episode");
+        assert_query_contains(&query, "ON i.episode_id = f.target_id AND f.rn = 1"); // episode level join
+        assert_query_contains(&query, "GROUP BY variant_name, episode_id");
+        assert_query_contains(&query, "avg(value_per_episode) AS avg_metric");
+        assert_query_contains(&query, "stddevSamp(value_per_episode) AS stdev");
+
+        // Verify no time window param for cumulative
+        assert!(!query_params.contains_key("time_window_unit"));
+    }
+
+    #[test]
+    fn test_build_variant_performance_query_episode_level_day() {
+        let metric_config = make_episode_level_float_metric();
+        let params = GetVariantPerformanceParams {
+            function_name: "test_function",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "episode_score",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Day,
+            variant_name: None,
+        };
+
+        let (query, query_params) = build_variant_performance_query(&params);
+
+        // Verify episode-level time-windowed query structure
+        assert_query_contains(&query, "WITH sub AS");
+        assert_query_contains(
+            &query,
+            "dateTrunc({time_window_unit:String}, i.timestamp) AS period_start",
+        );
+        assert_query_contains(&query, "ON i.episode_id = f.target_id AND f.rn = 1");
+        assert_query_contains(&query, "GROUP BY period_start, variant_name, episode_id");
+        assert_query_contains(
+            &query,
+            "formatDateTime(period_start, '%Y-%m-%dT%H:%i:%S.000Z') AS period_start",
+        );
+
+        // Verify params
+        assert_eq!(
+            query_params.get("time_window_unit"),
+            Some(&"day".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_variant_performance_query_with_variant_filter() {
+        let metric_config = make_inference_level_float_metric();
+        let params = GetVariantPerformanceParams {
+            function_name: "test_function",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "test_metric",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Cumulative,
+            variant_name: Some("specific_variant"),
+        };
+
+        let (query, query_params) = build_variant_performance_query(&params);
+
+        // Verify variant filter is present
+        assert_query_contains(&query, "AND i.variant_name = {variant_name:String}");
+
+        // Verify params include variant
+        assert_eq!(
+            query_params.get("variant_name"),
+            Some(&"specific_variant".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_variant_performance_query_boolean_metric() {
+        let metric_config = make_inference_level_boolean_metric();
+        let params = GetVariantPerformanceParams {
+            function_name: "test_function",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "success",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Month,
+            variant_name: None,
+        };
+
+        let (query, query_params) = build_variant_performance_query(&params);
+
+        // Verify boolean metric uses BooleanMetricFeedback
+        assert_query_contains(&query, "FROM BooleanMetricFeedback");
+        assert_query_contains(&query, "FROM ChatInference i");
+
+        // Verify params
+        assert_eq!(
+            query_params.get("time_window_unit"),
+            Some(&"month".to_string())
+        );
+        assert_eq!(
+            query_params.get("metric_name"),
+            Some(&"success".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_variant_performances_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "FROM ChatInference i");
+                assert_query_contains(query, "FROM FloatMetricFeedback");
+                assert_query_contains(query, "avg(f.value) AS avg_metric");
+                assert_eq!(params.get("function_name"), Some(&"test_function"));
+                assert_eq!(params.get("metric_name"), Some(&"accuracy"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"period_start":"1970-01-01T00:00:00.000Z","variant_name":"variant_a","count":10,"avg_metric":0.85,"stdev":0.05,"ci_error":0.031}
+{"period_start":"1970-01-01T00:00:00.000Z","variant_name":"variant_b","count":15,"avg_metric":0.90,"stdev":0.03,"ci_error":0.015}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let metric_config = make_inference_level_float_metric();
+        let params = GetVariantPerformanceParams {
+            function_name: "test_function",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "accuracy",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Cumulative,
+            variant_name: None,
+        };
+
+        let result = conn.get_variant_performances(params).await.unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].variant_name, "variant_a");
+        assert_eq!(result[0].count, 10);
+        assert!((result[0].avg_metric - 0.85).abs() < 0.001);
+        assert_eq!(result[1].variant_name, "variant_b");
+        assert_eq!(result[1].count, 15);
+        assert!((result[1].avg_metric - 0.90).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_get_variant_performances_empty_result() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let metric_config = make_inference_level_float_metric();
+        let params = GetVariantPerformanceParams {
+            function_name: "nonexistent_function",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "accuracy",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Cumulative,
+            variant_name: None,
+        };
+
+        let result = conn.get_variant_performances(params).await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_variant_performances_with_null_stdev() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                // stdev and ci_error are null when count = 1
+                Ok(ClickHouseResponse {
+                    response: r#"{"period_start":"2024-01-01T00:00:00.000Z","variant_name":"variant_a","count":1,"avg_metric":0.9,"stdev":null,"ci_error":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let metric_config = make_inference_level_float_metric();
+        let params = GetVariantPerformanceParams {
+            function_name: "test_function",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "accuracy",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Week,
+            variant_name: None,
+        };
+
+        let result = conn.get_variant_performances(params).await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].count, 1);
+        assert!(result[0].stdev.is_none());
+        assert!(result[0].ci_error.is_none());
     }
 }

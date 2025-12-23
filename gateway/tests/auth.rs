@@ -1,39 +1,41 @@
-#![expect(clippy::print_stdout, clippy::expect_used)]
+#![expect(clippy::print_stdout)]
 use std::process::Stdio;
 use std::str::FromStr;
 
 use http::{Method, StatusCode};
-use serde_json::json;
+use serde_json::{Value, json};
 use tensorzero_auth::key::TensorZeroApiKey;
-use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_core::{
+    db::clickhouse::test_helpers::{
+        get_clickhouse, select_chat_inference_clickhouse, select_feedback_clickhouse,
+    },
+    endpoints::status::{StatusResponse, TENSORZERO_VERSION},
+};
 use tokio::process::Command;
+use uuid::Uuid;
 
-use crate::common::start_gateway_on_random_port;
+use crate::common::{get_postgres_pool_for_testing, start_gateway_on_random_port};
 use secrecy::ExposeSecret;
 
 mod common;
-
-const GATEWAY_PATH: &str = env!("CARGO_BIN_EXE_gateway");
-
-/// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
-async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-        .expect("TENSORZERO_POSTGRES_URL must be set for auth tests");
-
-    sqlx::PgPool::connect(&postgres_url)
-        .await
-        .expect("Failed to connect to PostgreSQL")
-}
 
 #[tokio::test]
 async fn test_tensorzero_auth_enabled() {
     let pool = get_postgres_pool_for_testing().await;
     let child_data = start_gateway_on_random_port(
         "
+    [gateway.observability]
+    enabled = true
+
     [gateway.auth]
     enabled = true
     [gateway.auth.cache]
     enabled = false
+
+    [metrics.task_success]
+    type = \"boolean\"
+    optimize = \"max\"
+    level = \"inference\"
     ",
         None,
     )
@@ -42,6 +44,8 @@ async fn test_tensorzero_auth_enabled() {
     let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
         .await
         .unwrap();
+
+    let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
 
     let inference_response = reqwest::Client::new()
         .post(format!("http://{}/inference", child_data.addr))
@@ -58,6 +62,9 @@ async fn test_tensorzero_auth_enabled() {
                         "content": "Hello, world!",
                     }
                 ]
+            },
+            "tags": {
+                "my_tag": "my_value",
             }
         }))
         .send()
@@ -68,6 +75,74 @@ async fn test_tensorzero_auth_enabled() {
     let text = inference_response.text().await.unwrap();
     println!("API response: {text}");
     assert_eq!(status, StatusCode::OK);
+    let response_json: Value = serde_json::from_str(&text).unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for one second to allow time for the inference to be inserted into ClickHouse
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    // Check that we applied the API key as a tag
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let tags = result.get("tags").unwrap();
+    assert_eq!(
+        tags,
+        &json!({
+            "my_tag": "my_value",
+            "tensorzero::api_key_public_id": parsed_key.public_id,
+        })
+    );
+
+    let feedback_response = reqwest::Client::new()
+        .post(format!("http://{}/feedback", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", key.expose_secret()),
+        )
+        .json(&json!({
+            "inference_id": inference_id,
+            "metric_name": "task_success",
+            "value": true,
+            "tags": {
+                "my_feedback_tag": "my_feedback_value",
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = feedback_response.status();
+    let text = feedback_response.text().await.unwrap();
+    assert_eq!(status, StatusCode::OK);
+    let feedback_response_json: Value = serde_json::from_str(&text).unwrap();
+    let feedback_id = feedback_response_json
+        .get("feedback_id")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let feedback_id = Uuid::parse_str(feedback_id).unwrap();
+
+    // Sleep for one second to allow time for the feedback to be inserted into ClickHouse
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    // Get the feedback from the database
+    let clickhouse = get_clickhouse().await;
+    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+    assert_eq!(
+        result.get("tags").unwrap(),
+        &json!({
+            "my_feedback_tag": "my_feedback_value",
+            "tensorzero::api_key_public_id": parsed_key.public_id,
+        })
+    );
 
     // The key should stop working after we disable it
     let disabled_at = tensorzero_auth::postgres::disable_key(
@@ -103,7 +178,12 @@ async fn test_tensorzero_auth_enabled() {
     let status = inference_response.status();
     let text = inference_response.text().await.unwrap();
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(text, format!("{{\"error\":\"TensorZero authentication error: API key was disabled at: {disabled_at}\"}}"));
+    assert_eq!(
+        text,
+        format!(
+            "{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"
+        )
+    );
 }
 
 #[tokio::test]
@@ -127,6 +207,8 @@ async fn test_tensorzero_unauthenticated_routes() {
     let status = health_response.status();
     let text = health_response.text().await.unwrap();
     assert_eq!(status, StatusCode::OK);
+
+    // TODO(shuyangli): Add a HealthResponse type and validate the parsed form.
     assert_eq!(
         text,
         "{\"gateway\":\"ok\",\"clickhouse\":\"ok\",\"postgres\":\"ok\"}"
@@ -140,10 +222,16 @@ async fn test_tensorzero_unauthenticated_routes() {
 
     let status = status_response.status();
     let text = status_response.text().await.unwrap();
+    let parsed_status_response: StatusResponse = serde_json::from_str(&text).unwrap();
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(parsed_status_response.status, "ok", "Status should be ok");
     assert_eq!(
-        text,
-        format!("{{\"status\":\"ok\",\"version\":\"{TENSORZERO_VERSION}\"}}")
+        parsed_status_response.version, TENSORZERO_VERSION,
+        "Version should match $TENSORZERO_VERSION"
+    );
+    assert_ne!(
+        parsed_status_response.config_hash, "",
+        "There should be a config hash"
     );
 }
 
@@ -157,7 +245,7 @@ async fn test_tensorzero_missing_auth() {
     [gateway.auth.cache]
     enabled = false
     ",
-        None,
+        Some("gateway=debug,tensorzero_core=debug,warn"),
     )
     .await;
 
@@ -191,10 +279,12 @@ async fn test_tensorzero_missing_auth() {
         ("GET", "/v1/datasets/get_datapoints"),
     ];
 
+    let client = reqwest::Client::new();
+
     for (method, path) in auth_required_routes {
         // Authorization runs before we do any parsing of the request parameters/body,
         // so we don't need to provide a valid request here.
-        let response = reqwest::Client::new()
+        let response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -207,11 +297,11 @@ async fn test_tensorzero_missing_auth() {
         let text = response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Authorization header is required\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header is required\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let bad_auth_response = reqwest::Client::new()
+        let bad_auth_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -225,11 +315,11 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_auth_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Authorization header must start with 'Bearer '\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header must start with 'Bearer '\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let bad_key_format_response = reqwest::Client::new()
+        let bad_key_format_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -243,11 +333,11 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_key_format_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Invalid API key: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`\"}"
+            "{\"error\":\"TensorZero authentication error: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let missing_key_response = reqwest::Client::new()
+        let missing_key_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -264,11 +354,11 @@ async fn test_tensorzero_missing_auth() {
         let text = missing_key_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Provided API key does not exist in the database\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let disabled_key_response = reqwest::Client::new()
+        let disabled_key_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -285,7 +375,9 @@ async fn test_tensorzero_missing_auth() {
         let text = disabled_key_response.text().await.unwrap();
         assert_eq!(
             text,
-            format!("{{\"error\":\"TensorZero authentication error: API key was disabled at: {disabled_at}\"}}"),
+            format!(
+                "{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"
+            ),
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
@@ -548,7 +640,7 @@ async fn test_auth_cache_requires_full_key_match() {
     );
     assert_eq!(
         text,
-        "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+        "{\"error\":\"TensorZero authentication error: Error performing authentication: Provided API key does not exist in the database\"}"
     );
 
     // Verify the original valid key still works (cache should still be valid)
@@ -578,9 +670,88 @@ async fn test_auth_cache_requires_full_key_match() {
 }
 
 #[tokio::test]
+async fn test_disable_api_key_cli() {
+    let output = Command::new(common::gateway_path())
+        .args(["--create-api-key"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "CLI command failed with stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let api_key = stdout.trim();
+    let parsed_key = TensorZeroApiKey::parse(api_key).unwrap();
+    // we assume the key is correctly parsed; creation behavior is covered by create_api_key_cli()
+
+    let disable_output = Command::new(common::gateway_path())
+        .args(["--disable-api-key", parsed_key.public_id.as_str()])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        disable_output.status.success(),
+        "CLI command failed with stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify the key DOES NOT work for authentication
+    let child_data = start_gateway_on_random_port(
+        "
+    [gateway.auth]
+    enabled = true
+    ",
+        None,
+    )
+    .await;
+
+    let inference_response = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(http::header::AUTHORIZATION, format!("Bearer {api_key}"))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = inference_response.status();
+    assert_ne!(
+        status,
+        StatusCode::OK,
+        "Disabled API key should not work for authentication",
+    );
+
+    assert!(
+        inference_response
+            .text()
+            .await
+            .unwrap()
+            .contains("API key was disabled at")
+    );
+}
+
+#[tokio::test]
 async fn test_create_api_key_cli() {
     // This test verifies that the --create-api-key CLI command works correctly
-    let output = Command::new(GATEWAY_PATH)
+    let output = Command::new(common::gateway_path())
         .args(["--create-api-key"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -645,4 +816,295 @@ async fn test_create_api_key_cli() {
         StatusCode::OK,
         "Created API key should work for authentication"
     );
+}
+
+#[tokio::test]
+async fn test_rate_limit_auth_single_key() {
+    let pool = get_postgres_pool_for_testing().await;
+    let first_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let parsed_first_key = TensorZeroApiKey::parse(first_key.expose_secret()).unwrap();
+    let first_key_public_id = parsed_first_key.public_id;
+
+    let second_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let child_data = start_gateway_on_random_port(
+        &format!(
+            r#"
+    [gateway.auth]
+    enabled = true
+
+    [rate_limiting]
+    enabled = true
+
+    [[rate_limiting.rules]]
+    model_inferences_per_minute = 1
+    always = true
+    scope = [
+        {{ api_key_public_id = "{first_key_public_id}" }}
+    ]
+    "#,
+        ),
+        None,
+    )
+    .await;
+
+    // The first request with 'first_key' should succeed
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", first_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // The next request with 'first_key' should fail, since we've exceeded the rate limit
+    let first_key_failure = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", first_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = first_key_failure.status();
+    let text = first_key_failure.text().await.unwrap();
+    assert!(text.contains("TensorZero rate limit"));
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+
+    // The request with 'second_key' should succeed, since it's a different key
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", second_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // A second request with 'second_key' should succeed, since we're not rate-limiting by this key
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", second_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_rate_limit_auth_each_key() {
+    let pool = get_postgres_pool_for_testing().await;
+    let first_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let parsed_first_key = TensorZeroApiKey::parse(first_key.expose_secret()).unwrap();
+
+    let second_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let parsed_second_key = TensorZeroApiKey::parse(second_key.expose_secret()).unwrap();
+
+    let child_data = start_gateway_on_random_port(
+        r#"
+    [gateway.auth]
+    enabled = true
+
+    [rate_limiting]
+    enabled = true
+
+    [[rate_limiting.rules]]
+    model_inferences_per_minute = 1
+    always = true
+    scope = [
+        { api_key_public_id = "tensorzero::each" }
+    ]
+    "#,
+        None,
+    )
+    .await;
+
+    // The first request with 'first_key' should succeed
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", first_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // The next request with 'first_key' should fail, since we've exceeded the rate limit
+    let first_key_failure = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", first_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = first_key_failure.status();
+    let text = first_key_failure.text().await.unwrap();
+    assert!(
+        text.contains("TensorZero rate limit"),
+        "Missing rate limit error in response: {text}"
+    );
+    assert!(
+        text.contains(&parsed_first_key.public_id),
+        "Missing public ID in response: {text}"
+    );
+    assert!(
+        !text.contains(&parsed_second_key.public_id),
+        "Public ID of second key should not be in response: {text}"
+    );
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+
+    // The request with 'second_key' should succeed, since it's a different key
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", second_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // A second request with 'second_key' should fail, we've exceeded the rate limit for this key
+    let first_key_failure = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", second_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = first_key_failure.status();
+    let text = first_key_failure.text().await.unwrap();
+    assert!(
+        text.contains("TensorZero rate limit"),
+        "Missing rate limit error in response: {text}"
+    );
+    assert!(
+        text.contains(&parsed_second_key.public_id),
+        "Missing public ID in response: {text}"
+    );
+    assert!(
+        !text.contains(&parsed_first_key.public_id),
+        "Public ID of first key should not be in response: {text}"
+    );
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
 }

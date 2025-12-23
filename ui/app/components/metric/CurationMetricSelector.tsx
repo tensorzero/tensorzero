@@ -5,7 +5,7 @@ import {
   type Path,
   type PathValue,
 } from "react-hook-form";
-import type { Config } from "tensorzero-node";
+import type { UiConfig } from "~/types/tensorzero";
 import {
   FormField,
   FormItem,
@@ -30,9 +30,9 @@ import {
 } from "~/components/ui/command";
 import { Input } from "~/components/ui/input";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
-import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
+import type { MetricsWithFeedbackResponse } from "~/types/tensorzero";
 import clsx from "clsx";
 import type { FeedbackConfig } from "~/utils/config/feedback";
 import { Skeleton } from "../ui/skeleton";
@@ -41,7 +41,7 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
   functionFieldName: Path<T>;
-  config: Config;
+  config: UiConfig;
   addDemonstrations: boolean;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
@@ -73,7 +73,7 @@ export default function CurationMetricSelector<
   isLoading = false,
   onMetricsLoadingChange,
 }: CurationMetricSelectorProps<T>) {
-  const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
+  const metricsFetcher = useFetcher<MetricsWithFeedbackResponse>();
   const { getValues, setValue } = useFormContext<T>();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -119,6 +119,9 @@ export default function CurationMetricSelector<
 
   const metricsLoading = metricsFetcher.state === "loading";
 
+  const metricLabelId = useId();
+  const metricComboboxId = `${metricLabelId}-combobox`;
+
   // Inform parent when the internal metrics fetcher loading state changes
   useEffect(() => {
     onMetricsLoadingChange?.(metricsLoading);
@@ -147,7 +150,9 @@ export default function CurationMetricSelector<
       name={name}
       render={({ field }) => (
         <FormItem className="flex flex-col justify-center">
-          <FormLabel>Metric</FormLabel>
+          <FormLabel id={`${metricLabelId}-label`} htmlFor={metricComboboxId}>
+            Metric
+          </FormLabel>
           <div className="items-top grid gap-x-8 md:grid-cols-2">
             <div className="space-y-2">
               <Popover open={open} onOpenChange={setOpen}>
@@ -157,6 +162,9 @@ export default function CurationMetricSelector<
                     role="combobox"
                     aria-expanded={open}
                     aria-busy={metricsLoading}
+                    aria-label="Metric"
+                    aria-labelledby={`${metricLabelId}-label`}
+                    id={metricComboboxId}
                     className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
                     disabled={!functionValue || metricsLoading}
                   >

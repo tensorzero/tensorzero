@@ -41,6 +41,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
+use tensorzero_auth::key::TensorZeroAuthError;
 
 use once_cell::sync::OnceCell;
 #[cfg(feature = "e2e_tests")]
@@ -49,28 +50,30 @@ use tokio_stream::wrappers::IntervalStream;
 use tracing::field::Empty;
 
 use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
+use crate::observability::overhead_timing::OverheadTimingLayer;
 use crate::observability::span_leak_detector::SpanLeakDetector;
+use crate::utils::spawn_ignoring_shutdown;
 use axum::extract::MatchedPath;
 use axum::extract::State;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use axum::{middleware, Router};
+use axum::{Router, middleware};
 use clap::ValueEnum;
 use http::HeaderMap;
-use metrics::{describe_counter, Unit};
+use metrics::{Unit, describe_counter, describe_histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
 use opentelemetry::trace::Status;
 use opentelemetry::trace::{Tracer, TracerProvider as _};
 use opentelemetry::{Context, KeyValue};
-use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
 use opentelemetry_otlp::WithTonicConfig;
+use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
+use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
-use opentelemetry_sdk::Resource;
 use std::str::FromStr;
-use tokio_util::task::task_tracker::TaskTrackerToken;
 use tokio_util::task::TaskTracker;
+use tokio_util::task::task_tracker::TaskTrackerToken;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
 use tracing::level_filters::LevelFilter;
@@ -81,17 +84,19 @@ use tracing_opentelemetry_instrumentation_sdk::http::{
     http_flavor, http_host, url_scheme, user_agent,
 };
 use tracing_subscriber::layer::Filter;
-use tracing_subscriber::{filter, EnvFilter, Registry};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing_subscriber::{EnvFilter, Registry, filter};
+use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
+mod disjoint_intervals;
 mod exporter_wrapper;
+pub mod overhead_timing;
+pub mod request_logging;
 mod span_leak_detector;
 pub mod tracing_bug;
-pub mod warn_early_drop;
 
 #[derive(Clone, Debug, Default, ValueEnum)]
 pub enum LogFormat {
@@ -225,7 +230,11 @@ fn add_local_self_signed_cert(
 }
 
 impl TracerWrapper {
-    fn get_or_create_custom_tracer(&self, key: &CustomTracerKey, context: Context) -> Context {
+    fn get_or_create_custom_tracer(
+        &self,
+        key: &CustomTracerKey,
+        context: Context,
+    ) -> Result<Context, Error> {
         // This is the potentially expensive part - we need to dynamically create a new `SdkTracer`.
         // If this ends up causing performance issues (due to thrashing the `custom_tracers` cache,
         // or `build_tracer` becoming expensive), then we should do the following:
@@ -234,23 +243,20 @@ impl TracerWrapper {
         //    and don't immediately create the `SdkTracer`.
         // 3. In the `Drop` impl for `SpanWrapper`, call `tokio::task::spawn_blocking`, and perform the cache
         //    lookup and nested `build_with_context` inside the closure.
-        let tracer = self.custom_tracers.try_get_with_by_ref(key, || {
-            // We need to provide a dummy generic parameter to satisfy the compiler
-            let (provider, tracer) =
-                build_tracer::<opentelemetry_otlp::SpanExporter>(key.clone(), None)?;
-            Ok::<_, Error>(Arc::new(CustomTracer {
-                inner: tracer,
-                provider: Some(provider),
-                shutdown_tasks: self.shutdown_tasks.clone(),
-            }))
-        });
-        match tracer {
-            Ok(tracer) => context.with_value(CustomTracerContextEntry { inner: tracer }),
-            Err(e) => {
-                tracing::error!("Failed to create custom tracer: {e}");
-                context
-            }
-        }
+        let tracer = self
+            .custom_tracers
+            .try_get_with_by_ref(key, || {
+                // We need to provide a dummy generic parameter to satisfy the compiler
+                let (provider, tracer) =
+                    build_tracer::<opentelemetry_otlp::SpanExporter>(key.clone(), None)?;
+                Ok::<_, Error>(Arc::new(CustomTracer {
+                    inner: tracer,
+                    provider: Some(provider),
+                    shutdown_tasks: self.shutdown_tasks.clone(),
+                }))
+            })
+            .map_err(Arc::unwrap_or_clone)?;
+        Ok(context.with_value(CustomTracerContextEntry { inner: tracer }))
     }
 }
 
@@ -732,7 +738,7 @@ fn make_otel_http_span<B>(
     req: &http::Request<B>,
     key: Option<CustomTracerKey>,
     tracer_wrapper: &TracerWrapper,
-) -> Span {
+) -> Result<Span, Error> {
     // Based on `OtelAxumLayer`.
     // If we need to use a custom otel `Tracer`, then attach an `CustomTracerKey` to the OTEL context.
     // We check for a `CustomTracerKey` in `TracerWrapper`, and use it to dispatch to a
@@ -748,7 +754,7 @@ fn make_otel_http_span<B>(
     // This is stored in the span's `Context`, which is automatically propagated to descendants.
     // When a span is exported to OpenTelemetry, we'll look for
     if let Some(custom_tracer_key) = key {
-        context = tracer_wrapper.get_or_create_custom_tracer(&custom_tracer_key, context);
+        context = tracer_wrapper.get_or_create_custom_tracer(&custom_tracer_key, context)?;
     }
     let _guard = context.attach();
 
@@ -787,7 +793,7 @@ fn make_otel_http_span<B>(
         span.record("http.route", route);
     }
 
-    span
+    Ok(span)
 }
 
 /// Attach information from our HTTP response to the original span for the overall
@@ -796,18 +802,21 @@ fn handle_response<B>(res: &Response<B>, span: &Span) {
     // We cast this to an i64, so that tracing-opentelemetry will record it as an integer
     // rather than a string
     span.record("http.response.status_code", res.status().as_u16() as i64);
-    if res.status().is_server_error() {
-        if let Some(error) = res.extensions().get::<Error>() {
-            span.set_status(Status::Error {
-                description: Cow::Owned(error.to_string()),
-            });
-        } else {
-            // Don't set a description for non-TensorZero errors,
-            // since we don't know what a nice description should look like
-            span.set_status(Status::Error {
-                description: Cow::Owned(String::new()),
-            });
-        }
+
+    if let Some(error) = res.extensions().get::<Error>() {
+        span.set_status(Status::Error {
+            description: Cow::Owned(error.to_string()),
+        });
+    } else if let Some(error) = res.extensions().get::<TensorZeroAuthError>() {
+        span.set_status(Status::Error {
+            description: Cow::Owned(error.to_string()),
+        });
+    } else if res.status().is_server_error() {
+        // Don't set a description for non-TensorZero errors,
+        // since we don't know what a nice description should look like
+        span.set_status(Status::Error {
+            description: Cow::Owned(String::new()),
+        });
     }
 }
 
@@ -847,17 +856,22 @@ async fn tensorzero_otel_tracing_middleware(
 
     // If this is an OpenTelemetry-enabled route, then wrap the route handling in a new span
     // See the docstring on this method for why we need this check
-    if let Some(route) = route {
-        if otel_enabled_routes.routes.contains(&route) {
-            // Note - we intentionally create this span this *after* `extract_tensorzero_headers`
-            // As a result, if we reject a request due to a failure to parse custom OTLP headers,
-            // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
-            // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
-            let span = make_otel_http_span(&req, custom_tracer_key, &tracer_wrapper);
-            let response = next.run(req).instrument(span.clone()).await;
-            handle_response(&response, &span);
-            return response;
-        }
+    if let Some(route) = route
+        && otel_enabled_routes.routes.contains(&route)
+    {
+        // Note - we intentionally create this span this *after* `extract_tensorzero_headers`
+        // As a result, if we reject a request due to a failure to parse custom OTLP headers,
+        // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
+        // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
+        let span = match make_otel_http_span(&req, custom_tracer_key, &tracer_wrapper) {
+            Ok(span) => span,
+            Err(e) => {
+                return e.into_response();
+            }
+        };
+        let response = next.run(req).instrument(span.clone()).await;
+        handle_response(&response, &span);
+        return response;
     }
 
     // Otherwise, just process the request without creating a span.
@@ -1036,8 +1050,7 @@ async fn wait_for_tasks_with_logging(
 /// This is used when `gateway.debug` is `false` and `RUST_LOG` is not set
 const DEFAULT_GATEWAY_NON_DEBUG_DIRECTIVES: &str = "warn,gateway=info,tensorzero_core=info";
 /// This is used when `gateway.debug` is `true` and `RUST_LOG` is not set
-const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str =
-    "warn,gateway=debug,tensorzero_core=debug,tower_http::trace=debug";
+const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str = "warn,gateway=debug,tensorzero_core=debug";
 
 /// Set up logging (including the necessary layers for OpenTelemetry exporting)
 ///
@@ -1063,15 +1076,23 @@ const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str =
 /// However, the call to `build_opentelemetry_layer` requires a Tokio runtime,
 /// so marking this function as async makes it clear to callers that they need to
 /// be in an async context.
-pub async fn setup_observability(log_format: LogFormat) -> Result<ObservabilityHandle, Error> {
+pub async fn setup_observability(
+    log_format: LogFormat,
+    is_http_gateway: bool,
+) -> Result<ObservabilityHandle, Error> {
     // We need to provide a dummy generic parameter to satisfy the compiler
-    setup_observability_with_exporter_override::<opentelemetry_otlp::SpanExporter>(log_format, None)
-        .await
+    setup_observability_with_exporter_override::<opentelemetry_otlp::SpanExporter>(
+        log_format,
+        None,
+        is_http_gateway,
+    )
+    .await
 }
 
 pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'static>(
     log_format: LogFormat,
     exporter_override: Option<T>,
+    is_http_gateway: bool,
 ) -> Result<ObservabilityHandle, Error> {
     let env_var_name = "RUST_LOG";
     let has_env_var = std::env::var(env_var_name).is_ok();
@@ -1133,6 +1154,9 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
         Err(e) => (Err(e), None, None),
     };
 
+    // This layer only makes sense when we construct top-level HTTP overhead-tracking spans
+    let overhead_timing_layer = is_http_gateway.then(OverheadTimingLayer::new);
+
     // IMPORTANT: If you add any new layers here that have per-layer filtering applied
     // you *MUST* call `apply_filter_fixing_tracing_bug` instead of `layer.with_filter(filter)`
     // See the docs for `apply_filter_fixing_tracing_bug` for more details.
@@ -1140,6 +1164,7 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
         .with(otel_layer)
         .with(apply_filter_fixing_tracing_bug(log_layer, log_level))
         .with(leak_detector.clone())
+        .with(overhead_timing_layer)
         .init();
 
     // If `RUST_LOG` is explicitly set, it takes precedence over `gateway.debug`,
@@ -1178,6 +1203,17 @@ pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
             message: format!("Failed to install Prometheus exporter: {e}"),
         })
     })?;
+    let handle_clone = metrics_handle.clone();
+    // Metrics are pull-based via the `/metrics` endpoint, so we don't
+    // need to do anything on shutdown
+    spawn_ignoring_shutdown(async move {
+        loop {
+            // metrics-exporter-prometheus defaults to 5 seconds for `upkeep_timeout`
+            // when using `install()`
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            handle_clone.run_upkeep();
+        }
+    });
 
     // Register the expected metrics along with their types and docstrings
     describe_counter!(
@@ -1202,6 +1238,12 @@ pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
         "tensorzero_inferences_total",
         Unit::Count,
         "Inferences performed by TensorZero",
+    );
+
+    describe_histogram!(
+        "tensorzero_inference_latency_overhead_seconds",
+        Unit::Seconds,
+        "Overhead of TensorZero on HTTP requests"
     );
 
     Ok(metrics_handle)

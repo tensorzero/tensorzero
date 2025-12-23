@@ -99,7 +99,7 @@ from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
-        # Try other providers easily: "anthropic::claude-3-7-sonnet-20250219"
+        # Try other providers easily: "anthropic::claude-sonnet-4-5-20250929"
         input={
             "messages": [
                 {
@@ -139,7 +139,7 @@ patch_openai_client(
 
 response = client.chat.completions.create(
     model="tensorzero::model_name::openai::gpt-4o-mini",
-    # Try other providers easily: "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219"
+    # Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929"
     messages=[
         {
             "role": "user",
@@ -172,7 +172,7 @@ const client = new OpenAI({
 
 const response = await client.chat.completions.create({
   model: "tensorzero::model_name::openai::gpt-4o-mini",
-  // Try other providers easily: "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219"
+  // Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929"
   messages: [
     {
       role: "user",
@@ -247,7 +247,7 @@ t0.experimental_list_inferences(
       metric_name="converted_sale",
       value=True,
   ),
-  order_by=[OrderBy(by="timestamp", direction="DESC")],
+  order_by=[OrderBy(by="timestamp", direction="descending")],
   limit=100_000,
   # ... and more ...
 )
@@ -301,15 +301,13 @@ Boost performance by dynamically updating your prompts with relevant examples, c
   </tr>
   <tr>
     <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl">Dynamic In-Context Learning (DICL)</a></b></td>
-    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#chain-of-thought-cot">Chain-of-Thought (CoT)</a></b></td>
+    <td width="50%" align="center" valign="middle"></td>
   </tr>
   <tr>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d8489e92-ce93-46ac-9aab-289ce19bb67d"></td>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/ea13d73c-76a4-4e0c-a35b-0c648f898311" height="320"></td>
+    <td width="50%" align="center" valign="middle"></td>
   </tr>
 </table>
-
-_More coming soon..._
 
 <br>
 
@@ -362,9 +360,9 @@ _More coming soon..._
 <pre><code class="language-bash">Run ID: 01961de9-c8a4-7c60-ab8d-15491a9708e4
 Number of datapoints: 100
 ██████████████████████████████████████ 100/100
-exact_match: 0.83 ± 0.03
-semantic_match: 0.98 ± 0.01
-item_count: 7.15 ± 0.39</code></pre>
+exact_match: 0.83 ± 0.03 (n=100)
+semantic_match: 0.98 ± 0.01 (n=100)
+item_count: 7.15 ± 0.39 (n=100)</code></pre>
     </td>
   </tr>
 </table>
@@ -474,3 +472,13 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy.
 
 _& many more on the way!_
+
+## Blog Posts
+
+We write about LLM engineering on the **[TensorZero Blog](https://www.tensorzero.com/blog)**.
+Here are some of our favorite posts:
+
+- **[Bandits in your LLM Gateway: Improve LLM Applications Faster with Adaptive Experimentation (A/B Testing)](https://www.tensorzero.com/blog/bandits-in-your-llm-gateway/)**
+- **[Is OpenAI's Reinforcement Fine-Tuning (RFT) Worth It?](https://www.tensorzero.com/blog/is-openai-reinforcement-fine-tuning-rft-worth-it/)**
+- **[Distillation with Programmatic Data Curation: Smarter LLMs, 5-30x Cheaper Inference](https://www.tensorzero.com/blog/distillation-programmatic-data-curation-smarter-llms-5-30x-cheaper-inference/)**
+- **[From NER to Agents: Does Automated Prompt Engineering Scale to Complex Tasks?](https://www.tensorzero.com/blog/from-ner-to-agents-does-automated-prompt-engineering-scale-to-complex-tasks/)**

@@ -7,9 +7,7 @@ The configuration file is the backbone of TensorZero.
 It defines the behavior of the gateway, including the models and their providers, functions and their variants, tools, metrics, and more.
 Developers express the behavior of LLM calls by defining the relevant prompt templates, schemas, and other parameters in this configuration file.
 
-You can see an example configuration file [here](https://github.com/tensorzero/tensorzero/blob/main/tensorzero-core/fixtures/config/tensorzero.toml).
-
-The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `models`, `model_providers`, `functions`, `variants`, `tools`, `metrics`, `rate_limiting`, and `object_storage`.
+The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `postgres`, `models`, `model_providers`, `functions`, `variants`, `tools`, `metrics`, `rate_limiting`, and `object_storage`.
 
 ## `[gateway]`
 
@@ -100,19 +98,19 @@ When this field is set to `true`, the gateway will log more verbose errors to as
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/gateway/deployment/#disabling-pseudonymous-usage-analytics).
+If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/deployment/tensorzero-gateway/#disabling-pseudonymous-usage-analytics).
 
 ### `export.otlp.traces.enabled`
 
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-Enable [exporting traces to an external OpenTelemetry-compatible observability
-system](/gateway/guides/opentelemetry-otlp).
+Enable [exporting traces to an external OpenTelemetry-compatible observability system](/operations/export-opentelemetry-traces).
 
 <Warning>
-  Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
-  environment variable. See the above-linked guide for details.
+
+Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable. See the above-linked guide for details.
+
 </Warning>
 
 ### `export.otlp.traces.extra_headers`
@@ -155,11 +153,30 @@ If set to `"openinference"`, TensorZero will set attributes based on the [OpenIn
 
 Controls how the gateway handles remote input files (e.g., images, PDFs) during multimodal inference.
 
-If set to `true` (default), the gateway will fetch remote input files and send them as a base64-encoded payload in the prompt.
+If set to `true`, the gateway will fetch remote input files and send them as a base64-encoded payload in the prompt.
 This is recommended to ensure that TensorZero and the model providers see identical inputs, which is important for observability and reproducibility.
 
 If set to `false`, TensorZero will forward the input file URLs directly to the model provider (when supported) and fetch them for observability in parallel with inference.
 This can be more efficient, but may result in different content being observed if the URL content changes between when the provider fetches it and when TensorZero fetches it for observability.
+
+### `global_outbound_http_timeout_ms`
+
+- **Type:** integer
+- **Required:** no (default: `300000` = 5 minutes)
+
+Sets the global timeout in milliseconds for all outbound HTTP requests made by TensorZero to external services such as model providers and APIs.
+
+By default, all HTTP requests will timeout after 5 minutes (300,000 ms).
+This timeout is intentionally set high to accommodate slow model responses, but you can customize it based on your requirements.
+
+The `global_outbound_http_timeout_ms` acts as an upper bound for all more specific timeout configurations in your system.
+Any variant-level timeouts (e.g., `timeouts.non_streaming.total_ms`, `timeouts.streaming.ttft_ms`), provider-level timeouts, or embedding model timeouts must be less than or equal to this global timeout.
+
+<Warning>
+
+Setting this value too low may cause legitimate requests to timeout before receiving a response from the model provider.
+
+</Warning>
 
 ### `observability.async_writes`
 
@@ -239,28 +256,15 @@ If `true`, then the migrations are not applied upon launch and must instead be a
 by running `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations` or `docker compose run --rm gateway --run-clickhouse-migrations`.
 If `false`, then the migrations are run automatically upon launch.
 
-### `template_filesystem_access`
+### `template_filesystem_access.base_path`
 
-- **Type:** object
+- **Type:** string
 - **Required:** no (default disabled)
 
-Enabling this setting will allow MiniJinja templates to load sub-templates from the file system using the `include` directive.
+Set `template_filesystem_access.base_path` to allow MiniJinja templates to load sub-templates using the `{% include %}` and `{% import %}` directives.
 
-The object has two fields:
-
-- `enabled` (boolean): Determines whether to enable file system access for templates.
-- `base_path` (string, optional): Determines the base path for template file system access.
-
-If you use a single configuration file, the `base_path` will be the directory containing the configuration file.
-If you split your configuration into multiple files, you must specify `gateway.template_filesystem_access.base_path` (see [Organize your configuration](/operations/organize-your-configuration) for details).
-The `include` paths must be relative to `base_path`, and can only access files in that directory or its sub-directories.
-
-<Warning>
-
-Make sure to sanitize all user-provided template data before using this setting.
-Otherwise, a malicious input could read unintended files in the file system.
-
-</Warning>
+The directives will be relative to `base_path` and can only access files within that directory or its subdirectories.
+The `base_path` can be absolute or relative to the configuration file's location.
 
 ## `[models.model_name]`
 
@@ -574,6 +578,26 @@ api_base = "https://example.com/v1/messages"
 # ...
 ```
 
+##### `beta_structured_outputs`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enables Anthropic's beta structured outputs feature, which provides native support for strict JSON schema validation and strict tool parameter validation.
+
+When enabled:
+
+- Adds the `anthropic-beta: structured-outputs-2025-11-13` header to requests
+- For JSON functions with `json_mode = "strict"`, forwards the output schema in the `output_format` field
+- For tools with `strict = true`, forwards the `strict` parameter to enable strict validation
+
+```toml title="tensorzero.toml"
+[models.claude_structured.providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-5-20250929"
+beta_structured_outputs = true
+```
+
 </Accordion>
 
 <Accordion title='type: "aws_bedrock"'>
@@ -606,7 +630,7 @@ model_id = "anthropic.claude-3-haiku-20240307-v1:0"
 <Tip>
 
 Many AWS Bedrock models are only available through cross-region inference profiles.
-For those models, the `model_id` requires special prefix (e.g. the `us.` prefix in `us.anthropic.claude-3-7-sonnet-20250219-v1:0`).
+For those models, the `model_id` requires special prefix (e.g. the `us.` prefix in `us.anthropic.claude-sonnet-4-5-20250929-v1:0`).
 See the [AWS documentation on inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html).
 
 </Tip>
@@ -844,7 +868,7 @@ You can also deploy your own models on Fireworks AI.
 [models."llama-3.1-8b-instruct".providers.fireworks]
 # ...
 type = "fireworks"
-model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 # ...
 ```
 
@@ -1287,21 +1311,24 @@ model_name = "gpt-4o-mini-2024-07-18"
 
 ##### `provider_tools`
 
-- **Type:** string or object
-- **Required:** no (default: `env::OPENAI_API_KEY` unless otherwise set in `provider_types.openai.defaults.api_key_location`)
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
 
-Defines the location of the API key for the OpenAI provider.
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., OpenAI's web search tool).
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+Each object in the array should contain the provider-specific tool configuration as defined by the provider's API.
+For example, OpenAI's Responses API supports a `web_search` tool that enables the model to search the web for information.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
 
 ```toml title="tensorzero.toml"
 [models.gpt-5-mini-responses-web-search.providers.openai]
 # ...
 type = "openai"
 api_type = "responses"
-provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+provider_tools = [{type = "web_search"}]  # Enable OpenAI's built-in web search tool
 # ...
 ```
 
@@ -1404,7 +1431,7 @@ Can be either a string for a single credential location, or an object with `defa
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
-[models.llama3_1_8b_instruct_turbo.providers.together]
+[models.llama3_3_70b_instruct_turbo.providers.together]
 # ...
 type = "together"
 api_key_location = "dynamic::together_api_key"
@@ -1425,7 +1452,7 @@ See [Together's documentation](https://docs.together.ai/docs/chat-models) for th
 You can also deploy your own models on Together AI.
 
 ```toml title="tensorzero.toml"
-[models.llama3_1_8b_instruct_turbo.providers.together]
+[models.llama3_3_70b_instruct_turbo.providers.together]
 # ...
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
@@ -1504,7 +1531,7 @@ Can be either a string for a single credential location, or an object with `defa
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
-[models.grok_2_1212.providers.xai]
+[models.grok_4_1_fast_non_reasoning.providers.xai]
 # ...
 type = "xai"
 api_key_location = "dynamic::xai_api_key"
@@ -1523,10 +1550,10 @@ Defines the model name to use with the xAI API.
 See [xAI's documentation](https://docs.x.ai/docs/models) for the list of available model names.
 
 ```toml title="tensorzero.toml"
-[models.grok_2_1212.providers.xai]
+[models.grok_4_1_fast_non_reasoning.providers.xai]
 # ...
 type = "xai"
-model_name = "grok-2-1212"
+model_name = "grok-4-1-fast-non-reasoning"
 # ...
 ```
 
@@ -2371,6 +2398,12 @@ output_schema = "./functions/extract-customer-info/output_schema.json"
 # ...
 ```
 
+<Tip>
+
+See [Generate structured outputs](/gateway/generate-structured-outputs) for a comprehensive guide with examples.
+
+</Tip>
+
 </Accordion>
 
 ### `user_schema`
@@ -2426,13 +2459,12 @@ Defines the type of the variant.
 
 TensorZero currently supports the following variant types:
 
-| Type                                       | Description                                                                                                                                                                                                                                             |
-| :----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chat_completion`                          | Uses a chat completion model to generate responses by processing a series of messages in a conversational format. This is typically what you use out of the box with most LLMs.                                                                         |
-| `experimental_best_of_n`                   | Generates multiple response candidates with other variants, and selects the best one using an evaluator model.                                                                                                                                          |
-| `experimental_chain_of_thought`            | Encourages the model to reason step by step using a chain-of-thought prompting strategy, which is particularly useful for tasks requiring logical reasoning or multi-step problem-solving. Only available for non-streaming requests to JSON functions. |
-| `experimental_dynamic_in_context_learning` | Selects similar high-quality examples using an embedding of the input, and incorporates them into the prompt to enhance context and improve response quality.                                                                                           |
-| `experimental_mixture_of_n`                | Generates multiple response candidates with other variants, and combines the responses using a fuser model.                                                                                                                                             |
+| Type                                       | Description                                                                                                                                                                     |
+| :----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat_completion`                          | Uses a chat completion model to generate responses by processing a series of messages in a conversational format. This is typically what you use out of the box with most LLMs. |
+| `experimental_best_of_n`                   | Generates multiple response candidates with other variants, and selects the best one using an evaluator model.                                                                  |
+| `experimental_dynamic_in_context_learning` | Selects similar high-quality examples using an embedding of the input, and incorporates them into the prompt to enhance context and improve response quality.                   |
+| `experimental_mixture_of_n`                | Generates multiple response candidates with other variants, and combines the responses using a fuser model.                                                                     |
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -2613,7 +2645,7 @@ The supported modes are:
 - `off`: Make a chat completion request without any special JSON handling (not recommended).
 - `on`: Make a chat completion request with JSON mode (if supported by the provider).
 - `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
-- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+- `tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -2621,6 +2653,12 @@ The supported modes are:
 json_mode = "strict"
 # ...
 ```
+
+<Tip>
+
+See [Generate structured outputs](/gateway/generate-structured-outputs) for a comprehensive guide with examples.
+
+</Tip>
 
 ##### `max_tokens`
 
@@ -2698,7 +2736,8 @@ routing = ["openai", "azure"]
 Then:
 
 - `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
-- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
+- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model using the Chat Completions API, ignoring the `gpt-4o` model defined above.
+- `model = "openai::responses::gpt-5-codex"` calls the OpenAI Responses API directly for the `gpt-5-codex` model. See [OpenAI Responses API](/gateway/call-the-openai-responses-api/) for details.
 
 ##### `presence_penalty`
 
@@ -2768,6 +2807,35 @@ Defines the seed to use for the variant.
 # ...
 seed = 42
 ```
+
+##### `service_tier`
+
+- **Type:** string
+- **Required:** no (default: `"auto"`)
+
+Controls the priority and latency characteristics of inference requests.
+
+The supported values are:
+
+- `auto`: Let the provider automatically select the appropriate service tier (default).
+- `default`: Use the provider's standard service tier.
+- `priority`: Use a higher-priority service tier with lower latency (may have higher costs).
+- `flex`: Use a lower-priority service tier optimized for cost efficiency (may have higher latency).
+
+<Warning>
+
+Only some model providers support this parameter.
+TensorZero will warn and ignore it if unsupported.
+
+</Warning>
+
+##### `stop_sequences`
+
+- **Type:** array of strings
+- **Required:** no (default: `null`)
+
+Defines a list of sequences where the model will stop generating further tokens.
+When the model encounters any of these sequences in its output, it will immediately stop generation.
 
 ##### `system_template`
 
@@ -2915,28 +2983,6 @@ user_template = "./functions/draft-email/prompt-v1/user_template.minijinja"
 # ...
 ```
 
-##### `weight`
-
-- **Type:** float
-- **Required:** no (default: 0)
-
-Defines the weight of the variant.
-When you call a function, the weight determines the relative importance of the variant when sampling.
-
-Variants will be sampled with a probability proportional to their weight.
-For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
-
-You can disable a variant by setting its weight to `0`.
-The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
-This is useful for defining fallback variants, which won't be used unless no other variants are available.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.variants.prompt-v1]
-# ...
-weight = 1.0
-# ...
-```
-
 </Accordion>
 
 <Accordion title='type: "experimental_best_of_n"'>
@@ -2991,21 +3037,6 @@ type = "experimental_best_of_n"
 # ...
 ```
 
-##### `timeout_s`
-
-- **Type:** float
-- **Required:** no (default: 300s)
-
-The `timeout_s` parameter specifies the maximum time in seconds allowed for generating candidate responses.
-Any candidate that takes longer than this duration to generate a response will be dropped from consideration.
-
-```toml
-[functions.draft-email.variants.best-of-n]
-type = "experimental_best_of_n"
-timeout_s = 60
-# ...
-```
-
 ##### `timeouts`
 
 - **Type:** object
@@ -3027,40 +3058,6 @@ timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
 The specified timeouts apply to the scope of an entire variant inference request, including all inference requests to candidates and the evaluator.
 You can also set timeouts at the model level and provider level.
 Multiple timeouts can be active simultaneously.
-
-##### `weight`
-
-- **Type:** float
-- **Required:** no (default: 0)
-
-Defines the weight of the variant.
-When you call a function, the weight determines the relative importance of the variant when sampling.
-
-Variants will be sampled with a probability proportional to their weight.
-For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
-
-You can disable a variant by setting its weight to `0`.
-The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
-This is useful for defining fallback variants, which won't be used unless no other variants are available.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.variants.prompt-v1]
-# ...
-weight = 1.0
-# ...
-```
-
-</Accordion>
-
-<Accordion title='type: "experimental_chain_of_thought"'>
-
-The `experimental_chain_of_thought` variant type uses the same configuration as a `chat_completion` variant.
-
-<Warning>
-
-This variant type is only available for non-streaming requests to JSON functions.
-
-</Warning>
 
 </Accordion>
 
@@ -3114,21 +3111,6 @@ type = "experimental_mixture_of_n"
 # ...
 ```
 
-##### `timeout_s`
-
-- **Type:** float
-- **Required:** no (default: 300s)
-
-The `timeout_s` parameter specifies the maximum time in seconds allowed for generating candidate responses.
-Any candidate that takes longer than this duration to generate a response will be dropped from consideration.
-
-```toml
-[functions.draft-email.variants.mixture-of-n]
-type = "experimental_mixture_of_n"
-timeout_s = 60
-# ...
-```
-
 ##### `timeouts`
 
 - **Type:** object
@@ -3150,28 +3132,6 @@ timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
 The specified timeouts apply to the scope of an entire variant inference request, including all inference requests to candidates and the fuser.
 You can also set timeouts at the model level and provider level.
 Multiple timeouts can be active simultaneously.
-
-##### `weight`
-
-- **Type:** float
-- **Required:** no (default: 0)
-
-Defines the weight of the variant.
-When you call a function, the weight determines the relative importance of the variant when sampling.
-
-Variants will be sampled with a probability proportional to their weight.
-For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
-
-You can disable a variant by setting its weight to `0`.
-The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
-This is useful for defining fallback variants, which won't be used unless no other variants are available.
-
-```toml
-[functions.draft-email.variants.mixture-of-n]
-# ...
-weight = 1.0
-# ...
-```
 
 </Accordion>
 
@@ -3376,7 +3336,7 @@ The supported modes are:
 - `off`: Make a chat completion request without any special JSON handling (not recommended).
 - `on`: Make a chat completion request with JSON mode (if supported by the provider).
 - `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
-- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+- `tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3485,7 +3445,8 @@ routing = ["openai", "azure"]
 Then:
 
 - `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
-- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
+- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model using the Chat Completions API, ignoring the `gpt-4o` model defined above.
+- `model = "openai::responses::gpt-5-codex"` calls the OpenAI Responses API directly for the `gpt-5-codex` model. See [OpenAI Responses API](/gateway/call-the-openai-responses-api/) for details.
 
 ##### `retries`
 
@@ -3571,34 +3532,7 @@ The specified timeouts apply to the scope of an entire variant inference request
 You can also set timeouts at the model level and provider level.
 Multiple timeouts can be active simultaneously.
 
-##### `weight`
-
-- **Type:** float
-- **Required:** no (default: 0)
-
-Defines the weight of the variant.
-When you call a function, the weight determines the relative importance of the variant when sampling.
-
-Variants will be sampled with a probability proportional to their weight.
-For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
-
-You can disable a variant by setting its weight to `0`.
-The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
-This is useful for defining fallback variants, which won't be used unless no other variants are available.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.variants.prompt-v1]
-# ...
-weight = 1.0
-# ...
-```
-
 </Accordion>
-
-#### `type: "experimental_chain_of_thought"`
-
-Besides the type parameter, this variant has the same configuration options as the `chat_completion` variant type.
-Please refer to that documentation to see what options are available.
 
 ## `[functions.function_name.experimentation]`
 
@@ -3608,8 +3542,6 @@ At inference time, the gateway will sample a variant from the function to comple
 By default, the gateway will sample a variant uniformly at random (`type = "uniform"`).
 
 TensorZero supports multiple types of experiments that can help you learn about the relative performance of the variants.
-
-Note that if this section is present, it overrides any `weight` values that are specified within individual function variant config blocks.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3642,8 +3574,58 @@ type = "track_and_stop"
 
 <Accordion title='type: "uniform"'>
 
-The `uniform` type samples variants uniformly at random from all variants defined in the function.
+The `uniform` type samples variants uniformly at random.
 This is the default behavior when no `[functions.function_name.experimentation]` section is specified.
+
+By default, all variants defined in the function are sampled with equal probability.
+You can optionally specify `candidate_variants` to sample uniformly from a subset of variants, and `fallback_variants` for sequential fallback behavior.
+The behavior depends on which fields are specified:
+
+| Configuration             | Behavior                                                                    |
+| :------------------------ | :-------------------------------------------------------------------------- |
+| No fields specified       | Samples uniformly from all variants in the function                         |
+| Only `candidate_variants` | Samples uniformly from specified candidates                                 |
+| Only `fallback_variants`  | Uses fallback variants sequentially (no uniform sampling)                   |
+| Both specified            | Samples uniformly from candidates; if all fail, uses fallbacks sequentially |
+
+### `candidate_variants`
+
+- **Type:** array of strings
+- **Required:** no
+
+An optional set of variants to sample uniformly from.
+Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section.
+
+If not specified (and `fallback_variants` is also not specified), all variants are sampled uniformly.
+If `fallback_variants` is specified but `candidate_variants` is not, no candidates are used (fallback-only mode).
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]
+```
+
+### `fallback_variants`
+
+- **Type:** array of strings
+- **Required:** no
+
+An optional set of function variants to use as fallback options.
+Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section.
+
+If all candidate variants fail during inference, the gateway will select variants sequentially from `fallback_variants` (in order, not uniformly).
+This behaves like a ranked list where the first active fallback variant is always selected.
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]
+fallback_variants = ["fallback-variant"]
+```
+
+### Examples
+
+**Default uniform sampling (all variants):**
 
 ```toml title="tensorzero.toml"
 [functions.draft-email]
@@ -3656,8 +3638,33 @@ type = "chat"
 # ...
 
 [functions.draft-email.variants.variant-c] # 1/3 chance
-type = "chat_completion"
 # ...
+```
+
+**Explicit candidate variants:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]  # each has 1/2 probability
+# `variant-c` will not be sampled
+```
+
+**With fallback variants:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]  # try these first, uniformly
+fallback_variants = ["variant-c"]  # use if both candidates fail
+```
+
+**Fallback-only mode:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+fallback_variants = ["variant-a", "variant-b", "variant-c"]  # sequential
 ```
 
 </Accordion>
@@ -4167,6 +4174,32 @@ There are no additional fields available for this type.
 
 </Accordion>
 
+## `[postgres]`
+
+The `[postgres]` section defines the configuration for PostgreSQL connectivity.
+
+PostgreSQL is required for certain TensorZero features including [rate limiting](/operations/enforce-custom-rate-limits/) and [Track-and-Stop experimentation](/experimentation/run-adaptive-ab-tests/).
+You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environment variable.
+
+### `connection_pool_size`
+
+- **Type:** integer
+- **Required:** no (default: `20`)
+
+Defines the maximum number of connections in the PostgreSQL connection pool.
+
+### `enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `null`)
+
+Enable PostgreSQL connectivity.
+If `true`, the gateway will throw an error on startup if it fails to connect to PostgreSQL (requires `TENSORZERO_POSTGRES_URL` environment variable).
+If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
+If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
+
+If you have features that require PostgreSQL (e.g. rate limiting, adaptive experimentation) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
+
 ## `[rate_limiting]`
 
 The `[rate_limiting]` section allows you to configure granular rate limits for your TensorZero Gateway.
@@ -4269,7 +4302,7 @@ always = true
 - **Required:** no (default: `[]`)
 
 Defines the scope to which the rate limit applies.
-Scopes allow you to apply rate limits to specific subsets of requests based on tags.
+Scopes allow you to apply rate limits to specific subsets of requests based on tags or API keys.
 
 The following scopes are supported:
 
@@ -4279,6 +4312,11 @@ The following scopes are supported:
     - `tensorzero::each`: Apply the limit separately to each unique value of the tag.
     - `tensorzero::total`: Apply the limit to the aggregate of all requests with this tag, regardless of the tag's value.
     - Any other string: Apply the limit only when the tag has this specific value.
+
+- API Key Public ID (requires authentication to be enabled):
+  - `api_key_public_id` (string): The API key public ID to match against. This can be:
+    - `tensorzero::each`: Apply the limit separately to each API key.
+    - A specific 12-character public ID: Apply the limit only to requests authenticated with this API key.
 
 For example:
 
@@ -4297,5 +4335,21 @@ priority = 1
 model_inferences_per_minute = 5
 scope = [
     { tag_key = "user_id", tag_value = "ceo" }
+]
+
+# Each API key can make a maximum of 100 model inferences per hour
+[[rate_limiting.rules]]
+priority = 0
+model_inferences_per_hour = 100
+scope = [
+    { api_key_public_id = "tensorzero::each" }
+]
+
+# But override the limit for a specific API key
+[[rate_limiting.rules]]
+priority = 1
+model_inferences_per_hour = 1000
+scope = [
+    { api_key_public_id = "xxxxxxxxxxxx" }
 ]
 ```

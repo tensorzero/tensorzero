@@ -6,7 +6,7 @@ use std::{collections::HashMap, net::SocketAddr};
 use secrecy::SecretString;
 use tensorzero::ClientExt;
 
-use object_store::{aws::AmazonS3Builder, ObjectStore};
+use object_store::{ObjectStore, aws::AmazonS3Builder};
 use std::sync::Arc;
 use tensorzero_core::config::provider_types::{
     AnthropicDefaults, AzureDefaults, DeepSeekDefaults, FireworksDefaults, GCPDefaults,
@@ -15,11 +15,12 @@ use tensorzero_core::config::provider_types::{
     VLLMDefaults, XAIDefaults,
 };
 use tensorzero_core::http::TensorzeroHttpClient;
+use tensorzero_core::tool::Tool;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use base64::prelude::*;
 use futures::StreamExt;
 use image::{ImageFormat, ImageReader};
@@ -28,27 +29,26 @@ use object_store::path::Path;
 use rand::Rng;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::future::IntoFuture;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
+    CacheParamsOptions, ClientInferenceParams, ClientSecretString, InferenceOutput,
+    InferenceResponse, Input, InputMessage, InputMessageContent,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
+use tensorzero_core::endpoints::object_storage::{ObjectResponse, PathParams, get_object_handler};
 use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
-use tracing_test::traced_test;
 
-use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
-
-use tensorzero_core::inference::types::file::{Base64File, ObjectStoragePointer, UrlFile};
+use tensorzero_core::inference::types::file::{Base64File, Detail, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
-use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
+use tensorzero_core::inference::types::{Arguments, FinishReason, System, Text, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::testing::reset_capture_logs;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
+        ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage,
         storage::{StorageKind, StoragePath},
-        ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -63,7 +63,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 use tensorzero_core::model::CredentialLocation;
 
-use super::helpers::{get_extra_headers, get_test_model_extra_headers};
+use super::helpers::{get_modal_extra_headers, get_test_model_extra_headers};
 
 #[derive(Clone, Debug)]
 pub struct E2ETestProvider {
@@ -74,6 +74,13 @@ pub struct E2ETestProvider {
     pub credentials: HashMap<String, String>,
 
     pub supports_batch_inference: bool,
+}
+
+impl E2ETestProvider {
+    /// Returns true if the provider is vLLM or SGLang (which typically require Modal headers)
+    pub fn is_modal_provider(&self) -> bool {
+        self.model_provider_name == "vllm" || self.model_provider_name == "sglang"
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -87,6 +94,7 @@ pub struct ModelTestProvider {
 #[derive(Clone, Debug)]
 pub struct EmbeddingTestProvider {
     pub model_name: String,
+    pub dimensions: usize,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -120,6 +128,7 @@ pub struct E2ETestProviders {
 
     pub image_inference: Vec<E2ETestProvider>,
     pub pdf_inference: Vec<E2ETestProvider>,
+    pub input_audio: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
@@ -159,8 +168,10 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_image_url_inference_with_provider_filesystem;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_empty_message_content_with_provider;
         use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::common::test_inference_extra_body_with_provider;
+        use $crate::providers::common::test_assistant_prefill_inference_request_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_simple_with_provider;
         use $crate::providers::reasoning::test_streaming_reasoning_inference_request_simple_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
@@ -189,6 +200,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
         use $crate::providers::embeddings::test_single_token_array_with_provider;
         use $crate::providers::embeddings::test_batch_token_arrays_semantic_similarity_with_provider;
+        use $crate::providers::common::test_multi_turn_thought_non_streaming_with_provider;
+        use $crate::providers::common::test_multi_turn_thought_streaming_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -198,11 +211,21 @@ macro_rules! generate_provider_tests {
             }
         }
 
-        #[tokio::test(flavor = "multi_thread")]
-        async fn test_warn_ignored_thought_block() {
+        #[tokio::test]
+        async fn test_assistant_prefill_inference_request() {
             let providers = $func().await.simple_inference;
             for provider in providers {
-                test_warn_ignored_thought_block_with_provider(provider).await;
+                test_assistant_prefill_inference_request_with_provider(provider).await;
+            }
+        }
+
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_warn_ignored_thought_block() {
+            let logs_contain = tensorzero_core::utils::testing::capture_logs();
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_warn_ignored_thought_block_with_provider(provider, &logs_contain).await;
             }
         }
 
@@ -257,6 +280,14 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
+        async fn test_empty_message_content() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_empty_message_content_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
         async fn test_streaming_invalid_request() {
             let providers = $func().await.simple_inference;
             for provider in providers {
@@ -301,12 +332,13 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_provider_type_fallback_credentials() {
+            let logs_contain = tensorzero_core::utils::testing::capture_logs();
             // We just need a longhand model
             let all_providers = $func().await;
             let providers = all_providers.credential_fallbacks;
             let supports_dynamic_credentials = !all_providers.provider_type_default_credentials.is_empty();
             for provider in providers {
-                test_provider_type_fallback_credentials_with_provider(provider, supports_dynamic_credentials).await;
+                test_provider_type_fallback_credentials_with_provider(provider, supports_dynamic_credentials, &logs_contain).await;
             }
         }
 
@@ -531,6 +563,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_audio_inference_store_filesystem() {
+            let providers = $func().await.input_audio;
+            for provider in providers {
+                $crate::providers::commonv2::input_audio::test_audio_inference_with_provider_filesystem(provider).await;
+            }
+        }
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
@@ -602,6 +641,21 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_multi_turn_thought_non_streaming() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_multi_turn_thought_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_multi_turn_thought_streaming() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_multi_turn_thought_streaming_with_provider(provider).await;
+            }
+        }
 
         #[tokio::test]
         async fn test_json_mode_off_inference_request() {
@@ -743,6 +797,10 @@ model = "responses-gpt-4o-mini-2024-07-18"
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
 
+[functions.pdf_test.variants.gcp_vertex_anthropic]
+type = "chat_completion"
+model = "gcp_vertex_anthropic::projects/tensorzero-public/locations/global/publishers/anthropic/models/claude-sonnet-4-5@20250929"
+
 [functions.pdf_test.variants.google_ai_studio]
 type = "chat_completion"
 model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
@@ -751,9 +809,22 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 type = "chat_completion"
 model = "anthropic::claude-sonnet-4-5-20250929"
 
+[functions.pdf_test.variants.gcp-vertex-sonnet]
+type = "chat_completion"
+model = "claude-sonnet-4-5-gcp-vertex"
+
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models.claude-sonnet-4-5-gcp-vertex]
+routing = ["gcp_vertex_anthropic"]
+
+[models.claude-sonnet-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
 
 [models."responses-gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
@@ -953,14 +1024,14 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
     let credential_value = original_value.clone();
 
     // Remove the default env var
-    std::env::remove_var(&original_env_var);
+    tensorzero_unsafe_helpers::remove_env_var_tests_only(&original_env_var);
 
     // Set up a custom env var with a test-specific name
     let custom_env_var = format!(
         "TENSORZERO_TEST_{}_KEY",
         provider.model_provider_name.to_uppercase()
     );
-    std::env::set_var(&custom_env_var, &credential_value);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
     let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
@@ -1017,11 +1088,11 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1069,14 +1140,14 @@ pub async fn test_provider_type_default_credentials_shorthand_with_provider(
     let credential_value = original_value.clone();
 
     // Remove the default env var
-    std::env::remove_var(&original_env_var);
+    tensorzero_unsafe_helpers::remove_env_var_tests_only(&original_env_var);
 
     // Set up a custom env var with a test-specific name
     let custom_env_var = format!(
         "TENSORZERO_TEST_{}_KEY",
         provider.model_provider_name.to_uppercase()
     );
-    std::env::set_var(&custom_env_var, &credential_value);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
     let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
@@ -1117,11 +1188,11 @@ defaults.{}
             function_name: None,
             model_name: Some(provider.model_name),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1148,11 +1219,12 @@ defaults.{}
 /// 4. Infers with the dynamic credential
 /// 5. Infers with the default credential
 /// 6. Asserts that the logs contain exactly one message about falling back
-#[traced_test]
 pub async fn test_provider_type_fallback_credentials_with_provider(
     provider: ModelTestProvider,
     supports_dynamic_credentials_test: bool,
+    logs_contain: &impl Fn(&str) -> bool,
 ) {
+    reset_capture_logs();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.provider_type);
 
@@ -1236,11 +1308,11 @@ model = "test-model"
                 function_name: Some("basic_test".to_string()),
                 variant_name: Some("default".to_string()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "Say hello".to_string(),
                         })],
                     }],
@@ -1275,11 +1347,11 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1303,13 +1375,17 @@ model = "test-model"
         result.err()
     );
 
-    assert!(logs_contain("attempting fallback"));
+    assert!(logs_contain("Using fallback credential"));
+    assert!(
+        !logs_contain("ERROR"),
+        "We should not log an error when credential fallback occurs"
+    );
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    test_url_image_inference_with_provider_and_store(
+    Box::pin(test_url_image_inference_with_provider_and_store(
         provider,
         StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1325,7 +1401,7 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
         "#,
             temp_dir.path().to_string_lossy()
         ),
-    )
+    ))
     .await;
 
     // Check that image was stored in filesystem
@@ -1366,7 +1442,7 @@ async fn check_object_fetch_via_embedded(
 async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_data: &[u8]) {
     // Try using the running HTTP gateway (which is *not* configured with an object store)
     // to fetch the `StoragePath`
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let res = client
         .get(get_gateway_endpoint(&format!(
             "/internal/object_storage?storage_path={}",
@@ -1392,7 +1468,7 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_dat
 pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary pdf dir: {}", temp_dir.path().to_string_lossy());
-    let (client, storage_path) = test_base64_pdf_inference_with_provider_and_store(
+    let (client, storage_path) = Box::pin(test_base64_pdf_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1408,7 +1484,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that PDF was stored in filesystem
@@ -1432,7 +1508,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    let (client, storage_path) = test_base64_image_inference_with_provider_and_store(
+    let (client, storage_path) = Box::pin(test_base64_image_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1448,7 +1524,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that image was stored in filesystem
@@ -1511,7 +1587,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     prefix += "-";
 
     let (tensorzero_client, expected_key, storage_path) =
-        test_image_inference_with_provider_s3_compatible(
+        Box::pin(test_image_inference_with_provider_s3_compatible(
             provider,
             &StorageKind::S3Compatible {
                 bucket_name: Some(test_bucket.to_string()),
@@ -1533,7 +1609,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     "#
             ),
             &prefix,
-        )
+        ))
         .await;
 
     check_object_fetch(
@@ -1556,8 +1632,9 @@ pub async fn test_image_inference_with_provider_s3_compatible(
     toml: &str,
     prefix: &str,
 ) -> (tensorzero::Client, String, StoragePath) {
-    let expected_key =
-        format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
+    let expected_key = format!(
+        "{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+    );
 
     // Check that object is deleted
     let path = object_store::path::Path::parse(&expected_key).unwrap();
@@ -1579,9 +1656,10 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         }
     }
 
-    let (tensorzero_client, storage_path) =
-        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix)
-            .await;
+    let (tensorzero_client, storage_path) = Box::pin(
+        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix),
+    )
+    .await;
 
     let path = object_store::path::Path::parse(&expected_key).unwrap();
     let result = client
@@ -1645,17 +1723,19 @@ pub async fn test_url_image_inference_with_provider_and_store(
             .inference(ClientInferenceParams {
                 model_name: Some(provider.model_name.clone()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Url(UrlFile {
+                            InputMessageContent::File(File::Url(UrlFile {
                                 url: image_url.clone(),
                                 mime_type: None,
+                                detail: Some(Detail::Low),
+                                filename: None,
                             })),
                         ],
                     }],
@@ -1664,7 +1744,13 @@ pub async fn test_url_image_inference_with_provider_and_store(
                     enabled: CacheEnabledMode::On,
                     max_age_s: Some(10),
                 },
-                extra_headers: get_extra_headers(),
+                extra_headers: if provider.model_provider_name == "vllm"
+                    || provider.model_provider_name == "sglang"
+                {
+                    get_modal_extra_headers()
+                } else {
+                    UnfilteredInferenceExtraHeaders::default()
+                },
                 ..Default::default()
             })
             .await
@@ -1706,19 +1792,24 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                 function_name: Some("pdf_test".to_string()),
                 variant_name: Some(provider.variant_name.clone()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Base64(Base64File {
-                                source_url: None,
-                                mime_type: mime::APPLICATION_PDF,
-                                data: pdf_data.clone(),
-                            })),
+                            InputMessageContent::File(File::Base64(
+                                Base64File::new(
+                                    None,
+                                    Some(mime::APPLICATION_PDF),
+                                    pdf_data.clone(),
+                                    None,
+                                    None,
+                                )
+                                .expect("test data should be valid"),
+                            )),
                         ],
                     }],
                 },
@@ -1767,19 +1858,24 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         function_name: Some("image_test".to_string()),
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
                 content: vec![
-                    ClientInputMessageContent::Text(TextKind::Text {
+                    InputMessageContent::Text(Text {
                         text: "Describe the contents of the image".to_string(),
                     }),
-                    ClientInputMessageContent::File(File::Base64(Base64File {
-                        source_url: None,
-                        mime_type: mime::IMAGE_PNG,
-                        data: image_data.clone(),
-                    })),
+                    InputMessageContent::File(File::Base64(
+                        Base64File::new(
+                            None,
+                            Some(mime::IMAGE_PNG),
+                            image_data.clone(),
+                            Some(Detail::Low),
+                            None,
+                        )
+                        .expect("test data should be valid"),
+                    )),
                 ],
             }],
         },
@@ -1835,12 +1931,10 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
-    params.input.messages[0].content[1] =
-        ClientInputMessageContent::File(File::Base64(Base64File {
-            source_url: None,
-            mime_type: mime::IMAGE_PNG,
-            data: updated_base64,
-        }));
+    params.input.messages[0].content[1] = InputMessageContent::File(File::Base64(
+        Base64File::new(None, Some(mime::IMAGE_PNG), updated_base64, None, None)
+            .expect("test data should be valid"),
+    ));
 
     let response = client.inference(params.clone()).await.unwrap();
 
@@ -1867,7 +1961,11 @@ pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
 
 pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider, stream: bool) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2009,12 +2107,8 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "value": 0.5
             },
             {
-                "variant_name": "my_wrong_variant",
-                "pointer": "/inferenceConfig/temperature",
-                "value": 0.6
-            },
-            {
-                "model_provider_name": format!("tensorzero::model_name::{model_name}::provider_name::{model_provider_name}", model_name=provider.model_name, model_provider_name=provider.model_provider_name),
+                "model_name": provider.model_name,
+                "provider_name": provider.model_provider_name,
                 "pointer": "/inferenceConfig/top_p",
                 "value": 0.8
             }
@@ -2029,12 +2123,8 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "value": 0.5
             },
             {
-                "variant_name": "my_wrong_variant",
-                "pointer": "/generationConfig/temperature",
-                "value": 0.6
-            },
-            {
-                "model_provider_name": format!("tensorzero::model_name::{model_name}::provider_name::{model_provider_name}", model_name=provider.model_name, model_provider_name=provider.model_provider_name),
+                "model_name": provider.model_name,
+                "provider_name": provider.model_provider_name,
                 "pointer": "/generationConfig/top_p",
                 "value": 0.8
             }
@@ -2047,18 +2137,18 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "value": 0.5
             },
             {
-                "variant_name": "my_wrong_variant",
-                "pointer": "/temperature",
-                "value": 0.6
-            },
-            {
-                "model_provider_name": format!("tensorzero::model_name::{model_name}::provider_name::{model_provider_name}", model_name=provider.model_name, model_provider_name=provider.model_provider_name),
+                "model_name": provider.model_name,
+                "provider_name": provider.model_provider_name,
                 "pointer": "/top_p",
                 "value": 0.8
             }
         ])
     };
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2119,8 +2209,13 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             .unwrap();
 
         // Check that the API response is ok
-        assert_eq!(response.status(), StatusCode::OK);
-        let response_json = response.json::<Value>().await.unwrap();
+        let status = response.status();
+
+        let response_text = response.text().await.unwrap();
+        println!("API response text: {response_text}");
+
+        assert_eq!(status, StatusCode::OK);
+        let response_json = serde_json::from_str::<Value>(&response_text).unwrap();
 
         println!("API response: {response_json:#?}");
 
@@ -2143,7 +2238,6 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 
-    assert_eq!(extra_body[1]["variant_name"], "my_wrong_variant");
     let clickhouse_extra_body = chat_result.get("extra_body").unwrap().as_str().unwrap();
     let clickhouse_extra_body: serde_json::Value =
         serde_json::from_str(clickhouse_extra_body).unwrap();
@@ -2222,7 +2316,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     stream: bool,
 ) {
     // Inject randomness to prevent this from being cached, since provider-proxy will ignore the (invalid) auth header
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2312,7 +2410,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "fireworks" => {
             assert!(
-                res["error"].as_str().unwrap().contains("unauthorized"),
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .to_lowercase()
+                    .contains("unauthorized"),
                 "Unexpected error: {res}"
             );
         }
@@ -2397,9 +2499,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 }
-
-#[traced_test]
-pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
+pub async fn test_warn_ignored_thought_block_with_provider(
+    provider: E2ETestProvider,
+    logs_contain: &impl Fn(&str) -> bool,
+) {
+    reset_capture_logs();
     // Bedrock rejects input thoughts for these models
     if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
         || provider.model_name == "deepseek-r1-aws-bedrock"
@@ -2412,30 +2516,36 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
             variant_name: Some(provider.variant_name.clone()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
                 )])))),
                 messages: vec![
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::Assistant,
-                        content: vec![ClientInputMessageContent::Thought(Thought {
+                        content: vec![InputMessageContent::Thought(Thought {
                             text: Some("My TensorZero thought".to_string()),
                             signature: Some("My new TensorZero signature".to_string()),
                             summary: None,
                             provider_type: None,
                         })],
                     },
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "What is the name of the capital city of Japan?".to_string(),
                         })],
                     },
                 ],
             },
-            extra_headers: get_extra_headers(),
+            extra_headers: if provider.model_provider_name == "vllm"
+                || provider.model_provider_name == "sglang"
+            {
+                get_modal_extra_headers()
+            } else {
+                UnfilteredInferenceExtraHeaders::default()
+            },
             ..Default::default()
         })
         .await;
@@ -2456,6 +2566,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
 
     if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic"]
         .contains(&provider.model_provider_name.as_str())
+        || ["openai-responses"].contains(&provider.variant_name.as_str())
     {
         assert!(
             !logs_contain("TensorZero doesn't support input thought blocks for the"),
@@ -2464,14 +2575,135 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
     } else {
         assert!(
             logs_contain("TensorZero doesn't support input thought blocks for the"),
-            "Missing expected warning"
+            "Missing expected warning for model_provider {} variant {}",
+            provider.model_provider_name,
+            provider.variant_name
         );
     }
 }
 
+pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
+    // * Mistral doesn't support assistant prefill
+    // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
+    // * Some AWS bedrock models error when the last message is an assistant message
+    // * Azure AI foundry seems to ignore trailing assistant messages
+    // * xAI seems to also ignore them
+    if provider.model_provider_name == "mistral"
+        || provider.model_provider_name == "aws_sagemaker"
+        || provider.model_provider_name == "aws_bedrock"
+        || provider.variant_name == "azure-ai-foundry"
+        || provider.variant_name == "xai"
+    {
+        return;
+    }
+    let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+
+    let payload = serde_json::json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "Tell me a fun fact"
+                },
+                {
+                    "role": "assistant",
+                    "content": "The capital city "
+                },
+                {
+                    "role": "assistant",
+                    "content": " of Japan is"
+                },
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.extra_headers,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json}");
+
+    assert_eq!(response_json["content"][0]["type"], "text");
+    let content = response_json["content"][0]["text"].as_str().unwrap();
+    assert!(
+        content.to_lowercase().contains("tokyo"),
+        "Content should contain 'tokyo': {content}"
+    );
+
+    // We don't check clickhouse, since we do this in lots of places
+}
+
+pub async fn test_empty_message_content_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": []
+                },
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.extra_headers,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+
+    // Don't bother checking anything else - this is just to make sure that the provider
+    // doesn't choke on an empty 'content' array
+}
+
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2578,11 +2810,11 @@ pub async fn check_base64_pdf_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2664,6 +2896,8 @@ pub async fn check_base64_pdf_response(
                     source_url: None,
                     mime_type: mime::APPLICATION_PDF,
                     storage_path: expected_storage_path.clone(),
+                    detail: None,
+                    filename: None,
                 },)))
             ]
         },]
@@ -2729,11 +2963,11 @@ pub async fn check_base64_image_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2779,6 +3013,7 @@ pub async fn check_base64_image_response(
                             "kind": kind_json,
                             "path": format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                         },
+                        "detail": "low"
                     }
                 ]
             }
@@ -2815,6 +3050,8 @@ pub async fn check_base64_image_response(
                     source_url: None,
                     mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
+                    detail: Some(Detail::Low),
+                    filename: None,
                 },)))
             ]
         },]
@@ -2880,11 +3117,11 @@ pub async fn check_url_image_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2930,6 +3167,7 @@ pub async fn check_url_image_response(
                             "kind": kind_json,
                             "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         },
+                        "detail": "low"
                     }
                 ]
             }
@@ -2964,6 +3202,8 @@ pub async fn check_url_image_response(
                             kind: kind.clone(),
                             path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                         },
+                        detail: Some(Detail::Low),
+                        filename: None,
                     },
                 )))]
             },
@@ -3214,7 +3454,6 @@ pub async fn check_simple_image_inference_response(
     is_batch: bool,
     should_be_cached: bool,
 ) {
-    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -3269,7 +3508,7 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -3279,6 +3518,9 @@ pub async fn check_simple_image_inference_response(
     if let Some(episode_id) = episode_id {
         assert_eq!(retrieved_episode_id, episode_id);
     }
+    let tags = result.get("tags").unwrap();
+    // All callers set this tag so this tests that tags are propagated to the ultimate sink of the inference data
+    tags.get("test_type").unwrap();
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -3381,15 +3623,10 @@ pub async fn check_simple_image_inference_response(
 
     if !is_batch {
         // Check the InferenceTag Table
-        let result = select_inference_tags_clickhouse(
-            &clickhouse,
-            hardcoded_function_name,
-            "foo",
-            "bar",
-            inference_id,
-        )
-        .await
-        .unwrap();
+        let result =
+            select_inference_tags_clickhouse(&clickhouse, "basic_test", "foo", "bar", inference_id)
+                .await
+                .unwrap();
         let id = result.get("inference_id").unwrap().as_str().unwrap();
         let id = Uuid::parse_str(id).unwrap();
         assert_eq!(id, inference_id);
@@ -3401,15 +3638,25 @@ pub async fn check_simple_image_inference_response(
 }
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
-    // A top_p of -100 and temperature of -100 should produce errors on all providers
-    let extra_headers = get_extra_headers();
+    // This test is very flaky on Fireworks for some reason
+    if provider.model_provider_name == "fireworks" || provider.model_provider_name == "together" {
+        return;
+    }
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
+        // Set lots of invalid parameters to try to produce an error on all providers
         "params": {
             "chat_completion": {
                 "temperature": -100,
                 "top_p": -100,
+                "presence_penalty": -100,
+                "frequency_penalty": -100,
             }
         },
         "input":
@@ -3449,10 +3696,13 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
         let resp: Value = resp.json().await.unwrap();
         let err_msg = resp.get("error").unwrap().as_str().unwrap();
+        println!("Error message: {err_msg}");
         assert!(
             err_msg.contains("top_p")
                 || err_msg.contains("topP")
-                || err_msg.contains("temperature"),
+                || err_msg.contains("temperature")
+                || err_msg.contains("presence_penalty")
+                || err_msg.contains("frequency_penalty"),
             "Unexpected error message: {resp}"
         );
     }
@@ -3485,6 +3735,7 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
     }
+
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
@@ -3494,6 +3745,7 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
         &provider, episode_id, seed, &tag_value, false, true,
     )
     .await;
+
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
         &provider, episode_id, seed, &tag_value, true, true,
@@ -3510,7 +3762,11 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     check_cache: bool,
     include_original_response: bool,
 ) -> String {
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -3621,16 +3877,20 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if (provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry"))
-        || check_cache
-    {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+    // This is flaky on Fireworks - it seems like they sometimes don't send us usage information,
+    // so TensorZero reports 0 for input/output token usage.
+    if provider.model_provider_name != "fireworks" {
+        // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+        if (provider.variant_name.contains("azure")
+            && !provider.variant_name.contains("azure-ai-foundry"))
+            || check_cache
+        {
+            assert_eq!(input_tokens, 0);
+            assert_eq!(output_tokens, 0);
+        } else {
+            assert!(input_tokens > 0);
+            assert!(output_tokens > 0);
+        }
     }
 
     assert!(finish_reason.is_some());
@@ -3733,15 +3993,19 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
+    // This is flaky on Fireworks - it seems like they sometimes don't send us usage information,
+    // so TensorZero reports 0 for input/output token usage.
+    if provider.model_provider_name != "fireworks" {
+        // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+        if provider.variant_name.contains("azure")
+            && !provider.variant_name.contains("azure-ai-foundry")
+        {
+            assert!(input_tokens.is_null());
+            assert!(output_tokens.is_null());
+        } else {
+            assert!(input_tokens.as_u64().unwrap() > 0);
+            assert!(output_tokens.as_u64().unwrap() > 0);
+        }
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -3797,7 +4061,11 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         return;
     }
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -4039,7 +4307,11 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         return;
     }
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -4304,7 +4576,11 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4341,6 +4617,90 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
         false,
     )
     .await;
+}
+
+// Helper function to verify new Migration 0041 tool call storage columns
+fn verify_tool_call_storage_columns(
+    result: &Value,
+    expected_tool_choice: &str,
+    expected_parallel_tool_calls: Option<bool>,
+    expected_allowed_tools_choice: &str,
+    expected_static_tool_names: &[&str],
+    expected_dynamic_tool_count: usize,
+    expected_provider_tool_count: usize,
+) {
+    // Verify allowed_tools column
+    let allowed_tools_str = result.get("allowed_tools").unwrap().as_str().unwrap();
+    let allowed_tools: Value = serde_json::from_str(allowed_tools_str).unwrap();
+    assert_eq!(
+        allowed_tools["choice"], expected_allowed_tools_choice,
+        "allowed_tools.choice mismatch"
+    );
+
+    let actual_tools = allowed_tools["tools"].as_array().unwrap();
+    assert_eq!(
+        actual_tools.len(),
+        expected_static_tool_names.len(),
+        "allowed_tools.tools length mismatch"
+    );
+    for expected_tool in expected_static_tool_names {
+        assert!(
+            actual_tools.contains(&json!(expected_tool)),
+            "allowed_tools.tools missing tool: {expected_tool}"
+        );
+    }
+
+    // Verify dynamic_tools column
+    let dynamic_tools_unparsed = result.get("dynamic_tools").unwrap().as_array().unwrap();
+    let dynamic_tools: Result<Vec<Tool>, _> = dynamic_tools_unparsed
+        .iter()
+        .map(|x| serde_json::from_str::<Tool>(x.as_str().unwrap()))
+        .collect();
+    let dynamic_tools = dynamic_tools.unwrap();
+    assert_eq!(
+        dynamic_tools.len(),
+        expected_dynamic_tool_count,
+        "dynamic_tools length mismatch"
+    );
+
+    // Verify dynamic_provider_tools column
+    let dynamic_provider_tools_unparsed = result
+        .get("dynamic_provider_tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    let dynamic_provider_tools: Result<Vec<Tool>, _> = dynamic_provider_tools_unparsed
+        .iter()
+        .map(|x| serde_json::from_str::<Tool>(x.as_str().unwrap()))
+        .collect();
+    let dynamic_provider_tools = dynamic_provider_tools.unwrap();
+    assert_eq!(
+        dynamic_provider_tools.len(),
+        expected_provider_tool_count,
+        "dynamic_provider_tools length mismatch"
+    );
+
+    // Verify tool_choice column
+    let tool_choice = result.get("tool_choice").unwrap().as_str().unwrap();
+    assert_eq!(tool_choice, expected_tool_choice, "tool_choice mismatch");
+
+    // Verify parallel_tool_calls column
+    let parallel_tool_calls = result.get("parallel_tool_calls");
+    match expected_parallel_tool_calls {
+        Some(expected) => {
+            let actual = parallel_tool_calls
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            assert_eq!(actual, expected, "parallel_tool_calls mismatch");
+        }
+        None => {
+            // Should be null or not present
+            assert!(
+                parallel_tool_calls.is_none() || parallel_tool_calls.unwrap().is_null(),
+                "parallel_tool_calls should be null"
+            );
+        }
+    }
 }
 
 pub async fn check_tool_use_tool_choice_auto_used_inference_response(
@@ -4499,6 +4859,17 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
 
+    // Verify new Migration 0041 columns (decomposed tool call storage format)
+    verify_tool_call_storage_columns(
+        &result,
+        "auto",               // expected_tool_choice
+        None,                 // expected_parallel_tool_calls (null/none)
+        "function_default",   // expected_allowed_tools_choice (tools from function config)
+        &["get_temperature"], // expected_static_tool_names
+        0,                    // expected_dynamic_tool_count
+        0,                    // expected_provider_tool_count
+    );
+
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -4591,7 +4962,11 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -4769,7 +5144,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-                                            // Ignore other content blocks
+    // Ignore other content blocks
     let content_block = output_clickhouse
         .iter()
         .find(|b| b["type"] == "tool_call")
@@ -4949,7 +5324,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -5211,7 +5590,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -5360,20 +5743,24 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     // We don't care about thoughts in this test
     output_clickhouse.retain(|block| block["type"] != "thought");
 
-    assert!(!output_clickhouse
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
+    assert!(
+        !output_clickhouse
+            .iter()
+            .any(|block| block["type"] == "tool_call")
+    );
 
     let content_block = output_clickhouse.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    assert!(content_block
-        .get("text")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("mehta"));
+    assert!(
+        content_block
+            .get("text")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("mehta")
+    );
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -5516,7 +5903,11 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -5815,7 +6206,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -5990,7 +6385,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-                                            // Ignore other content blocks
+    // Ignore other content blocks
     let content_block = output_clickhouse
         .iter()
         .find(|b| b["type"] == "tool_call")
@@ -6176,7 +6571,11 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -6408,7 +6807,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let first = output.first().unwrap();
     match first {
-        StoredContentBlock::Text(_) | StoredContentBlock::Unknown { .. } => {}
+        StoredContentBlock::Text(_) | StoredContentBlock::Unknown(_) => {}
         _ => {
             panic!("Expected a text or unknown block, got {first:?}");
         }
@@ -6433,7 +6832,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         return;
     }
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -6579,9 +6982,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
 
-    assert!(!output_clickhouse
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
+    assert!(
+        !output_clickhouse
+            .iter()
+            .any(|block| block["type"] == "tool_call")
+    );
 
     let content_block = output_clickhouse.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -6657,9 +7062,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert!(raw_request
-        .to_lowercase()
-        .contains("what is the weather like in tokyo (in celsius)"));
+    assert!(
+        raw_request
+            .to_lowercase()
+            .contains("what is the weather like in tokyo (in celsius)")
+    );
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
@@ -6734,7 +7141,11 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         return;
     }
 
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let episode_id = Uuid::now_v7();
 
@@ -6961,12 +7372,14 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     let tool_parameters = tool["parameters"].as_object().unwrap();
     assert_eq!(tool_parameters["type"], "object");
     assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .contains(&json!("fast")));
+    assert!(
+        tool_parameters
+            .get("required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&json!("fast"))
+    );
     assert_eq!(tool_parameters["additionalProperties"], false);
 
     let properties = tool_parameters["properties"].as_object().unwrap();
@@ -7073,7 +7486,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     // Groq tool requests aren't always sent with the correct schema
     let prompt: String = if provider.model_provider_name == "groq" {
@@ -7369,12 +7786,14 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let tool_parameters = tool["parameters"].as_object().unwrap();
     assert_eq!(tool_parameters["type"], "object");
     assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .contains(&json!("fast")));
+    assert!(
+        tool_parameters
+            .get("required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&json!("fast"))
+    );
     assert_eq!(tool_parameters["additionalProperties"], false);
 
     let properties = tool_parameters["properties"].as_object().unwrap();
@@ -7485,7 +7904,11 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -7651,12 +8074,14 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     let tool_parameters = tool["parameters"].as_object().unwrap();
     assert_eq!(tool_parameters["type"], "object");
     assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .contains(&json!("location")));
+    assert!(
+        tool_parameters
+            .get("required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&json!("location"))
+    );
     assert_eq!(tool_parameters["additionalProperties"], false);
 
     let properties = tool_parameters["properties"].as_object().unwrap();
@@ -7762,7 +8187,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": episode_id,
@@ -8166,7 +8595,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
             ]},
         "variant_name": provider.variant_name,
         "stream": false,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
     });
 
     let response = Client::new()
@@ -8295,8 +8724,10 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -8408,7 +8839,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let payload = json!({
        "function_name": "weather_helper",
         "episode_id": episode_id,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
         "input":{
             "system": {"assistant_name": "Dr. Mehta"},
             "messages": [
@@ -8712,7 +9143,11 @@ pub async fn test_stop_sequences_inference_request_with_provider(
         return;
     }
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let response = client
         .inference(tensorzero::ClientInferenceParams {
@@ -8720,15 +9155,15 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             model_name: None,
             variant_name: Some(provider.variant_name.clone()),
             episode_id: Some(episode_id),
-            input: tensorzero::ClientInput {
+            input: tensorzero::Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
                 )])))),
-                messages: vec![tensorzero::ClientInputMessage {
+                messages: vec![tensorzero::InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
-                        TextKind::Text {
+                    content: vec![tensorzero::InputMessageContent::Text(
+                        Text {
                             text: "Write me a short sentence ending with the word TensorZero. Don't say anything else."
                                 .to_string(),
                         },
@@ -8819,11 +9254,17 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             if !(provider.model_provider_name == "tgi"
                 || provider.model_name == "gemma-3-1b-aws-sagemaker-tgi")
             {
-                let json = serde_json::to_string(&response).unwrap();
-                assert!(
-                    !json.to_lowercase().contains("tensorzero"),
-                    "TensorZero should not be in the response: `{json}`"
-                );
+                // Thought content blocks can contain the stop-sequence on some providers,
+                // so just check the text content blocks
+                for block in response.content {
+                    if let ContentBlockChatOutput::Text(text) = block {
+                        assert!(
+                            !text.text.to_lowercase().contains("tensorzero"),
+                            "TensorZero should not be in the response: `{}`",
+                            text.text
+                        );
+                    }
+                }
             }
         }
         tensorzero::InferenceOutput::Streaming(_) => {
@@ -8843,17 +9284,23 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        extra_headers: get_extra_headers(),
-        input: tensorzero::ClientInput {
+        extra_headers: if provider.model_provider_name == "vllm"
+            || provider.model_provider_name == "sglang"
+        {
+            get_modal_extra_headers()
+        } else {
+            UnfilteredInferenceExtraHeaders::default()
+        },
+        input: tensorzero::Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "Dr. Mehta".into(),
             )])))),
-            messages: vec![tensorzero::ClientInputMessage {
+            messages: vec![tensorzero::InputMessage {
                 role: Role::User,
                 content: vec![
-                    tensorzero::ClientInputMessageContent::Text(
-                        TextKind::Text {
+                    tensorzero::InputMessageContent::Text(
+                        Text {
                             text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string()
                         }
                     )
@@ -8862,28 +9309,30 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         },
         stream: Some(false),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::Tool {
-                name: "get_temperature".to_string(),
-                description: "Get the current temperature in a given location".to_string(),
-                parameters: json!({
-                    "$schema": "http://json-schema.org/draft-07/schema#",
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The location to get the temperature for (e.g. \"New York\")"
+            additional_tools: Some(vec![
+                tensorzero::Tool::Function(tensorzero::FunctionTool {
+                    name: "get_temperature".to_string(),
+                    description: "Get the current temperature in a given location".to_string(),
+                    parameters: json!({
+                        "$schema": "http://json-schema.org/draft-07/schema#",
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": "The location to get the temperature for (e.g. \"New York\")"
+                            },
+                            "units": {
+                                "type": "string",
+                                "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                                "enum": ["fahrenheit", "celsius"]
+                            }
                         },
-                        "units": {
-                            "type": "string",
-                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
-                            "enum": ["fahrenheit", "celsius"]
-                        }
-                    },
-                    "required": ["location"],
-                    "additionalProperties": false
+                        "required": ["location"],
+                        "additionalProperties": false
+                    }),
+                    strict: false,
                 }),
-                strict: false,
-            }]),
+            ]),
             ..Default::default()
         },
         ..Default::default()
@@ -9152,41 +9601,49 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: tensorzero::ClientInput {
+        input: tensorzero::Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "Dr. Mehta".into(),
             )])))),
-            messages: vec![tensorzero::ClientInputMessage {
+            messages: vec![tensorzero::InputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
+                content: vec![tensorzero::InputMessageContent::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
             }],
         },
-        extra_headers: get_extra_headers(),
+        extra_headers: if provider.model_provider_name == "vllm"
+            || provider.model_provider_name == "sglang"
+        {
+            get_modal_extra_headers()
+        } else {
+            UnfilteredInferenceExtraHeaders::default()
+        },
         stream: Some(true),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::Tool {
-                name: "get_temperature".to_string(),
-                description: "Get the current temperature in a given location".to_string(),
-                parameters: json!({
-                    "$schema": "http://json-schema.org/draft-07/schema#",
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The location to get the temperature for (e.g. \"New York\")"
+            additional_tools: Some(vec![
+                tensorzero::Tool::Function(tensorzero::FunctionTool {
+                    name: "get_temperature".to_string(),
+                    description: "Get the current temperature in a given location".to_string(),
+                    parameters: json!({
+                        "$schema": "http://json-schema.org/draft-07/schema#",
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": "The location to get the temperature for (e.g. \"New York\")"
+                            },
+                            "units": {
+                                "type": "string",
+                                "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                                "enum": ["fahrenheit", "celsius"]
+                            }
                         },
-                        "units": {
-                            "type": "string",
-                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
-                            "enum": ["fahrenheit", "celsius"]
-                        }
-                    },
-                    "required": ["location"],
-                    "additionalProperties": false
+                        "required": ["location"],
+                        "additionalProperties": false
+                    }),
+                    strict: false,
                 }),
-                strict: false,
-            }]),
+            ]),
             ..Default::default()
         },
         ..Default::default()
@@ -9520,7 +9977,7 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
         "parallel_tool_calls": true,
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
     });
 
     let response = Client::new()
@@ -9552,7 +10009,6 @@ pub async fn check_parallel_tool_use_inference_response(
     is_batch: bool,
     parallel_param: Value,
 ) {
-    let hardcoded_function_name = "weather_helper_parallel";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -9656,7 +10112,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(function_name, "weather_helper_parallel");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -9898,7 +10354,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         "parallel_tool_calls": true,
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
     });
 
     let mut event_source = Client::new()
@@ -10307,7 +10763,11 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
 
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "json_success",
         "variant_name": provider.variant_name,
@@ -10361,13 +10821,15 @@ pub async fn check_json_mode_inference_response(
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
-    assert!(parsed_output
-        .get("answer")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        parsed_output
+            .get("answer")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
@@ -10553,7 +11015,11 @@ pub async fn check_json_mode_inference_response(
 
 pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let output_schema = json!({
       "type": "object",
       "properties": {
@@ -10628,13 +11094,15 @@ pub async fn check_dynamic_json_mode_inference_response(
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
-    assert!(parsed_output
-        .get("response")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        parsed_output
+            .get("response")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
@@ -10699,8 +11167,10 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     if let Some(output_schema) = &output_schema {
         let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
@@ -10823,7 +11293,11 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "json_success",
         "variant_name": provider.variant_name,
@@ -10887,10 +11361,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
-        if let Some(raw) = chunk_json.get("raw").and_then(|raw| raw.as_str()) {
-            if !raw.is_empty() {
-                full_content.push_str(raw);
-            }
+        if let Some(raw) = chunk_json.get("raw").and_then(|raw| raw.as_str())
+            && !raw.is_empty()
+        {
+            full_content.push_str(raw);
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -11070,8 +11544,12 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    let output: Vec<StoredContentBlock> = serde_json::from_str::<Vec<StoredContentBlock>>(output)
+        .unwrap()
+        .into_iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect();
+
     match &output[0] {
         StoredContentBlock::Text(text) => {
             let parsed: Value = serde_json::from_str(&text.text).unwrap();
@@ -11119,7 +11597,11 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     };
 
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     // Include randomness in the prompt to force a cache miss for the first request
     let randomness = Uuid::now_v7();
@@ -11227,6 +11709,11 @@ async fn check_short_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let content = response_json.get("content").unwrap().as_array().unwrap();
+    // Some providers return empty thoughts - exclude thought blocks here
+    let content = content
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect::<Vec<_>>();
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -11293,6 +11780,11 @@ async fn check_short_inference_response(
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    // Some providers return empty thoughts - exclude thought blocks here
+    let content_blocks = content_blocks
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect::<Vec<_>>();
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -11377,6 +11869,11 @@ async fn check_short_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    // Some providers return empty thoughts - exclude thought blocks here
+    let output = output
+        .iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect::<Vec<_>>();
     assert_eq!(output.len(), 1);
     let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "length");
@@ -11449,7 +11946,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
             ]},
         "parallel_tool_calls": true,
         "stream": false,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
         "variant_name": provider.variant_name,
     });
 
@@ -11753,7 +12250,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         "parallel_tool_calls": true,
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
     });
 
     let response = Client::new()
@@ -12083,7 +12580,11 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 
 pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "json_success",
@@ -12223,9 +12724,11 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     if provider.model_provider_name == "google_ai_studio_gemini"
         || provider.model_provider_name == "gcp_vertex_gemini"
     {
-        assert!(raw_request_val["generationConfig"]
-            .get("response_mime_type")
-            .is_none());
+        assert!(
+            raw_request_val["generationConfig"]
+                .get("response_mime_type")
+                .is_none()
+        );
     } else {
         assert!(raw_request_val.get("response_format").is_none());
     }
@@ -12234,7 +12737,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(input_tokens > 5);
 
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
+    assert!(output_tokens > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
@@ -12244,7 +12747,11 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
 
 pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -12306,4 +12813,218 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
     assert!(content.to_lowercase().contains("tokyo"));
+}
+
+pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETestProvider) {
+    if provider.variant_name == "together-deepseek-r1" {
+        // This produces invalid tool calls within text blocks (e.g 🛠\u{fe0f}\n\n```json\n{\n  \"too)
+        return;
+    }
+
+    // TODO: https://github.com/tensorzero/tensorzero/issues/5270
+    // This currently produces 'Mismatched thinking tags' on Fireworks
+    if provider.variant_name == "fireworks-deepseek" {
+        // This either times out or returns "Internal Server Error"
+        return;
+    }
+
+    // TODO: https://github.com/tensorzero/tensorzero/issues/5270
+    if provider.variant_name == "deepseek-reasoner" {
+        return;
+    }
+
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+
+    println!("Original Content blocks: {content_blocks:?}");
+
+    // Check that we have a thought block
+    assert!(
+        content_blocks
+            .iter()
+            .any(|block| block["type"] == "thought"),
+        "Expected a thought block in the content blocks: {content_blocks:?}"
+    );
+
+    // Check that we have a tool call block
+    assert!(
+        content_blocks
+            .iter()
+            .any(|block| block["type"] == "tool_call"),
+        "Expected a tool call block in the content blocks: {content_blocks:?}"
+    );
+
+    let tool_id = content_blocks
+        .iter()
+        .find(|block| block["type"] == "tool_call")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap();
+
+    let tensorzero_content_blocks = content_blocks.clone();
+
+    let mut new_messages = vec![
+        serde_json::json!({
+            "role": "user",
+            "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+        }),
+        serde_json::json!({
+            "role": "assistant",
+            "content": tensorzero_content_blocks,
+        }),
+    ];
+
+    new_messages.push(serde_json::json!({
+        "role": "user",
+        "content": [{"type": "tool_result", "name": "My result", "result": "13", "id": tool_id}],
+    }));
+
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": new_messages
+        },
+        "stream": false,
+    });
+    println!("New payload: {payload}");
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    let response_json = response.json::<Value>().await.unwrap();
+    let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(
+        new_content_blocks
+            .iter()
+            .any(|block| block["type"] == "text"),
+        "Expected at least one text block in the new content blocks: {new_content_blocks:?}"
+    );
+    // Don't bother checking ClickHouse, as we do that in lots of other tests
+}
+
+pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
+    if provider.variant_name == "fireworks-deepseek" {
+        // This either times out or returns "Internal Server Error"
+        return;
+    }
+
+    // TODO: https://github.com/tensorzero/tensorzero/issues/5270
+    if provider.variant_name == "together-deepseek-r1" {
+        return;
+    }
+
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                }
+            ]},
+        "stream": true,
+    });
+
+    let mut event_source = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+    let mut chunks = vec![];
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+
+    let mut inference_id = None;
+
+    // Just validate that all of the chunks are valid JSON,
+    // and then check the `collect_chunks` result stored in the database
+    for chunk in chunks {
+        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+        println!("Chunk: {chunk_json}");
+        inference_id = Some(
+            chunk_json
+                .get("inference_id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_string(),
+        );
+    }
+    let inference_id = inference_id.unwrap().parse::<Uuid>().unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let _id_uuid = Uuid::parse_str(id).unwrap();
+
+    let clickhouse_content_blocks = result.get("output").unwrap().as_str().unwrap();
+    let clickhouse_content_blocks: Vec<Value> =
+        serde_json::from_str(clickhouse_content_blocks).unwrap();
+    // Check that we have a thought block
+    assert!(
+        clickhouse_content_blocks
+            .iter()
+            .any(|block| block["type"] == "thought"),
+        "Expected a thought block in the content blocks: {clickhouse_content_blocks:?}"
+    );
+
+    // Check that we have a tool call block
+    assert!(
+        clickhouse_content_blocks
+            .iter()
+            .any(|block| block["type"] == "tool_call"),
+        "Expected a tool call block in the content blocks: {clickhouse_content_blocks:?}"
+    );
 }

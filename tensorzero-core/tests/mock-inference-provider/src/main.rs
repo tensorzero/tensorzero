@@ -6,8 +6,11 @@
     clippy::unwrap_used
 )]
 
+mod batch_response_generator;
 mod error;
 mod fireworks;
+mod gcp_batch;
+mod openai_batch;
 mod together;
 
 use async_stream::try_stream;
@@ -16,8 +19,8 @@ use axum::{
     body::Body,
     extract::{Json, Multipart, Path},
     response::{
-        sse::{Event, Sse},
         IntoResponse, Response,
+        sse::{Event, Sse},
     },
 };
 use clap::Parser;
@@ -26,7 +29,7 @@ use futures::Stream;
 use mimalloc::MiMalloc;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -155,6 +158,18 @@ fn make_router() -> axum::Router {
         )
         .route("/openai/files", axum::routing::post(create_openai_file))
         .route(
+            "/openai/files/{file_id}/content",
+            axum::routing::get(openai_batch::get_file_content),
+        )
+        .route(
+            "/openai/batches",
+            axum::routing::post(openai_batch::create_batch),
+        )
+        .route(
+            "/openai/batches/{batch_id}",
+            axum::routing::get(openai_batch::get_batch),
+        )
+        .route(
             "/azure/openai/deployments/{deployment}/chat/completions",
             axum::routing::post(completions_handler),
         )
@@ -193,6 +208,14 @@ fn make_router() -> axum::Router {
         .route(
             "/together/fine-tunes/{job_id}",
             axum::routing::get(together::get_fine_tuning_job),
+        )
+        .route(
+            "/v1/projects/{project}/locations/{location}/batchPredictionJobs",
+            axum::routing::post(gcp_batch::create_batch_prediction_job),
+        )
+        .route(
+            "/v1/projects/{project}/locations/{location}/batchPredictionJobs/{job_id}",
+            axum::routing::get(gcp_batch::get_batch_prediction_job),
         )
         .route("/status", axum::routing::get(status_handler))
         .layer(TraceLayer::new_for_http())
@@ -282,9 +305,9 @@ async fn create_openai_fine_tuning_job(
 
 async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Value>, Error> {
     apply_delay().await;
-    let file_id =
-        "mock-inference-file-".to_string() + &Alphanumeric.sample_string(&mut rand::rng(), 10);
+    let file_id = format!("file-{}", uuid::Uuid::now_v7());
 
+    let mut file_content = None;
     let mut file_len = None;
     let mut filename = None;
     let mut purpose = None;
@@ -295,8 +318,18 @@ async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Valu
 
             // Try to parse the file as JSONL
             if let Ok(content) = std::str::from_utf8(&bytes) {
+                // Store the content for batch processing
+                file_content = Some(content.to_string());
+
                 // Check if it's valid JSONL by attempting to parse each line
                 for line in content.lines() {
+                    // Try to parse as batch request first (for batch purpose)
+                    if let Ok(_batch_req) = serde_json::from_str::<serde_json::Value>(line) {
+                        // Valid JSON line, continue
+                        continue;
+                    }
+
+                    // Otherwise try fine-tuning format
                     let result = serde_json::from_str::<OpenAIFineTuningRow>(line);
                     match result {
                         Ok(row) => {
@@ -315,13 +348,17 @@ async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Valu
                                             url_data.get("url").and_then(|v| v.as_str()).unwrap();
                                         if !url.starts_with("data:") {
                                             return Err(Error::new(
-                                                format!("Invalid JSONL line (\"{line}\"): image_url is not a data URL"),
+                                                format!(
+                                                    "Invalid JSONL line (\"{line}\"): image_url is not a data URL"
+                                                ),
                                                 StatusCode::BAD_REQUEST,
                                             ));
                                         }
                                         if url.len() < 100 {
                                             return Err(Error::new(
-                                                format!("Invalid JSONL line (\"{line}\"): image_url is too short"),
+                                                format!(
+                                                    "Invalid JSONL line (\"{line}\"): image_url is too short"
+                                                ),
                                                 StatusCode::BAD_REQUEST,
                                             ));
                                         }
@@ -345,13 +382,30 @@ async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Valu
         }
     }
 
+    let purpose_str = purpose.as_deref().unwrap_or("fine-tune");
+    let filename_str = filename.as_deref().unwrap_or("file.jsonl");
+
+    // Store the file content for batch processing
+    if let Some(content) = file_content {
+        openai_batch::store_file(
+            file_id.clone(),
+            openai_batch::OpenAIFileData {
+                content,
+                filename: filename_str.to_string(),
+                purpose: purpose_str.to_string(),
+                bytes: file_len.unwrap_or(0),
+                created_at: chrono::Utc::now().timestamp(),
+            },
+        );
+    }
+
     Ok(Json(json!({
         "id": file_id,
         "object": "file",
         "bytes": file_len,
         "created_at": chrono::Utc::now().timestamp(),
-        "filename": filename,
-        "purpose": purpose,
+        "filename": filename_str,
+        "purpose": purpose_str,
     })))
 }
 
@@ -606,10 +660,10 @@ mod tests {
             .unwrap();
         let body_json = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
 
-        let arguments = body_json["choices"][0]["message"]["tool_calls"][0]["function"]
-            ["arguments"]
-            .as_str()
-            .unwrap();
+        let arguments =
+            body_json["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+                .as_str()
+                .unwrap();
         assert_eq!(
             arguments,
             "{\n\"answer\": \"The 2020 World Series was played in Texas at Globe Life Field in Arlington.\"}",

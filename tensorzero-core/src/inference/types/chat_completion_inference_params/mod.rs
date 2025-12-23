@@ -2,18 +2,21 @@
 //! We are migrating the inference parameters to a struct that must be explicitly handled by every model provider.
 //! To avoid a massive PR, I'll start with a small struct as an extension, and gradually migrate the rest of the parameters.
 
+mod service_tier;
+
+pub use service_tier::ServiceTier;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct ChatCompletionInferenceParamsV2 {
-    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<ServiceTier>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
-    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
 }

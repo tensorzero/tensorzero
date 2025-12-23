@@ -34,13 +34,13 @@ jobs:
 
       - name: Build `ui` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f ui/Dockerfile . -t tensorzero/ui:sha-${{ github.sha }}
+          docker buildx build --build-arg DEBUG_BUILD=1 --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f ui/Dockerfile . -t tensorzero/ui:sha-${{ github.sha }}
 
       - name: Save `ui` container
         run: docker save tensorzero/ui:sha-${{ github.sha }} > ui-container.tar
 
       - name: Upload `ui` container as an artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: build-ui-container
           path: ui-container.tar

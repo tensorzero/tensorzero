@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use lazy_static::lazy_static;
 use secrecy::SecretString;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
@@ -9,7 +10,7 @@ use crate::db::clickhouse::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, TableName,
 };
-use crate::error::Error;
+use crate::error::{DelayedError, Error};
 
 lazy_static! {
     static ref DISABLED_DATABASE_URL: SecretString = SecretString::from("disabled");
@@ -24,6 +25,10 @@ pub struct DisabledClickHouseClient;
 
 #[async_trait]
 impl ClickHouseClient for DisabledClickHouseClient {
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error> {
+        Ok(Arc::new(DisabledClickHouseClient))
+    }
+
     fn database_url(&self) -> &SecretString {
         &DISABLED_DATABASE_URL
     }
@@ -74,12 +79,11 @@ impl ClickHouseClient for DisabledClickHouseClient {
         })
     }
 
-    async fn run_query_synchronous_with_err_logging(
+    async fn run_query_synchronous_delayed_err(
         &self,
         _query: String,
         _parameters: &HashMap<&str, &str>,
-        _err_logging: bool,
-    ) -> Result<ClickHouseResponse, Error> {
+    ) -> Result<ClickHouseResponse, DelayedError> {
         Ok(ClickHouseResponse {
             response: String::new(),
             metadata: ClickHouseResponseMetadata {

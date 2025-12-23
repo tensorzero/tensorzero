@@ -2,10 +2,11 @@ import { useState, useId, useEffect, memo } from "react";
 import { z } from "zod";
 import type {
   InferenceFilter,
+  DatapointFilter,
   MetricConfig,
   TagComparisonOperator,
   FloatComparisonOperator,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { Input } from "~/components/ui/input";
 import {
   Select,
@@ -16,7 +17,7 @@ import {
 } from "~/components/ui/select";
 import { cn } from "~/utils/common";
 import { MetricNameWithTooltip } from "~/components/querybuilder/MetricNameWithTooltip";
-import DeleteButton from "~/components/querybuilder/DeleteButton";
+import { DeleteButton } from "../ui/DeleteButton";
 
 // Labels for comparison operators
 export const TAG_OPERATOR_LABELS = {
@@ -132,11 +133,13 @@ const ComparisonOperatorSelect = memo(function ComparisonOperatorSelect<
 interface BooleanValueSelectProps {
   value: boolean;
   onChange: (value: boolean) => void;
+  ariaLabel?: string;
 }
 
 const BooleanValueSelect = memo(function BooleanValueSelect({
   value,
   onChange,
+  ariaLabel,
 }: BooleanValueSelectProps) {
   return (
     <div className="w-48">
@@ -144,7 +147,7 @@ const BooleanValueSelect = memo(function BooleanValueSelect({
         onValueChange={(val) => onChange(val === "true")}
         value={value.toString()}
       >
-        <SelectTrigger>
+        <SelectTrigger aria-label={ariaLabel}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -158,9 +161,12 @@ const BooleanValueSelect = memo(function BooleanValueSelect({
 
 // Row Components
 
+// TagFilter is the same shape in both InferenceFilter and DatapointFilter
+type TagFilterType = (InferenceFilter | DatapointFilter) & { type: "tag" };
+
 export interface TagFilterRowProps {
-  filter: InferenceFilter & { type: "tag" };
-  onChange: (newFilter: InferenceFilter | undefined) => void;
+  filter: TagFilterType;
+  onChange: (newFilter: TagFilterType | undefined) => void;
 }
 
 export const TagFilterRow = memo(function TagFilterRow({
@@ -228,7 +234,8 @@ export const TagFilterRow = memo(function TagFilterRow({
 
         <DeleteButton
           onDelete={() => onChange(undefined)}
-          ariaLabel="Delete tag filter"
+          label="Delete tag filter"
+          icon="x"
         />
       </div>
     </div>
@@ -238,7 +245,7 @@ export const TagFilterRow = memo(function TagFilterRow({
 export interface FloatMetricFilterRowProps {
   filter: InferenceFilter & { type: "float_metric" };
   metricConfig: MetricConfig;
-  onChange: (newFilter: InferenceFilter | undefined) => void;
+  onChange: (newFilter?: InferenceFilter) => void;
 }
 
 export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
@@ -300,7 +307,8 @@ export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
 
         <DeleteButton
           onDelete={() => onChange(undefined)}
-          ariaLabel="Delete metric filter"
+          label="Delete metric filter"
+          icon="x"
         />
       </div>
     </div>
@@ -310,7 +318,7 @@ export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
 export interface BooleanMetricFilterRowProps {
   filter: InferenceFilter & { type: "boolean_metric" };
   metricConfig: MetricConfig;
-  onChange: (newFilter: InferenceFilter | undefined) => void;
+  onChange: (newFilter?: InferenceFilter) => void;
 }
 
 export const BooleanMetricFilterRow = memo(function BooleanMetricFilterRow({
@@ -335,11 +343,51 @@ export const BooleanMetricFilterRow = memo(function BooleanMetricFilterRow({
         <BooleanValueSelect
           value={filter.value}
           onChange={(val) => onChange({ ...filter, value: val })}
+          ariaLabel="Boolean metric value"
         />
 
         <DeleteButton
           onDelete={() => onChange(undefined)}
-          ariaLabel="Delete metric filter"
+          label="Delete metric filter"
+          icon="x"
+        />
+      </div>
+    </div>
+  );
+});
+
+export interface DemonstrationFilterRowProps {
+  filter: InferenceFilter & { type: "demonstration_feedback" };
+  onChange: (newFilter: InferenceFilter | undefined) => void;
+}
+
+export const DemonstrationFilterRow = memo(function DemonstrationFilterRow({
+  filter,
+  onChange,
+}: DemonstrationFilterRowProps) {
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="text-fg-secondary text-sm font-medium">
+            Inference has demonstration
+          </span>
+        </div>
+
+        <div className="text-fg-secondary flex w-14 items-center justify-center text-sm">
+          is
+        </div>
+
+        <BooleanValueSelect
+          value={filter.has_demonstration}
+          onChange={(val) => onChange({ ...filter, has_demonstration: val })}
+          ariaLabel="Inference has demonstration"
+        />
+
+        <DeleteButton
+          onDelete={() => onChange(undefined)}
+          label="Delete demonstration filter"
+          icon="x"
         />
       </div>
     </div>

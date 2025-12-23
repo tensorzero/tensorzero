@@ -1,5 +1,8 @@
 name: Cancel workflows on status failure
 
+# Note that Github does not fire 'check_run' events for job fails in other Github Actions workflows,
+# so this job only cancels workflows when external statuses like Buildkite report a failure.
+# We use '.github/workflows/cancel-merge-queue-on-job-failure.yml' to cancel workflows when other checks fail.
 on:
   status:
 
@@ -11,19 +14,23 @@ jobs:
   cancel-on-failure:
     name: Cancel General Checks on Failure
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero' && (github.event.state == 'failure' || github.event.state == 'error')
+    if: |
+      github.repository == 'tensorzero/tensorzero' && (
+        (github.event_name == 'status' && (github.event.state == 'failure' || github.event.state == 'error'))
+      )
     steps:
       - name: Find workflows to cancel
         id: find-workflows
         run: |
+          SHA="${{ github.event.sha }}"
           echo "Status event details:"
-          echo "SHA: ${{ github.event.sha }}"
+          echo "SHA: $SHA"
           echo "State: ${{ github.event.state }}"
           echo "Context: ${{ github.event.context }}"
 
           # Get all workflow runs for the specific SHA
           workflow_runs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=${{ github.event.sha }}")
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=$SHA")
 
           # Find running general.yml workflows on merge queue branches
           current_run_id="${{ github.run_id }}"
@@ -43,10 +50,12 @@ jobs:
       - name: Cancel workflows
         if: steps.find-workflows.outputs.workflows != ''
         run: |
+          SHA="${{ github.event.sha }}"
+
           echo "Cancelling workflows..."
           echo "${{ steps.find-workflows.outputs.workflows }}" | while read -r run_id branch; do
             if [ -n "$run_id" ]; then
-              echo "Cancelling general.yml workflow run $run_id on branch $branch for SHA ${{ github.event.sha }}"
+              echo "Cancelling general.yml workflow run $run_id on branch $branch for SHA $SHA"
               curl -X POST -H "Authorization: Bearer ${{ github.token }}" \
                 "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/cancel"
             fi

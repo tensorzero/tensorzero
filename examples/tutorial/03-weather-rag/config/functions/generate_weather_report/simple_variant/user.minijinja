@@ -1,5 +1,0 @@
-Please respond with a weather report given the information below.
-
-Location: {{ location }}
-Temperature: {{ temperature }}
-Units: {{ units }}

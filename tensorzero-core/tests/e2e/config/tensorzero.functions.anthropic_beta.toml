@@ -1,0 +1,26 @@
+[functions.anthropic_beta_structured_outputs_chat]
+type = "chat"
+tools = ["answer_question"]
+
+[functions.anthropic_beta_structured_outputs_chat.variants.claude]
+type = "chat_completion"
+model = "claude_structured_outputs"
+max_tokens = 100
+
+[functions.anthropic_beta_structured_outputs_json]
+type = "json"
+output_schema = "../../../fixtures/config/functions/basic_test/output_schema.json"
+
+[functions.anthropic_beta_structured_outputs_json.variants.claude]
+type = "chat_completion"
+model = "claude_structured_outputs"
+json_mode = "strict"
+max_tokens = 100
+
+[models.claude_structured_outputs]
+routing = ["anthropic"]
+
+[models.claude_structured_outputs.providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-5-20250929"
+beta_structured_outputs = true

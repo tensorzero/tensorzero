@@ -3,13 +3,28 @@ from datetime import datetime, timezone
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatCompletionInferenceParams,
+    ContentBlockChatOutputText,
     FileBase64,
+    FunctionTool,
+    InferenceParams,
     JsonInferenceOutput,
-    StoredInference,
+    StorageKindS3Compatible,
+    StoragePath,
+    StoredInferenceChat,
+    StoredInferenceJson,
+    StoredInput,
+    StoredInputMessage,
+    StoredInputMessageContentFile,
+    StoredInputMessageContentTemplate,
+    StoredInputMessageContentText,
+    StoredInputMessageContentThought,
+    StoredInputMessageContentToolCall,
+    StoredInputMessageContentToolResult,
+    StoredInputMessageContentUnknown,
     TensorZeroGateway,
     Text,
     Thought,
-    Tool,
     ToolCall,
     ToolResult,
     UnknownContentBlock,
@@ -20,64 +35,64 @@ from tensorzero.util import uuid7
 def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
     rendered_samples = embedded_sync_client.experimental_render_samples(
         stored_samples=[
-            StoredInference(
-                type="chat",
+            StoredInferenceChat(
                 function_name="basic_test",
                 variant_name="default",
-                input={
-                    "system": {"assistant_name": "foo"},
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "thought", "text": "hmmm"},
-                                {"type": "text", "value": "bar"},
-                                {
-                                    "type": "tool_call",
-                                    "id": "123",
-                                    "arguments": '{"foo": "bar"}',
-                                    "name": "test_tool",
-                                },
+                input=StoredInput(
+                    system={"assistant_name": "foo"},
+                    messages=[
+                        StoredInputMessage(
+                            role="user",
+                            content=[
+                                StoredInputMessageContentThought(type="thought", text="hmmm"),
+                                StoredInputMessageContentText(type="text", text="bar"),
+                                StoredInputMessageContentToolCall(
+                                    type="tool_call",
+                                    id="123",
+                                    arguments='{"foo": "bar"}',
+                                    name="test_tool",
+                                ),
                             ],
-                        },
-                        {
-                            "role": "assistant",
-                            "content": [
-                                {"type": "text", "value": "Hello world"},
-                                {
-                                    "type": "tool_result",
-                                    "id": "123",
-                                    "name": "test_tool",
-                                    "result": "test",
-                                },
-                                {"type": "unknown", "data": [{"woo": "hoo"}]},
+                        ),
+                        StoredInputMessage(
+                            role="assistant",
+                            content=[
+                                StoredInputMessageContentText(type="text", text="Hello world"),
+                                StoredInputMessageContentToolResult(
+                                    type="tool_result",
+                                    id="123",
+                                    name="test_tool",
+                                    result="test",
+                                ),
+                                StoredInputMessageContentUnknown(type="unknown", data=[{"woo": "hoo"}]),
                             ],
-                        },
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "image",
-                                    "image": {"mime_type": "image/png"},
-                                    "storage_path": {
-                                        "kind": {
-                                            "type": "s3_compatible",
-                                            "bucket_name": "tensorzero-e2e-test-images",
-                                            "region": "us-east-1",
-                                            "prefix": "",
-                                        },
-                                        "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
-                                    },
-                                }
+                        ),
+                        StoredInputMessage(
+                            role="user",
+                            content=[
+                                StoredInputMessageContentFile(
+                                    type="file",
+                                    mime_type="image/png",
+                                    storage_path=StoragePath(
+                                        kind=StorageKindS3Compatible(
+                                            type="s3_compatible",
+                                            bucket_name="tensorzero-e2e-test-images",
+                                            region="us-east-1",
+                                            prefix="",
+                                        ),
+                                        path="observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                                    ),
+                                )
                             ],
-                        },
+                        ),
                     ],
-                },
-                output=[Text(text="Hello world")],
-                episode_id=uuid7(),
-                inference_id=uuid7(),
+                ),
+                output=[ContentBlockChatOutputText(text="Hello world")],
+                episode_id=str(uuid7()),
+                inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 additional_tools=[
-                    Tool(
+                    FunctionTool(
                         name="test",
                         description="test",
                         parameters={"foo": "bar"},
@@ -86,27 +101,27 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                 ],
                 tool_choice="auto",
                 parallel_tool_calls=False,
-                output_schema=None,
-                dispreferred_outputs=[[Text(text="goodbye")]],
+                dispreferred_outputs=[[ContentBlockChatOutputText(text="goodbye")]],
                 tags={},
                 timestamp=datetime.now(timezone.utc).isoformat(),
             ),
-            StoredInference(
-                type="json",
+            StoredInferenceJson(
                 function_name="json_success",
                 variant_name="dummy",
-                input={
-                    "system": {"assistant_name": "Dr. Mehta"},
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [{"type": "text", "value": {"country": "Japan"}}],
-                        },
+                input=StoredInput(
+                    system={"assistant_name": "Dr. Mehta"},
+                    messages=[
+                        StoredInputMessage(
+                            role="user",
+                            content=[StoredInputMessageContentTemplate(name="user", arguments={"country": "Japan"})],
+                        ),
                     ],
-                },
+                ),
                 output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
-                episode_id=uuid7(),
-                inference_id=uuid7(),
+                episode_id=str(uuid7()),
+                inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
+                extra_body=[],
                 output_schema={
                     "type": "object",
                     "properties": {"answer": {"type": "string"}},
@@ -191,7 +206,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
     assert not tool.strict
     assert rendered_samples[0].allowed_tools is None
     assert rendered_samples[0].parallel_tool_calls is False
-    assert rendered_samples[0].provider_tools is None
+    assert rendered_samples[0].provider_tools == []
     json_inference = rendered_samples[1]
     assert json_inference.function_name == "json_success"
     assert json_inference.episode_id is not None
@@ -231,7 +246,7 @@ Example Response:
     assert json_inference.allowed_tools is None
     assert json_inference.additional_tools is None
     assert json_inference.parallel_tool_calls is None
-    assert json_inference.provider_tools is None
+    assert json_inference.provider_tools == []
     assert json_inference.output_schema == {
         "type": "object",
         "properties": {"answer": {"type": "string"}},
@@ -246,25 +261,24 @@ def test_sync_render_samples_nonexistent_function(
     with pytest.raises(Exception) as excinfo:
         embedded_sync_client.experimental_render_samples(
             stored_samples=[
-                StoredInference(
-                    type="chat",
+                StoredInferenceChat(
                     function_name="non_existent_function",
                     variant_name="default",
-                    input={
-                        "system": {"assistant_name": "foo"},
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "value": "bar"}],
-                            }
+                    input=StoredInput(
+                        system={"assistant_name": "foo"},
+                        messages=[
+                            StoredInputMessage(
+                                role="user",
+                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                            )
                         ],
-                    },
-                    output=[Text(text="Hello world")],
-                    episode_id=uuid7(),
-                    inference_id=uuid7(),
+                    ),
+                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    episode_id=str(uuid7()),
+                    inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
-                    output_schema=None,
                     dispreferred_outputs=[],
                     tags={},
                     timestamp=datetime.now(timezone.utc).isoformat(),
@@ -282,25 +296,24 @@ def test_sync_render_samples_unspecified_function(
     with pytest.raises(Exception) as excinfo:
         embedded_sync_client.experimental_render_samples(
             stored_samples=[
-                StoredInference(
-                    type="chat",
+                StoredInferenceChat(
                     function_name="non_existent_function",
                     variant_name="default",
-                    input={
-                        "system": {"assistant_name": "foo"},
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "value": "bar"}],
-                            }
+                    input=StoredInput(
+                        system={"assistant_name": "foo"},
+                        messages=[
+                            StoredInputMessage(
+                                role="user",
+                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                            )
                         ],
-                    },
-                    output=[Text(text="Hello world")],
-                    episode_id=uuid7(),
-                    inference_id=uuid7(),
+                    ),
+                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    episode_id=str(uuid7()),
+                    inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
-                    output_schema=None,
                     dispreferred_outputs=[],
                     tags={},
                     timestamp=datetime.now(timezone.utc).isoformat(),
@@ -316,25 +329,24 @@ def test_sync_render_samples_no_variant(embedded_sync_client: TensorZeroGateway)
     with pytest.raises(Exception) as excinfo:
         embedded_sync_client.experimental_render_samples(
             stored_samples=[
-                StoredInference(
-                    type="chat",
+                StoredInferenceChat(
                     function_name="basic_test",  # This function exists in the config
                     variant_name="non_existent_variant",
-                    input={
-                        "system": {"assistant_name": "foo"},
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "value": "bar"}],
-                            }
+                    input=StoredInput(
+                        system={"assistant_name": "foo"},
+                        messages=[
+                            StoredInputMessage(
+                                role="user",
+                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                            )
                         ],
-                    },
-                    output=[Text(text="Hello world")],
-                    episode_id=uuid7(),
-                    inference_id=uuid7(),
+                    ),
+                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    episode_id=str(uuid7()),
+                    inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
-                    output_schema=None,
                     dispreferred_outputs=[],
                     tags={},
                     timestamp=datetime.now(timezone.utc).isoformat(),
@@ -351,26 +363,25 @@ def test_sync_render_samples_missing_variable(
     """Test that render_samples drops an example if a template variable is missing."""
     rendered_samples = embedded_sync_client.experimental_render_samples(
         stored_samples=[
-            StoredInference(
-                type="chat",
+            StoredInferenceChat(
                 function_name="basic_test",  # Uses assistant_name in system prompt
                 variant_name="default",
-                input={
+                input=StoredInput(
                     # Missing assistant_name
-                    "system": {"some_other_variable": "foo"},
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [{"type": "text", "value": "bar"}],
-                        }
+                    system={"some_other_variable": "foo"},
+                    messages=[
+                        StoredInputMessage(
+                            role="user",
+                            content=[StoredInputMessageContentText(type="text", text="bar")],
+                        )
                     ],
-                },
-                output=[Text(text="Hello world")],
-                episode_id=uuid7(),
-                inference_id=uuid7(),
+                ),
+                output=[ContentBlockChatOutputText(text="Hello world")],
+                episode_id=str(uuid7()),
+                inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 tool_choice="auto",
                 parallel_tool_calls=False,
-                output_schema=None,
                 dispreferred_outputs=[],
                 tags={},
                 timestamp=datetime.now(timezone.utc).isoformat(),
@@ -388,66 +399,64 @@ async def test_async_render_samples_success(
 ):
     rendered_samples = await embedded_async_client.experimental_render_samples(
         stored_samples=[
-            StoredInference(
-                type="chat",
+            StoredInferenceChat(
                 function_name="basic_test",
                 variant_name="default",
-                input={
-                    "system": {"assistant_name": "foo"},
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "thought", "text": "hmmm"},
-                                {"type": "text", "value": "bar"},
-                                {
-                                    "type": "tool_call",
-                                    "id": "123",
-                                    "arguments": '{"foo": "bar"}',
-                                    "name": "test_tool",
-                                },
+                input=StoredInput(
+                    system={"assistant_name": "foo"},
+                    messages=[
+                        StoredInputMessage(
+                            role="user",
+                            content=[
+                                StoredInputMessageContentThought(type="thought", text="hmmm"),
+                                StoredInputMessageContentText(type="text", text="bar"),
+                                StoredInputMessageContentToolCall(
+                                    type="tool_call",
+                                    id="123",
+                                    arguments='{"foo": "bar"}',
+                                    name="test_tool",
+                                ),
                             ],
-                        },
-                        {
-                            "role": "assistant",
-                            "content": [
-                                {"type": "text", "value": "Hello world"},
-                                {
-                                    "type": "tool_result",
-                                    "id": "123",
-                                    "name": "test_tool",
-                                    "result": "test",
-                                },
-                                {"type": "unknown", "data": [{"woo": "hoo"}]},
+                        ),
+                        StoredInputMessage(
+                            role="assistant",
+                            content=[
+                                StoredInputMessageContentText(type="text", text="Hello world"),
+                                StoredInputMessageContentToolResult(
+                                    type="tool_result",
+                                    id="123",
+                                    name="test_tool",
+                                    result="test",
+                                ),
+                                StoredInputMessageContentUnknown(type="unknown", data=[{"woo": "hoo"}]),
                             ],
-                        },
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "image",
-                                    "image": {
-                                        "mime_type": "image/png",
-                                    },
-                                    "storage_path": {
-                                        "kind": {
-                                            "type": "s3_compatible",
-                                            "bucket_name": "tensorzero-e2e-test-images",
-                                            "region": "us-east-1",
-                                            "prefix": "",
-                                        },
-                                        "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
-                                    },
-                                }
+                        ),
+                        StoredInputMessage(
+                            role="user",
+                            content=[
+                                StoredInputMessageContentFile(
+                                    type="file",
+                                    mime_type="image/png",
+                                    storage_path=StoragePath(
+                                        kind=StorageKindS3Compatible(
+                                            type="s3_compatible",
+                                            bucket_name="tensorzero-e2e-test-images",
+                                            region="us-east-1",
+                                            prefix="",
+                                        ),
+                                        path="observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                                    ),
+                                )
                             ],
-                        },
+                        ),
                     ],
-                },
-                output=[Text(text="Hello world")],
-                episode_id=uuid7(),
-                inference_id=uuid7(),
+                ),
+                output=[ContentBlockChatOutputText(text="Hello world")],
+                episode_id=str(uuid7()),
+                inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 additional_tools=[
-                    Tool(
+                    FunctionTool(
                         name="test",
                         description="test",
                         parameters={"foo": "bar"},
@@ -456,30 +465,30 @@ async def test_async_render_samples_success(
                 ],
                 tool_choice="auto",
                 parallel_tool_calls=False,
-                output_schema=None,
                 dispreferred_outputs=[],
                 tags={},
                 timestamp=datetime.now(timezone.utc).isoformat(),
             ),
-            StoredInference(
-                type="json",
+            StoredInferenceJson(
                 function_name="json_success",
                 variant_name="dummy",
-                input={
-                    "system": {"assistant_name": "Dr. Mehta"},
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [{"type": "text", "value": {"country": "Japan"}}],
-                        }
+                input=StoredInput(
+                    system={"assistant_name": "Dr. Mehta"},
+                    messages=[
+                        StoredInputMessage(
+                            role="user",
+                            content=[StoredInputMessageContentTemplate(name="user", arguments={"country": "Japan"})],
+                        )
                     ],
-                },
+                ),
                 output=JsonInferenceOutput(
                     parsed={"answer": "Tokyo"},
-                    raw="""{"answer": "Tokyo"}""",
+                    raw='{"answer": "Tokyo"}',
                 ),
-                episode_id=uuid7(),
-                inference_id=uuid7(),
+                episode_id=str(uuid7()),
+                inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
+                extra_body=[],
                 output_schema={
                     "type": "object",
                     "properties": {"answer": {"type": "string"}},
@@ -560,7 +569,7 @@ async def test_async_render_samples_success(
     assert not tool.strict
     assert rendered_samples[0].allowed_tools is None
     assert rendered_samples[0].parallel_tool_calls is False
-    assert rendered_samples[0].provider_tools is None
+    assert rendered_samples[0].provider_tools == []
     assert rendered_samples[0].output_schema is None
 
     json_inference = rendered_samples[1]
@@ -602,7 +611,7 @@ Example Response:
     assert json_inference.allowed_tools is None
     assert json_inference.additional_tools is None
     assert json_inference.parallel_tool_calls is None
-    assert json_inference.provider_tools is None
+    assert json_inference.provider_tools == []
     assert json_inference.output_schema == {
         "type": "object",
         "properties": {"answer": {"type": "string"}},
@@ -617,25 +626,24 @@ async def test_async_render_samples_nonexistent_function(
     with pytest.raises(Exception) as excinfo:
         await embedded_async_client.experimental_render_samples(
             stored_samples=[
-                StoredInference(
-                    type="chat",
+                StoredInferenceChat(
                     function_name="non_existent_function",
                     variant_name="default",
-                    input={
-                        "system": {"assistant_name": "foo"},
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "value": "bar"}],
-                            }
+                    input=StoredInput(
+                        system={"assistant_name": "foo"},
+                        messages=[
+                            StoredInputMessage(
+                                role="user",
+                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                            )
                         ],
-                    },
-                    output=[Text(text="Hello world")],
-                    episode_id=uuid7(),
-                    inference_id=uuid7(),
+                    ),
+                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    episode_id=str(uuid7()),
+                    inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
-                    output_schema=None,
                     dispreferred_outputs=[],
                     tags={},
                     timestamp=datetime.now(timezone.utc).isoformat(),
@@ -654,25 +662,24 @@ async def test_async_render_samples_unspecified_function(
     with pytest.raises(Exception) as excinfo:
         await embedded_async_client.experimental_render_samples(
             stored_samples=[
-                StoredInference(
-                    type="chat",
+                StoredInferenceChat(
                     function_name="non_existent_function",
                     variant_name="default",
-                    input={
-                        "system": {"assistant_name": "foo"},
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "value": "bar"}],
-                            }
+                    input=StoredInput(
+                        system={"assistant_name": "foo"},
+                        messages=[
+                            StoredInputMessage(
+                                role="user",
+                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                            )
                         ],
-                    },
-                    output=[Text(text="Hello world")],
-                    episode_id=uuid7(),
-                    inference_id=uuid7(),
+                    ),
+                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    episode_id=str(uuid7()),
+                    inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
-                    output_schema=None,
                     dispreferred_outputs=[],
                     tags={},
                     timestamp=datetime.now(timezone.utc).isoformat(),
@@ -691,25 +698,24 @@ async def test_async_render_samples_no_variant(
     with pytest.raises(Exception) as excinfo:
         await embedded_async_client.experimental_render_samples(
             stored_samples=[
-                StoredInference(
-                    type="chat",
+                StoredInferenceChat(
                     function_name="basic_test",  # This function exists in the config
                     variant_name="non_existent_variant",
-                    input={
-                        "system": {"assistant_name": "foo"},
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "value": "bar"}],
-                            }
+                    input=StoredInput(
+                        system={"assistant_name": "foo"},
+                        messages=[
+                            StoredInputMessage(
+                                role="user",
+                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                            )
                         ],
-                    },
-                    output=[Text(text="Hello world")],
-                    episode_id=uuid7(),
-                    inference_id=uuid7(),
+                    ),
+                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    episode_id=str(uuid7()),
+                    inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
-                    output_schema=None,
                     dispreferred_outputs=[],
                     tags={},
                     timestamp=datetime.now(timezone.utc).isoformat(),
@@ -727,26 +733,25 @@ async def test_async_render_samples_missing_variable(
     """Test that render_samples drops an example if a template variable is missing."""
     rendered_samples = await embedded_async_client.experimental_render_samples(
         stored_samples=[
-            StoredInference(
-                type="chat",
+            StoredInferenceChat(
                 function_name="basic_test",  # Uses assistant_name in system prompt
                 variant_name="default",
-                input={
+                input=StoredInput(
                     # Missing assistant_name
-                    "system": {"some_other_variable": "foo"},
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [{"type": "text", "value": "bar"}],
-                        }
+                    system={"some_other_variable": "foo"},
+                    messages=[
+                        StoredInputMessage(
+                            role="user",
+                            content=[StoredInputMessageContentText(type="text", text="bar")],
+                        )
                     ],
-                },
-                output=[Text(text="Hello world")],
-                episode_id=uuid7(),
-                inference_id=uuid7(),
+                ),
+                output=[ContentBlockChatOutputText(text="Hello world")],
+                episode_id=str(uuid7()),
+                inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 tool_choice="auto",
                 parallel_tool_calls=False,
-                output_schema=None,
                 dispreferred_outputs=[],
                 tags={},
                 timestamp=datetime.now(timezone.utc).isoformat(),

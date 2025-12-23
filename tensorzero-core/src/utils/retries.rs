@@ -1,9 +1,13 @@
 #[expect(clippy::disallowed_types)]
 use backon::{ExponentialBuilder, Retryable};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, time::Duration};
 
 use crate::error::Error;
+
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 
 /*
  * This file implements TensorZero's custom retry logic.
@@ -15,13 +19,21 @@ use crate::error::Error;
  * this code.
  */
 
-#[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Copy, Clone, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RetryConfig {
     #[serde(default = "default_num_retries")]
     pub num_retries: usize,
     #[serde(default = "default_max_delay_s")]
     pub max_delay_s: f32,
+}
+
+impl std::fmt::Display for RetryConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 impl Default for RetryConfig {

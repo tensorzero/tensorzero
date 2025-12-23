@@ -86,7 +86,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "fireworks-shorthand".to_string(),
-        model_name: "fireworks::accounts/fireworks/models/llama-v3p1-8b-instruct".into(),
+        model_name: "fireworks::accounts/fireworks/models/llama-v3p3-70b-instruct".into(),
         model_provider_name: "fireworks".into(),
         credentials: HashMap::new(),
     }];
@@ -152,6 +152,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
         pdf_inference: vec![],
+        input_audio: vec![],
         shorthand_inference: shorthand_providers,
         credential_fallbacks,
     }

@@ -360,7 +360,7 @@ impl Migration for Migration0020<'_> {
             // First, insert data into InferenceById from ChatInference
             let query = format!(
                 r"
-                INSERT INTO InferenceById
+                INSERT INTO InferenceById (id_uint, function_name, variant_name, episode_id, function_type)
                 SELECT
                     toUInt128(id) as id_uint,
                     function_name,
@@ -378,7 +378,7 @@ impl Migration for Migration0020<'_> {
             // Then, insert data into InferenceById from JsonInference
             let query = format!(
                 r"
-                INSERT INTO InferenceById
+                INSERT INTO InferenceById (id_uint, function_name, variant_name, episode_id, function_type)
                 SELECT
                     toUInt128(id) as id_uint,
                     function_name,
@@ -396,7 +396,7 @@ impl Migration for Migration0020<'_> {
             // Next, insert data into InferenceByEpisodeId from ChatInference
             let query = format!(
                 r"
-                INSERT INTO InferenceByEpisodeId
+                INSERT INTO InferenceByEpisodeId (episode_id_uint, id_uint, function_name, variant_name, function_type)
                 SELECT
                     toUInt128(episode_id) as episode_id_uint,
                     toUInt128(id) as id_uint,
@@ -414,7 +414,7 @@ impl Migration for Migration0020<'_> {
             // Finally, insert data into InferenceByEpisodeId from JsonInference
             let query = format!(
                 r"
-                INSERT INTO InferenceByEpisodeId
+                INSERT INTO InferenceByEpisodeId (episode_id_uint, id_uint, function_name, variant_name, function_type)
                 SELECT
                     toUInt128(episode_id) as episode_id_uint,
                     toUInt128(id) as id_uint,
@@ -432,6 +432,8 @@ impl Migration for Migration0020<'_> {
         Ok(())
     }
 
+    // NOTE - we do *not* drop the uint_to_uuid function here, as ClickHouse user-defined functions are globally scoped.
+    // Dropping the function can break other migrations running concurrently in our test suite.
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
@@ -440,8 +442,6 @@ impl Migration for Migration0020<'_> {
             DROP VIEW IF EXISTS JsonInferenceByIdView{on_cluster_name};
             DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView{on_cluster_name};
             DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView{on_cluster_name};
-            /* Drop the function */\
-            DROP FUNCTION IF EXISTS uint_to_uuid{on_cluster_name};
             /* Drop the tables */\
             DROP TABLE IF EXISTS InferenceById{on_cluster_name} SYNC;
             DROP TABLE IF EXISTS InferenceByEpisodeId{on_cluster_name} SYNC;

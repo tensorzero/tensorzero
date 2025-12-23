@@ -68,7 +68,7 @@ async fn get_providers() -> E2ETestProviders {
             credentials: HashMap::new(),
         },
         // Groq gives 500 errors when tool calls fail to parse. We don't test
-        // json_mode = "implicit_tool" here for that reason.
+        // json_mode = "tool" here for that reason.
         // We don't recommend its use with Groq.
         E2ETestProvider {
             supports_batch_inference: false,
@@ -119,6 +119,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         image_inference: vec![],
         pdf_inference: vec![],
+        input_audio: vec![],
         shorthand_inference: shorthand_providers,
         json_mode_off_inference: vec![],
         credential_fallbacks,

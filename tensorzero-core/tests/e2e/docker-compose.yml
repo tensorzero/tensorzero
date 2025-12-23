@@ -3,18 +3,19 @@ include:
 
 services:
   mock-inference-provider:
+    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
     build:
       context: ../../../
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
     environment:
       RUST_LOG: debug
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+    volumes:
+      # Mount GCP JWT key file for GCS access (needed for batch inference)
+      # Can be overridden with GCP_CREDENTIALS_PATH env var
+      - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
     ports:
       - "3030:3030"
-    healthcheck:
-      test: wget --spider --tries 1 http://localhost:3030/status
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
 
   fixtures:
     build:
@@ -29,6 +30,8 @@ services:
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
       - TENSORZERO_SKIP_LARGE_FIXTURES
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
     depends_on:
       clickhouse:
         condition: service_healthy

@@ -1,4 +1,4 @@
-import type { DisplayInput } from "~/utils/clickhouse/common";
+import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { z } from "zod";
 import type {
   Datapoint as TensorZeroDatapoint,
@@ -7,7 +7,7 @@ import type {
   FunctionConfig,
   InferenceResponse,
   StaticToolConfig,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
 import { data } from "react-router";
@@ -138,7 +138,7 @@ export interface ClientInferenceInputArgs {
   variant: PlaygroundVariantInfo;
   functionName: string;
   datapoint: TensorZeroDatapoint;
-  input: DisplayInput;
+  input: ZodDisplayInput;
   functionConfig: FunctionConfig;
   toolsConfig: { [key in string]?: StaticToolConfig };
 }
@@ -146,36 +146,13 @@ export interface ClientInferenceInputArgs {
 export function preparePlaygroundInferenceRequest(
   args: ClientInferenceInputArgs,
 ): ClientInferenceParams {
-  const {
-    variant,
-    functionName,
-    datapoint,
-    input,
-    functionConfig,
-    toolsConfig,
-  } = args;
+  const { variant, datapoint } = args;
   const variantInferenceInfo = getVariantInferenceInfo(variant);
   const request = prepareInferenceActionRequest({
-    source: "clickhouse_datapoint",
-    input,
-    functionName,
+    source: "t0_datapoint",
+    resource: datapoint,
     variant: variantInferenceInfo.variant,
-    allowed_tools:
-      datapoint?.type === "chat" ? datapoint.allowed_tools : undefined,
-    additional_tools:
-      datapoint?.type === "chat" ? datapoint.additional_tools : null,
-    tool_choice: datapoint?.type === "chat" ? datapoint.tool_choice : null,
-    parallel_tool_calls:
-      datapoint?.type === "chat" ? datapoint.parallel_tool_calls : null,
-    output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
-    // The default is write_only but we do off in the playground
-    cache_options: {
-      max_age_s: null,
-      enabled: "off",
-    },
     editedVariantInfo: variantInferenceInfo.editedVariantInfo,
-    functionConfig,
-    toolsConfig,
   });
   const extraOptions = getExtraInferenceOptions();
   return {

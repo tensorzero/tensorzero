@@ -1,4 +1,4 @@
-import type { EvaluatorConfig } from "tensorzero-node";
+import type { EvaluatorConfig } from "~/types/tensorzero";
 
 export const getOptimize = (evaluatorConfig?: EvaluatorConfig) => {
   if (!evaluatorConfig) {

@@ -1,19 +1,13 @@
-import {
-  countInferencesForEpisode,
-  queryInferenceTableBoundsByEpisodeId,
-  queryInferenceTableByEpisodeId,
-} from "~/utils/clickhouse/inference.server";
-import {
-  pollForFeedbackItem,
-  queryLatestFeedbackIdByMetric,
-} from "~/utils/clickhouse/feedback";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
   data,
   isRouteErrorResponse,
   useNavigate,
   type RouteHandle,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
@@ -25,21 +19,66 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
-import { addHumanFeedback } from "~/utils/tensorzero.server";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect, useState } from "react";
+import { Suspense, use, useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
-import { isTensorZeroServerError } from "~/utils/tensorzero";
+import type {
+  StoredInference,
+  FeedbackRow,
+  FeedbackBounds,
+} from "~/types/tensorzero";
+import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
+
+export type InferencesData = {
+  inferences: StoredInference[];
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+export type FeedbackData = {
+  feedbacks: FeedbackRow[];
+  bounds: FeedbackBounds;
+  latestFeedbackByMetric: Record<string, string>;
+};
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
 };
+
+/**
+ * Prevent revalidation of this route when actions are submitted to API routes.
+ * This is needed because:
+ * 1. The InferencePreviewSheet submits feedback to /api/feedback
+ * 2. The AddToDatasetButton submits to /api/datasets/datapoints/from-inference
+ * 3. By default, React Router revalidates all active loaders after any action
+ * 4. We don't want to reload the entire episode page when these actions complete
+ *    because the sheet handles its own data refresh
+ */
+export function shouldRevalidate({
+  formAction,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (
+    formAction?.startsWith("/api/feedback") ||
+    formAction?.startsWith("/api/datasets/datapoints/from-inference")
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
+}
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -48,143 +87,168 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const afterInference = url.searchParams.get("afterInference");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
+  const limit = Number(url.searchParams.get("limit")) || 10;
   const newFeedbackId = url.searchParams.get("newFeedbackId");
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  const dbClient = await getNativeDatabaseClient();
+  const tensorZeroClient = getTensorZeroClient();
 
-  // If there is a freshly inserted feedback, ClickHouse may take some time to
-  // update the feedback table as it is eventually consistent.
-  // In this case, we poll for the feedback item until it is found but time out and log a warning.
-  const feedbackDataPromise = newFeedbackId
-    ? pollForFeedbackItem(episode_id, newFeedbackId, pageSize)
-    : dbClient.queryFeedbackByTargetId({
-        target_id: episode_id,
-        before: beforeFeedback || undefined,
-        after: afterFeedback || undefined,
-        page_size: pageSize,
-      });
+  // Start count queries early - these will be streamed to section headers
+  const numInferencesPromise = tensorZeroClient
+    .getEpisodeInferenceCount(episode_id)
+    .then((response) => response.inference_count);
+  const numFeedbacksPromise =
+    tensorZeroClient.countFeedbackByTargetId(episode_id);
 
-  const [
-    inferences,
-    inference_bounds,
-    feedbacks,
-    feedbackBounds,
-    num_inferences,
-    num_feedbacks,
-    latestFeedbackByMetric,
-  ] = await Promise.all([
-    queryInferenceTableByEpisodeId({
+  // Stream inferences data - will be resolved in the component
+  // Throws error if no inferences found (episode doesn't exist)
+  const inferencesDataPromise: Promise<InferencesData> =
+    listInferencesWithPagination({
       episode_id,
       before: beforeInference ?? undefined,
       after: afterInference ?? undefined,
-      page_size: pageSize,
-    }),
-    queryInferenceTableBoundsByEpisodeId({
-      episode_id,
-    }),
-    feedbackDataPromise,
-    dbClient.queryFeedbackBoundsByTargetId({
-      target_id: episode_id,
-    }),
-    countInferencesForEpisode(episode_id),
-    dbClient.countFeedbackByTargetId({
-      target_id: episode_id,
-    }),
-    queryLatestFeedbackIdByMetric({ target_id: episode_id }),
-  ]);
-  if (inferences.length === 0) {
-    throw data(`No inferences found for episode ${episode_id}.`, {
-      status: 404,
+      limit,
+    }).then((result) => {
+      if (result.inferences.length === 0) {
+        throw Error(`Episode not found`);
+      }
+      return {
+        inferences: result.inferences,
+        hasNextPage: result.hasNextPage,
+        hasPreviousPage: result.hasPreviousPage,
+      };
     });
-  }
+
+  // Stream feedback data - will be resolved in the component
+  // If there is a freshly inserted feedback, ClickHouse may take some time to
+  // update the feedback table and materialized views as it is eventually consistent.
+  // In this case, we poll for the feedback item until it is found but time out and log a warning.
+  // When polling for new feedback, we also need to query feedbackBounds and latestFeedbackByMetric
+  // AFTER the polling completes to ensure the materialized views have caught up.
+  const feedbackDataPromise: Promise<FeedbackData> = newFeedbackId
+    ? // Sequential case: poll first, then query bounds/metrics
+      pollForFeedbackItem(episode_id, newFeedbackId, limit).then(
+        async (feedbacks) => {
+          const [bounds, latestFeedbackByMetric] = await Promise.all([
+            tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
+            tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
+          ]);
+          return { feedbacks, bounds, latestFeedbackByMetric };
+        },
+      )
+    : // Normal case: execute all queries in parallel
+      Promise.all([
+        tensorZeroClient.getFeedbackByTargetId(episode_id, {
+          before: beforeFeedback || undefined,
+          after: afterFeedback || undefined,
+          limit,
+        }),
+        tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
+        tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
+      ]).then(([feedbacks, bounds, latestFeedbackByMetric]) => ({
+        feedbacks,
+        bounds,
+        latestFeedbackByMetric,
+      }));
 
   return {
     episode_id,
-    inferences,
-    inference_bounds,
-    feedbacks,
-    feedbackBounds,
-    num_inferences,
-    num_feedbacks,
+    inferencesData: inferencesDataPromise,
+    feedbackData: feedbackDataPromise,
+    // Stream counts to section headers
+    num_inferences: numInferencesPromise,
+    num_feedbacks: numFeedbacksPromise,
     newFeedbackId,
-    latestFeedbackByMetric,
   };
 }
 
-type ActionData =
+/** Response type from /api/feedback endpoint */
+type FeedbackActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
 
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-
-  try {
-    const response = await addHumanFeedback(formData);
-    const url = new URL(request.url);
-    url.searchParams.delete("beforeFeedback");
-    url.searchParams.delete("afterFeedback");
-    url.searchParams.set("newFeedbackId", response.feedback_id);
-    return data<ActionData>({ redirectTo: url.pathname + url.search });
-  } catch (error) {
-    if (isTensorZeroServerError(error)) {
-      return data<ActionData>(
-        { error: error.message },
-        { status: error.status },
-      );
-    }
-    return data<ActionData>(
-      { error: "Unknown server error. Try again." },
-      { status: 500 },
-    );
-  }
-}
-
-export default function InferencesPage({ loaderData }: Route.ComponentProps) {
-  const {
-    episode_id,
-    inferences,
-    inference_bounds,
-    feedbacks,
-    feedbackBounds,
-    num_inferences,
-    num_feedbacks,
-    newFeedbackId,
-    latestFeedbackByMetric,
-  } = loaderData;
+function InferencePagination({ data }: { data: Promise<InferencesData> }) {
+  const { inferences, hasNextPage, hasPreviousPage } = use(data);
   const navigate = useNavigate();
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const topInference = inferences[0];
-  const bottomInference = inferences[inferences.length - 1];
-  const handleNextInferencePage = () => {
+  const topInference = inferences.at(0);
+  const bottomInference = inferences.at(-1);
+
+  const handleNextPage = () => {
+    if (!bottomInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.id);
+    searchParams.set("beforeInference", bottomInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  const handlePreviousInferencePage = () => {
+  const handlePreviousPage = () => {
+    if (!topInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.id);
+    searchParams.set("afterInference", topInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-  // These are swapped because the table is sorted in descending order
-  const disablePreviousInferencePage =
-    inference_bounds?.last_id === topInference.id;
-  const disableNextInferencePage =
-    inference_bounds?.first_id === bottomInference.id;
+
+  return (
+    <PageButtons
+      onPreviousPage={handlePreviousPage}
+      onNextPage={handleNextPage}
+      disablePrevious={!hasPreviousPage}
+      disableNext={!hasNextPage}
+    />
+  );
+}
+
+function FeedbackTableSkeleton() {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>ID</TableHead>
+          <TableHead>Metric</TableHead>
+          <TableHead>Value</TableHead>
+          <TableHead>Tags</TableHead>
+          <TableHead>Time</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <TableRow key={i}>
+            <TableCell>
+              <Skeleton className="h-4 w-24" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-20" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-16" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-24" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-28" />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function FeedbackSection({ data }: { data: Promise<FeedbackData> }) {
+  const { feedbacks, bounds, latestFeedbackByMetric } = use(data);
+  const navigate = useNavigate();
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
   const bottomFeedback = feedbacks[feedbacks.length - 1] as
     | { id: string }
     | undefined;
 
-  const handleNextFeedbackPage = () => {
+  const handleNextPage = () => {
     if (!bottomFeedback?.id) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterFeedback");
@@ -192,7 +256,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  const handlePreviousFeedbackPage = () => {
+  const handlePreviousPage = () => {
     if (!topFeedback?.id) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeFeedback");
@@ -200,26 +264,68 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  // These are swapped because the table is sorted in descending order
+  const disablePrevious =
+    !topFeedback?.id || !bounds.last_id || bounds.last_id === topFeedback.id;
+
+  const disableNext =
+    !bottomFeedback?.id ||
+    !bounds.first_id ||
+    bounds.first_id === bottomFeedback.id;
+
+  return (
+    <>
+      <FeedbackTable
+        feedback={feedbacks}
+        latestCommentId={bounds.by_type.comment.last_id!}
+        latestDemonstrationId={bounds.by_type.demonstration.last_id!}
+        latestFeedbackIdByMetric={latestFeedbackByMetric}
+      />
+      <PageButtons
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        disablePrevious={disablePrevious}
+        disableNext={disableNext}
+      />
+    </>
+  );
+}
+
+export default function EpisodeDetailPage({
+  loaderData,
+}: Route.ComponentProps) {
+  const {
+    episode_id,
+    inferencesData,
+    feedbackData,
+    num_inferences,
+    num_feedbacks,
+    newFeedbackId,
+  } = loaderData;
+  const navigate = useNavigate();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [openSheetInferenceId, setOpenSheetInferenceId] = useState<
+    string | null
+  >(null);
+
+  const handleOpenSheet = useCallback((inferenceId: string) => {
+    setOpenSheetInferenceId(inferenceId);
+  }, []);
+
+  const handleCloseSheet = useCallback(() => {
+    setOpenSheetInferenceId(null);
+  }, []);
+
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {
-      toast({
-        title: "Feedback Added",
-      });
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
     }
+    return;
   }, [newFeedbackId, toast]);
-  // These are swapped because the table is sorted in descending order
-  const disablePreviousFeedbackPage =
-    !topFeedback?.id ||
-    !feedbackBounds.last_id ||
-    feedbackBounds.last_id === topFeedback.id;
 
-  const disableNextFeedbackPage =
-    !bottomFeedback?.id ||
-    !feedbackBounds.first_id ||
-    feedbackBounds.first_id === bottomFeedback.id;
-
-  const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
+  const humanFeedbackFetcher = useFetcherWithReset<FeedbackActionData>();
   const formError =
     humanFeedbackFetcher.state === "idle"
       ? (humanFeedbackFetcher.data?.error ?? null)
@@ -251,7 +357,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             }}
             trigger={<HumanFeedbackButton />}
           >
-            <humanFeedbackFetcher.Form method="post">
+            <humanFeedbackFetcher.Form method="post" action="/api/feedback">
               <HumanFeedbackForm
                 episodeId={episode_id}
                 formError={formError}
@@ -268,13 +374,24 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Inferences" count={num_inferences} />
-          <EpisodeInferenceTable inferences={inferences} />
-          <PageButtons
-            onPreviousPage={handlePreviousInferencePage}
-            onNextPage={handleNextInferencePage}
-            disablePrevious={disablePreviousInferencePage}
-            disableNext={disableNextInferencePage}
+          <EpisodeInferenceTable
+            data={inferencesData}
+            onOpenSheet={handleOpenSheet}
+            onCloseSheet={handleCloseSheet}
+            openSheetInferenceId={openSheetInferenceId}
           />
+          <Suspense
+            fallback={
+              <PageButtons
+                onPreviousPage={() => {}}
+                onNextPage={() => {}}
+                disablePrevious
+                disableNext
+              />
+            }
+          >
+            <InferencePagination data={inferencesData} />
+          </Suspense>
         </SectionLayout>
 
         <SectionLayout>
@@ -287,23 +404,23 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
                 "This table only includes episode-level feedback. To see inference-level feedback, open the detail page for that inference.",
             }}
           />
-          <FeedbackTable
-            feedback={feedbacks}
-            latestCommentId={feedbackBounds.by_type.comment.last_id!}
-            latestDemonstrationId={
-              feedbackBounds.by_type.demonstration.last_id!
+          <Suspense
+            fallback={
+              <>
+                <FeedbackTableSkeleton />
+                <PageButtons
+                  onPreviousPage={() => {}}
+                  onNextPage={() => {}}
+                  disablePrevious
+                  disableNext
+                />
+              </>
             }
-            latestFeedbackIdByMetric={latestFeedbackByMetric}
-          />
-          <PageButtons
-            onPreviousPage={handlePreviousFeedbackPage}
-            onNextPage={handleNextFeedbackPage}
-            disablePrevious={disablePreviousFeedbackPage}
-            disableNext={disableNextFeedbackPage}
-          />
+          >
+            <FeedbackSection data={feedbackData} />
+          </Suspense>
         </SectionLayout>
       </SectionsGroup>
-      <Toaster />
     </PageLayout>
   );
 }

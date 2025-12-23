@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::de::IntoDeserializer;
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -46,7 +47,7 @@ where
     serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
 }
 
-/// Deserializes a "doubly-serialized" field of a struct, but allows the string "" to be the default.
+/// Deserializes a "doubly-serialized" field of a struct, but allows the string "" or null to be the default.
 /// If you have a struct like this:
 /// ```ignore
 /// #[derive(Deserialize, Default)]
@@ -57,7 +58,7 @@ where
 ///
 /// #[derive(Deserialize)]
 /// struct Outer {
-///     #[serde(deserialize_with = "deserialize_json_string")]
+///     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
 ///     inner: Inner,
 /// }
 /// ```
@@ -74,16 +75,30 @@ where
 /// let outer = serde_json::from_str::<Outer>("{\"inner\": \"\"}")?;
 /// assert_eq!(outer.inner, Inner { foo: 0, bar: "".to_string() });
 /// ```
+///
+/// or this:
+/// ```ignore
+/// let outer = serde_json::from_str::<Outer>("{\"inner\": null}")?;
+/// assert_eq!(outer.inner, Inner { foo: 0, bar: "".to_string() });
+/// ```
 pub fn deserialize_defaulted_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: serde::de::DeserializeOwned + Default,
 {
-    let json_str = String::deserialize(deserializer)?;
-    if json_str.is_empty() {
-        return Ok(T::default());
+    let value: Value = Deserialize::deserialize(deserializer)?;
+    match value {
+        Value::Null => Ok(T::default()),
+        Value::String(s) => {
+            if s.is_empty() {
+                return Ok(T::default());
+            }
+            serde_json::from_str(&s).map_err(serde::de::Error::custom)
+        }
+        _ => Err(serde::de::Error::custom(
+            "expected a string or null for deserialize_defaulted_json_string",
+        )),
     }
-    serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
 }
 
 /// Deserializes an optional "doubly-serialized" field of a struct.
@@ -458,12 +473,25 @@ where
     }
 }
 
+/// Serializes a DateTime<Utc> with milliseconds in RFC 3339 format.
+/// This ensures the output format is always `YYYY-MM-DDTHH:MM:SS.sssZ` with exactly 3 decimal places.
+pub fn serialize_utc_datetime_rfc_3339_with_millis<S>(
+    dt: &DateTime<Utc>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let formatted = dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    serializer.serialize_str(&formatted)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
+    #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
     struct TestStruct {
         foo: u32,
         bar: String,
@@ -733,9 +761,16 @@ mod tests {
     #[test]
     fn test_deserialize_defaulted_json_string_valid() {
         let json = r#"{"inner": "{\"foo\": 1, \"bar\": \"test\"}"}"#;
-        let result: TestDefaultedOuter = serde_json::from_str(json).unwrap();
+        let result: TestDefaultedJsonOuter = serde_json::from_str(json).unwrap();
         assert_eq!(result.inner.foo, 1);
         assert_eq!(result.inner.bar, "test");
+    }
+
+    #[test]
+    fn test_deserialize_defaulted_json_string_null() {
+        let json = r#"{"inner": null}"#;
+        let result: TestDefaultedJsonOuter = serde_json::from_str(json).unwrap();
+        assert_eq!(result.inner, TestDefaultedStruct::default());
     }
 
     #[test]
@@ -892,5 +927,43 @@ mod tests {
         };
         let json = serde_json::to_string(&obj).unwrap();
         assert_eq!(json, r#"{"field":{}}"#);
+    }
+
+    // Tests for serialize_utc_datetime_rfc_3339_with_millis
+    #[derive(Debug, Serialize)]
+    struct TestSerializeUtcDateTimeRfc3339WithMillis {
+        #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
+        timestamp: DateTime<Utc>,
+    }
+
+    #[test]
+    fn test_serialize_utc_datetime_rfc_3339_with_millis_zero_millis() {
+        use chrono::TimeZone;
+        let dt = Utc.with_ymd_and_hms(2024, 12, 25, 10, 30, 0).unwrap();
+        let obj = TestSerializeUtcDateTimeRfc3339WithMillis { timestamp: dt };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"timestamp":"2024-12-25T10:30:00.000Z"}"#);
+    }
+
+    #[test]
+    fn test_serialize_utc_datetime_rfc_3339_with_millis_non_zero_millis() {
+        use chrono::NaiveDate;
+        let naive_dt = NaiveDate::from_ymd_opt(2024, 12, 25)
+            .unwrap()
+            .and_hms_milli_opt(10, 30, 45, 123)
+            .unwrap();
+        let dt = DateTime::<Utc>::from_naive_utc_and_offset(naive_dt, Utc);
+        let obj = TestSerializeUtcDateTimeRfc3339WithMillis { timestamp: dt };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"timestamp":"2024-12-25T10:30:45.123Z"}"#);
+    }
+
+    #[test]
+    fn test_serialize_utc_datetime_rfc_3339_with_millis_epoch() {
+        use chrono::TimeZone;
+        let dt = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
+        let obj = TestSerializeUtcDateTimeRfc3339WithMillis { timestamp: dt };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"timestamp":"1970-01-01T00:00:00.000Z"}"#);
     }
 }

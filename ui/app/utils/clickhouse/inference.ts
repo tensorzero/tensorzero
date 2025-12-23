@@ -6,21 +6,34 @@ import {
   displayInputSchema,
   displayModelInferenceInputMessageSchema,
   modelInferenceOutputContentBlockSchema,
-  JsonValueSchema,
+  ZodJsonValueSchema,
 } from "./common";
 import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
   Tool,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
-// Zod schemas for ToolCallConfigDatabaseInsert
-export const toolSchema = z.object({
-  description: z.string(),
-  parameters: JsonValueSchema,
-  name: z.string(),
-  strict: z.boolean(),
-}) satisfies z.ZodType<Tool>;
+// Note: This schema handles backward compatibility with old database records that don't have
+// the 'type' field. The transform ensures all parsed tools have type: "function".
+// We use 'as z.ZodType<Tool, z.ZodTypeDef, unknown>' instead of 'satisfies' because:
+// - Input type: accepts data with optional 'type' field (old format)
+// - Output type: guarantees 'type' field is present (new format)
+// This is safe because the transform always adds the 'type' field to the output.
+export const toolSchema = z
+  .object({
+    type: z
+      .union([z.literal("function"), z.literal("client_side_function")])
+      .optional(),
+    description: z.string(),
+    parameters: ZodJsonValueSchema,
+    name: z.string(),
+    strict: z.boolean(),
+  })
+  .transform((data) => ({
+    ...data,
+    type: "function" as const,
+  })) as z.ZodType<Tool, z.ZodTypeDef, unknown>;
 
 export const toolChoiceSchema = z.union([
   z.literal("none"),
@@ -39,7 +52,7 @@ export const providerInferenceExtraBodySchema = z
   .object({
     model_provider_name: z.string(),
     pointer: z.string(),
-    value: JsonValueSchema,
+    value: ZodJsonValueSchema,
   })
   .strict();
 export type ProviderInferenceExtraBody = z.infer<
@@ -50,7 +63,7 @@ export const variantInferenceExtraBodySchema = z
   .object({
     variant_name: z.string(),
     pointer: z.string(),
-    value: JsonValueSchema,
+    value: ZodJsonValueSchema,
   })
   .strict();
 export type VariantInferenceExtraBody = z.infer<
@@ -62,19 +75,6 @@ export const inferenceExtraBodySchema = z.union([
   variantInferenceExtraBodySchema,
 ]);
 export type InferenceExtraBody = z.infer<typeof inferenceExtraBodySchema>;
-
-export const inferenceByIdRowSchema = z
-  .object({
-    id: z.string().uuid(),
-    function_name: z.string(),
-    variant_name: z.string(),
-    episode_id: z.string().uuid(),
-    function_type: z.enum(["chat", "json"]),
-    timestamp: z.string().datetime(),
-  })
-  .strict();
-
-export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
 
 export const chatInferenceRowSchema = z.object({
   id: z.string().uuid(),
@@ -153,7 +153,7 @@ export const parsedJsonInferenceRowSchema = jsonInferenceRowSchema
     input: inputSchema,
     output: jsonInferenceOutputSchema,
     inference_params: z.record(z.string(), z.unknown()),
-    output_schema: JsonValueSchema,
+    output_schema: ZodJsonValueSchema,
     extra_body: z.array(inferenceExtraBodySchema).nullable(),
   });
 
@@ -184,43 +184,34 @@ export function parseInferenceOutput(
   return jsonInferenceOutputSchema.parse(parsed);
 }
 
-export const modelInferenceRowSchema = z.object({
+// TODO(shuyangli): sort out file loading and delete these Zod schemas.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const parsedModelInferenceRowSchema = z.object({
   id: z.string().uuid(),
   inference_id: z.string().uuid(),
   raw_request: z.string(),
   raw_response: z.string(),
   model_name: z.string(),
   model_provider_name: z.string(),
-  input_tokens: z.number().nullable(),
-  output_tokens: z.number().nullable(),
-  response_time_ms: z.number(),
+  input_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
+  response_time_ms: z.number().nullable(),
   ttft_ms: z.number().nullable(),
   timestamp: z.string().datetime(),
   system: z.string().nullable(),
-  input_messages: z.string(),
-  output: z.string(),
+  input_messages: z.array(displayModelInferenceInputMessageSchema),
+  output: z.array(modelInferenceOutputContentBlockSchema),
   cached: z.boolean(),
 });
-
-export type ModelInferenceRow = z.infer<typeof modelInferenceRowSchema>;
-
-export const parsedModelInferenceRowSchema = modelInferenceRowSchema
-  .omit({
-    input_messages: true,
-    output: true,
-  })
-  .extend({
-    input_messages: z.array(displayModelInferenceInputMessageSchema),
-    output: z.array(modelInferenceOutputContentBlockSchema),
-  });
 
 export type ParsedModelInferenceRow = z.infer<
   typeof parsedModelInferenceRowSchema
 >;
 
-export const adjacentIdsSchema = z.object({
-  previous_id: z.string().uuid().nullable(),
-  next_id: z.string().uuid().nullable(),
-});
-
-export type AdjacentIds = z.infer<typeof adjacentIdsSchema>;
+/// Hacky helper to determine if the output is JSON
+// We should continue to refactor our types to avoid stuff like this...
+export function isJsonOutput(
+  output: ReturnType<typeof parseInferenceOutput>,
+): output is JsonInferenceOutput {
+  return !Array.isArray(output) && "raw" in output;
+}

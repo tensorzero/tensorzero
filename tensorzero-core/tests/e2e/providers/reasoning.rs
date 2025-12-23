@@ -1,25 +1,31 @@
 #![expect(clippy::print_stdout)]
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::E2ETestProvider;
-use crate::providers::helpers::get_extra_headers;
+use crate::providers::helpers::get_modal_extra_headers;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use reqwest_eventsource::RequestBuilderExt;
-use serde_json::json;
 use serde_json::Value;
+use serde_json::json;
 use tensorzero::Role;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 use tensorzero_core::inference::types::ContentBlockOutput;
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage, Text};
 use uuid::Uuid;
 
 pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -31,10 +37,10 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the capital city of Japan? Think step by step"
                 }
             ]},
-        "extra_headers": get_extra_headers(),
+        "extra_headers": extra_headers,
         "stream": false,
         "tags": {"foo": "bar"},
     });
@@ -64,7 +70,6 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
     assert_eq!(variant_name, provider.variant_name);
 
     let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 2);
 
     let mut found_text = false;
     let mut found_thought = false;
@@ -86,7 +91,10 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
 
     assert!(found_text, "Expected to find a text block");
     assert!(found_thought, "Expected to find a thought block");
-    assert!(text_content.to_lowercase().contains("tokyo"));
+    assert!(
+        text_content.to_lowercase().contains("tokyo"),
+        "Unexpected text content: {text_content}"
+    );
 
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
@@ -126,7 +134,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "text": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital city of Japan? Think step by step"}]
             }
         ]
     });
@@ -134,7 +142,6 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 2);
     let mut found_text = false;
     let mut found_thought = false;
     let mut clickhouse_content = String::new();
@@ -229,13 +236,24 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "What is the capital city of Japan?".to_string(),
+            text: "What is the capital city of Japan? Think step by step".to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Text(_))),
+        "Missing text block in output: {output:#?}"
+    );
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Thought(_))),
+        "Missing thought block in output: {output:#?}"
+    );
 
     // Check the InferenceTag Table
     let result = select_inference_tags_clickhouse(
@@ -262,6 +280,11 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -277,7 +300,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
                 }
             ]},
         "stream": true,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": extra_headers,
         "tags": {"key": tag_value},
     });
 
@@ -306,7 +329,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
-    let mut full_thought = String::new();
+    let mut full_thought = None;
     let mut input_tokens = 0;
     let mut output_tokens = 0;
     for chunk in chunks.clone() {
@@ -336,8 +359,12 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
                 let content = content_block.get("text").unwrap().as_str().unwrap();
                 full_content.push_str(content);
             } else if content_block.get("type").unwrap().as_str().unwrap() == "thought" {
-                let content = content_block.get("text").unwrap().as_str().unwrap();
-                full_thought.push_str(content);
+                // Some providers give signature-only thought blocks
+                if let Some(thought_text) = content_block.get("text").and_then(|v| v.as_str()) {
+                    full_thought
+                        .get_or_insert_with(String::new)
+                        .push_str(thought_text);
+                }
             }
         }
 
@@ -349,7 +376,11 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
-    assert!(full_thought.to_lowercase().contains("tokyo"));
+    // Some providers give signature-only thought blocks,
+    // so only check the content if we had at least one thought block with text
+    if let Some(full_thought) = &full_thought {
+        assert!(full_thought.to_lowercase().contains("tokyo"));
+    }
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
@@ -400,21 +431,24 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
     println!("output: {output:#?}");
-    assert_eq!(output.len(), 2);
     let mut found_text = false;
     let mut found_thought = false;
     let mut clickhouse_content = String::new();
-    let mut clickhouse_thought = String::new();
+    let mut clickhouse_thought = None;
     for block in output {
         let block_type = block.get("type").unwrap().as_str().unwrap();
         match block_type {
             "text" => {
                 found_text = true;
-                clickhouse_content = block.get("text").unwrap().as_str().unwrap().to_string();
+                clickhouse_content.push_str(block.get("text").unwrap().as_str().unwrap());
             }
             "thought" => {
                 found_thought = true;
-                clickhouse_thought = block.get("text").unwrap().as_str().unwrap().to_string();
+                if let Some(thought_text) = block.get("text").and_then(|v| v.as_str()) {
+                    clickhouse_thought
+                        .get_or_insert_with(String::new)
+                        .push_str(thought_text);
+                }
             }
             _ => panic!("Unexpected content block type: {block_type}"),
         }
@@ -517,7 +551,18 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Text(_))),
+        "Missing text block in output: {output:#?}"
+    );
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Thought(_))),
+        "Missing thought block in output: {output:#?}"
+    );
     // Check the InferenceTag Table
     let result = select_inference_tags_clickhouse(
         &clickhouse,
@@ -535,6 +580,11 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
 pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "json_success",
@@ -550,7 +600,7 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
                 }
             ]},
         "stream": false,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": extra_headers,
     });
 
     let response = Client::new()
@@ -580,13 +630,15 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     let output = response_json.get("output").unwrap().as_object().unwrap();
     assert!(output.keys().len() == 2);
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
-    assert!(parsed_output
-        .get("answer")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        parsed_output
+            .get("answer")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
@@ -673,14 +725,15 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     );
     assert_eq!(retrieved_output_schema, expected_output_schema);
 
-    // Check that the auxiliary content is correct
+    // Check that the auxiliary content contains a thought block
     let auxiliary_content: Vec<ContentBlockOutput> =
         serde_json::from_str(result.get("auxiliary_content").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(auxiliary_content.len(), 1);
-    assert!(matches!(
-        auxiliary_content[0],
-        ContentBlockOutput::Thought(_)
-    ));
+    assert!(
+        auxiliary_content
+            .iter()
+            .any(|c| matches!(c, ContentBlockOutput::Thought(_))),
+        "Unexpected auxiliary content: {auxiliary_content:#?}"
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -734,7 +787,12 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Text(_))),
+        "Unexpected output: {output:#?}"
+    );
 }
 
 pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
@@ -746,6 +804,11 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         return;
     }
     let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "json_success",
@@ -761,7 +824,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
                 }
             ]},
         "stream": true,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": extra_headers,
     });
 
     let mut event_source = Client::new()
@@ -1007,10 +1070,12 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         StoredContentBlock::Thought(thought) => thought,
         _ => panic!("Expected a thought block"),
     };
-    assert!(thought
-        .text
-        .as_ref()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        thought
+            .text
+            .as_ref()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
 }

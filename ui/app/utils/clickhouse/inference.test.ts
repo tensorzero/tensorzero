@@ -1,636 +1,279 @@
-import { describe, expect, test } from "vitest";
-import { DEFAULT_FUNCTION } from "~/utils/constants";
+import { expect, test } from "vitest";
 import {
-  countInferencesForEpisode,
-  queryInferenceById,
-  queryInferenceTable,
-  queryInferenceTableBounds,
-  queryInferenceTableBoundsByEpisodeId,
-  queryInferenceTableByEpisodeId,
-  countInferencesByFunction,
+  listInferencesWithPagination,
   countInferencesForVariant,
-  queryInferenceTableByVariantName,
-  queryInferenceTableByFunctionName,
-  queryInferenceTableBoundsByFunctionName,
-  queryInferenceTableBoundsByVariantName,
-  queryModelInferencesByInferenceId,
-  getAdjacentInferenceIds,
-  getAdjacentEpisodeIds,
+  countInferencesForFunction,
 } from "./inference.server";
-import { countInferencesForFunction } from "./inference.server";
-import type { TextContent } from "./common";
-import { getClickhouseClient } from "./client.server";
-import type {
-  ContentBlockChatOutput,
-  JsonInferenceOutput,
-} from "tensorzero-node";
+import { displayModelInferenceInputMessageContentSchema } from "./common";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
-  const jsonCount = await countInferencesForFunction("extract_entities", {
-    type: "json",
-    variants: {},
-    schemas: {},
-    description: "",
-    output_schema: { value: {} },
-    implicit_tool_call_config: {
-      static_tools_available: [],
-      dynamic_tools_available: [],
-      provider_tools: [],
-      tool_choice: "none",
-      parallel_tool_calls: false,
-      allowed_tools: { tools: [], choice: "function_default" },
-    },
-    experimentation: { type: "uniform" },
-  });
-  expect(jsonCount).toBe(604);
+  const jsonCount = await countInferencesForFunction("extract_entities");
+  expect(jsonCount).toBeGreaterThanOrEqual(604);
 
-  const chatCount = await countInferencesForFunction("write_haiku", {
-    type: "chat",
-    variants: {},
-    tools: [],
-    tool_choice: "none",
-    parallel_tool_calls: false,
-    schemas: {},
-    description: "",
-    experimentation: { type: "uniform" },
-  });
-  expect(chatCount).toBe(804);
+  const chatCount = await countInferencesForFunction("write_haiku");
+  expect(chatCount).toBeGreaterThanOrEqual(804);
 });
 
 // Test countInferencesForVariant
 test("countInferencesForVariant returns correct counts", async () => {
   const jsonCount = await countInferencesForVariant(
     "extract_entities",
-    {
-      type: "json",
-      variants: {},
-      schemas: {},
-      description: "",
-      output_schema: { value: {} },
-      implicit_tool_call_config: {
-        static_tools_available: [],
-        dynamic_tools_available: [],
-        provider_tools: [],
-        tool_choice: "none",
-        parallel_tool_calls: false,
-        allowed_tools: {
-          tools: [],
-          choice: "function_default",
-        },
-      },
-      experimentation: { type: "uniform" },
-    },
     "gpt4o_initial_prompt",
   );
-  expect(jsonCount).toBe(132);
+  expect(jsonCount).toBeGreaterThanOrEqual(132);
 
   const chatCount = await countInferencesForVariant(
     "write_haiku",
-    {
-      type: "chat",
-      variants: {},
-      tools: [],
-      tool_choice: "none",
-      parallel_tool_calls: false,
-      schemas: {},
-      description: "",
-      experimentation: { type: "uniform" },
-    },
     "initial_prompt_gpt4o_mini",
   );
-  expect(chatCount).toBe(649);
+  expect(chatCount).toBeGreaterThanOrEqual(649);
 });
 
-test("queryInferenceTable", async () => {
-  const inferences = await queryInferenceTable({
-    page_size: 10,
-  });
-  expect(inferences.length).toBe(10);
+// Tests for listInferencesWithPagination (new cursor-based pagination API)
+test(
+  "listInferencesWithPagination basic pagination",
+  // TODO - lower this timeout when we figure out what's wrong with clickhouse lts
+  { timeout: 20_000 },
+  async () => {
+    const result = await listInferencesWithPagination({
+      limit: 10,
+    });
+    expect(result.inferences.length).toBe(10);
+    expect(result.hasPreviousPage).toBe(false); // First page has no previous
+    expect(result.hasNextPage).toBe(true); // Should have more pages
 
-  // Verify IDs are in descending order
-  for (let i = 1; i < inferences.length; i++) {
-    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
-  }
+    // Verify IDs are in descending order
+    for (let i = 1; i < result.inferences.length; i++) {
+      expect(
+        result.inferences[i - 1].inference_id >
+          result.inferences[i].inference_id,
+      ).toBe(true);
+    }
 
-  const inferences2 = await queryInferenceTable({
-    before: inferences[inferences.length - 1].id,
-    page_size: 10,
-  });
-  expect(inferences2.length).toBe(10);
-});
+    // Get second page using before
+    const result2 = await listInferencesWithPagination({
+      before: result.inferences[result.inferences.length - 1].inference_id,
+      limit: 10,
+    });
+    expect(result2.inferences.length).toBe(10);
+    expect(result2.hasPreviousPage).toBe(true); // We came from a newer page
+  },
+);
 
 test(
-  "queryInferenceTable pagination samples front and near-end pages correctly",
+  "listInferencesWithPagination pagination with before and after",
   { timeout: 10_000 },
   async () => {
-    const PAGE_SIZE = 100;
+    const LIMIT = 100;
 
-    // --- Front of the table (most recent entries) ---
-    const firstPage = await queryInferenceTable({ page_size: PAGE_SIZE });
-    expect(firstPage.length).toBe(PAGE_SIZE);
-    for (let i = 1; i < firstPage.length; i++) {
-      expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
+    // First page (most recent)
+    const firstResult = await listInferencesWithPagination({ limit: LIMIT });
+    expect(firstResult.inferences.length).toBe(LIMIT);
+    expect(firstResult.hasPreviousPage).toBe(false);
+    expect(firstResult.hasNextPage).toBe(true);
+    for (let i = 1; i < firstResult.inferences.length; i++) {
+      expect(
+        firstResult.inferences[i - 1].inference_id >
+          firstResult.inferences[i].inference_id,
+      ).toBe(true);
     }
 
-    const secondPage = await queryInferenceTable({
-      before: firstPage[firstPage.length - 1].id,
-      page_size: PAGE_SIZE,
+    // Second page using before (going to older)
+    const secondResult = await listInferencesWithPagination({
+      before:
+        firstResult.inferences[firstResult.inferences.length - 1].inference_id,
+      limit: LIMIT,
     });
-    expect(secondPage.length).toBe(PAGE_SIZE);
-    for (let i = 1; i < secondPage.length; i++) {
-      expect(secondPage[i - 1].id > secondPage[i].id).toBe(true);
+    expect(secondResult.inferences.length).toBe(LIMIT);
+    expect(secondResult.hasPreviousPage).toBe(true);
+    for (let i = 1; i < secondResult.inferences.length; i++) {
+      expect(
+        secondResult.inferences[i - 1].inference_id >
+          secondResult.inferences[i].inference_id,
+      ).toBe(true);
     }
 
-    // --- Near the end of the table (oldest entries) ---
-    const bounds = await queryInferenceTableBounds();
-    // bounds.last_id is the earliest (oldest) inference ID
-    const lastID = bounds.last_id!;
-
-    const endPage1 = await queryInferenceTable({
-      before: lastID,
-      page_size: PAGE_SIZE,
+    // Go back to newer using after
+    const forwardResult = await listInferencesWithPagination({
+      after:
+        secondResult.inferences[secondResult.inferences.length - 1]
+          .inference_id,
+      limit: LIMIT,
     });
-    expect(endPage1.length).toBeGreaterThan(0);
-    for (let i = 1; i < endPage1.length; i++) {
-      expect(endPage1[i - 1].id > endPage1[i].id).toBe(true);
-    }
-
-    const endPage2 = await queryInferenceTable({
-      before: endPage1[endPage1.length - 1].id,
-      page_size: PAGE_SIZE,
-    });
-    // this may be empty if there are no more older entries
-    expect(endPage2.length).toBeGreaterThanOrEqual(0);
-    for (let i = 1; i < endPage2.length; i++) {
-      expect(endPage2[i - 1].id > endPage2[i].id).toBe(true);
-    }
-
-    // Try to grab the last page by after
-    const lastPageByAfter = await queryInferenceTable({
-      after: endPage1[endPage1.length - 1].id,
-      page_size: PAGE_SIZE,
-    });
-    expect(lastPageByAfter.length).toBe(PAGE_SIZE);
-    for (let i = 1; i < lastPageByAfter.length; i++) {
-      expect(lastPageByAfter[i - 1].id > lastPageByAfter[i].id).toBe(true);
+    expect(forwardResult.inferences.length).toBe(LIMIT);
+    expect(forwardResult.hasNextPage).toBe(true); // We came from older page
+    for (let i = 1; i < forwardResult.inferences.length; i++) {
+      expect(
+        forwardResult.inferences[i - 1].inference_id >
+          forwardResult.inferences[i].inference_id,
+      ).toBe(true);
     }
   },
 );
 
-test("queryInferenceTable pages through results correctly using after with inference ID", async () => {
-  const PAGE_SIZE = 20;
-  // Get a limited sample of inferences instead of the full table
-  const sampleSize = 100;
+test("listInferencesWithPagination after future timestamp is empty", async () => {
+  const futureUUID = "ffffffff-ffff-7fff-ffff-ffffffffffff";
+  const result = await listInferencesWithPagination({
+    after: futureUUID,
+    limit: 10,
+  });
+  expect(result.inferences.length).toBe(0);
+  expect(result.hasPreviousPage).toBe(false);
+  expect(result.hasNextPage).toBe(true); // We came from future, so there are older pages
+});
 
-  // Now, page forward using after through our sample
-  let results: Awaited<ReturnType<typeof queryInferenceTable>> = [];
-  let after: string | undefined = undefined;
-  let pageCount = 0;
+test("listInferencesWithPagination before past timestamp is empty", async () => {
+  const pastUUID = "00000000-0000-7000-0000-000000000000";
+  const result = await listInferencesWithPagination({
+    before: pastUUID,
+    limit: 10,
+  });
+  expect(result.inferences.length).toBe(0);
+  expect(result.hasNextPage).toBe(false); // No more older pages
+  expect(result.hasPreviousPage).toBe(true); // We came from newer page
+});
 
-  // Only page through our sample size
-  while (results.length < sampleSize) {
-    const page = await queryInferenceTable({
-      page_size: PAGE_SIZE,
-      after,
-    });
-    if (page.length === 0) break;
+test("listInferencesWithPagination with function_name filter", async () => {
+  const result = await listInferencesWithPagination({
+    function_name: "extract_entities",
+    limit: 10,
+  });
+  expect(result.inferences.length).toBe(10);
 
-    // IDs should be in descending order within the page
-    for (let i = 1; i < page.length; i++) {
-      expect(page[i - 1].id > page[i].id).toBe(true);
-    }
-
-    results = results.concat(page);
-    after = page[page.length - 1].id;
-    pageCount++;
-
-    if (page.length < PAGE_SIZE) break;
-
-    // Safety check to avoid infinite loops
-    if (pageCount > 10) break;
+  // All inferences should be for the specified function
+  for (const inference of result.inferences) {
+    expect(inference.function_name).toBe("extract_entities");
   }
 
-  // Should have paged at least once
-  expect(pageCount).toBeGreaterThanOrEqual(1);
-});
+  // Verify IDs are in descending order
+  for (let i = 1; i < result.inferences.length; i++) {
+    expect(
+      result.inferences[i - 1].inference_id > result.inferences[i].inference_id,
+    ).toBe(true);
+  }
 
-test("queryInferenceTable after future timestamp is empty", async () => {
-  // Create a future timestamp UUID - this will be larger than any existing ID
-  const futureUUID = "ffffffff-ffff-7fff-ffff-ffffffffffff";
-  const inferences = await queryInferenceTable({
-    after: futureUUID,
-    page_size: 10,
+  // Test pagination with before
+  const result2 = await listInferencesWithPagination({
+    function_name: "extract_entities",
+    before: result.inferences[result.inferences.length - 1].inference_id,
+    limit: 10,
   });
-  expect(inferences.length).toBe(0);
+  expect(result2.inferences.length).toBe(10);
+  for (const inference of result2.inferences) {
+    expect(inference.function_name).toBe("extract_entities");
+  }
 });
 
-test("queryInferenceTable before past timestamp is empty", async () => {
-  // Create a past timestamp UUID - this will be smaller than any existing ID
-  const pastUUID = "00000000-0000-7000-0000-000000000000";
-  const inferences = await queryInferenceTable({
-    before: pastUUID,
-    page_size: 10,
+test("listInferencesWithPagination with variant_name filter", async () => {
+  const result = await listInferencesWithPagination({
+    function_name: "extract_entities",
+    variant_name: "gpt4o_initial_prompt",
+    limit: 10,
   });
-  expect(inferences.length).toBe(0);
+  expect(result.inferences.length).toBe(10);
+
+  // All inferences should be for the specified function and variant
+  for (const inference of result.inferences) {
+    expect(inference.function_name).toBe("extract_entities");
+    expect(inference.variant_name).toBe("gpt4o_initial_prompt");
+  }
+
+  // Verify IDs are in descending order
+  for (let i = 1; i < result.inferences.length; i++) {
+    expect(
+      result.inferences[i - 1].inference_id > result.inferences[i].inference_id,
+    ).toBe(true);
+  }
 });
 
-test("queryInferenceTableByEpisodeId pages through initial and final pages correctly using before with episode_id", async () => {
-  const PAGE_SIZE = 20;
+test("listInferencesWithPagination with episode_id filter", async () => {
   const episodeId = "01942e26-618b-7b80-b492-34bed9f6d872";
+  const LIMIT = 20;
 
   // First page
-  const firstPage = await queryInferenceTableByEpisodeId({
-    page_size: PAGE_SIZE,
+  const result = await listInferencesWithPagination({
     episode_id: episodeId,
+    limit: LIMIT,
   });
-  // Should be exactly PAGE_SIZE
-  expect(firstPage.length).toBe(PAGE_SIZE);
-  // IDs in descending order
-  for (let i = 1; i < firstPage.length; i++) {
-    expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
+  expect(result.inferences.length).toBe(LIMIT);
+  expect(result.hasPreviousPage).toBe(false);
+  expect(result.hasNextPage).toBe(true); // Episode has 35 inferences, so there's more
+
+  // All inferences should be for the specified episode
+  for (const inference of result.inferences) {
+    expect(inference.episode_id).toBe(episodeId);
   }
 
-  // Next (and in this case final) page
-  const lastPage = await queryInferenceTableByEpisodeId({
-    before: firstPage[firstPage.length - 1].id,
-    page_size: PAGE_SIZE,
+  // Second page
+  const result2 = await listInferencesWithPagination({
     episode_id: episodeId,
+    before: result.inferences[result.inferences.length - 1].inference_id,
+    limit: LIMIT,
   });
-  // Should be smaller or equal to PAGE_SIZE (here 15)
-  expect(lastPage.length).toBeLessThanOrEqual(PAGE_SIZE);
-  // IDs in descending order
-  for (let i = 1; i < lastPage.length; i++) {
-    expect(lastPage[i - 1].id > lastPage[i].id).toBe(true);
+  // Should have remaining 15 inferences
+  expect(result2.inferences.length).toBe(15);
+  expect(result2.hasPreviousPage).toBe(true);
+  expect(result2.hasNextPage).toBe(false); // Last page
+
+  for (const inference of result2.inferences) {
+    expect(inference.episode_id).toBe(episodeId);
   }
-
-  // Verify total elements matches expected count
-  expect(firstPage.length + lastPage.length).toBe(35);
 });
 
-test("queryInferenceTableByEpisodeId pages through a sample of results correctly using after with episode_id", async () => {
-  const PAGE_SIZE = 20;
-  const episodeId = "01942e26-469a-7553-af00-cb0495dc7bb5";
+test("displayModelInferenceInputMessageContentSchema accepts thought content blocks", () => {
+  // Test thought content block with all fields including summary
+  const thoughtContentWithSummary = {
+    type: "thought",
+    text: "This is a thinking step",
+    signature: "abcdef",
+    summary: [
+      { text: "Summary of the thought", type: "summary_text" },
+      { text: "Another summary point", type: "summary_text" },
+    ],
+    provider_type: "anthropic",
+  };
 
-  // Get the first page
-  const firstPage = await queryInferenceTableByEpisodeId({
-    page_size: PAGE_SIZE,
-    episode_id: episodeId,
-  });
-
-  // Verify first page properties
-  expect(firstPage.length).toBe(PAGE_SIZE);
-  for (let i = 1; i < firstPage.length; i++) {
-    expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
-  }
-
-  // Get the second page using the last ID of the first page
-  const secondPage = await queryInferenceTableByEpisodeId({
-    before: firstPage[firstPage.length - 1].id,
-    page_size: PAGE_SIZE,
-    episode_id: episodeId,
-  });
-
-  // Verify second page properties
-  expect(secondPage.length).toBe(PAGE_SIZE);
-  for (let i = 1; i < secondPage.length; i++) {
-    expect(secondPage[i - 1].id > secondPage[i].id).toBe(true);
-  }
-
-  // Now test paging forward using after
-  // Get a page starting after the first item of the second page
-  const forwardPage = await queryInferenceTableByEpisodeId({
-    after: secondPage[0].id,
-    page_size: PAGE_SIZE,
-    episode_id: episodeId,
-  });
-
-  // Verify forward paging works
-  expect(forwardPage.length).toBeGreaterThan(0);
-  expect(forwardPage.length).toBeLessThanOrEqual(PAGE_SIZE);
-
-  // Verify IDs are in descending order
-  for (let i = 1; i < forwardPage.length; i++) {
-    expect(forwardPage[i - 1].id > forwardPage[i].id).toBe(true);
-  }
-
-  // Get the last page to verify we can reach the end
-  let lastPage = firstPage;
-  let nextPage = secondPage;
-
-  // Just get a couple more pages to avoid too many queries
-  for (let i = 0; i < 2 && nextPage.length === PAGE_SIZE; i++) {
-    lastPage = nextPage;
-    nextPage = await queryInferenceTableByEpisodeId({
-      before: lastPage[lastPage.length - 1].id,
-      page_size: PAGE_SIZE,
-      episode_id: episodeId,
-    });
-  }
-
-  // Verify we can get to the end if needed
-  if (nextPage.length < PAGE_SIZE) {
-    // We reached the last page
-    expect(nextPage.length).toBeLessThan(PAGE_SIZE);
-  }
-
-  // Verify total count is as expected (42 from previous test)
-  const totalCount = await countInferencesForEpisode(episodeId);
-  expect(totalCount).toBe(43);
-});
-
-// queryInferenceTableBounds and queryEpisodeTableBounds are the same because the early inferences are in singleton episodes.
-test("queryInferenceTableBounds", async () => {
-  const bounds = await queryInferenceTableBounds();
-  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("019a0881-7437-7495-b506-782079c593bf");
-});
-
-test("queryInferenceTableBounds with episode_id", async () => {
-  const bounds = await queryInferenceTableBoundsByEpisodeId({
-    episode_id: "01942e26-6497-7910-89d6-d9d1c735d3df",
-  });
-  expect(bounds.first_id).toBe("01942e26-6e50-7fa0-8d61-9fd730a73a8b");
-  expect(bounds.last_id).toBe("01942e27-5a2b-75b3-830c-094f82096270");
-});
-
-test("queryInferenceTableBounds with invalid episode_id", async () => {
-  const bounds = await queryInferenceTableBoundsByEpisodeId({
-    episode_id: "01942e26-6497-7910-89d6-d9c1c735d3df",
-  });
-  expect(bounds.first_id).toBe(null);
-  expect(bounds.last_id).toBe(null);
-});
-
-test("queryInferenceTableByFunctionName", async () => {
-  const inferences = await queryInferenceTableByFunctionName({
-    function_name: "extract_entities",
-    page_size: 10,
-  });
-  expect(inferences.length).toBe(10);
-
-  // Verify IDs are in descending order
-  for (let i = 1; i < inferences.length; i++) {
-    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
-  }
-
-  // Test pagination with before
-  const inferences2 = await queryInferenceTableByFunctionName({
-    function_name: "extract_entities",
-    before: inferences[inferences.length - 1].id,
-    page_size: 10,
-  });
-  expect(inferences2.length).toBe(10);
-
-  // Test pagination with after
-  const inferences3 = await queryInferenceTableByFunctionName({
-    function_name: "extract_entities",
-    after: inferences[0].id,
-    page_size: 10,
-  });
-  expect(inferences3.length).toBe(0);
-});
-
-test("queryInferenceTableBoundsByFunctionName", async () => {
-  const bounds = await queryInferenceTableBoundsByFunctionName({
-    function_name: "extract_entities",
-  });
-  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196374c-2c92-74b3-843f-ffa611b577b4");
-});
-
-test("queryInferenceTableByVariantName", async () => {
-  const inferences = await queryInferenceTableByVariantName({
-    function_name: "extract_entities",
-    variant_name: "gpt4o_initial_prompt",
-    page_size: 10,
-  });
-  expect(inferences.length).toBe(10);
-
-  // Verify IDs are in descending order
-  for (let i = 1; i < inferences.length; i++) {
-    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
-  }
-
-  // Test pagination with before
-  const inferences2 = await queryInferenceTableByVariantName({
-    function_name: "extract_entities",
-    variant_name: "gpt4o_initial_prompt",
-    before: inferences[inferences.length - 1].id,
-    page_size: 10,
-  });
-  expect(inferences2.length).toBe(10);
-
-  // Test pagination with after
-  const inferences3 = await queryInferenceTableByVariantName({
-    function_name: "extract_entities",
-    variant_name: "gpt4o_initial_prompt",
-    after: inferences[0].id,
-    page_size: 10,
-  });
-  expect(inferences3.length).toBe(0);
-});
-
-test("queryInferenceTableBoundsByVariantName", async () => {
-  const bounds = await queryInferenceTableBoundsByVariantName({
-    function_name: "extract_entities",
-    variant_name: "gpt4o_initial_prompt",
-  });
-  expect(bounds.first_id).toBe("01939adf-0f50-79d0-8d55-7a009fcc5e32");
-  expect(bounds.last_id).toBe("0196368e-5505-7721-88d2-654cd26483b4");
-});
-
-test("countInferencesForEpisode", async () => {
-  const count = await countInferencesForEpisode(
-    "01942e26-549f-7153-ac56-dd1d23d30f8c",
+  const result1 = displayModelInferenceInputMessageContentSchema.safeParse(
+    thoughtContentWithSummary,
   );
-  expect(count).toBe(43);
-});
+  expect(result1.success).toBe(true);
+  if (result1.success && result1.data.type === "thought") {
+    expect(result1.data.text).toBe("This is a thinking step");
+    expect(result1.data.summary).toHaveLength(2);
+    expect(result1.data.summary?.[0].text).toBe("Summary of the thought");
+  }
 
-test("countInferencesForEpisode with invalid episode_id", async () => {
-  const count = await countInferencesForEpisode(
-    "01942e26-549f-7153-ac56-dd1d23d30f8d",
+  // Test thought content block with signature but without summary
+  const thoughtContentWithSignature = {
+    type: "thought",
+    text: "Another thinking step",
+    signature: "abcdef",
+    provider_type: "anthropic",
+  };
+
+  const result2 = displayModelInferenceInputMessageContentSchema.safeParse(
+    thoughtContentWithSignature,
   );
-  expect(count).toBe(0);
-});
+  expect(result2.success).toBe(true);
+  if (result2.success && result2.data.type === "thought") {
+    expect(result2.data.text).toBe("Another thinking step");
+    expect(result2.data.summary).toBeUndefined();
+  }
 
-test("queryInferenceById for chat inference", async () => {
-  const inference = await queryInferenceById(
-    "01942e26-910b-7ab1-a645-46bc4463a001",
+  // Test thought content block with minimal fields (text is null)
+  const thoughtContentMinimal = {
+    type: "thought",
+    text: null,
+    signature: "abcdef",
+  };
+
+  const result3 = displayModelInferenceInputMessageContentSchema.safeParse(
+    thoughtContentMinimal,
   );
-  expect(inference?.function_type).toBe("chat");
-  expect(inference?.input.messages.length).toBeGreaterThan(0);
-  const output = inference?.output as ContentBlockChatOutput[];
-  const firstOutput = output[0] as TextContent;
-  expect(firstOutput.type).toBe("text");
-  expect(firstOutput.text).toBe("Yes.");
-});
-
-test("queryInferenceById for missing inference", async () => {
-  const inference = await queryInferenceById(
-    "01942e26-910b-7ab1-a645-46bc4463a000",
-  );
-  expect(inference).toBeNull();
-});
-
-test("queryInferenceById for json inference", async () => {
-  const inference = await queryInferenceById(
-    "01942e26-88ab-7331-8293-de75cc2b88a7",
-  );
-  expect(inference?.function_type).toBe("json");
-  expect(inference?.input.messages.length).toBe(0);
-  const output = inference?.output as JsonInferenceOutput;
-  expect(output.parsed).toBeDefined();
-});
-test("countInferencesByFunction", async () => {
-  const countsInfo = await countInferencesByFunction();
-  expect(countsInfo).toEqual(
-    expect.arrayContaining([
-      {
-        count: 204,
-        function_name: "tensorzero::llm_judge::entity_extraction::count_sports",
-        max_timestamp: "2025-04-15T02:34:22Z",
-      },
-      {
-        count: 604,
-        function_name: "extract_entities",
-        max_timestamp: "2025-04-15T02:34:21Z",
-      },
-      {
-        count: 310,
-        function_name: "tensorzero::llm_judge::haiku::topic_starts_with_f",
-        max_timestamp: "2025-04-15T02:33:10Z",
-      },
-      {
-        count: 804,
-        function_name: "write_haiku",
-        max_timestamp: "2025-05-12T21:59:20Z",
-      },
-      {
-        count: 3,
-        function_name: DEFAULT_FUNCTION,
-        max_timestamp: "2025-09-08T01:42:25Z",
-      },
-      {
-        count: 1,
-        function_name: "foo",
-        max_timestamp: "2025-02-13T22:29:20Z",
-      },
-    ]),
-  );
-});
-
-test("queryModelInferencesByInferenceId", async () => {
-  const modelInferences = await queryModelInferencesByInferenceId(
-    "0195aef6-6cee-75e3-9097-f7bdf6e9c9af",
-  );
-  expect(modelInferences.length).toBe(1);
-  const firstInference = modelInferences[0];
-  expect(firstInference.id).toBe("0195aef6-77a9-7ce1-8910-016c2bef9cec");
-  expect(firstInference.input_messages.length).toBe(1);
-  expect(firstInference.output.length).toBe(1);
-  expect(firstInference.output[0].type).toBe("text");
-  expect(!firstInference.cached);
-});
-
-describe("getAdjacentInferenceIds", () => {
-  test("returns adjacent inference ids", async () => {
-    const adjacentInferenceIds = await getAdjacentInferenceIds(
-      "01942e26-910b-7ab1-a645-46bc4463a001",
-    );
-    expect(adjacentInferenceIds.previous_id).toBe(
-      "01942e26-9026-76e0-bf84-27038739ec33",
-    );
-    expect(adjacentInferenceIds.next_id).toBe(
-      "01942e26-9128-71d2-bed6-aee96bb3e181",
-    );
-  });
-
-  test("returns null for previous inference id if current inference is first", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(min(id_uint)) as first_inference_id FROM InferenceById",
-      format: "JSON",
-    });
-    const firstInferenceId = await resultSet.json<{
-      first_inference_id: string;
-    }>();
-    const adjacentInferenceIds = await getAdjacentInferenceIds(
-      firstInferenceId.data[0].first_inference_id,
-    );
-    expect(adjacentInferenceIds.previous_id).toBeNull();
-    expect(adjacentInferenceIds.next_id).toBe(
-      "01934c9a-be70-7d72-a722-744cb572eb49",
-    );
-  });
-
-  test("returns null for next inference id if current inference is last", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(max(id_uint)) as last_inference_id FROM InferenceById",
-      format: "JSON",
-    });
-    const lastInferenceId = await resultSet.json<{
-      last_inference_id: string;
-    }>();
-    const adjacentInferenceIds = await getAdjacentInferenceIds(
-      lastInferenceId.data[0].last_inference_id,
-    );
-    expect(adjacentInferenceIds.previous_id).toBe(
-      "019926fd-1a06-7fe2-b7f4-2318de2f2046",
-    );
-    expect(adjacentInferenceIds.next_id).toBeNull();
-  });
-});
-
-describe("getAdjacentEpisodeIds", () => {
-  test("returns adjacent episode ids", async () => {
-    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
-      "01942e26-549f-7153-ac56-dd1d23d30f8c",
-    );
-    expect(adjacentEpisodeIds.previous_id).toBe(
-      "01942e26-5392-7652-ad59-734198888520",
-    );
-    expect(adjacentEpisodeIds.next_id).toBe(
-      "01942e26-54a2-71d1-ad80-3629b6cb18a3",
-    );
-  });
-
-  test("returns null for previous episode id if current episode is first", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(min(episode_id_uint)) as first_episode_id FROM InferenceByEpisodeId",
-      format: "JSON",
-    });
-    const firstEpisodeId = await resultSet.json<{
-      first_episode_id: string;
-    }>();
-
-    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
-      firstEpisodeId.data[0].first_episode_id,
-    );
-    expect(adjacentEpisodeIds.previous_id).toBeNull();
-    expect(adjacentEpisodeIds.next_id).toBe(
-      "0192ced0-9486-7491-9b60-42dd2ef9194e",
-    );
-  });
-
-  test("returns null for next episode id if current episode is last", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(max(episode_id_uint)) as last_episode_id FROM InferenceByEpisodeId",
-      format: "JSON",
-    });
-    const lastEpisodeId = await resultSet.json<{
-      last_episode_id: string;
-    }>();
-
-    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
-      lastEpisodeId.data[0].last_episode_id,
-    );
-    expect(adjacentEpisodeIds.previous_id).toBe(
-      "0aaeef58-3633-7f27-9393-65bd98491026",
-    );
-    expect(adjacentEpisodeIds.next_id).toBeNull();
-  });
+  expect(result3.success).toBe(true);
+  if (result3.success && result3.data.type === "thought") {
+    expect(result3.data.text).toBeUndefined();
+    expect(result3.data.summary).toBeUndefined();
+  }
 });

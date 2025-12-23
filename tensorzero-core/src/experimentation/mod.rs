@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -14,29 +17,107 @@ use crate::variant::VariantInfo;
 pub mod asymptotic_confidence_sequences;
 mod static_weights;
 pub mod track_and_stop;
+mod uniform;
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+/// Check for duplicate variants within a list
+fn check_duplicates_within(variants: &[String], list_name: &str) -> Result<(), Error> {
+    let mut seen = HashSet::new();
+    let mut duplicates = Vec::new();
+
+    for variant in variants {
+        if !seen.insert(variant) && !duplicates.contains(&variant.as_str()) {
+            duplicates.push(variant.as_str());
+        }
+    }
+
+    if !duplicates.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "`{}` contains duplicate entries: {}",
+                list_name,
+                duplicates.join(", ")
+            ),
+        }));
+    }
+
+    Ok(())
+}
+
+/// Check for duplicate variants across candidate_variants and fallback_variants
+fn check_duplicates_across(candidates: &[String], fallbacks: &[String]) -> Result<(), Error> {
+    let candidate_set: HashSet<_> = candidates.iter().collect();
+    let mut duplicates = Vec::new();
+
+    for fallback in fallbacks {
+        if candidate_set.contains(fallback) && !duplicates.contains(&fallback.as_str()) {
+            duplicates.push(fallback.as_str());
+        }
+    }
+
+    if !duplicates.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "variants cannot appear in both `candidate_variants` and `fallback_variants`: {}",
+                duplicates.join(", ")
+            ),
+        }));
+    }
+
+    Ok(())
+}
+
+/// Check for duplicate variants across candidate_variants (from a map) and fallback_variants
+fn check_duplicates_across_map(
+    candidate_keys: impl Iterator<Item = impl AsRef<str>>,
+    fallbacks: &[String],
+) -> Result<(), Error> {
+    let candidate_set: HashSet<_> = candidate_keys.map(|s| s.as_ref().to_string()).collect();
+    let mut duplicates = Vec::new();
+
+    for fallback in fallbacks {
+        if candidate_set.contains(fallback) && !duplicates.contains(&fallback.as_str()) {
+            duplicates.push(fallback.as_str());
+        }
+    }
+
+    if !duplicates.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "variants cannot appear in both `candidate_variants` and `fallback_variants`: {}",
+                duplicates.join(", ")
+            ),
+        }));
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
+    Uniform(uniform::UniformConfig),
     StaticWeights(static_weights::StaticWeightsConfig),
-    #[default]
-    Uniform,
-    #[ts(skip)]
-    #[cfg(test)]
-    AlwaysFails(AlwaysFailsConfig),
     // NOTE: this diverges from the spec due to technical limitations with `serde`
     // (serde enums cannot be #[serde(flatten)])
     // we can write a custom deserializer for this if we want
     TrackAndStop(track_and_stop::TrackAndStopConfig),
+    #[ts(skip)]
+    #[cfg(test)]
+    AlwaysFails(AlwaysFailsConfig),
 }
 
-#[derive(Debug, Deserialize)]
+impl Default for ExperimentationConfig {
+    fn default() -> Self {
+        Self::Uniform(uniform::UniformConfig::default())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
-    Uniform,
+    Uniform(uniform::UniformConfig),
     TrackAndStop(track_and_stop::UninitializedTrackAndStopConfig),
 }
 
@@ -68,7 +149,9 @@ impl UninitializedExperimentationConfig {
             UninitializedExperimentationConfig::StaticWeights(config) => {
                 Ok(ExperimentationConfig::StaticWeights(config))
             }
-            UninitializedExperimentationConfig::Uniform => Ok(ExperimentationConfig::Uniform),
+            UninitializedExperimentationConfig::Uniform(config) => {
+                Ok(ExperimentationConfig::Uniform(config.load(variants)?))
+            }
             UninitializedExperimentationConfig::TrackAndStop(config) => Ok(
                 ExperimentationConfig::TrackAndStop(config.load(variants, metrics)?),
             ),
@@ -119,7 +202,7 @@ impl ExperimentationConfig {
                 );
             }
         }
-        Self::Uniform
+        Self::Uniform(uniform::UniformConfig::default())
     }
 
     pub async fn setup(
@@ -135,7 +218,11 @@ impl ExperimentationConfig {
                     .setup(db, function_name, postgres, cancel_token)
                     .await
             }
-            Self::Uniform => Ok(()),
+            Self::Uniform(config) => {
+                config
+                    .setup(db, function_name, postgres, cancel_token)
+                    .await
+            }
             Self::TrackAndStop(config) => {
                 config
                     .setup(db, function_name, postgres, cancel_token)
@@ -164,7 +251,11 @@ impl ExperimentationConfig {
                     .sample(function_name, episode_id, active_variants, postgres)
                     .await
             }
-            Self::Uniform => sample_uniform(function_name, &episode_id, active_variants, None),
+            Self::Uniform(config) => {
+                config
+                    .sample(function_name, episode_id, active_variants, postgres)
+                    .await
+            }
             #[cfg(test)]
             Self::AlwaysFails(config) => {
                 config
@@ -186,12 +277,17 @@ impl ExperimentationConfig {
             } else {
                 let allowed: Vec<&str> = match self {
                     Self::StaticWeights(config) => config.allowed_variants().collect(),
-                    Self::Uniform => return Err(e), // Uniform has no restrictions, so if it failed we just propagate
+                    Self::Uniform(config) => config.allowed_variants().collect(),
                     #[cfg(test)]
                     Self::AlwaysFails(config) => config.allowed_variants().collect(),
                     Self::TrackAndStop(config) => config.allowed_variants().collect(),
                 };
-                sample_uniform(function_name, &episode_id, active_variants, Some(&allowed))
+                // If allowed is empty (UniformConfig with None, None), fall back to all variants
+                if allowed.is_empty() {
+                    sample_uniform(function_name, &episode_id, active_variants, None)
+                } else {
+                    sample_uniform(function_name, &episode_id, active_variants, Some(&allowed))
+                }
             }
         })
     }
@@ -206,17 +302,8 @@ impl ExperimentationConfig {
             Self::StaticWeights(config) => {
                 config.get_current_display_probabilities(function_name, active_variants, postgres)
             }
-            Self::Uniform => {
-                // Uniform distribution over all active variants
-                let num_variants = active_variants.len();
-                if num_variants == 0 {
-                    return Ok(HashMap::new());
-                }
-                let uniform_prob = 1.0 / num_variants as f64;
-                Ok(active_variants
-                    .keys()
-                    .map(|k| (k.as_str(), uniform_prob))
-                    .collect())
+            Self::Uniform(config) => {
+                config.get_current_display_probabilities(function_name, active_variants, postgres)
             }
             #[cfg(test)]
             Self::AlwaysFails(config) => {
@@ -342,7 +429,7 @@ impl VariantSampler for AlwaysFailsConfig {
         // Find intersection of active_variants and allowed_variants
         let intersection: Vec<&str> = active_variants
             .keys()
-            .filter(|k| self.allowed_variants.contains(&k.to_string()))
+            .filter(|k| self.allowed_variants.contains(*k))
             .map(String::as_str)
             .collect();
 
@@ -364,7 +451,7 @@ impl VariantSampler for AlwaysFailsConfig {
 mod tests {
     use super::*;
     use crate::config::{ErrorContext, SchemaData};
-    use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+    use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
     use uuid::Uuid;
 
     #[test]
@@ -394,7 +481,7 @@ mod tests {
     #[test]
     fn test_uniform_sampling_distribution() {
         use crate::config::{ErrorContext, SchemaData};
-        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+        use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
         use std::collections::HashMap;
 
         // Create variants with no weights (should trigger uniform sampling)
@@ -447,7 +534,7 @@ mod tests {
     #[tokio::test]
     async fn test_always_fails_fallback_with_allowed_variants() {
         use crate::config::{ErrorContext, SchemaData};
-        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+        use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
 
         // Create 5 variants: A, B, C, D, E
         let variant_names = ["A", "B", "C", "D", "E"];
@@ -566,7 +653,7 @@ mod tests {
             );
         }
 
-        let config = ExperimentationConfig::Uniform;
+        let config = ExperimentationConfig::Uniform(uniform::UniformConfig::default());
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
             .get_current_display_probabilities("test", &active_variants, &postgres)
@@ -587,7 +674,7 @@ mod tests {
     fn test_get_current_display_probabilities_uniform_empty() {
         let active_variants = HashMap::new();
 
-        let config = ExperimentationConfig::Uniform;
+        let config = ExperimentationConfig::Uniform(uniform::UniformConfig::default());
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
             .get_current_display_probabilities("test", &active_variants, &postgres)

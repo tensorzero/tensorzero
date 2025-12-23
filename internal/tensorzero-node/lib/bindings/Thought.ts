@@ -2,10 +2,10 @@
 import type { ThoughtSummaryBlock } from "./ThoughtSummaryBlock";
 
 /**
- * Struct that represents Chain of Thought reasoning
+ * Struct that represents a model's reasoning
  */
 export type Thought = {
-  text: string | null;
+  text?: string;
   /**
    * An optional signature - currently, this is only used with Anthropic,
    * and is ignored by other providers.
@@ -13,9 +13,9 @@ export type Thought = {
   signature?: string;
   summary?: Array<ThoughtSummaryBlock>;
   /**
-   * When set, this 'Thought' block will only be used for providers
+   * When set, this `Thought` block will only be used for providers
    * matching this type (e.g. `anthropic`). Other providers will emit
    * a warning and discard the block.
    */
-  _internal_provider_type?: string;
+  provider_type?: string;
 };

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use futures::{future::try_join_all, StreamExt};
+use futures::{StreamExt, future::try_join_all};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
@@ -15,30 +15,33 @@ use super::helpers::check_new_tool_call_name;
 use super::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::warn_discarded_thought_block;
 use crate::error::warn_discarded_unknown_chunk;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
-    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, RequestMessage, Usage,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
-    Thought, ThoughtChunk, UnknownChunk,
+    Thought, ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
-use crate::inference::InferenceProvider;
-use crate::model::{fully_qualified_name, Credential, ModelProvider};
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::inference::types::{
+    ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage,
+    batch::StartBatchProviderInferenceResponse, serialize_or_log,
+};
+use crate::model::{Credential, ModelProvider};
+use crate::tool::FunctionToolConfig;
+#[cfg(test)]
+use crate::tool::{AllowedTools, AllowedToolsChoice};
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
 
 use super::gcp_vertex_gemini::process_jsonschema_for_gcp_vertex_gemini;
 use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
@@ -48,9 +51,8 @@ pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GoogleAIStudioGeminiProvider {
     model_name: String,
     request_url: Url,
@@ -127,33 +129,36 @@ impl GoogleAIStudioCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             GoogleAIStudioCredentials::Static(api_key) => Ok(api_key),
             GoogleAIStudioCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             GoogleAIStudioCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: PROVIDER_NAME.to_string(),
-                message: "No credentials are set".to_string(),
+            GoogleAIStudioCredentials::None => {
+                Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: PROVIDER_NAME.to_string(),
+                    message: "No credentials are set".to_string(),
+                }))
             }
-            .into()),
         }
     }
 }
@@ -181,12 +186,15 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                     ),
                 })
             })?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let mut url = self.request_url.clone();
-        url.query_pairs_mut()
-            .append_pair("key", api_key.expose_secret());
-        let builder = http_client.post(url);
+        let url = self.request_url.clone();
+        let builder = http_client
+            .post(url)
+            .header("x-goog-api-key", api_key.expose_secret());
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -273,12 +281,15 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                     ),
                 })
             })?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let mut url = self.streaming_request_url.clone();
-        url.query_pairs_mut()
-            .append_pair("key", api_key.expose_secret());
-        let builder = http_client.post(url);
+        let url = self.streaming_request_url.clone();
+        let builder = http_client
+            .post(url)
+            .header("x-goog-api-key", api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -295,6 +306,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             model_provider,
             model_name,
             provider_name,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -331,7 +343,9 @@ fn stream_google_ai_studio_gemini(
     model_provider: &ModelProvider,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
@@ -346,7 +360,7 @@ fn stream_google_ai_studio_gemini(
                     if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -355,7 +369,7 @@ fn stream_google_ai_studio_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                             })
                         });
@@ -501,7 +515,7 @@ impl<'a> GeminiContent<'a> {
                                     raw_response: None,
                                 }));
                             }
-                            Some(ContentBlock::Unknown { .. }) => {
+                            Some(ContentBlock::Unknown(_)) => {
                                 return Err(Error::new(ErrorDetails::InferenceServer {
                                     message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
@@ -520,10 +534,12 @@ impl<'a> GeminiContent<'a> {
                                             data: FlattenUnknown::Normal(part),
                                         });
                                     }
-                                    // We should have handled this case above with `Some(ContentBlock::Unknown { .. })`
+                                    // We should have handled this case above with `Some(ContentBlock::Unknown(_))`
                                     FlattenUnknown::Unknown(_) => {
                                         return Err(Error::new(ErrorDetails::InternalError {
-                                            message: format!("Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                                            message: format!(
+                                                "Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"
+                                            ),
                                         }));
                                     }
                                 }
@@ -574,14 +590,12 @@ async fn convert_non_thought_content_block(
                 "name": tool_result.name,
                 "content": tool_result.result,
             });
-            Ok(FlattenUnknown::Normal(
-                GeminiPartData::FunctionResponse {
-                    function_response: GeminiFunctionResponse {
-                        name: &tool_result.name,
-                        response,
-                    },
+            Ok(FlattenUnknown::Normal(GeminiPartData::FunctionResponse {
+                function_response: GeminiFunctionResponse {
+                    name: &tool_result.name,
+                    response,
                 },
-            ))
+            }))
         }
         ContentBlock::ToolCall(tool_call) => {
             // Convert the tool call arguments from String to JSON Value (Gemini expects an object)
@@ -619,6 +633,11 @@ async fn convert_non_thought_content_block(
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
             let ObjectStorageFile { file, data } = &*resolved_file;
+            if file.detail.is_some() {
+                tracing::warn!(
+                    "The image detail parameter is not supported by Google AI Studio Gemini. The `detail` field will be ignored."
+                );
+            }
             Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
                 inline_data: GeminiInlineData {
                     mime_type: file.mime_type.to_string(),
@@ -627,12 +646,13 @@ async fn convert_non_thought_content_block(
             }))
         }
         ContentBlock::Thought(_) => Err(Error::new(ErrorDetails::InternalError {
-            message: format!("Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"),
+            message: format!(
+                "Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"
+            ),
         })),
-        ContentBlock::Unknown {
-            data,
-            model_provider_name: _,
-        } => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
+        ContentBlock::Unknown(Unknown { data, .. }) => {
+            Ok(FlattenUnknown::Unknown(Cow::Borrowed(data)))
+        }
     }
 }
 
@@ -650,8 +670,8 @@ struct GeminiTool<'a> {
     // TODO (if needed): code_execution ([docs](https://ai.google.dev/api/caching#CodeExecution))
 }
 
-impl<'a> From<&'a ToolConfig> for GeminiFunctionDeclaration<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
+impl<'a> GeminiFunctionDeclaration<'a> {
+    fn from_tool_config(tool: &'a FunctionToolConfig) -> Self {
         let mut parameters = tool.parameters().clone();
         if let Some(obj) = parameters.as_object_mut() {
             obj.remove("additionalProperties");
@@ -688,25 +708,35 @@ struct GoogleAIStudioGeminiToolConfig<'a> {
     function_calling_config: GeminiFunctionCallingConfig<'a>,
 }
 
-impl<'a> From<&'a ToolChoice> for GoogleAIStudioGeminiToolConfig<'a> {
-    fn from(tool_choice: &'a ToolChoice) -> Self {
-        match tool_choice {
+impl<'a> GoogleAIStudioGeminiToolConfig<'a> {
+    fn from_tool_config(tool_config: &'a ToolCallConfig) -> Self {
+        match &tool_config.tool_choice {
             ToolChoice::None => GoogleAIStudioGeminiToolConfig {
                 function_calling_config: GeminiFunctionCallingConfig {
                     mode: GeminiFunctionCallingMode::None,
                     allowed_function_names: None,
                 },
             },
-            ToolChoice::Auto => GoogleAIStudioGeminiToolConfig {
-                function_calling_config: GeminiFunctionCallingConfig {
-                    mode: GeminiFunctionCallingMode::Auto,
-                    allowed_function_names: None,
-                },
-            },
+            ToolChoice::Auto => {
+                let allowed_function_names = tool_config.allowed_tools.as_dynamic_allowed_tools();
+                // If allowed_function_names is set, we need to use Any mode because
+                // Gemini's Auto mode with allowed_function_names errors
+                let mode = if allowed_function_names.is_some() {
+                    GeminiFunctionCallingMode::Any
+                } else {
+                    GeminiFunctionCallingMode::Auto
+                };
+                GoogleAIStudioGeminiToolConfig {
+                    function_calling_config: GeminiFunctionCallingConfig {
+                        mode,
+                        allowed_function_names,
+                    },
+                }
+            }
             ToolChoice::Required => GoogleAIStudioGeminiToolConfig {
                 function_calling_config: GeminiFunctionCallingConfig {
                     mode: GeminiFunctionCallingMode::Any,
-                    allowed_function_names: None,
+                    allowed_function_names: tool_config.allowed_tools.as_dynamic_allowed_tools(),
                 },
             },
             ToolChoice::Specific(tool_name) => GoogleAIStudioGeminiToolConfig {
@@ -779,6 +809,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -814,6 +845,10 @@ fn apply_inference_params(
         }
     }
 
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
+    }
+
     if verbosity.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
@@ -845,7 +880,7 @@ impl<'a> GeminiRequest<'a> {
             .into_iter()
             .filter(|m| !m.parts.is_empty())
             .collect();
-        let (tools, tool_config) = prepare_tools(request);
+        let (tools, tool_config) = prepare_tools(request)?;
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 match request.output_schema {
@@ -893,25 +928,30 @@ impl<'a> GeminiRequest<'a> {
 
 fn prepare_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
-) -> (
-    Option<Vec<GeminiTool<'a>>>,
-    Option<GoogleAIStudioGeminiToolConfig<'a>>,
-) {
+) -> Result<
+    (
+        Option<Vec<GeminiTool<'a>>>,
+        Option<GoogleAIStudioGeminiToolConfig<'a>>,
+    ),
+    Error,
+> {
     match &request.tool_config {
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None);
+                return Ok((None, None));
             }
             let tools = Some(vec![GeminiTool {
                 function_declarations: tool_config
-                    .tools_available()
-                    .map(GeminiFunctionDeclaration::from)
+                    .tools_available()?
+                    .map(GeminiFunctionDeclaration::from_tool_config)
                     .collect(),
             }]);
-            let tool_config = Some((&tool_config.tool_choice).into());
-            (tools, tool_config)
+            let tool_config_converted = Some(GoogleAIStudioGeminiToolConfig::from_tool_config(
+                tool_config,
+            ));
+            Ok((tools, tool_config_converted))
         }
-        None => (None, None),
+        None => Ok((None, None)),
     }
 }
 
@@ -985,14 +1025,13 @@ fn content_part_to_tensorzero_chunk(
             }
             _ => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-                        message:
-                            format!(
-                                "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
-                            ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
-                    }));
+                    message: format!(
+                        "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: None,
+                    raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+                }));
             }
         }
         return Ok(());
@@ -1059,7 +1098,8 @@ fn content_part_to_tensorzero_chunk(
             output.push(ContentBlockChunk::Unknown(UnknownChunk {
                 id: last_unknown_chunk_id.to_string(),
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
             }));
             *last_unknown_chunk_id += 1;
         }
@@ -1095,7 +1135,7 @@ fn convert_part_to_output(
                 }));
             }
             _ => {
-                output.push(ContentBlockOutput::Unknown {
+                output.push(ContentBlockOutput::Unknown(Unknown {
                     data: serde_json::to_value(part).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -1103,8 +1143,9 @@ fn convert_part_to_output(
                             ),
                         })
                     })?,
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-                });
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
+                }));
             }
         }
         return Ok(());
@@ -1142,10 +1183,11 @@ fn convert_part_to_output(
             }));
         }
         FlattenUnknown::Unknown(part) => {
-            output.push(ContentBlockOutput::Unknown {
+            output.push(ContentBlockOutput::Unknown(Unknown {
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-            });
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
+            }));
         }
     }
     Ok(())
@@ -1205,7 +1247,7 @@ struct GeminiResponseCandidate {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiUsageMetadata {
-    prompt_token_count: u32,
+    prompt_token_count: Option<u32>,
     // Gemini doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
@@ -1215,7 +1257,7 @@ impl From<GeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GeminiUsageMetadata) -> Self {
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
+            output_tokens: usage_metadata.candidates_token_count,
         }
     }
 }
@@ -1416,17 +1458,25 @@ fn handle_google_ai_studio_error(
 mod tests {
     use std::borrow::Cow;
 
+    use base64::Engine;
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use serde_json::json;
-    use tracing_test::traced_test;
 
     use super::*;
-    use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::file::Detail;
+    use crate::inference::types::resolved_input::LazyFile;
+    use crate::inference::types::storage::{StorageKind, StoragePath};
+    use crate::inference::types::{
+        ContentBlock, FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode,
+        ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
+    };
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{ToolCallConfig, ToolResult};
+    use crate::utils::testing::capture_logs;
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_content_block_warn() {
+        let logs_contain = capture_logs();
         use std::time::Duration;
         let content = GeminiResponseContent {
             parts: vec![GeminiResponseContentPart {
@@ -1444,7 +1494,7 @@ mod tests {
                 finish_reason: Some(GeminiFinishReason::Stop),
             }],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 10,
+                prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
             }),
         };
@@ -1581,11 +1631,12 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec: Vec<&FunctionToolConfig> =
+            MULTI_TOOL_CONFIG.tools_available().unwrap().collect();
         let tool = GeminiTool {
             function_declarations: tools_vec
                 .iter()
-                .map(|&t| GeminiFunctionDeclaration::from(t))
+                .map(|&t| GeminiFunctionDeclaration::from_tool_config(t))
                 .collect(),
         };
         assert_eq!(
@@ -1608,9 +1659,18 @@ mod tests {
     }
 
     #[test]
-    fn test_from_tool_choice() {
-        let tool_choice = ToolChoice::Auto;
-        let tool_config = GoogleAIStudioGeminiToolConfig::from(&tool_choice);
+    fn test_from_tool_config() {
+        // Test Auto mode
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+        let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
         assert_eq!(
             tool_config,
             GoogleAIStudioGeminiToolConfig {
@@ -1621,8 +1681,16 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::Required;
-        let tool_config = GoogleAIStudioGeminiToolConfig::from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+        let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
         assert_eq!(
             tool_config,
             GoogleAIStudioGeminiToolConfig {
@@ -1633,8 +1701,19 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::Specific("get_temperature".to_string());
-        let tool_config = GoogleAIStudioGeminiToolConfig::from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Specific("get_temperature".to_string()),
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["get_temperature".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+        let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
         assert_eq!(
             tool_config,
             GoogleAIStudioGeminiToolConfig {
@@ -1645,8 +1724,67 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::None;
-        let tool_config = GoogleAIStudioGeminiToolConfig::from(&tool_choice);
+        // Test Auto mode with specific allowed tools - should use Any mode
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["tool1".to_string(), "tool2".to_string()]
+                    .into_iter()
+                    .collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+        let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
+        assert_eq!(
+            tool_config.function_calling_config.mode,
+            GeminiFunctionCallingMode::Any
+        );
+        let mut allowed_names = tool_config
+            .function_calling_config
+            .allowed_function_names
+            .unwrap();
+        allowed_names.sort();
+        assert_eq!(allowed_names, vec!["tool1", "tool2"]);
+
+        // Test Required mode with specific allowed tools (new behavior)
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["allowed_tool".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+        let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
+        assert_eq!(
+            tool_config,
+            GoogleAIStudioGeminiToolConfig {
+                function_calling_config: GeminiFunctionCallingConfig {
+                    mode: GeminiFunctionCallingMode::Any,
+                    allowed_function_names: Some(vec!["allowed_tool"]),
+                }
+            }
+        );
+
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+        let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
         assert_eq!(
             tool_config,
             GoogleAIStudioGeminiToolConfig {
@@ -1871,7 +2009,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 10,
+                prompt_token_count: Some(10),
                 candidates_token_count: Some(10),
             }),
         };
@@ -1926,8 +2064,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 10,
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -1973,7 +2111,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 15,
+                prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
             }),
         };
@@ -2021,8 +2159,10 @@ mod tests {
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        if let [ContentBlockOutput::Text(Text { text }), ContentBlockOutput::ToolCall(tool_call)] =
-            &model_inference_response.output[..]
+        if let [
+            ContentBlockOutput::Text(Text { text }),
+            ContentBlockOutput::ToolCall(tool_call),
+        ] = &model_inference_response.output[..]
         {
             assert_eq!(text, "Here's the weather information:");
             assert_eq!(tool_call.name, "get_temperature");
@@ -2037,8 +2177,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 15,
-                output_tokens: 20,
+                input_tokens: Some(15),
+                output_tokens: Some(20),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -2105,7 +2245,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 25,
+                prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
             }),
         };
@@ -2134,8 +2274,12 @@ mod tests {
         assert_eq!(model_inference_response.raw_request, raw_request);
 
         assert_eq!(model_inference_response.raw_response, raw_response);
-        if let [ContentBlockOutput::Text(Text { text: text1 }), ContentBlockOutput::ToolCall(tool_call1), ContentBlockOutput::Text(Text { text: text2 }), ContentBlockOutput::ToolCall(tool_call2)] =
-            &model_inference_response.output[..]
+        if let [
+            ContentBlockOutput::Text(Text { text: text1 }),
+            ContentBlockOutput::ToolCall(tool_call1),
+            ContentBlockOutput::Text(Text { text: text2 }),
+            ContentBlockOutput::ToolCall(tool_call2),
+        ] = &model_inference_response.output[..]
         {
             assert_eq!(text1, "Here's the weather information:");
             assert_eq!(text2, "And here's a restaurant recommendation:");
@@ -2159,8 +2303,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 25,
-                output_tokens: 40,
+                input_tokens: Some(25),
+                output_tokens: Some(40),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -2200,7 +2344,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools);
+        let (tools, tool_choice) = prepare_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -2243,7 +2387,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools);
+        let (tools, tool_choice) = prepare_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         // Flash models do not support function calling mode Any
@@ -2409,7 +2553,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 10,
+                prompt_token_count: Some(10),
                 candidates_token_count: Some(20),
             }),
         };
@@ -2449,8 +2593,8 @@ mod tests {
         // Verify usage is included when finish_reason is set
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 10);
-        assert_eq!(usage.output_tokens, 20);
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(20));
 
         // Verify finish reason
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
@@ -2474,7 +2618,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 10,
+                prompt_token_count: Some(10),
                 candidates_token_count: Some(15),
             }),
         };
@@ -2543,7 +2687,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 5,
+                prompt_token_count: Some(5),
                 candidates_token_count: Some(3),
             }),
         };
@@ -2602,7 +2746,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 15,
+                prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
             }),
         };
@@ -2658,7 +2802,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 8,
+                prompt_token_count: Some(8),
                 candidates_token_count: None, // No output tokens when blocked
             }),
         };
@@ -2692,8 +2836,8 @@ mod tests {
         // Verify usage is included (with zero output tokens)
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 8);
-        assert_eq!(usage.output_tokens, 0);
+        assert_eq!(usage.input_tokens, Some(8));
+        assert_eq!(usage.output_tokens, None);
 
         // Verify finish reason for safety blocks
         assert_eq!(chunk.finish_reason, Some(FinishReason::ContentFilter));
@@ -2705,7 +2849,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 5,
+                prompt_token_count: Some(5),
                 candidates_token_count: Some(0),
             }),
         };
@@ -2784,7 +2928,7 @@ mod tests {
             let response = GeminiResponse {
                 candidates: vec![candidate],
                 usage_metadata: Some(GeminiUsageMetadata {
-                    prompt_token_count: 1,
+                    prompt_token_count: Some(1),
                     candidates_token_count: Some(1),
                 }),
             };
@@ -2817,10 +2961,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_google_ai_studio_gemini_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };
@@ -2852,6 +2997,36 @@ mod tests {
         // Test that verbosity warns
         assert!(logs_contain(
             "Google AI Studio Gemini does not support the inference parameter `verbosity`"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_gemini_warns_on_detail() {
+        let logs_contain = capture_logs();
+
+        // Test with resolved file with detail
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let content_block = ContentBlock::File(Box::new(LazyFile::Base64(PendingObjectStoreFile(
+            ObjectStorageFile {
+                file: ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::IMAGE_PNG,
+                    storage_path: dummy_storage_path,
+                    detail: Some(Detail::Auto),
+                    filename: None,
+                },
+                data: BASE64_STANDARD.encode(b"fake image data"),
+            },
+        ))));
+
+        let _result = convert_non_thought_content_block(&content_block).await;
+
+        // Should log a warning about detail not being supported
+        assert!(logs_contain(
+            "The image detail parameter is not supported by Google AI Studio Gemini"
         ));
     }
 }

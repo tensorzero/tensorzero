@@ -41,12 +41,12 @@ import type { ToolChoice } from "./ToolChoice";
  * Use `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.
  *
  * # Conversion from Storage Format
- * Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` attempts to reconstruct the original:
- * 1. Tools that match function config tool names → `allowed_tools`
- * 2. Tools that don't match function config → `additional_tools`
- * 3. `provider_tools` is set to `None` (cannot be recovered)
+ * Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` reconstructs the original:
+ * 1. `dynamic_tools` -> `additional_tools`
+ * 2. `allowed_tools` -> `allowed_tools` (based on choice enum)
+ * 3. Other fields copied directly
  *
- * Use `FunctionConfig::database_insert_to_dynamic_tool_params()` for this conversion.
+ * Use `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` for this conversion.
  *
  * # Example
  * ```rust,ignore
@@ -56,10 +56,10 @@ import type { ToolChoice } from "./ToolChoice";
  *     additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool
  *     tool_choice: Some(ToolChoice::Required),
  *     parallel_tool_calls: Some(true),
- *     provider_tools: None,
+ *     provider_tools: vec![],
  * };
  *
- * // Convert to storage format (merge tools, lose distinction)
+ * // Convert to storage format
  * let db_insert = function_config
  *     .dynamic_tool_params_to_database_insert(params, &static_tools)?
  *     .unwrap_or_default();
@@ -72,23 +72,27 @@ import type { ToolChoice } from "./ToolChoice";
  */
 export type DynamicToolParams = {
   /**
-   * Names of static tools (from function config) to use. If None, all static tools are available.
+   * A subset of static tools configured for the function that the inference is allowed to use. Optional.
+   * If not provided, all static tools are allowed.
    */
   allowed_tools?: Array<string>;
   /**
-   * Additional tools provided at runtime (not in function config)
+   * Tools that the user provided at inference time (not in function config), in addition to the function-configured
+   * tools, that are also allowed.
    */
   additional_tools?: Array<Tool>;
   /**
-   * Override the function's tool choice strategy
+   * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+   * Optional.
    */
   tool_choice?: ToolChoice;
   /**
-   * Override whether parallel tool calls are enabled
+   * Whether to use parallel tool calls in the inference. Optional.
+   * If provided during inference, it will override the function-configured parallel tool calls.
    */
   parallel_tool_calls?: boolean;
   /**
-   * Provider-specific tool configurations (not persisted to database)
+   * Provider-specific tool configurations
    */
-  provider_tools?: Array<ProviderTool>;
+  provider_tools: Array<ProviderTool>;
 };

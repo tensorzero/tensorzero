@@ -16,7 +16,7 @@ For example:
 ```toml {3}
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "xai::grok-2-1212"
+model = "xai::grok-4-1-fast-non-reasoning"
 ```
 
 Additionally, you can set `model_name` in the inference request to use a specific xAI model, without having to configure a function and variant in TensorZero.
@@ -25,7 +25,7 @@ Additionally, you can set `model_name` in the inference request to use a specifi
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "xai::grok-2-1212",
+    "model_name": "xai::grok-4-1-fast-non-reasoning",
     "input": {
       "messages": [
         {
@@ -62,19 +62,19 @@ For production deployments, see our [Deployment Guide](/deployment/tensorzero-ga
 Create a minimal configuration file that defines a model and a simple chat function:
 
 ```toml title="config/tensorzero.toml"
-[models.grok_2_1212]
+[models.grok_4_1_fast_non_reasoning]
 routing = ["xai"]
 
-[models.grok_2_1212.providers.xai]
+[models.grok_4_1_fast_non_reasoning.providers.xai]
 type = "xai"
-model_name = "grok-2-1212"
+model_name = "grok-4-1-fast-non-reasoning"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "grok_2_1212"
+model = "grok_4_1_fast_non_reasoning"
 ```
 
 See the [list of models available on xAI](https://docs.x.ai/docs/models).
@@ -84,7 +84,7 @@ See the [list of models available on xAI](https://docs.x.ai/docs/models).
 You must set the `XAI_API_KEY` environment variable before running the gateway.
 
 You can customize the credential location by setting the `api_key_location` to `env::YOUR_ENVIRONMENT_VARIABLE` or `dynamic::ARGUMENT_NAME`.
-See the [Credential Management](/gateway/guides/credential-management/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
+See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
 
 ### Deployment (Docker Compose)
 
@@ -92,7 +92,7 @@ Create a minimal Docker Compose configuration:
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+# For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
   gateway:

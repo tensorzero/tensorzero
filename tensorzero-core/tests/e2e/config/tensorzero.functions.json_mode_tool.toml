@@ -1,0 +1,9 @@
+# Test functions for json_mode="tool" feature
+# These functions have NO tools configured, allowing json_mode="tool" to work
+
+[functions.test_chat_json_mode_tool_openai]
+type = "chat"
+
+[functions.test_chat_json_mode_tool_openai.variants.baseline]
+type = "chat_completion"
+model = "dummy::good_tool"

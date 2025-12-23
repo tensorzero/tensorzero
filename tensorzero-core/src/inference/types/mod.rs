@@ -50,10 +50,16 @@ use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
 use file::sanitize_raw_request;
 pub use file::{
-    Base64File, File, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
+    Base64File, Base64FileMetadata, Detail, File, FileExt, ObjectStorageError, ObjectStorageFile,
+    ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
 };
-use futures::future::{join_all, try_join_all};
+// Re-export content types from tensorzero-types
+pub use tensorzero_types::{
+    Arguments, RawText, System, Template, Text, Thought, ThoughtSummaryBlock, Unknown,
+};
+// Re-export message types from tensorzero-types
 use futures::FutureExt;
+use futures::future::{join_all, try_join_all};
 use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -62,62 +68,63 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
+use schemars::JsonSchema;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::borrow::Borrow;
-use std::ops::Add;
 use std::{
     borrow::Cow,
     collections::HashMap,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use tensorzero_derive::export_schema;
+pub use tensorzero_types::{Input, InputMessage, InputMessageContent, TextKind, ToolCallWrapper};
 use uuid::Uuid;
 
-use crate::cache::NonStreamingCacheData;
+use crate::cache::{CacheData, NonStreamingCacheData};
+use crate::config::ObjectStoreInfo;
+use crate::config::snapshot::SnapshotHash;
+use crate::endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceParams};
 use crate::endpoints::object_storage::get_object;
+use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens};
 use crate::function::FunctionConfigType;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
-use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::resolved_input::{
-    write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
-    LazyResolvedInputMessageContent,
+    FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
+    LazyResolvedInputMessageContent, write_file,
 };
-use crate::inference::types::storage::StorageKind;
+use crate::inference::types::storage::{StorageKind, StorageKindExt};
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
-    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
-    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+    EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
+    RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
 };
 use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
+    deserialize_defaulted_json_string, deserialize_json_string, serialize_json_string,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
-use crate::tool::ToolCallInput;
-use crate::tool::{ToolCall, ToolCallConfig, ToolCallOutput, ToolResult};
-use crate::{cache::CacheData, config::ObjectStoreInfo};
-use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
-use crate::{
-    endpoints::inference::InferenceParams,
-    error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
+use crate::tool::{
+    InferenceResponseToolCall, InferenceResponseToolCallExt, ToolCall, ToolCallConfig,
+    ToolCallConfigDatabaseInsert, ToolResult, deserialize_optional_tool_info,
 };
-use crate::{error::Error, variant::JsonMode};
+use crate::variant::{InferenceConfig, JsonMode};
 
 pub mod batch;
 pub mod chat_completion_inference_params;
 pub mod extra_body;
 pub mod extra_headers;
+pub mod extra_stuff;
 pub mod file;
-mod input_message;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
 pub mod resolved_input;
-mod role;
+pub mod role;
 pub mod storage;
 pub mod stored_input;
 pub mod streams;
+pub mod usage;
 
 pub use resolved_input::ResolvedRequestMessage;
 pub use role::Role;
@@ -125,11 +132,12 @@ pub use stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
 };
 pub use streams::{
-    collect_chunks, ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk,
-    InferenceResultChunk, InferenceResultStream, JsonInferenceResultChunk,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk, UnknownChunk,
+    ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk, InferenceResultChunk,
+    InferenceResultStream, JsonInferenceResultChunk, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
+    UnknownChunk, collect_chunks,
 };
+pub use usage::Usage;
 
 /*
  * Data flow in TensorZero
@@ -138,29 +146,28 @@ pub use streams::{
  * Most of them are defined below.
  */
 
-/// A request is made that contains an Input
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct Input {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
-    pub system: Option<System>,
-    #[serde(default)]
-    pub messages: Vec<InputMessage>,
-}
-
 #[derive(Copy, Clone)]
 pub struct FetchContext<'a> {
     pub client: &'a TensorzeroHttpClient,
     pub object_store_info: &'a Option<ObjectStoreInfo>,
 }
 
-impl Input {
-    pub fn into_lazy_resolved_input(
+/// Extension trait for `Input` that provides core-specific transformation methods.
+pub trait InputExt {
+    fn into_lazy_resolved_input(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInput, Error>;
+
+    /// Turns the input into a StoredInput, without resolving network resources for files.
+    /// Returns an error if any files are present.
+    fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error>;
+}
+
+impl InputExt for Input {
+    fn into_lazy_resolved_input(
+        self,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInput, Error> {
         Ok(LazyResolvedInput {
             system: self.system,
@@ -169,6 +176,17 @@ impl Input {
                 .into_iter()
                 .map(|message| message.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessage>, Error>>()?,
+        })
+    }
+
+    fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error> {
+        Ok(StoredInput {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(InputMessage::into_stored_input_message_without_file_handling)
+                .try_collect()?,
         })
     }
 }
@@ -208,10 +226,22 @@ impl LazyResolvedInput {
     }
 }
 
-impl InputMessage {
-    pub fn into_lazy_resolved_input_message(
+/// Extension trait for `InputMessage` that provides core-specific transformation methods.
+pub trait InputMessageExt {
+    fn into_lazy_resolved_input_message(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessage, Error>;
+
+    /// Turns the input message into a StoredInputMessage, without resolving network resources for files.
+    /// Returns an error if the message contains any files that require storage (e.g. external URLs, Base64).
+    fn into_stored_input_message_without_file_handling(self) -> Result<StoredInputMessage, Error>;
+}
+
+impl InputMessageExt for InputMessage {
+    fn into_lazy_resolved_input_message(
+        self,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessage, Error> {
         Ok(LazyResolvedInputMessage {
             role: self.role,
@@ -220,6 +250,17 @@ impl InputMessage {
                 .into_iter()
                 .map(|content| content.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessageContent>, Error>>()?,
+        })
+    }
+
+    fn into_stored_input_message_without_file_handling(self) -> Result<StoredInputMessage, Error> {
+        Ok(StoredInputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(InputMessageContent::into_stored_input_message_content_without_file_handling)
+                .try_collect()?,
         })
     }
 }
@@ -268,13 +309,26 @@ fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
     Ok(object_store_info.kind.clone())
 }
 
-impl InputMessageContent {
+/// Extension trait for `InputMessageContent` that provides core-specific transformation methods.
+pub trait InputMessageContentExt {
     /// The `role` parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
     /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
     /// we can remove the `role` parameter.
-    pub fn into_lazy_resolved_input_message(
+    fn into_lazy_resolved_input_message(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessageContent, Error>;
+
+    /// Convert the input message content into a StoredInputMessageContent, but without loading or storing any files.
+    fn into_stored_input_message_content_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessageContent, Error>;
+}
+
+impl InputMessageContentExt for InputMessageContent {
+    fn into_lazy_resolved_input_message(
+        self,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
             InputMessageContent::Text(Text { text }) => {
@@ -290,7 +344,7 @@ impl InputMessageContent {
                 LazyResolvedInputMessageContent::Template(template)
             }
             InputMessageContent::ToolCall(tool_call) => {
-                LazyResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
+                LazyResolvedInputMessageContent::ToolCall(tool_call.into_tool_call())
             }
             InputMessageContent::ToolResult(tool_result) => {
                 LazyResolvedInputMessageContent::ToolResult(tool_result)
@@ -305,11 +359,16 @@ impl InputMessageContent {
                     // 1. Fetches the file from the URL
                     // 2. Computes a content-addressed `storage_path`
                     // 3. Returns a `ObjectStorageFile` with the data
-                    File::Url(UrlFile { url, mime_type }) => {
+                    File::Url(UrlFile {
+                        url,
+                        mime_type,
+                        detail,
+                        filename,
+                    }) => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
-                        let storage_kind = get_storage_kind(&context)?;
+                        let storage_kind = get_storage_kind(context)?;
                         let client = context.client.clone();
                         // Construct a future that will actually fetch the file URL from the network.
                         // Important: we do *not* use `tokio::spawn` here. As a result, the future
@@ -320,20 +379,31 @@ impl InputMessageContent {
                         // we will skip downloading the file entirely.
                         let url = url.clone();
                         let mime_type = mime_type.clone();
+                        let detail_clone = detail.clone();
+                        let detail_for_future = detail.clone();
+                        let filename_for_future = filename.clone();
+                        let filename_clone = filename.clone();
                         let delayed_file_future = async move {
                             let base64_file = file.take_or_fetch(&client).await?;
                             let path = storage_kind.file_path(&base64_file)?;
                             Ok(ObjectStorageFile {
                                 file: ObjectStoragePointer {
-                                    source_url: base64_file.source_url,
-                                    mime_type: base64_file.mime_type,
+                                    source_url: base64_file.source_url.clone(),
+                                    mime_type: base64_file.mime_type.clone(),
                                     storage_path: path,
+                                    detail: detail_for_future,
+                                    filename: filename_for_future,
                                 },
-                                data: base64_file.data,
+                                data: base64_file.data().to_string(),
                             })
                         };
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Url {
-                            file_url: FileUrl { url, mime_type },
+                            file_url: FileUrl {
+                                url,
+                                mime_type,
+                                detail: detail_clone,
+                                filename: filename_clone,
+                            },
                             future: delayed_file_future.boxed().shared(),
                         }))
                     }
@@ -343,18 +413,29 @@ impl InputMessageContent {
                     // 2. Wrap the data in `PendingObjectStoreFile` to signal it needs writing
                     // The data is ready to use but not yet persisted to object storage.
                     // The write will happen later in `into_stored_input_message_content`.
-                    File::Base64(Base64File {
-                        source_url,
-                        mime_type,
-                        data,
-                    }) => {
-                        let storage_kind = get_storage_kind(&context)?;
-                        let base64_file = Base64File {
-                            source_url: source_url.clone(),
-                            mime_type: mime_type.clone(),
-                            data: data.clone(),
-                        };
-                        let path = storage_kind.file_path(&base64_file)?;
+                    File::Base64(base64_file) => {
+                        let source_url = &base64_file.source_url;
+                        let mime_type = &base64_file.mime_type;
+                        let data = base64_file.data();
+                        let detail = &base64_file.detail;
+                        let filename = &base64_file.filename;
+
+                        let storage_kind = get_storage_kind(context)?;
+                        let base64_file_for_path = Base64File::new(
+                            source_url.clone(),
+                            Some(mime_type.clone()),
+                            data.to_string(),
+                            // We explicitly set detail to None when computing the storage path.
+                            // This is intentional for content-addressing: the detail parameter controls
+                            // how providers process the image (resolution/token cost), but shouldn't
+                            // affect the file's hash or storage location. The same image file with
+                            // different detail values should map to the same storage path for deduplication.
+                            None,
+                            // We also set filename to None when computing the storage path for the same reason.
+                            // The filename is metadata that shouldn't affect the file's hash or storage location.
+                            None,
+                        )?;
+                        let path = storage_kind.file_path(&base64_file_for_path)?;
 
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Base64(
                             PendingObjectStoreFile(ObjectStorageFile {
@@ -362,25 +443,34 @@ impl InputMessageContent {
                                     source_url: source_url.clone(),
                                     mime_type: mime_type.clone(),
                                     storage_path: path,
+                                    detail: detail.clone(),
+                                    filename: filename.clone(),
                                 },
-                                data: data.clone(),
+                                data: data.to_string(),
                             }),
                         )))
                     }
+                    // # File::ObjectStoragePointer
+                    //
                     // User provided a reference to a file already in object storage.
                     // We create a lazy future that will fetch the file data when needed.
                     // The future is not executed immediately - it only runs when awaited.
                     // This allows us to skip fetching if the file data isn't needed (e.g., just storing metadata).
                     // When the future does run, it fetches the file from object storage.
-                    File::ObjectStoragePointer(ObjectStoragePointer {
-                        source_url,
-                        mime_type,
-                        storage_path,
-                    }) => {
-                        let source_url_for_future = source_url.clone();
+                    //
+                    // # File::ObjectStorageError
+                    //
+                    // User provided a failed that we previously attempted and failed to fetch from object storage.
+                    // Here, we disregard the previous attempt and retry, as if the user had only sent the pointer.
+                    File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        let source_url_for_future = file.source_url.clone();
                         let object_store_info = context.object_store_info.clone();
-                        let owned_storage_path = storage_path.clone();
-                        let mime_type_for_closure = mime_type.clone();
+                        let owned_storage_path = file.storage_path.clone();
+                        let mime_type_for_closure = file.mime_type.clone();
+                        let detail_for_future = file.detail.clone();
+                        let filename_for_future = file.filename.clone();
+                        let filename_clone = file.filename.clone();
                         // Construct a future that will fetch the file from the object store.
                         // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
@@ -393,6 +483,8 @@ impl InputMessageContent {
                                     source_url: source_url_for_future,
                                     mime_type: mime_type_for_closure,
                                     storage_path: owned_storage_path,
+                                    detail: detail_for_future,
+                                    filename: filename_for_future,
                                 },
                                 data: object_response.data,
                             })
@@ -400,10 +492,12 @@ impl InputMessageContent {
                         LazyResolvedInputMessageContent::File(Box::new(
                             LazyFile::ObjectStoragePointer {
                                 metadata: Base64FileMetadata {
-                                    source_url: source_url.clone(),
-                                    mime_type: mime_type.clone(),
+                                    source_url: file.source_url.clone(),
+                                    mime_type: file.mime_type.clone(),
+                                    detail: file.detail.clone(),
+                                    filename: filename_clone,
                                 },
-                                storage_path: storage_path.clone(),
+                                storage_path: file.storage_path.clone(),
                                 future: delayed_file_future.boxed().shared(),
                             },
                         ))
@@ -420,6 +514,44 @@ impl InputMessageContent {
             InputMessageContent::Unknown(unknown) => {
                 LazyResolvedInputMessageContent::Unknown(unknown)
             }
+        })
+    }
+
+    fn into_stored_input_message_content_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessageContent, Error> {
+        Ok(match self {
+            InputMessageContent::Text(Text { text }) => {
+                StoredInputMessageContent::Text(Text { text })
+            }
+            InputMessageContent::RawText(raw_text) => StoredInputMessageContent::RawText(raw_text),
+            InputMessageContent::Thought(thought) => StoredInputMessageContent::Thought(thought),
+            InputMessageContent::Template(template) => {
+                StoredInputMessageContent::Template(template)
+            }
+            InputMessageContent::ToolCall(tool_call) => {
+                StoredInputMessageContent::ToolCall(tool_call.into_tool_call())
+            }
+            InputMessageContent::ToolResult(tool_result) => {
+                StoredInputMessageContent::ToolResult(tool_result)
+            }
+            InputMessageContent::File(file) => {
+                match file {
+                    // If `file` is external, we cannot convert it directly to a StoredFile.
+                    File::Url(_) | File::Base64(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: "Cannot resolve file input without a fetch context. Please provide a fetch context when creating the input.".to_string()
+                        }));
+                    }
+                    // If `file` is present in our object storage, even if it's an error, we can represent it as a StoredFile.
+                    File::ObjectStorage(ObjectStorageFile { file, .. })
+                    | File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        StoredInputMessageContent::File(Box::new(StoredFile(file)))
+                    }
+                }
+            }
+            InputMessageContent::Unknown(unknown) => StoredInputMessageContent::Unknown(unknown),
         })
     }
 }
@@ -498,6 +630,8 @@ impl LazyResolvedInputMessageContent {
                     source_url: metadata.source_url,
                     mime_type: metadata.mime_type,
                     storage_path,
+                    detail: metadata.detail,
+                    filename: metadata.filename,
                 }))),
                 // File reference to object storage with data in memory.
                 // Origin: Roundtripping from database (e.g., list_inferences → update_datapoints)
@@ -515,13 +649,16 @@ impl LazyResolvedInputMessageContent {
                     file_url: _,
                 } => {
                     let resolved_file = future.await?;
+                    let base64_file = Base64File::new(
+                        resolved_file.file.source_url.clone(),
+                        Some(resolved_file.file.mime_type.clone()),
+                        resolved_file.data.clone(),
+                        resolved_file.file.detail.clone(),
+                        resolved_file.file.filename.clone(),
+                    )?;
                     write_file(
                         object_store_info,
-                        Base64File {
-                            source_url: resolved_file.file.source_url.clone(),
-                            mime_type: resolved_file.file.mime_type.clone(),
-                            data: resolved_file.data.clone(),
-                        },
+                        base64_file,
                         resolved_file.file.storage_path.clone(),
                     )
                     .await?;
@@ -533,13 +670,16 @@ impl LazyResolvedInputMessageContent {
                 // We write the base64 data to object storage.
                 // The PendingObjectStoreFile wrapper type signals this write requirement.
                 LazyFile::Base64(pending) => {
+                    let base64_file = Base64File::new(
+                        pending.0.file.source_url.clone(),
+                        Some(pending.0.file.mime_type.clone()),
+                        pending.0.data.clone(),
+                        pending.0.file.detail.clone(),
+                        pending.0.file.filename.clone(),
+                    )?;
                     write_file(
                         object_store_info,
-                        Base64File {
-                            source_url: pending.0.file.source_url.clone(),
-                            mime_type: pending.0.file.mime_type.clone(),
-                            data: pending.0.data.clone(),
-                        },
+                        base64_file,
                         pending.0.file.storage_path.clone(),
                     )
                     .await?;
@@ -548,129 +688,25 @@ impl LazyResolvedInputMessageContent {
                 }
             },
             // All other cases delegate to the "resolve" case, which is mostly just a type conversion.
-            other => other.resolve().await?.into_stored_input_message_content()?,
+            other => other.resolve().await?.into_stored_input_message_content(),
         })
     }
 }
 
-/// InputMessage and Role are our representation of the input sent by the client
-/// prior to any processing into LLM representations below.
-/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct InputMessage {
-    pub role: Role,
-    pub content: Vec<InputMessageContent>,
-}
-
-/// A newtype wrapper around Map<String, Value> for template and system arguments
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
-#[ts(export)]
-#[serde(transparent)]
-pub struct Arguments(pub Map<String, Value>);
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
-#[ts(export)]
-#[serde(deny_unknown_fields)]
-pub struct Template {
-    pub name: String,
-    pub arguments: Arguments,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
-#[serde(untagged)]
-#[ts(export)]
-pub enum System {
-    Text(String),
-    Template(Arguments),
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
-pub enum InputMessageContent {
-    Text(Text),
-    Template(Template),
-    ToolCall(ToolCallInput),
-    ToolResult(ToolResult),
-    RawText(RawText),
-    Thought(Thought),
-    #[serde(alias = "image")]
-    File(File),
-    /// An unknown content block type, used to allow passing provider-specific
-    /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
-    /// of TensorZero.
-    /// The `data` field holds the original content block from the provider,
-    /// without any validation or transformation by TensorZero.
-    Unknown(Unknown),
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(untagged, deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
-pub enum TextKind {
-    Text { text: String },
-    Arguments { arguments: Arguments },
-}
-
-impl<'de> Deserialize<'de> for TextKind {
-    fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
-        let object: Map<String, Value> = Map::deserialize(de)?;
-        // Expect exactly one key
-        if object.keys().len() != 1 {
-            return Err(serde::de::Error::custom(format!(
-                "Expected exactly one other key in text content, found {} other keys",
-                object.keys().len()
-            )));
-        }
-        let (key, value) = object.into_iter().next().ok_or_else(|| {
-            serde::de::Error::custom(
-                "Internal error: Failed to get key/value after checking length",
-            )
-        })?;
-        match key.as_str() {
-            "text" => Ok(TextKind::Text {
-                text: serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing `text`: {e}"))
-                })?,
-            }),
-            "arguments" => Ok(TextKind::Arguments {
-                arguments: Arguments(serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing `arguments`: {e}"))
-                })?),
-            }),
-            _ => Err(serde::de::Error::custom(format!(
-                "Unknown key `{key}` in text content"
-            ))),
+impl From<StoredInputMessage> for InputMessage {
+    fn from(stored_input_message: StoredInputMessage) -> Self {
+        InputMessage {
+            role: stored_input_message.role,
+            content: stored_input_message
+                .content
+                .into_iter()
+                .map(StoredInputMessageContent::into_input_message_content)
+                .collect(),
         }
     }
 }
 
-/// InputMessages are validated against the input schema of the Function
-/// and then templated and transformed into RequestMessages for a particular Variant.
-/// They might contain tool calls or tool results along with text.
-/// The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
-/// ContentBlocks are collected into RequestMessages.
-/// These RequestMessages are collected into a ModelInferenceRequest,
-/// which should contain all information needed by a ModelProvider to perform the
-/// inference that is called for.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[serde(deny_unknown_fields)]
-pub struct Text {
-    pub text: String,
-}
-
-impl std::fmt::Display for Text {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.text)
-    }
-}
-
+// RateLimitedInputContent impls for types re-exported from tensorzero-types
 impl RateLimitedInputContent for Text {
     fn estimated_input_token_usage(&self) -> u64 {
         let Text { text } = self;
@@ -678,104 +714,10 @@ impl RateLimitedInputContent for Text {
     }
 }
 
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Text {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-}
-
-/// Struct that represents raw text content that should be passed directly to the model
-/// without any template processing or validation
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[serde(deny_unknown_fields)]
-pub struct RawText {
-    pub value: String,
-}
-
-impl std::fmt::Display for RawText {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
 impl RateLimitedInputContent for RawText {
     fn estimated_input_token_usage(&self) -> u64 {
         get_estimated_tokens(&self.value)
     }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl RawText {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-}
-
-/// Struct that represents an unknown provider-specific content block.
-/// We pass this along as-is without any validation or transformation.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass)]
-#[serde(deny_unknown_fields)]
-pub struct Unknown {
-    /// The underlying content block to be passed to the model provider.
-    pub data: Value,
-    /// A fully-qualified name specifying when this content block should
-    /// be included in the model provider input.
-    pub model_provider_name: Option<String>,
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Unknown {
-    #[getter]
-    pub fn data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        use crate::inference::types::pyo3_helpers::serialize_to_dict;
-        serialize_to_dict(py, &self.data).map(|p| p.into_bound(py))
-    }
-
-    #[getter]
-    pub fn model_provider_name(&self) -> Option<String> {
-        self.model_provider_name.clone()
-    }
-}
-
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ThoughtSummaryBlock {
-    SummaryText { text: String },
-}
-
-/// Struct that represents Chain of Thought reasoning
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
-pub struct Thought {
-    pub text: Option<String>,
-    /// An optional signature - currently, this is only used with Anthropic,
-    /// and is ignored by other providers.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub signature: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub summary: Option<Vec<ThoughtSummaryBlock>>,
-    /// When set, this 'Thought' block will only be used for providers
-    /// matching this type (e.g. `anthropic`). Other providers will emit
-    /// a warning and discard the block.
-    #[serde(
-        rename = "_internal_provider_type",
-        skip_serializing_if = "Option::is_none"
-    )]
-    #[ts(optional)]
-    pub provider_type: Option<String>,
 }
 
 impl RateLimitedInputContent for Thought {
@@ -812,22 +754,7 @@ pub enum ContentBlock {
     #[serde(alias = "image")]
     File(Box<LazyFile>),
     Thought(Thought),
-    /// Represents an unknown provider-specific content block.
-    /// We pass this along as-is without any validation or transformation.
-    Unknown {
-        /// The underlying content block to be passed to the model provider.
-        data: Value,
-        /// A fully-qualified name specifying when this content block should
-        /// be included in the model provider input.
-        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-        ///
-        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None, then this is passed to all model providers.
-        /// Individual model provider implementation never need to check this field themselves -
-        /// they only need to produce it with the proper `fully_qualified_name` set.
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ContentBlock {
@@ -845,13 +772,7 @@ impl ContentBlock {
                 )))
             }
             ContentBlock::Thought(thought) => Ok(StoredContentBlock::Thought(thought)),
-            ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            } => Ok(StoredContentBlock::Unknown {
-                data,
-                model_provider_name,
-            }),
+            ContentBlock::Unknown(unknown) => Ok(StoredContentBlock::Unknown(unknown)),
         }
     }
 
@@ -866,13 +787,7 @@ impl ContentBlock {
                 file.resolve().await?.clone().into_owned(),
             ))),
             ContentBlock::Thought(thought) => Ok(ResolvedContentBlock::Thought(thought)),
-            ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            } => Ok(ResolvedContentBlock::Unknown {
-                data,
-                model_provider_name,
-            }),
+            ContentBlock::Unknown(unknown) => Ok(ResolvedContentBlock::Unknown(unknown)),
         }
     }
 }
@@ -892,16 +807,15 @@ impl RateLimitedInputContent for ContentBlock {
             ContentBlock::ToolResult(tool_result) => tool_result.estimated_input_token_usage(),
             ContentBlock::File(file) => file.estimated_input_token_usage(),
             ContentBlock::Thought(thought) => thought.estimated_input_token_usage(),
-            ContentBlock::Unknown { .. } => 0,
+            ContentBlock::Unknown(_) => 0,
         }
     }
 }
 
 /// The version of `ContentBlock` that is stored in ClickHouse.
 /// This is almost identical to `ContentBlock`, but without `File` data.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StoredContentBlock {
     Text(Text),
@@ -910,29 +824,13 @@ pub enum StoredContentBlock {
     #[serde(alias = "image")]
     File(Box<StoredFile>),
     Thought(Thought),
-    /// Represents an unknown provider-specific content block.
-    /// We pass this along as-is without any validation or transformation.
-    Unknown {
-        /// The underlying content block to be passed to the model provider.
-        data: Value,
-        /// A fully-qualified name specifying when this content block should
-        /// be included in the model provider input.
-        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-        ///
-        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None, then this is passed to all model providers.
-        /// Individual model provider implementation never need to check this field themselves -
-        /// they only need to produce it with the proper `fully_qualified_name` set.
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ResolvedContentBlock {
     Text(Text),
@@ -940,10 +838,7 @@ pub enum ResolvedContentBlock {
     ToolResult(ToolResult),
     File(Box<ObjectStorageFile>),
     Thought(Thought),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ResolvedContentBlock {
@@ -957,13 +852,7 @@ impl ResolvedContentBlock {
                 ContentBlock::File(Box::new(LazyFile::ObjectStorage(*resolved)))
             }
             ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
-            ResolvedContentBlock::Unknown {
-                data,
-                model_provider_name,
-            } => ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            },
+            ResolvedContentBlock::Unknown(unknown) => ContentBlock::Unknown(unknown),
         }
     }
 }
@@ -994,31 +883,60 @@ enum ContentBlockOutputType {
     Unknown,
 }
 
-/// Defines the types of content block that can come out of a model provider
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+/// Types of content blocks that can be returned by a model provider
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCall),
     Thought(Thought),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 /// Defines the types of content block that can come from a `chat` function
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[export_schema]
 pub enum ContentBlockChatOutput {
+    #[schemars(title = "ContentBlockChatOutputText")]
     Text(Text),
-    ToolCall(ToolCallOutput),
+    #[schemars(title = "ContentBlockChatOutputToolCall")]
+    ToolCall(InferenceResponseToolCall),
+    #[schemars(title = "ContentBlockChatOutputThought")]
     Thought(Thought),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    #[schemars(title = "ContentBlockChatOutputUnknown")]
+    Unknown(Unknown),
+}
+
+impl ContentBlockChatOutput {
+    /// Validates a `ContentBlockChatOutput` and re-validate and re-parse structured fields.
+    /// (e.g. ToolCallOutput.name and .arguments). Returns a new `ContentBlockChatOutput` with the validated fields.
+    ///
+    /// This is used in CreateChatDatapointRequest, which accepts a ContentBlockChatOutput. In these cases where a
+    /// user specifies it, we cannot trust raw and parsed values agree, and we use the raw fields as the source of truth
+    /// and re-validate.
+    pub async fn into_validated(
+        self,
+        tool_call_config: Option<&ToolCallConfig>,
+    ) -> ContentBlockChatOutput {
+        if let ContentBlockChatOutput::ToolCall(input_tool_call) = self {
+            let unvalidated_tool_call = ToolCall {
+                name: input_tool_call.raw_name,
+                arguments: input_tool_call.raw_arguments,
+                id: input_tool_call.id,
+            };
+            let validated_tool_call = InferenceResponseToolCall::new_from_tool_call(
+                unvalidated_tool_call,
+                tool_call_config,
+            )
+            .await;
+            ContentBlockChatOutput::ToolCall(validated_tool_call)
+        } else {
+            self
+        }
+    }
 }
 
 /// A RequestMessage is a message sent to a model
@@ -1076,7 +994,8 @@ impl std::fmt::Display for RequestMessage {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum FunctionType {
     #[default]
@@ -1202,10 +1121,9 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
 }
 
 /// For use in rendering for optimization purposes
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,
@@ -1263,23 +1181,16 @@ pub struct ProviderInferenceResponse {
 
 impl ProviderInferenceResponse {
     pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        Ok(RateLimitResourceUsage::Exact {
-            model_inferences: 1,
-            tokens: self.usage.total_tokens() as u64,
-        })
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct Usage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-}
-
-impl Usage {
-    pub fn total_tokens(&self) -> u32 {
-        self.input_tokens + self.output_tokens
+        match self.usage.total_tokens() {
+            Some(tokens) => Ok(RateLimitResourceUsage::Exact {
+                model_inferences: 1,
+                tokens: tokens as u64,
+            }),
+            None => Ok(RateLimitResourceUsage::UnderEstimate {
+                model_inferences: 1,
+                tokens: 0,
+            }),
+        }
     }
 }
 
@@ -1296,8 +1207,12 @@ pub enum Latency {
     Batch,
 }
 
+/// Runtime type for model inference responses during inference execution.
+///
 /// After a ProviderInferenceResponse is returned to the Model,
 /// it is converted into a ModelInferenceResponse that includes additional metadata (such as the model provider name).
+///
+/// This is NOT the type stored in ClickHouse - see [`StoredModelInference`] for the storage type.
 #[derive(Clone, Debug)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ModelInferenceResponse {
@@ -1315,8 +1230,13 @@ pub struct ModelInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-/// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
+/// Runtime type for model inference responses with full metadata during inference execution.
+///
+/// In the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
 /// that includes additional metadata (such as the model name).
+///
+/// This is NOT the type stored in ClickHouse - see [`StoredModelInference`] for the storage type.
+/// To convert this runtime type to a storage type, use [`StoredModelInference::new`].
 #[derive(Clone, Debug)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ModelInferenceResponseWithMetadata {
@@ -1362,8 +1282,8 @@ impl ModelInferenceResponseWithMetadata {
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
             Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
             }
         } else {
             self.usage
@@ -1408,7 +1328,8 @@ pub struct JsonInferenceResult {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
@@ -1459,7 +1380,7 @@ converted into an InferenceResponseChunk and sent to the client.
 We then collect all the InferenceResultChunks into an InferenceResult for validation and storage after the fact.
 
 Alongside the response, we also store information about what happened during the request.
-For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
+For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and StoredModelInferences,
 which are written to ClickHouse tables of the same name asynchronously.
 */
 #[derive(Deserialize)]
@@ -1479,8 +1400,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    #[serde(deserialize_with = "deserialize_optional_tool_info")]
+    #[serde(flatten)]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
@@ -1489,6 +1410,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1513,6 +1436,8 @@ pub struct JsonInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1522,15 +1447,34 @@ pub enum InferenceDatabaseInsert {
     Json(JsonInferenceDatabaseInsert),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInferenceDatabaseInsert {
+/// Stored model inference data for ClickHouse.
+///
+/// This type is used both for inserting model inferences into ClickHouse
+/// and for deserializing them when querying.
+///
+/// Note: The `timestamp` field is a materialized column in ClickHouse
+/// (computed from `UUIDv7ToDateTime(id)`), so it's only populated during reads.
+///
+/// The `input_messages` and `output` fields are stored as JSON strings in ClickHouse.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StoredModelInference {
     pub id: Uuid,
     pub inference_id: Uuid,
     pub raw_request: String,
     pub raw_response: String,
     pub system: Option<String>,
-    pub input_messages: String,
-    pub output: String,
+    /// Input messages - stored as JSON string in ClickHouse
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
+    pub input_messages: Vec<StoredRequestMessage>,
+    /// Output content blocks - stored as JSON string in ClickHouse
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
+    pub output: Vec<ContentBlockOutput>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub response_time_ms: Option<u32>,
@@ -1539,13 +1483,11 @@ pub struct ModelInferenceDatabaseInsert {
     pub ttft_ms: Option<u32>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
-}
-
-#[cfg(test)]
-impl From<String> for InputMessageContent {
-    fn from(text: String) -> Self {
-        InputMessageContent::Text(Text { text })
-    }
+    pub snapshot_hash: Option<SnapshotHash>,
+    /// Materialized column in ClickHouse - only present when reading from the database.
+    /// Ignored during insert (computed from `UUIDv7ToDateTime(id)`).
+    #[serde(default, skip_serializing)]
+    pub timestamp: Option<String>,
 }
 
 #[cfg(test)]
@@ -1658,10 +1600,13 @@ impl ModelInferenceResponseWithMetadata {
     }
 }
 
-impl ModelInferenceDatabaseInsert {
+impl StoredModelInference {
+    /// Create a new StoredModelInference from a runtime ModelInferenceResponseWithMetadata.
+    /// Used when inserting into ClickHouse.
     pub async fn new(
         result: ModelInferenceResponseWithMetadata,
         inference_id: Uuid,
+        snapshot_hash: SnapshotHash,
     ) -> Result<Self, Error> {
         let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
@@ -1676,21 +1621,18 @@ impl ModelInferenceDatabaseInsert {
             }
             Latency::Batch => (None, None),
         };
-        let serialized_output = serialize_or_log(&result.output);
 
         // A usage of 0 indicates that something went wrong, since a model
         // should always consume and produce at least one token.
         // We store this as `null` in ClickHouse, so that we can easily filter
         // out these values from aggregation queries.
-        let input_tokens = if result.usage.input_tokens > 0 {
-            Some(result.usage.input_tokens)
-        } else {
-            None
+        let input_tokens = match result.usage.input_tokens {
+            Some(tokens) if tokens > 0 => Some(tokens),
+            _ => None,
         };
-        let output_tokens = if result.usage.output_tokens > 0 {
-            Some(result.usage.output_tokens)
-        } else {
-            None
+        let output_tokens = match result.usage.output_tokens {
+            Some(tokens) if tokens > 0 => Some(tokens),
+            _ => None,
         };
 
         let stored_input_messages = match result.input_messages {
@@ -1713,7 +1655,7 @@ impl ModelInferenceDatabaseInsert {
             raw_request: result.raw_request,
             raw_response: result.raw_response,
             system: result.system,
-            output: serialized_output,
+            output: result.output,
             input_tokens,
             output_tokens,
             response_time_ms: latency_ms,
@@ -1722,7 +1664,10 @@ impl ModelInferenceDatabaseInsert {
             model_name: result.model_name.to_string(),
             cached: result.cached,
             finish_reason: result.finish_reason,
-            input_messages: serialize_or_log(&stored_input_messages),
+            input_messages: stored_input_messages,
+            snapshot_hash: Some(snapshot_hash),
+            // timestamp is a materialized column, not set during insert
+            timestamp: None,
         })
     }
 }
@@ -1764,43 +1709,53 @@ impl InferenceResult {
         }
     }
 
-    pub async fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
+    pub async fn get_serialized_model_inferences(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Vec<serde_json::Value> {
         let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
             InferenceResult::Json(json_result) => json_result.inference_id,
         };
-        join_all(model_inference_responses.iter().map(|r| async {
-            let model_inference = ModelInferenceDatabaseInsert::new(r.clone(), inference_id).await;
-            let model_inference = match model_inference {
-                Ok(model_inference) => model_inference,
-                Err(e) => {
-                    ErrorDetails::Serialization {
-                        message: format!("Failed to construct ModelInferenceDatabaseInsert: {e:?}"),
+        join_all(model_inference_responses.iter().map(|r| {
+            let snapshot_hash = snapshot_hash.clone();
+            async move {
+                let model_inference =
+                    StoredModelInference::new(r.clone(), inference_id, snapshot_hash).await;
+                let model_inference = match model_inference {
+                    Ok(model_inference) => model_inference,
+                    Err(e) => {
+                        ErrorDetails::Serialization {
+                            message: format!("Failed to construct StoredModelInference: {e:?}"),
+                        }
+                        .log();
+                        return Default::default();
                     }
-                    .log();
-                    return Default::default();
-                }
-            };
-            match serde_json::to_value(model_inference) {
-                Ok(v) => v,
-                Err(e) => {
-                    ErrorDetails::Serialization {
-                        message: format!("Failed to serialize ModelInferenceDatabaseInsert: {e:?}"),
+                };
+                match serde_json::to_value(model_inference) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        ErrorDetails::Serialization {
+                            message: format!("Failed to serialize StoredModelInference: {e:?}"),
+                        }
+                        .log();
+                        Default::default()
                     }
-                    .log();
-                    Default::default()
                 }
             }
         }))
         .await
     }
 
+    /// Aggregates the usage of all model inference results, considering cached results.
+    /// If any of the values are None, the total usage is considered as None (via `sum_usage_strict`).
     pub fn usage_considering_cached(&self) -> Usage {
-        self.model_inference_results()
-            .iter()
-            .map(ModelInferenceResponseWithMetadata::usage_considering_cached)
-            .sum()
+        Usage::sum_iter_strict(
+            self.model_inference_results()
+                .iter()
+                .map(ModelInferenceResponseWithMetadata::usage_considering_cached),
+        )
     }
 
     pub fn set_original_response(&mut self, original_response: Option<String>) {
@@ -1866,9 +1821,10 @@ impl ChatInferenceResult {
         tool_config: Option<&ToolCallConfig>,
         inference_params: InferenceParams,
         original_response: Option<String>,
+        json_mode: Option<JsonMode>,
     ) -> Self {
         let created = current_timestamp();
-        let content = parse_chat_output(raw_content, tool_config).await;
+        let content = parse_chat_output(raw_content, tool_config, json_mode).await;
         let finish_reason = get_finish_reason(&model_inference_results);
         Self {
             inference_id,
@@ -1896,6 +1852,7 @@ fn get_finish_reason(
 pub async fn parse_chat_output(
     content: Vec<ContentBlockOutput>,
     tool_config: Option<&ToolCallConfig>,
+    json_mode: Option<JsonMode>,
 ) -> Vec<ContentBlockChatOutput> {
     if content.is_empty() {
         Error::new(ErrorDetails::Inference {
@@ -1904,27 +1861,31 @@ pub async fn parse_chat_output(
     }
 
     let mut output = Vec::new();
-    for content in content.into_iter() {
+    for content in content {
         match content {
             ContentBlockOutput::Text(text) => {
                 output.push(ContentBlockChatOutput::Text(text));
             }
             ContentBlockOutput::ToolCall(tool_call) => {
-                // Parse the tool call arguments
-                let tool_call_output = ToolCallOutput::new(tool_call, tool_config).await;
-                output.push(ContentBlockChatOutput::ToolCall(tool_call_output));
+                // If using json_mode="tool", convert tool call arguments to text
+                if json_mode == Some(JsonMode::Tool) {
+                    output.push(ContentBlockChatOutput::Text(Text {
+                        text: tool_call.arguments,
+                    }));
+                } else {
+                    // Normal tool call handling
+                    let inference_response_tool_call =
+                        InferenceResponseToolCall::new_from_tool_call(tool_call, tool_config).await;
+                    output.push(ContentBlockChatOutput::ToolCall(
+                        inference_response_tool_call,
+                    ));
+                }
             }
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
             }
-            ContentBlockOutput::Unknown {
-                data,
-                model_provider_name,
-            } => {
-                output.push(ContentBlockChatOutput::Unknown {
-                    data,
-                    model_provider_name,
-                });
+            ContentBlockOutput::Unknown(unknown) => {
+                output.push(ContentBlockChatOutput::Unknown(unknown));
             }
         }
     }
@@ -1957,6 +1918,7 @@ impl ChatInferenceDatabaseInsert {
             tags: metadata.tags,
             ttft_ms: metadata.ttft_ms,
             extra_body: metadata.extra_body,
+            snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
 }
@@ -1994,6 +1956,7 @@ impl JsonInferenceDatabaseInsert {
             tags: metadata.tags,
             extra_body: metadata.extra_body,
             ttft_ms: metadata.ttft_ms,
+            snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
 }
@@ -2027,31 +1990,15 @@ impl ProviderInferenceResponseChunk {
     }
 }
 
-impl From<ToolCallOutput> for ToolCall {
-    fn from(output: ToolCallOutput) -> Self {
-        Self {
-            id: output.id,
-            name: output.raw_name,
-            arguments: output.raw_arguments,
-        }
-    }
-}
-
 impl From<ContentBlockChatOutput> for ContentBlock {
     fn from(output: ContentBlockChatOutput) -> Self {
         match output {
             ContentBlockChatOutput::Text(text) => ContentBlock::Text(text),
-            ContentBlockChatOutput::ToolCall(tool_call_output) => {
-                ContentBlock::ToolCall(tool_call_output.into())
+            ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
+                ContentBlock::ToolCall(inference_response_tool_call.into_tool_call())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            },
+            ContentBlockChatOutput::Unknown(unknown) => ContentBlock::Unknown(unknown),
         }
     }
 }
@@ -2061,16 +2008,10 @@ impl From<ContentBlockChatOutput> for ContentBlockOutput {
         match output {
             ContentBlockChatOutput::Text(text) => ContentBlockOutput::Text(text),
             ContentBlockChatOutput::ToolCall(tool_call) => {
-                ContentBlockOutput::ToolCall(tool_call.into())
+                ContentBlockOutput::ToolCall(tool_call.into_tool_call())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ContentBlockOutput::Unknown {
-                data,
-                model_provider_name,
-            },
+            ContentBlockChatOutput::Unknown(unknown) => ContentBlockOutput::Unknown(unknown),
         }
     }
 }
@@ -2080,24 +2021,9 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
         match json_enforcement {
             JsonMode::On => ModelInferenceRequestJsonMode::On,
             JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
-            JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
+            JsonMode::Tool => ModelInferenceRequestJsonMode::Off,
             JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
-    }
-}
-
-impl Add for Usage {
-    type Output = Usage;
-    fn add(self, other: Usage) -> Usage {
-        Usage {
-            input_tokens: self.input_tokens.saturating_add(other.input_tokens),
-            output_tokens: self.output_tokens.saturating_add(other.output_tokens),
-        }
-    }
-}
-impl std::iter::Sum<Usage> for Usage {
-    fn sum<I: Iterator<Item = Usage>>(iter: I) -> Self {
-        iter.fold(Usage::default(), |acc, u| acc + u)
     }
 }
 
@@ -2145,10 +2071,39 @@ where
     let val = bool::deserialize(d)?;
     if !val {
         return Err(D::Error::custom(
-            "Error deserializing replacement config: 'delete' must be 'true', or not set",
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
         ));
     }
     Ok(())
+}
+
+// Field-aware versions for struct fields (not enum variants)
+#[expect(clippy::trivially_copy_pass_by_ref)]
+pub(super) fn serialize_delete_field<S>(_: &(), s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    true.serialize(s)
+}
+
+pub(super) fn deserialize_delete_field<'de, D>(d: D) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = bool::deserialize(d)?;
+    if !val {
+        return Err(D::Error::custom(
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn schema_for_delete_field(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let mut map = Map::new();
+    map.insert("type".to_owned(), Value::String("boolean".to_owned()));
+    map.insert("const".to_owned(), Value::Bool(true));
+    schemars::Schema::from(map)
 }
 
 #[cfg(test)]
@@ -2156,7 +2111,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{DynamicToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolChoice};
     use serde_json::json;
     use tokio::time::Instant;
 
@@ -2166,8 +2121,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content = vec!["Hello, world!".to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 20,
+            input_tokens: Some(10),
+            output_tokens: Some(20),
         };
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
@@ -2193,6 +2148,7 @@ mod tests {
             model_inference_responses,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2244,6 +2200,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2294,6 +2251,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2340,6 +2298,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2407,6 +2366,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2493,6 +2453,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 2);
@@ -2536,7 +2497,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "custom_tool".to_string(),
                     description: "A custom tool".to_string(),
                     parameters: DynamicJSONSchema::new(
@@ -2586,6 +2547,7 @@ mod tests {
             model_inference_responses,
             Some(&additional_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2637,6 +2599,7 @@ mod tests {
             Some(&additional_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2659,7 +2622,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "weather_tool".to_string(),
                     description: "Get weather information".to_string(),
                     parameters: DynamicJSONSchema::new(
@@ -2710,6 +2673,7 @@ mod tests {
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2766,6 +2730,7 @@ mod tests {
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2838,13 +2803,20 @@ mod tests {
             _ => panic!("Expected Text content"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(tool_call) => {
-                assert_eq!(tool_call.id, "123");
-                assert_eq!(tool_call.name, Some("test_tool".to_string()));
-                assert_eq!(tool_call.arguments, Some(json!("{}")));
-                assert_eq!(tool_call.raw_name, None);
-                assert_eq!(tool_call.raw_arguments, None);
-            }
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, "test_tool");
+                    assert_eq!(tc.arguments, "{}");
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, Some("test_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!("{}")));
+                    assert_eq!(tc.raw_name, "test_tool");
+                    assert_eq!(tc.raw_arguments, "{}");
+                }
+            },
             _ => panic!("Expected ToolCall content"),
         }
         // Test case for multiple content items with JSON object in text block
@@ -2871,13 +2843,18 @@ mod tests {
             _ => panic!("Expected Text content with JSON object"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(tool_call) => {
-                assert_eq!(tool_call.id, "456");
-                assert_eq!(tool_call.name, Some("another_tool".to_string()));
-                assert_eq!(tool_call.arguments, Some(json!({"key":"value"})));
-                assert_eq!(tool_call.raw_name, None);
-                assert_eq!(tool_call.raw_arguments, None,);
-            }
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, "another_tool");
+                    assert_eq!(tc.arguments, json!({"key":"value"}).to_string());
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, Some("another_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!({"key":"value"})));
+                }
+            },
             _ => panic!("Expected ToolCall content"),
         }
 
@@ -2915,5 +2892,232 @@ mod tests {
             "content": [{"type": "invalid_type", "value": "test"}]
         });
         assert!(serde_json::from_value::<InputMessage>(input).is_err());
+    }
+
+    /// Test that usage_considering_cached properly propagates None values
+    /// If any of the model inference results have None for input_tokens or output_tokens,
+    /// the aggregated result should also have None for those fields
+    #[tokio::test]
+    async fn test_usage_considering_cached_none_propagation() {
+        let inference_id = Uuid::now_v7();
+
+        // Helper function to create a ModelInferenceResponseWithMetadata with specified usage
+        let create_model_response =
+            |usage: Usage, cached: bool| ModelInferenceResponseWithMetadata {
+                id: Uuid::now_v7(),
+                created: Instant::now().elapsed().as_secs(),
+                system: None,
+                input_messages: RequestMessagesOrBatch::Message(vec![]),
+                output: vec!["test".to_string().into()],
+                raw_request: String::new(),
+                raw_response: String::new(),
+                usage,
+                latency: Latency::NonStreaming {
+                    response_time: Duration::default(),
+                },
+                finish_reason: None,
+                model_provider_name: "test_provider".into(),
+                model_name: "test_model".into(),
+                cached,
+            };
+
+        // Test Case 1: All values are Some() - should aggregate correctly
+        let model_responses_all_some = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: Some(15),
+                    output_tokens: Some(25),
+                },
+                false,
+            ),
+        ];
+        let chat_result_all_some = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_all_some,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_all_some = InferenceResult::Chat(chat_result_all_some);
+        let usage_all_some = result_all_some.usage_considering_cached();
+        assert_eq!(usage_all_some.input_tokens, Some(25));
+        assert_eq!(usage_all_some.output_tokens, Some(45));
+
+        // Test Case 2: Some input_tokens are None - should propagate None for input_tokens
+        let model_responses_input_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: Some(25),
+                },
+                false,
+            ),
+        ];
+        let chat_result_input_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_input_none,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_input_none = InferenceResult::Chat(chat_result_input_none);
+        let usage_input_none = result_input_none.usage_considering_cached();
+        assert_eq!(usage_input_none.input_tokens, None);
+        assert_eq!(usage_input_none.output_tokens, Some(45));
+
+        // Test Case 3: Some output_tokens are None - should propagate None for output_tokens
+        let model_responses_output_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: Some(15),
+                    output_tokens: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_output_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_output_none,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_output_none = InferenceResult::Chat(chat_result_output_none);
+        let usage_output_none = result_output_none.usage_considering_cached();
+        assert_eq!(usage_output_none.input_tokens, Some(25));
+        assert_eq!(usage_output_none.output_tokens, None);
+
+        // Test Case 4: All values are None - should result in all None
+        let model_responses_all_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: None,
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_all_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_all_none,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_all_none = InferenceResult::Chat(chat_result_all_none);
+        let usage_all_none = result_all_none.usage_considering_cached();
+        assert_eq!(usage_all_none.input_tokens, None);
+        assert_eq!(usage_all_none.output_tokens, None);
+
+        // Test Case 5: Mixed cached and non-cached with None values
+        // Cached results return Usage { input_tokens: Some(0), output_tokens: Some(0) }
+        let model_responses_mixed = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                true,
+            ), // This will be treated as 0/0 due to cached=true
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: Some(25),
+                },
+                false,
+            ),
+        ];
+        let chat_result_mixed = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_mixed,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_mixed = InferenceResult::Chat(chat_result_mixed);
+        let usage_mixed = result_mixed.usage_considering_cached();
+        assert_eq!(usage_mixed.input_tokens, None); // None propagates
+        assert_eq!(usage_mixed.output_tokens, Some(25)); // 0 (cached) + 25
+    }
+
+    #[test]
+    fn test_unknown_deserialize() {
+        // New format
+        let u: Unknown =
+            serde_json::from_value(json!({"data": {}, "model_name": "m", "provider_name": "p"}))
+                .unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("m"));
+        assert_eq!(u.provider_name.as_deref(), Some("p"));
+
+        // Provider-agnostic (no targeting)
+        let u: Unknown = serde_json::from_value(json!({"data": {}})).unwrap();
+        assert!(u.model_name.is_none() && u.provider_name.is_none());
+
+        // Legacy FQN - simple
+        let u: Unknown = serde_json::from_value(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p"})).unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("m"));
+        assert_eq!(u.provider_name.as_deref(), Some("p"));
+
+        // Legacy FQN - model with colons (e.g. dummy::echo)
+        let u: Unknown = serde_json::from_value(json!({"data": {}, "model_provider_name": "tensorzero::model_name::dummy::echo::provider_name::p"})).unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("dummy::echo"));
+
+        // Invalid legacy FQN - errors
+        assert!(
+            serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "bad"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<Unknown>(
+                json!({"data": {}, "model_provider_name": "tensorzero::model_name::m"})
+            )
+            .is_err()
+        );
+
+        // Conflict: both old and new fields
+        assert!(serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p", "model_name": "x"})).is_err());
     }
 }

@@ -1,12 +1,13 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
+use indexmap::IndexMap;
+use minijinja_utils::AnalysisError;
 use opentelemetry::trace::Status;
 use serde::{Serialize, Serializer};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fmt::{Debug, Display};
 use thiserror::Error;
 use tokio::sync::OnceCell;
@@ -15,12 +16,14 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 use uuid::Uuid;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::db::clickhouse::migration_manager::get_run_migrations_command;
-use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
+use crate::inference::types::storage::StoragePath;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
+pub use delayed_error::DelayedError;
 
 /// Controls whether to include raw request/response details in error output
 ///
@@ -123,19 +126,18 @@ impl Error {
         Error(Arc::new(details))
     }
 
-    pub fn new_with_err_logging(details: ErrorDetails, err_logging: bool) -> Self {
-        if err_logging {
-            details.log();
-        }
-        Error(Arc::new(details))
-    }
-
-    pub fn new_without_logging(details: ErrorDetails) -> Self {
+    // If you need to construct an error without logging it, use `DelayedError` instead.
+    // This method should only be called within `DelayedError` itself.
+    fn new_without_logging(details: ErrorDetails) -> Self {
         Error(Arc::new(details))
     }
 
     pub fn status_code(&self) -> StatusCode {
         self.0.status_code()
+    }
+
+    pub fn underlying_status_code(&self) -> Option<StatusCode> {
+        self.0.underlying_status_code()
     }
 
     pub fn get_details(&self) -> &ErrorDetails {
@@ -201,7 +203,8 @@ impl From<ErrorDetails> for Error {
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 pub enum ErrorDetails {
     AllVariantsFailed {
-        errors: HashMap<String, Error>,
+        // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
+        errors: IndexMap<String, Error>,
     },
     TensorZeroAuth {
         message: String,
@@ -263,6 +266,13 @@ pub enum ErrorDetails {
     Config {
         message: String,
     },
+    ConfigSnapshotNotFound {
+        snapshot_hash: String,
+    },
+    ConfigSnapshotHashMismatch {
+        expected: SnapshotHash,
+        actual: SnapshotHash,
+    },
     ObjectStoreUnconfigured {
         block_type: String,
     },
@@ -282,6 +292,9 @@ pub enum ErrorDetails {
     },
     DynamicJsonSchema {
         message: String,
+    },
+    DynamicTemplateLoad {
+        internal: AnalysisError,
     },
     FileRead {
         message: String,
@@ -325,9 +338,6 @@ pub enum ErrorDetails {
     InvalidClientMode {
         mode: String,
         message: String,
-    },
-    InvalidDynamicTemplatePath {
-        name: String,
     },
     InvalidDynamicEndpoint {
         url: String,
@@ -470,7 +480,8 @@ pub enum ErrorDetails {
         model_name: String,
     },
     ModelProvidersExhausted {
-        provider_errors: HashMap<String, Error>,
+        // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
+        provider_errors: IndexMap<String, Error>,
     },
     ModelValidation {
         message: String,
@@ -514,6 +525,9 @@ pub enum ErrorDetails {
     RateLimitExceeded {
         failed_rate_limits: Vec<FailedRateLimit>,
     },
+    Relay {
+        message: String,
+    },
     RateLimitMissingMaxTokens,
     Serialization {
         message: String,
@@ -530,6 +544,9 @@ pub enum ErrorDetails {
     },
     ToolNotLoaded {
         name: String,
+    },
+    IncompatibleTool {
+        message: String,
     },
     TypeConversion {
         message: String,
@@ -588,8 +605,12 @@ pub enum ErrorDetails {
         path: String,
         method: String,
     },
+    AutopilotUnavailable,
+    Autopilot {
+        message: String,
+        status_code: Option<u16>,
+    },
 }
-
 impl ErrorDetails {
     /// Defines the error level for logging this error
     fn level(&self) -> tracing::Level {
@@ -617,18 +638,22 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
+            ErrorDetails::ConfigSnapshotNotFound { .. } => tracing::Level::ERROR,
+            ErrorDetails::ConfigSnapshotHashMismatch { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicTemplateLoad { .. } => tracing::Level::ERROR,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::Relay { .. } => tracing::Level::ERROR,
             ErrorDetails::FatalStreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
@@ -648,7 +673,6 @@ impl ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidDynamicTemplatePath { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
             ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
@@ -694,6 +718,7 @@ impl ErrorDetails {
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
+            ErrorDetails::IncompatibleTool { .. } => tracing::Level::WARN,
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
@@ -712,6 +737,28 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
             ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
             ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::AutopilotUnavailable => tracing::Level::WARN,
+            ErrorDetails::Autopilot { .. } => tracing::Level::ERROR,
+        }
+    }
+
+    /// Returns the most recent 'underlying' status code for this error.
+    /// For example, if an inference fails due to all models failing, this will
+    /// return the status code of the last model that failed.
+    ///
+    /// Returns `None` if the error doesn't have a concept of a 'last' status code.
+    fn underlying_status_code(&self) -> Option<StatusCode> {
+        match self {
+            ErrorDetails::AllVariantsFailed { errors } => errors
+                .values()
+                .last()
+                .and_then(|error| error.underlying_status_code()),
+            ErrorDetails::InferenceClient { status_code, .. } => *status_code,
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+                .values()
+                .last()
+                .and_then(|error| error.underlying_status_code()),
+            _ => None,
         }
     }
 
@@ -738,10 +785,13 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ConfigSnapshotNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::ConfigSnapshotHashMismatch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DynamicTemplateLoad { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -757,6 +807,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::FatalStreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::Relay { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -776,7 +827,6 @@ impl ErrorDetails {
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEndpoint { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidWorkflowEvaluationRun { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
@@ -822,6 +872,7 @@ impl ErrorDetails {
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::IncompatibleTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownFunction { .. } => StatusCode::NOT_FOUND,
@@ -846,6 +897,10 @@ impl ErrorDetails {
             }
             ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::AutopilotUnavailable => StatusCode::NOT_IMPLEMENTED,
+            ErrorDetails::Autopilot { status_code, .. } => status_code
+                .and_then(|code| StatusCode::from_u16(code).ok())
+                .unwrap_or(StatusCode::BAD_GATEWAY),
         }
     }
 
@@ -916,9 +971,15 @@ impl std::fmt::Display for ErrorDetails {
                 streaming,
             } => {
                 if *streaming {
-                    write!(f, "Model {model_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
+                    write!(
+                        f,
+                        "Model {model_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
+                    )
                 } else {
-                    write!(f, "Model {model_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})")
+                    write!(
+                        f,
+                        "Model {model_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
+                    )
                 }
             }
             ErrorDetails::VariantTimeout {
@@ -928,9 +989,15 @@ impl std::fmt::Display for ErrorDetails {
             } => {
                 let variant_description = format!("Variant `{variant_name}`");
                 if *streaming {
-                    write!(f, "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
+                    write!(
+                        f,
+                        "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
+                    )
                 } else {
-                    write!(f, "{variant_description} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})")
+                    write!(
+                        f,
+                        "{variant_description} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
+                    )
                 }
             }
             ErrorDetails::ObjectStoreWrite { message, path } => {
@@ -946,7 +1013,13 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error fetching file from {url}: {message}")
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
-                write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration.")
+                write!(
+                    f,
+                    "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration."
+                )
+            }
+            ErrorDetails::Relay { message } => {
+                write!(f, "Error forwarding request in relay mode: {message}")
             }
             ErrorDetails::UnsupportedContentBlockType {
                 content_block_type,
@@ -1010,13 +1083,25 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ClickHouseMigrationsDisabled => {
                 let run_migrations_command: String = get_run_migrations_command();
-                write!(f, "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`")
+                write!(
+                    f,
+                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`"
+                )
             }
             ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {message}")
             }
             ErrorDetails::Config { message } => {
                 write!(f, "{message}")
+            }
+            ErrorDetails::ConfigSnapshotNotFound { snapshot_hash } => {
+                write!(f, "Config snapshot not found for hash: {snapshot_hash}")
+            }
+            ErrorDetails::ConfigSnapshotHashMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "Config snapshot hash does not match expected hash. Expected {expected} but got {actual}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                )
             }
             ErrorDetails::DatapointNotFound {
                 dataset_name,
@@ -1028,13 +1113,19 @@ impl std::fmt::Display for ErrorDetails {
                 )
             }
             ErrorDetails::DiclMissingOutput => {
-                write!(f, "DICL example missing output. There was a bug in a notebook from 2025-08 that may have caused the output to not be written to ClickHouse. You can remove the examples with missing output by running the query `DELETE FROM DynamicInContextLearningExample WHERE empty(output)`.")
+                write!(
+                    f,
+                    "DICL example missing output. There was a bug in a notebook from 2025-08 that may have caused the output to not be written to ClickHouse. You can remove the examples with missing output by running the query `DELETE FROM DynamicInContextLearningExample WHERE empty(output)`."
+                )
             }
             ErrorDetails::DuplicateTool { name } => {
                 write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
             }
             ErrorDetails::DuplicateRateLimitingConfigScope { scope } => {
-                write!(f, "Duplicate rate limiting config scope: {scope:?}. Rate limiting config scopes must be unique.")
+                write!(
+                    f,
+                    "Duplicate rate limiting config scope: {scope:?}. Rate limiting config scopes must be unique."
+                )
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(
@@ -1045,6 +1136,41 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::DynamicEndpointNotFound { key_name } => {
                 write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
             }
+            ErrorDetails::DynamicTemplateLoad { internal } => match internal {
+                AnalysisError::ParseError(err) => {
+                    write!(
+                        f,
+                        "Failed to parse template during validation of loads: {err}"
+                    )
+                }
+                AnalysisError::DynamicLoadsFound(loads) => {
+                    writeln!(
+                        f,
+                        "TensorZero does not allow templates with dynamic paths to be loaded. Found {} dynamic load(s):",
+                        loads.len()
+                    )?;
+                    for (i, load) in loads.iter().enumerate() {
+                        if i > 0 {
+                            writeln!(f)?;
+                        }
+                        write!(
+                            f,
+                            "  {}:{}:{}: dynamic {} - {}:\n    {}",
+                            load.template_name,
+                            load.line,
+                            load.column,
+                            load.load_kind,
+                            load.reason,
+                            load.source_quote
+                        )?;
+                    }
+                    writeln!(
+                        f,
+                        "Please use explicit paths to templates instead of variables. You may be able to use if / else statements to achieve the desired behavior."
+                    )?;
+                    Ok(())
+                }
+            },
 
             ErrorDetails::FileRead { message, file_path } => {
                 write!(f, "Error reading file {file_path}: {message}")
@@ -1132,7 +1258,10 @@ impl std::fmt::Display for ErrorDetails {
                             .map_or(String::new(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
-                    write!(f, "Inference stream closed due to error from {provider_type} server: {message}")
+                    write!(
+                        f,
+                        "Inference stream closed due to error from {provider_type} server: {message}"
+                    )
                 }
             }
             ErrorDetails::InferenceTimeout { variant_name } => {
@@ -1161,10 +1290,16 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid client mode: {mode}. {message}")
             }
             ErrorDetails::InvalidDiclConfig { message } => {
-                write!(f, "Invalid dynamic in-context learning config: {message}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new")
+                write!(
+                    f,
+                    "Invalid dynamic in-context learning config: {message}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
+                )
             }
             ErrorDetails::InvalidDatasetName { dataset_name } => {
-                write!(f, "Invalid dataset name: {dataset_name}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"")
+                write!(
+                    f,
+                    "Invalid dataset name: {dataset_name}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\""
+                )
             }
             ErrorDetails::InvalidWorkflowEvaluationRun { episode_id } => {
                 write!(
@@ -1174,9 +1309,6 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::InvalidDynamicEndpoint { url } => {
                 write!(f, "Invalid dynamic endpoint URL: {url}")
-            }
-            ErrorDetails::InvalidDynamicTemplatePath { name } => {
-                write!(f, "Invalid dynamic template path: {name}. There is likely a duplicate template in the config.")
             }
             ErrorDetails::InvalidEncodedJobHandle => {
                 write!(
@@ -1192,7 +1324,10 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid {kind} ID: {message}")
             }
             ErrorDetails::InvalidInferenceOutputSource { source_kind } => {
-                write!(f, "Invalid inference output source: {source_kind}. Should be one of: \"inference\" or \"demonstration\".")
+                write!(
+                    f,
+                    "Invalid inference output source: {source_kind}. Should be one of: \"inference\" or \"demonstration\"."
+                )
             }
             ErrorDetails::InvalidMetricName { metric_name } => {
                 write!(f, "Invalid metric name: {metric_name}")
@@ -1236,7 +1371,10 @@ impl std::fmt::Display for ErrorDetails {
                 function_name,
                 variant_name,
             } => {
-                write!(f, "Invalid variant for optimization: {variant_name} for function: {function_name}")
+                write!(
+                    f,
+                    "Invalid variant for optimization: {variant_name} for function: {function_name}"
+                )
             }
             ErrorDetails::JsonRequest { message } => write!(f, "{message}"),
             ErrorDetails::JsonSchema { message } => write!(f, "{message}"),
@@ -1375,25 +1513,45 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::RateLimitExceeded { failed_rate_limits } => {
                 if failed_rate_limits.len() == 1 {
                     let limit = &failed_rate_limits[0];
+                    let scope = limit
+                        .scope_key
+                        .iter()
+                        .map(|key| key.to_config_representation())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
                     write!(
                         f,
-                        "TensorZero rate limit exceeded for rule {}. Requested {} units but only {} available.",
-                        limit.key, limit.requested, limit.available
+                        "TensorZero rate limit exceeded for `{}` resource.\nScope: {}\nRequested: {}\nAvailable: {}",
+                        limit.resource.as_str(),
+                        scope,
+                        limit.requested,
+                        limit.available
                     )
                 } else {
-                    write!(
+                    writeln!(
                         f,
-                        "TensorZero rate limits exceeded for {} rules: ",
+                        "TensorZero rate limits exceeded for {} rules:",
                         failed_rate_limits.len()
                     )?;
                     for (i, limit) in failed_rate_limits.iter().enumerate() {
                         if i > 0 {
-                            write!(f, ", ")?;
+                            writeln!(f)?;
                         }
+                        let scope = limit
+                            .scope_key
+                            .iter()
+                            .map(|key| key.to_config_representation())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
                         write!(
                             f,
-                            "{} (requested {}, available {})",
-                            limit.key, limit.requested, limit.available
+                            "- Resource: `{}`\n    ├ Scope: {}\n    ├ Requested: {}\n    └ Available: {}",
+                            limit.resource.as_str(),
+                            scope,
+                            limit.requested,
+                            limit.available
                         )?;
                     }
                     Ok(())
@@ -1412,6 +1570,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::TypeConversion { message } => write!(f, "{message}"),
             ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {name}"),
             ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {name}"),
+            ErrorDetails::IncompatibleTool { message } => write!(f, "{message}"),
             ErrorDetails::UnknownCandidate { name } => {
                 write!(f, "Unknown candidate variant: {name}")
             }
@@ -1466,13 +1625,22 @@ impl std::fmt::Display for ErrorDetails {
                 function_type,
                 variant_type,
             } => {
-                write!(f, "Unsupported variant `{variant_name}` of type `{variant_type}` for function `{function_name}` of type `{function_type}`")
+                write!(
+                    f,
+                    "Unsupported variant `{variant_name}` of type `{variant_type}` for function `{function_name}` of type `{function_type}`"
+                )
             }
             ErrorDetails::UuidInFuture { raw_uuid } => {
                 write!(f, "UUID is in the future: {raw_uuid}")
             }
             ErrorDetails::RouteNotFound { path, method } => {
                 write!(f, "Route not found: {method} {path}")
+            }
+            ErrorDetails::AutopilotUnavailable => {
+                write!(f, "Autopilot credentials unavailable")
+            }
+            ErrorDetails::Autopilot { message, .. } => {
+                write!(f, "Autopilot API error: {message}")
             }
         }
     }
@@ -1511,5 +1679,61 @@ impl From<sqlx::Error> for Error {
             message: err.to_string(),
             function_name: None,
         })
+    }
+}
+
+impl From<AnalysisError> for Error {
+    fn from(err: AnalysisError) -> Self {
+        Self::new(ErrorDetails::DynamicTemplateLoad { internal: err })
+    }
+}
+
+impl From<autopilot_client::AutopilotError> for Error {
+    fn from(err: autopilot_client::AutopilotError) -> Self {
+        match err {
+            autopilot_client::AutopilotError::Http {
+                status_code,
+                message,
+            } => Self::new(ErrorDetails::Autopilot {
+                message,
+                status_code: Some(status_code),
+            }),
+            autopilot_client::AutopilotError::Request(e) => Self::new(ErrorDetails::Autopilot {
+                message: e.to_string(),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Json(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("JSON error: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Sse(message) => Self::new(ErrorDetails::Autopilot {
+                message: format!("SSE error: {message}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::InvalidUrl(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Invalid URL: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::MissingConfig(field) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Missing config: {field}"),
+                    status_code: None,
+                })
+            }
+        }
+    }
+}
+
+impl From<tensorzero_types::TypeError> for Error {
+    fn from(err: tensorzero_types::TypeError) -> Self {
+        match err {
+            tensorzero_types::TypeError::InvalidDataPrefix(message) => {
+                Self::new(ErrorDetails::InternalError { message })
+            }
+            tensorzero_types::TypeError::InvalidBase64(message)
+            | tensorzero_types::TypeError::InvalidMimeType(message) => {
+                Self::new(ErrorDetails::Base64 { message })
+            }
+        }
     }
 }

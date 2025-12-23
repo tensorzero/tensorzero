@@ -1,28 +1,15 @@
 import { getConfig } from "./config/index.server";
+import { getTensorZeroClient } from "./get-tensorzero-client.server";
 import {
   FeedbackRequestSchema,
-  TensorZeroClient,
   TensorZeroServerError,
   type FeedbackResponse,
 } from "~/utils/tensorzero";
-import type { JsonValue } from "tensorzero-node";
-import { getEnv } from "./env.server";
+import type { JsonValue } from "~/types/tensorzero";
 import { getFeedbackConfig } from "./config/feedback";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 
-let _tensorZeroClient: TensorZeroClient | undefined;
-
-export function getTensorZeroClient() {
-  if (_tensorZeroClient) {
-    return _tensorZeroClient;
-  }
-
-  _tensorZeroClient = new TensorZeroClient(
-    getEnv().TENSORZERO_GATEWAY_URL,
-    getEnv().TENSORZERO_API_KEY,
-  );
-  return _tensorZeroClient;
-}
+// Re-export for backcompat.
+export { getTensorZeroClient };
 
 export async function addHumanFeedback(formData: FormData) {
   const metricName = formData.get("metricName")?.toString();
@@ -163,20 +150,5 @@ export async function addJudgeDemonstration(formData: FormData) {
     internal: true,
   });
   const response = await getTensorZeroClient().feedback(feedbackRequest);
-  return response;
-}
-
-export async function listDatapoints(
-  datasetName: string,
-  functionName?: string,
-  limit?: number,
-  offset?: number,
-): Promise<TensorZeroDatapoint[]> {
-  const response = await getTensorZeroClient().listDatapoints(
-    datasetName,
-    functionName,
-    limit,
-    offset,
-  );
   return response;
 }

@@ -1,4 +1,4 @@
-import type { Decorator } from "@storybook/react";
+import type { Decorator } from "@storybook/react-vite";
 import type { Preview } from "@storybook/react-vite";
 import { withRouter } from "storybook-addon-remix-react-router";
 

@@ -36,6 +36,14 @@ For example, periods are not allowed in basic strings, so you can define an eval
 This should be the name of a function defined in the `[functions]` section of the gateway config.
 This value sets which function this evaluation should evaluate when run.
 
+### `description`
+
+- **Type:** string
+- **Required:** no
+
+An optional description for this evaluation.
+This can be used to document the purpose of the evaluation for automated workflows.
+
 ### `[evaluations.evaluation_name.evaluators.evaluator_name]`
 
 The `evaluators` sub-section defines the behavior of a particular evaluator that will be run as part of its parent evaluation.
@@ -192,6 +200,14 @@ cutoff = 0.8 # Example: Consider passing if average score is >= 0.8
 # ...
 ```
 
+###### `description`
+
+- **Type:** string
+- **Required:** no
+
+An optional description for this evaluator.
+This can be used to document the purpose of the evaluator for automated workflows.
+
 ###### `[evaluations.evaluation_name.evaluators.evaluator_name.variants.variant_name]`
 
 An LLM Judge evaluator defines a TensorZero function that is used to judge the output of another TensorZero function.
@@ -199,7 +215,7 @@ Therefore, all the variant types that are available for a normal TensorZero func
 
 You can include a standard [variant configuration](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) in this block, with two modifications:
 
-- Instead of assigning `weight` to each variant, you simply mark a single variant as `active`.
+- You must mark a single variant as `active`.
 - For `chat_completion` variants, instead of a `system_template` we require `system_instructions` as a text file and take no other templates.
 
 Here we list only the configuration for variants that differs from the configuration for a normal TensorZero function. Please refer the [variant configuration reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for the remaining options.

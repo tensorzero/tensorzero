@@ -51,13 +51,13 @@ export function AddToDatasetButton({
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
       if (fetcher.data.error) {
-        toast({
+        const { dismiss } = toast.error({
           title: "Failed to add to dataset",
           description: fetcher.data.error,
-          variant: "destructive",
         });
+        return () => dismiss({ immediate: true });
       } else if (fetcher.data.redirectTo) {
-        toast({
+        const { dismiss } = toast.success({
           title: "New Datapoint",
           description: "A datapoint was created successfully.",
           action: (
@@ -66,8 +66,10 @@ export function AddToDatasetButton({
             </ToastAction>
           ),
         });
+        return () => dismiss({ immediate: true });
       }
     }
+    return;
   }, [fetcher.state, fetcher.data, toast]);
 
   // Helper function to handle dataset selection
@@ -85,8 +87,10 @@ export function AddToDatasetButton({
       formData.append("function_name", functionName);
       formData.append("variant_name", variantName);
       formData.append("episode_id", episodeId);
-      formData.append("_action", "addToDataset");
-      fetcher.submit(formData, { method: "post" });
+      fetcher.submit(formData, {
+        method: "post",
+        action: "/api/datasets/datapoints/from-inference",
+      });
     }
   };
 
@@ -107,10 +111,11 @@ export function AddToDatasetButton({
           setOutputDialogOpen(true);
         }
       }}
-      placeholder="Add to dataset"
       buttonProps={{
         size: "sm",
       }}
+      label="Add to dataset"
+      labelClassName="text-fg-primary font-medium"
       disabled={isReadOnly}
     />
   );

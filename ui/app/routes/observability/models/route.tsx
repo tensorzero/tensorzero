@@ -5,8 +5,8 @@ import type { RouteHandle } from "react-router";
 export const handle: RouteHandle = {
   crumb: () => ["Models"],
 };
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-import type { TimeWindow } from "tensorzero-node";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import type { TimeWindow } from "~/types/tensorzero";
 import { getQuantiles } from "tensorzero-node";
 import { ModelUsage } from "~/components/model/ModelUsage";
 import { ModelLatency } from "~/components/model/ModelLatency";
@@ -49,14 +49,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const latencyTimeGranularity = latencyTimeGranularityParam as TimeWindow;
 
   const numPeriods = parseInt(url.searchParams.get("usageNumPeriods") || "10");
-  const databaseClient = await getNativeDatabaseClient();
-  const modelUsageTimeseriesPromise = databaseClient.getModelUsageTimeseries(
-    usageTimeGranularity,
-    numPeriods,
-  );
-  const modelLatencyQuantilesPromise = databaseClient.getModelLatencyQuantiles(
-    latencyTimeGranularity,
-  );
+  const client = getTensorZeroClient();
+  const modelUsageTimeseriesPromise = client
+    .getModelUsageTimeseries(usageTimeGranularity, numPeriods)
+    .then((response) => response.data);
+  const modelLatencyQuantilesPromise = client
+    .getModelLatencyQuantiles(latencyTimeGranularity)
+    .then((response) => response.data);
   const quantiles = getQuantiles();
   return {
     modelUsageTimeseriesPromise,

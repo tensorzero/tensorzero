@@ -4,14 +4,14 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::batch::BatchRequestRow;
-use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::Latency;
 use crate::inference::types::ModelInferenceRequest;
 use crate::inference::types::PeekableProviderInferenceResponseStream;
 use crate::inference::types::ProviderInferenceResponse;
 use crate::inference::types::ProviderInferenceResponseStreamInner;
+use crate::inference::types::batch::BatchRequestRow;
+use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::model::ModelProvider;
 use async_trait::async_trait;
 use futures::Future;
@@ -93,5 +93,6 @@ pub trait WrappedProvider: Debug {
             Box<dyn Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static>,
         >,
         start_time: Instant,
+        raw_request: &str,
     ) -> ProviderInferenceResponseStreamInner;
 }

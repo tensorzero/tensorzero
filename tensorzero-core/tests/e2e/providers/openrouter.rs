@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
+use crate::providers::common::{
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, ModelTestProvider,
+};
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 use uuid::Uuid;
@@ -103,10 +105,23 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let input_audio_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "openrouter".to_string(),
+        model_name: "openai/gpt-4o-audio-preview".into(),
+        model_provider_name: "openrouter".into(),
+        credentials: HashMap::new(),
+    }];
+
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "openrouter".to_string(),
         model_info: HashMap::from([("model_name".to_string(), "openai/gpt-4o-mini".to_string())]),
         use_modal_headers: false,
+    }];
+
+    let embedding_providers = vec![EmbeddingTestProvider {
+        model_name: "gemini_embedding_001_openrouter".to_string(),
+        dimensions: 3072,
     }];
 
     E2ETestProviders {
@@ -114,7 +129,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
-        embeddings: vec![],
+        embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: provider_type_default_credentials_providers,
@@ -127,6 +142,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         image_inference: vec![],
         pdf_inference: vec![],
+        input_audio: input_audio_providers,
         shorthand_inference: shorthand_providers,
         json_mode_off_inference: vec![],
         credential_fallbacks,

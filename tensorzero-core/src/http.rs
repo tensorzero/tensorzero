@@ -1,26 +1,33 @@
+use chrono::Duration;
+use http_body::{Frame, SizeHint};
 use once_cell::sync::OnceCell;
+use opentelemetry_http::HeaderInjector;
 use std::{
     pin::Pin,
     sync::{
-        atomic::{AtomicU8, Ordering},
         Arc,
+        atomic::{AtomicU8, Ordering},
     },
     task::{Context, Poll},
-    time::Duration,
 };
 use tracing::Span;
 use tracing_futures::Instrument;
 
-use futures::Stream;
-use http::{HeaderName, HeaderValue};
+use eventsource_stream::Eventsource;
+use futures::{Stream, StreamExt};
+use http::{HeaderMap, HeaderName, HeaderValue};
 use pin_project::pin_project;
-use reqwest::{Body, Response};
+use reqwest::header::{ACCEPT, CONTENT_TYPE};
+use reqwest::{Body, Response, StatusCode};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
-use reqwest_eventsource::{CannotCloneRequestError, Event, EventSource, RequestBuilderExt};
-use serde::{de::DeserializeOwned, Serialize};
+use reqwest_eventsource::{
+    CannotCloneRequestError, Error as ReqwestEventSourceError, Event, RequestBuilderExt,
+};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model_table::CowNoClone,
@@ -103,6 +110,14 @@ const CONCURRENCY_LIMIT: u8 = 100;
 
 /// A wrapper for `reqwest::Client` that adds extra features:
 /// * Improved connection pooling support for HTTP/2
+/// * Workaround for long-lived `h2` spans (see `tensorzero_h2_workaround_span`)
+/// * Outgoing OpenTelemetry 'tracecontext/baggage' propagation
+/// * Integrates with the 'overhead' metric tracking, and excludes the time
+///   taken by the HTTP request from the calculated overhead.
+///   We currently only use `TensorzeroHttpClient` for calls to LLMs, which
+///   we want to exclude from our 'overhead' metric calculation.
+///   If we ever start using `TensorzeroHttpClient` for other purposes (e.g. ClickHouse requests),
+///   we'll probably need to make this configurable on a per-request basis.
 #[derive(Debug, Clone)]
 pub struct TensorzeroHttpClient {
     // A 'waterfall' of clients for connecting pooling.
@@ -130,10 +145,24 @@ pub struct TensorzeroHttpClient {
     // it stays alive for the lifetime of the `TensorzeroHttpClient` instance.
     clients: Arc<[OnceCell<LimitedClient>]>,
     fallback_client: Arc<LimitedClient>,
+    global_outbound_http_timeout: Duration,
+}
+
+#[cfg(any(test, feature = "e2e_tests", feature = "pyo3"))]
+impl Default for TensorzeroHttpClient {
+    fn default() -> Self {
+        // This is only available in tests and e2e tests, so it's fine to unwrap here
+        #[expect(clippy::unwrap_used)]
+        Self::new_testing().unwrap()
+    }
 }
 
 impl TensorzeroHttpClient {
-    pub fn new() -> Result<Self, Error> {
+    #[cfg(any(test, feature = "e2e_tests", feature = "pyo3"))]
+    pub fn new_testing() -> Result<Self, Error> {
+        Self::new(DEFAULT_HTTP_CLIENT_TIMEOUT)
+    }
+    pub fn new(global_outbound_http_timeout: Duration) -> Result<Self, Error> {
         let clients = (0..MAX_NUM_CLIENTS)
             .map(|_| OnceCell::new())
             .collect::<Vec<_>>();
@@ -141,8 +170,9 @@ impl TensorzeroHttpClient {
             clients: clients.into(),
             fallback_client: Arc::new(LimitedClient {
                 concurrent_requests: Arc::new(AtomicU8::new(0)),
-                client: build_client()?,
+                client: build_client(global_outbound_http_timeout)?,
             }),
+            global_outbound_http_timeout,
         };
         // Eagerly initialize the first `OnceCell` in the array
         client.take_ticket();
@@ -154,7 +184,7 @@ impl TensorzeroHttpClient {
             let client = match client_cell.get_or_try_init(|| {
                 Ok::<_, Error>(LimitedClient {
                     concurrent_requests: Arc::new(AtomicU8::new(0)),
-                    client: build_client()?,
+                    client: build_client(self.global_outbound_http_timeout)?,
                 })
             }) {
                 Ok(client) => client,
@@ -227,6 +257,22 @@ impl TensorzeroHttpClient {
         }
     }
 
+    pub fn patch<U: IntoUrl>(&self, url: U) -> TensorzeroRequestBuilder<'_> {
+        let ticket = self.take_ticket();
+        TensorzeroRequestBuilder {
+            builder: ticket.client.client.patch(url),
+            ticket,
+        }
+    }
+
+    pub fn delete<U: IntoUrl>(&self, url: U) -> TensorzeroRequestBuilder<'_> {
+        let ticket = self.take_ticket();
+        TensorzeroRequestBuilder {
+            builder: ticket.client.client.delete(url),
+            ticket,
+        }
+    }
+
     pub fn request<U: IntoUrl>(
         &self,
         method: reqwest::Method,
@@ -252,23 +298,19 @@ pub struct TensorzeroRequestBuilder<'a> {
     ticket: LimitedClientTicket<'a>,
 }
 
-/// A wrapper type around `reqwest_eventsource::EventSource`.
+/// A wrapper type around an event source stream.
 /// Like `TensorzeroRequestBuilder`, this type holds on to a `LimitedClientTicket`,
 /// so that we can drop it when the stream is dropped (and hold on to it while
 /// we're still polling messages from the stream).
 #[pin_project]
 pub struct TensorZeroEventSource {
-    // We forward to this `EventSource` in our `Stream` impl
     #[pin]
-    source: EventSource,
+    stream: Pin<Box<dyn Stream<Item = Result<Event, ReqwestEventSourceError>> + Send>>,
     ticket: LimitedClientTicket<'static>,
     span: Span,
-}
-
-impl TensorZeroEventSource {
-    pub fn close(&mut self) {
-        self.source.close();
-    }
+    // We deliberately hold this span across the entire lifetime of the event source stream,
+    // as we want the total duration to count as 'external' for our overhead metric.
+    tensorzero_external_span: Span,
 }
 
 impl Stream for TensorZeroEventSource {
@@ -277,10 +319,96 @@ impl Stream for TensorZeroEventSource {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
         let _guard = this.span.enter();
-        // Just forward to the underlying `EventSource`, without doing anything else.
-        // The `TensorZeroEventSource` type only exists to hold on to a `LimitedClientTicket`
-        // until the stream is dropped.
-        this.source.poll_next(cx)
+        // Just forward to the underlying `stream`, without doing anything else.
+        this.stream.poll_next(cx)
+    }
+}
+
+/// A wrapper type around `reqwest::Response`
+/// We use this to extend the lifetime of a `Span`,
+/// and drop it when the response is fully consumed
+/// (e.g. after `text`) is called.
+///
+// At the moment, we don't actually store a Span - this will
+// be added in a future PR
+pub struct TensorzeroResponseWrapper {
+    /// IMPORTANT - do *not* directly expose this field.
+    /// Instead, add accessor methods to `TensorzeroResponseWrapper`,
+    /// so that the caller is forced to hold on to the entire `TensorzeroResponseWrapper`
+    /// until it gets 'consumed' (e.g. calling `text`)
+    response: Response,
+    /// We hold onto a ticket, since holding a `Response` still uses a logical HTTP connection
+    /// (since the body will not be read until `text` is called)
+    ticket: LimitedClientTicket<'static>,
+}
+
+#[pin_project]
+/// A wrapper over a `reqwest::Body` that holds on to a `LimitedClientTicket`
+/// We use this to extend the lifetime of our ticket until the body is fully consumed
+/// (since the underlying HTTP connection is still in use as long as we're reading data from the body)
+pub struct TensorzeroBodyWrapper {
+    #[pin]
+    body: reqwest::Body,
+    ticket: LimitedClientTicket<'static>,
+}
+
+#[deny(clippy::missing_trait_methods)]
+impl http_body::Body for TensorzeroBodyWrapper {
+    type Data = <reqwest::Body as http_body::Body>::Data;
+    type Error = <reqwest::Body as http_body::Body>::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        self.project().body.poll_frame(cx)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.body.is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.body.size_hint()
+    }
+}
+
+impl TensorzeroResponseWrapper {
+    pub fn status(&self) -> StatusCode {
+        self.response.status()
+    }
+
+    pub fn headers(&self) -> &HeaderMap {
+        self.response.headers()
+    }
+
+    pub fn error_for_status_ref(&self) -> Result<&Self, reqwest::Error> {
+        self.response.error_for_status_ref()?;
+        Ok(self)
+    }
+
+    // These methods consume the `TensorzeroResponseWrapper`,
+    // and drop the ticket. They do *not* give the caller ownership of `self.response`
+    pub async fn text(self) -> Result<String, reqwest::Error> {
+        self.response.text().await
+    }
+
+    pub async fn json<T: DeserializeOwned>(self) -> Result<T, reqwest::Error> {
+        self.response.json().await
+    }
+
+    pub async fn bytes(self) -> Result<bytes::Bytes, reqwest::Error> {
+        self.response.bytes().await
+    }
+
+    /// Converts this `TensorzeroResponseWrapper` into an `http::Response<TensorzeroBodyWrapper>`.
+    /// preserving our `LimitedClientTicket` until the body is fully consumed
+    pub fn into_http_response(self) -> http::Response<TensorzeroBodyWrapper> {
+        let resp: http::Response<reqwest::Body> = self.response.into();
+        resp.map(|body| TensorzeroBodyWrapper {
+            body,
+            ticket: self.ticket,
+        })
     }
 }
 
@@ -323,9 +451,16 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         }
     }
 
-    pub fn timeout(self, timeout: Duration) -> TensorzeroRequestBuilder<'a> {
+    pub fn timeout(self, timeout: std::time::Duration) -> TensorzeroRequestBuilder<'a> {
         Self {
             builder: self.builder.timeout(timeout),
+            ticket: self.ticket,
+        }
+    }
+
+    pub fn query<T: Serialize + ?Sized>(self, query: &T) -> TensorzeroRequestBuilder<'a> {
+        Self {
+            builder: self.builder.query(query),
             ticket: self.ticket,
         }
     }
@@ -367,27 +502,96 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         }
     }
 
-    pub fn eventsource(self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
+    // We call this method just before sending the request, so that we capture the OpenTelemetry Context (including the parent span)
+    // as close to the request callsite as possible.
+    #[must_use]
+    fn with_otlp_headers(mut self) -> Self {
+        let mut extra_headers = HeaderMap::new();
+        opentelemetry::global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(
+                &opentelemetry::Context::current(),
+                &mut HeaderInjector(&mut extra_headers),
+            );
+        });
+        self.builder = self.builder.headers(extra_headers);
+        self
+    }
+
+    pub fn eventsource(mut self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
+        self = self.with_otlp_headers();
+        let event_source = self.builder.eventsource()?;
         Ok(TensorZeroEventSource {
-            source: self.builder.eventsource()?,
+            stream: Box::pin(event_source),
             ticket: self.ticket.into_owned(),
             span: tensorzero_h2_workaround_span(),
+            tensorzero_external_span: tracing::debug_span!(
+                "eventsource",
+                { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
+            ),
         })
     }
 
-    // This method takes an owned `self`, so we'll drop `self.ticket` when this method
-    // returns (after we've gotten a response)
-    pub async fn send(self) -> Result<Response, reqwest::Error> {
-        self.builder
+    pub async fn eventsource_with_headers(
+        mut self,
+    ) -> Result<
+        (TensorZeroEventSource, http::HeaderMap),
+        (ReqwestEventSourceError, Option<http::HeaderMap>),
+    > {
+        self = self.with_otlp_headers();
+        let ticket = self.ticket.into_owned();
+        let builder = self.builder.header(ACCEPT, "text/event-stream");
+        let response = builder
             .send()
             .instrument(tensorzero_h2_workaround_span())
             .await
+            .map_err(|e| (ReqwestEventSourceError::Transport(e), None))?;
+
+        let headers = response.headers().clone();
+        let response =
+            validate_event_stream_response(response).map_err(|e| (e, Some(headers.clone())))?;
+        let stream = response.bytes_stream().eventsource().map(|event| {
+            event
+                .map(Event::Message)
+                .map_err(ReqwestEventSourceError::from)
+        });
+        // Emit an initial Open event to mirror `reqwest_eventsource::EventSource` behavior.
+        let stream = futures::stream::once(async { Ok(Event::Open) }).chain(stream);
+
+        Ok((
+            TensorZeroEventSource {
+                stream: Box::pin(stream),
+                ticket,
+                span: tensorzero_h2_workaround_span(),
+                tensorzero_external_span: tracing::debug_span!(
+                    "eventsource",
+                    { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
+                ),
+            },
+            headers,
+        ))
+    }
+
+    // This method preserves our ticket (by storing it in the `TensorzeroResponseWrapper`),
+    // since holding a `Reponse` still requires an active connection (since the
+    // body will not be read until `text()` is called)
+    #[tracing::instrument(skip_all, fields({ TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true))]
+    pub async fn send(mut self) -> Result<TensorzeroResponseWrapper, reqwest::Error> {
+        self = self.with_otlp_headers();
+        Ok(TensorzeroResponseWrapper {
+            response: self
+                .builder
+                .send()
+                .instrument(tensorzero_h2_workaround_span())
+                .await?,
+            ticket: self.ticket.into_owned(),
+        })
     }
 
     pub async fn send_and_parse_json<T: DeserializeOwned>(
-        self,
+        mut self,
         provider_type: &str,
     ) -> Result<T, Error> {
+        self = self.with_otlp_headers();
         let (client, request) = self.builder.build_split();
         let request = request.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
@@ -405,6 +609,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         let response = client
             .execute(request)
             .instrument(tensorzero_h2_workaround_span())
+            .instrument(tracing::debug_span!(
+                "send_and_parse_json",
+                { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
+            ))
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -421,6 +629,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         let raw_response = response
             .text()
             .instrument(tensorzero_h2_workaround_span())
+            .instrument(tracing::debug_span!(
+                "response_text",
+                { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
+            ))
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -458,18 +670,23 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 }
 
 // This is set high enough that it should never be hit for a normal model response.
-// In the future, we may want to allow overriding this at the model provider level.
-const DEFAULT_HTTP_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+// Users can customize it via `gateway.global_outbound_http_timeout_ms` in the config file.
+pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(5 * 60);
 
-fn build_client() -> Result<Client, Error> {
+fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error> {
     let mut http_client_builder = Client::builder()
-        .timeout(DEFAULT_HTTP_CLIENT_TIMEOUT)
+        .timeout(global_outbound_http_timeout.to_std().map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to convert Duration to std::time::Duration: {e}"),
+            })
+        })?)
         .user_agent(format!("TensorZero/{TENSORZERO_VERSION}"));
 
-    if cfg!(feature = "e2e_tests") {
-        if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
-            tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
-            http_client_builder = http_client_builder
+    if cfg!(feature = "e2e_tests")
+        && let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY")
+    {
+        tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
+        http_client_builder = http_client_builder
                 .proxy(
                     Proxy::all(proxy_url)
                         .map_err(|e| {
@@ -477,12 +694,13 @@ fn build_client() -> Result<Client, Error> {
                                 message: format!("Invalid proxy URL: {e}"),
                             })
                         })?
-                        .no_proxy(NoProxy::from_string("localhost,127.0.0.1,minio")),
+                        .no_proxy(NoProxy::from_string(
+                            "localhost,0.0.0.0,127.0.0.1,minio,mock-inference-provider,gateway,provider-proxy,clickhouse",
+                        )),
                 )
                 // When running e2e tests, we use `provider-proxy` as an MITM proxy
                 // for caching, so we need to accept the invalid (self-signed) cert.
                 .danger_accept_invalid_certs(true);
-        }
     }
 
     http_client_builder.build().map_err(|e| {
@@ -492,28 +710,62 @@ fn build_client() -> Result<Client, Error> {
     })
 }
 
+#[expect(clippy::result_large_err)]
+fn validate_event_stream_response(response: Response) -> Result<Response, ReqwestEventSourceError> {
+    match response.status() {
+        StatusCode::OK => {}
+        status => {
+            return Err(ReqwestEventSourceError::InvalidStatusCode(status, response));
+        }
+    }
+    let content_type = if let Some(content_type) = response.headers().get(&CONTENT_TYPE) {
+        content_type
+    } else {
+        return Err(ReqwestEventSourceError::InvalidContentType(
+            HeaderValue::from_static(""),
+            response,
+        ));
+    };
+    // Check if the media type (ignoring parameters like charset) is text/event-stream
+    if content_type
+        .to_str()
+        .map(|value| {
+            let media_type = value.split(';').next().unwrap_or("").trim();
+            media_type.eq_ignore_ascii_case("text/event-stream")
+        })
+        .unwrap_or(false)
+    {
+        Ok(response)
+    } else {
+        Err(ReqwestEventSourceError::InvalidContentType(
+            content_type.clone(),
+            response,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
         future::IntoFuture,
         net::SocketAddr,
         sync::{
-            atomic::{AtomicU8, Ordering},
             Arc,
+            atomic::{AtomicU8, Ordering},
         },
     };
 
     use axum::{
-        extract::Request,
-        response::{sse::Event, Sse},
-        routing::get,
         Router,
+        extract::Request,
+        response::{Sse, sse::Event},
+        routing::get,
     };
     use futures::StreamExt;
     use reqwest::Proxy;
     use tokio::task::{JoinHandle, JoinSet};
 
-    use crate::http::{LimitedClient, TensorZeroEventSource, CONCURRENCY_LIMIT};
+    use crate::http::{CONCURRENCY_LIMIT, LimitedClient, TensorZeroEventSource};
 
     async fn start_target_server() -> (SocketAddr, JoinHandle<Result<(), std::io::Error>>) {
         let app = Router::new()
@@ -558,7 +810,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_concurrent_requests_helper() {
         let (addr, _handle) = start_target_server().await;
-        let mut client = super::TensorzeroHttpClient::new().unwrap();
+        let mut client = super::TensorzeroHttpClient::new_testing().unwrap();
 
         // Send one non-stream request, and check that it didn't require using a new client
         let response = client
@@ -568,6 +820,18 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), 200);
 
+        // We should still have a request in-flight while we're holding the `Response`'
+        assert_eq!(
+            client.clients[0]
+                .get()
+                .unwrap()
+                .concurrent_requests
+                .load(Ordering::SeqCst),
+            1
+        );
+
+        // Drop the response, and verify that the counter is now zero (and that no other clients were used)
+        drop(response);
         for (i, client_cell) in client.clients.iter().enumerate() {
             if i == 0 {
                 assert_eq!(
@@ -641,7 +905,11 @@ mod tests {
         // (the maximum is achieved if all tasks happen to run concurrently)
         assert_eq!(num_tasks % (CONCURRENCY_LIMIT as usize), 0);
         let num_initialized_clients = client.clients.iter().filter(|c| c.get().is_some()).count();
-        assert!(num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize) ), "Too many initialized clients - found {num_initialized_clients} but expected at most {}", num_tasks / (CONCURRENCY_LIMIT as usize));
+        assert!(
+            num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize)),
+            "Too many initialized clients - found {num_initialized_clients} but expected at most {}",
+            num_tasks / (CONCURRENCY_LIMIT as usize)
+        );
         for client_cell in client.clients.iter() {
             if let Some(client) = client_cell.get() {
                 assert_eq!(client.concurrent_requests.load(Ordering::SeqCst), 0);
@@ -661,6 +929,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), 200);
+        drop(response);
         for (i, client_cell) in client.clients.iter().enumerate() {
             assert_eq!(
                 client_cell.get().is_some(),

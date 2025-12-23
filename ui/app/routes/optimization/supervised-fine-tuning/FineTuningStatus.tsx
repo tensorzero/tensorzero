@@ -26,7 +26,7 @@ import type { SFTFormValues } from "./types";
 import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { toFunctionUrl } from "~/utils/urls";
 
 export default function LLMFineTuningStatus({

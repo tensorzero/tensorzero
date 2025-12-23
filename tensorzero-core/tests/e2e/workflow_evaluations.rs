@@ -5,8 +5,8 @@ use std::{
 
 use serde_json::json;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    FeedbackParams, InferenceOutput, Role, WorkflowEvaluationRunParams,
+    ClientExt, ClientInferenceParams, FeedbackParams, InferenceOutput, Input, InputMessage,
+    InputMessageContent, Role, WorkflowEvaluationRunParams,
 };
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
@@ -15,7 +15,7 @@ use tensorzero_core::{
         select_workflow_evaluation_run_episode_clickhouse,
     },
     endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
-    inference::types::{Arguments, System, TextKind},
+    inference::types::{Arguments, System, Text},
 };
 use uuid::{Timestamp, Uuid};
 
@@ -45,6 +45,34 @@ async fn test_workflow_evaluation() {
         run_row.run_display_name,
         Some("test_display_name".to_string())
     );
+    // Assert DynamicEvaluationRun has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM DynamicEvaluationRun WHERE run_id_uint = toUInt128(toUUID('{run_id}')) FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let run_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !run_result["snapshot_hash"].is_null(),
+        "DynamicEvaluationRun should have snapshot_hash"
+    );
+
+    // Assert DynamicEvaluationRunByProjectName materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM DynamicEvaluationRunByProjectName WHERE run_id_uint = toUInt128(toUUID('{run_id}')) FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "DynamicEvaluationRunByProjectName should have snapshot_hash"
+    );
+
     for i in 0..2 {
         // Get the episode_id from the workflow_evaluation_run_episode endpoint
         let episode_id = client
@@ -65,14 +93,14 @@ async fn test_workflow_evaluation() {
         let inference_params = ClientInferenceParams {
             episode_id: Some(episode_id),
             function_name: Some("basic_test".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Please write me a sentence about Megumin making an explosion."
                             .into(),
                     })],
@@ -183,6 +211,34 @@ async fn test_workflow_evaluation() {
                 "Tag {k:?} missing or incorrect"
             );
         }
+        // Assert DynamicEvaluationRunEpisode has snapshot_hash
+        let query = format!(
+            "SELECT snapshot_hash FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let episode_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !episode_result["snapshot_hash"].is_null(),
+            "DynamicEvaluationRunEpisode should have snapshot_hash"
+        );
+
+        // Assert DynamicEvaluationRunEpisodeByRunId materialized view has snapshot_hash
+        let query = format!(
+            "SELECT snapshot_hash FROM DynamicEvaluationRunEpisodeByRunId WHERE run_id_uint = toUInt128(toUUID('{run_id}')) AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !view_result["snapshot_hash"].is_null(),
+            "DynamicEvaluationRunEpisodeByRunId should have snapshot_hash"
+        );
+
         // Send feedback for the dynamic evaluation run episode
         let feedback_params = FeedbackParams {
             episode_id: Some(episode_id),
@@ -211,9 +267,11 @@ async fn test_workflow_evaluation_nonexistent_function() {
     };
     let result = client.workflow_evaluation_run(params).await.unwrap_err();
     println!("Result: {result:#?}");
-    assert!(result
-        .to_string()
-        .contains("Unknown function: nonexistent_function"));
+    assert!(
+        result
+            .to_string()
+            .contains("Unknown function: nonexistent_function")
+    );
 }
 
 /// Test that the variant behavior is default if we use a different function name
@@ -253,14 +311,14 @@ async fn test_workflow_evaluation_other_function() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -326,14 +384,14 @@ async fn test_workflow_evaluation_variant_error() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -381,14 +439,14 @@ async fn test_workflow_evaluation_override_variant_tags() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -439,14 +497,14 @@ async fn test_bad_workflow_evaluation_run() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -455,9 +513,11 @@ async fn test_bad_workflow_evaluation_run() {
     };
     let response = client.inference(inference_params).await.unwrap_err();
     println!("Response: {response:#?}");
-    assert!(response
-        .to_string()
-        .contains("Workflow evaluation run not found"));
+    assert!(
+        response
+            .to_string()
+            .contains("Workflow evaluation run not found")
+    );
 }
 
 #[tokio::test]
@@ -471,7 +531,9 @@ async fn test_workflow_evaluation_tag_validation() {
         display_name: Some("test_display_name".to_string()),
     };
     let workflow_evaluation_info = client.workflow_evaluation_run(params).await.unwrap_err();
-    assert!(workflow_evaluation_info
-        .to_string()
-        .contains("Tag name cannot start with 'tensorzero::'"));
+    assert!(
+        workflow_evaluation_info
+            .to_string()
+            .contains("Tag name cannot start with 'tensorzero::'")
+    );
 }

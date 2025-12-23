@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_core::{
     inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text},
     providers::dummy::{
@@ -219,12 +219,14 @@ async fn e2e_test_streaming_flaky() {
             let content = content_block.get("text").unwrap().as_str().unwrap();
             assert_eq!(content, DUMMY_STREAMING_RESPONSE[i]);
         } else {
-            assert!(chunk_json
-                .get("content")
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .is_empty());
+            assert!(
+                chunk_json
+                    .get("content")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
             let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
             let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
             let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();

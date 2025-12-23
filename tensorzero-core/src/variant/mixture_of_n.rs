@@ -3,12 +3,12 @@ use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
 
-use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
+use futures::future::{join_all, try_join_all};
 use rand::Rng;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::time::{timeout, Duration};
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
@@ -18,12 +18,12 @@ use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
-    System,
-};
-use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
+};
+use crate::inference::types::{
+    ModelInferenceRequest, RequestMessage, Role, System,
+    batch::StartBatchModelInferenceWithMetadata,
 };
 use crate::model::ModelTable;
 use crate::tool::ToolCallChunk;
@@ -40,16 +40,14 @@ use crate::{
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 
 use super::{
-    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant, infer_model_request,
+    infer_model_request_stream, prepare_model_inference_request,
 };
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct MixtureOfNConfig {
     weight: Option<f64>,
-    timeout_s: f64,
     candidates: Vec<String>,
     fuser: FuserConfig,
 }
@@ -63,10 +61,6 @@ impl MixtureOfNConfig {
         self.weight = weight;
     }
 
-    pub fn timeout_s(&self) -> f64 {
-        self.timeout_s
-    }
-
     pub fn candidates(&self) -> &Vec<String> {
         &self.candidates
     }
@@ -74,35 +68,44 @@ impl MixtureOfNConfig {
     pub fn fuser(&self) -> &FuserConfig {
         &self.fuser
     }
+
+    /// Converts this initialized config back to its uninitialized form.
+    #[expect(deprecated)]
+    pub fn as_uninitialized(self) -> UninitializedMixtureOfNConfig {
+        UninitializedMixtureOfNConfig {
+            weight: self.weight,
+            timeout_s: None,
+            candidates: self.candidates,
+            fuser: UninitializedFuserConfig {
+                inner: self.fuser.inner.as_uninitialized(),
+            },
+        }
+    }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
     pub weight: Option<f64>,
-    #[serde(default = "default_timeout")]
-    pub timeout_s: f64,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
     pub candidates: Vec<String>,
     pub fuser: UninitializedFuserConfig,
 }
 
-fn default_timeout() -> f64 {
-    300.0
-}
-
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct FuserConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct UninitializedFuserConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
@@ -116,7 +119,6 @@ impl UninitializedMixtureOfNConfig {
     ) -> Result<MixtureOfNConfig, Error> {
         Ok(MixtureOfNConfig {
             weight: self.weight,
-            timeout_s: self.timeout_s,
             candidates: self.candidates,
             fuser: FuserConfig {
                 inner: self.fuser.inner.load(
@@ -130,6 +132,12 @@ impl UninitializedMixtureOfNConfig {
                 )?,
             },
         })
+    }
+
+    /// Returns the deprecated `timeout_s` value if set.
+    #[expect(deprecated)]
+    pub fn timeout_s(&self) -> Option<f64> {
+        self.timeout_s
     }
 }
 
@@ -228,6 +236,7 @@ impl Variant for MixtureOfNConfig {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
@@ -244,6 +253,7 @@ impl Variant for MixtureOfNConfig {
                 templates,
                 function_name,
                 candidate,
+                global_outbound_http_timeout,
             ))
             .await
             .map_err(|e| {
@@ -263,6 +273,7 @@ impl Variant for MixtureOfNConfig {
                 templates,
                 function_name,
                 variant_name,
+                global_outbound_http_timeout,
             )
             .await?;
         Ok(())
@@ -396,7 +407,7 @@ fn make_stream_from_non_stream(
                     id += 1;
                     Ok(chunk)
                 }
-                ContentBlockChatOutput::Unknown { .. } => {
+                ContentBlockChatOutput::Unknown(_) => {
                     Err(ErrorDetails::Inference {
                         message: "MixtureOfNConfig variant does not support unknown content blocks in streaming mode".to_string(),
                     }
@@ -408,7 +419,7 @@ fn make_stream_from_non_stream(
                 content: content_blocks,
                 created: chat.created,
                 usage,
-                latency: Duration::from_secs(0),
+                latency: tokio::time::Duration::from_secs(0),
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
             }))
@@ -418,7 +429,7 @@ fn make_stream_from_non_stream(
             thought: None,
             created: json.created,
             usage,
-            latency: Duration::from_secs(0),
+            latency: tokio::time::Duration::from_secs(0),
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
         })),
@@ -489,21 +500,18 @@ impl MixtureOfNConfig {
             let clients = clients.clone();
             inference_futures.push((
                 candidate_name.clone(),
-                timeout(
-                    Duration::from_secs_f64(self.timeout_s),
-                    unbounded_recursion_wrapper(async move {
-                        candidate_variant
-                            .infer(
-                                input,
-                                models,
-                                function,
-                                config,
-                                clients,
-                                InferenceParams::default(),
-                            )
-                            .await
-                    }),
-                ),
+                unbounded_recursion_wrapper(async move {
+                    candidate_variant
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            config,
+                            clients,
+                            InferenceParams::default(),
+                        )
+                        .await
+                }),
             ));
         }
 
@@ -517,19 +525,9 @@ impl MixtureOfNConfig {
 
         // Collect the successful results
         let mut successful_results = Vec::new();
-        for (candidate_name, result) in inference_results {
-            match result {
-                Ok(inner_result) => {
-                    if let Ok(res) = inner_result {
-                        successful_results.push(res);
-                    }
-                }
-                Err(_timeout_error) => {
-                    // Map the Tokio timeout error to our own TimeoutError type
-                    Error::new(ErrorDetails::InferenceTimeout {
-                        variant_name: candidate_name.clone(),
-                    });
-                }
+        for (_candidate_name, result) in inference_results {
+            if let Ok(res) = result {
+                successful_results.push(res);
             }
         }
 
@@ -905,7 +903,7 @@ impl FuserConfig {
             inference_config,
             stream,
             inference_params,
-            self.inner.json_mode().cloned(),
+            self.inner.json_mode().copied(),
             extra_body,
             extra_headers,
         )?;
@@ -923,7 +921,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas},
+        config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         experimentation::ExperimentationConfig,
@@ -941,14 +939,14 @@ mod tests {
         model::{ModelConfig, ModelProvider, ProviderConfig},
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
-        tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
+        tool::{InferenceResponseToolCall, ToolCallConfig, ToolChoice},
     };
 
     use super::*;
 
     #[tokio::test]
     async fn test_prepare_system_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Test without templates, string message
         let fuser_config = FuserConfig {
@@ -1129,7 +1127,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
@@ -1141,11 +1139,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: Some(50),
+                output_tokens: Some(100),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1161,6 +1159,7 @@ mod tests {
                 None,
                 InferenceParams::default(),
                 None,
+                None,
             )
             .await,
         );
@@ -1174,11 +1173,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
-                input_tokens: 15,
-                output_tokens: 25,
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
@@ -1193,6 +1192,7 @@ mod tests {
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1214,7 +1214,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message_json() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
@@ -1226,11 +1226,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1253,19 +1253,21 @@ mod tests {
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            output: vec!["{\"response\": \"Malformed JSON response\""
-                .to_string()
-                .into()], // missing closing brace
+            output: vec![
+                "{\"response\": \"Malformed JSON response\""
+                    .to_string()
+                    .into(),
+            ], // missing closing brace
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
-                input_tokens: 15,
-                output_tokens: 25,
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
@@ -1315,17 +1317,16 @@ mod tests {
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
         };
 
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
-            implicit_tool_call_config: ToolCallConfig::default(),
+            json_mode_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1340,11 +1341,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1360,6 +1361,7 @@ mod tests {
                 None,
                 InferenceParams::default(),
                 None,
+                None,
             )
             .await,
         );
@@ -1373,11 +1375,11 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {
-                input_tokens: 15,
-                output_tokens: 25,
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
@@ -1392,6 +1394,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1418,12 +1421,14 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            chrono::Duration::seconds(120),
         )
         .expect("Failed to create model table");
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
@@ -1441,7 +1446,9 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
+            relay: None,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1480,8 +1487,8 @@ mod tests {
         };
 
         let expected_usage = Usage {
-            input_tokens: 35,
-            output_tokens: 46,
+            input_tokens: Some(35),
+            output_tokens: Some(46),
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
@@ -1510,7 +1517,6 @@ mod tests {
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
         };
@@ -1536,12 +1542,14 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
             ModelTable::new(
                 map,
                 ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .expect("Failed to create model table")
         };
@@ -1590,7 +1598,6 @@ mod tests {
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
         };
@@ -1616,12 +1623,14 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
             ModelTable::new(
                 map,
                 ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .expect("Failed to create model table")
         };
@@ -1700,7 +1709,7 @@ mod tests {
                     ContentBlockChatOutput::Text(Text {
                         text: "First text message".to_string(),
                     }),
-                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                    ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                         id: "123".into(),
                         name: Some("first_tool".into()),
                         raw_name: "first_tool".into(),
@@ -1721,7 +1730,7 @@ mod tests {
                         summary: None,
                         provider_type: None,
                     }),
-                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                    ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                         id: "456".into(),
                         name: Some("second_tool".into()),
                         raw_name: "second_tool".into(),
@@ -1741,8 +1750,8 @@ mod tests {
                 finish_reason: Some(FinishReason::Length),
             }),
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             }),
         )
         .unwrap();
@@ -1789,13 +1798,141 @@ mod tests {
                 ],
                 created: 123456,
                 usage: Some(Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
                 }),
-                latency: Duration::from_secs(0),
+                latency: std::time::Duration::from_secs(0),
                 raw_response: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),
             })),]
+        );
+    }
+
+    #[test]
+    #[expect(deprecated)]
+    fn test_as_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedMixtureOfNConfig {
+            weight: Some(1.0),
+            timeout_s: Some(60.0), // deprecated, will be None in exported
+            candidates: vec!["variant1".to_string(), "variant2".to_string()],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    temperature: Some(0.3),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.weight, Some(1.0));
+        // timeout_s is deprecated and not stored in initialized config, so it's None in exported
+        assert_eq!(
+            exported.timeout_s, None,
+            "timeout_s should be None in exported config"
+        );
+        assert_eq!(
+            exported.candidates,
+            vec!["variant1".to_string(), "variant2".to_string()]
+        );
+        assert_eq!(exported.fuser.inner.model, "gpt-4".into());
+        assert_eq!(exported.fuser.inner.temperature, Some(0.3));
+    }
+
+    #[test]
+    #[expect(deprecated)]
+    fn test_as_uninitialized_preserves_nested_fuser() {
+        let uninitialized = UninitializedMixtureOfNConfig {
+            weight: None,
+            timeout_s: None,
+            candidates: vec!["v1".to_string()],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "fuser-model".into(),
+                    temperature: Some(0.1),
+                    max_tokens: Some(50),
+                    seed: Some(99),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.fuser.inner.model, "fuser-model".into());
+        assert_eq!(exported.fuser.inner.temperature, Some(0.1));
+        assert_eq!(exported.fuser.inner.max_tokens, Some(50));
+        assert_eq!(exported.fuser.inner.seed, Some(99));
+    }
+
+    #[test]
+    #[expect(deprecated)]
+    fn test_as_uninitialized_with_empty_candidates() {
+        let uninitialized = UninitializedMixtureOfNConfig {
+            weight: None,
+            timeout_s: None,
+            candidates: vec![],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert!(exported.candidates.is_empty());
+    }
+
+    #[test]
+    #[expect(deprecated)]
+    fn test_as_uninitialized_serialization_round_trip() {
+        let original = UninitializedMixtureOfNConfig {
+            weight: Some(0.7),
+            timeout_s: None, // deprecated field
+            candidates: vec!["a".to_string(), "b".to_string()],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-3.5-turbo".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = original
+            .clone()
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedMixtureOfNConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        assert_eq!(reloaded.weight(), Some(0.7));
+        assert_eq!(
+            reloaded.candidates(),
+            &vec!["a".to_string(), "b".to_string()]
         );
     }
 }

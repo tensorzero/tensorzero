@@ -70,6 +70,9 @@ export default function handleRequest(
           // errors encountered during initial shell rendering since they'll
           // reject and get logged in handleDocumentRequest.
           if (shellRendered) {
+            // Ok to log error directly since it's not a user-facing error that
+            // appears in the server logs.
+            // eslint-disable-next-line no-console
             console.error(error);
           }
         },

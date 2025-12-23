@@ -140,7 +140,8 @@ test("should create, display, delete, and persist API key states", async ({
   const deleteButton = firstKeyRowToDelete
     .locator("td")
     .last()
-    .locator("button");
+    .locator("button")
+    .last();
   await expect(deleteButton).not.toBeDisabled(); // Should be enabled before deletion
   await deleteButton.click();
 
@@ -179,7 +180,8 @@ test("should create, display, delete, and persist API key states", async ({
   const disabledDeleteButton = disabledKeyRow
     .locator("td")
     .last()
-    .locator("button");
+    .locator("button")
+    .last();
   await expect(disabledDeleteButton).toBeDisabled();
 
   // Verify second key is still active
@@ -192,7 +194,8 @@ test("should create, display, delete, and persist API key states", async ({
   const activeDeleteButton = activeKeyRow
     .locator("td")
     .last()
-    .locator("button");
+    .locator("button")
+    .last();
   await expect(activeDeleteButton).not.toBeDisabled();
 
   // 5. Refresh the page
@@ -218,7 +221,8 @@ test("should create, display, delete, and persist API key states", async ({
   const refreshedDisabledButton = refreshedDisabledRow
     .locator("td")
     .last()
-    .locator("button");
+    .locator("button")
+    .last();
   await expect(refreshedDisabledButton).toBeDisabled();
 
   // Second key should still be active
@@ -234,13 +238,101 @@ test("should create, display, delete, and persist API key states", async ({
   const refreshedActiveButton = refreshedActiveRow
     .locator("td")
     .last()
-    .locator("button");
+    .locator("button")
+    .last();
   await expect(refreshedActiveButton).not.toBeDisabled();
 });
 
-test("should paginate API keys with custom page size", async ({ page }) => {
-  // 1. Navigate to API Keys page with small pageSize
-  await page.goto("/api-keys?pageSize=2");
+test("should edit API key descriptions and persist changes", async ({
+  page,
+}) => {
+  await page.goto("/api-keys");
+  await page.waitForLoadState("networkidle");
+
+  await expect(
+    page.getByRole("heading", { name: "TensorZero API Keys" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Generate API Key" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Generate API Key" }),
+  ).toBeVisible();
+
+  const originalDescription = `Editable key ${uuidv7()}`;
+  const descriptionInput = page.locator("#description");
+  await descriptionInput.fill(originalDescription);
+
+  const generateButton = page.getByRole("button", { name: "Generate Key" });
+  await expect(generateButton).toBeVisible();
+  await expect(generateButton).toBeEnabled();
+  await page.waitForTimeout(300);
+  await generateButton.click();
+
+  const successDialog = page.getByRole("dialog", {
+    name: "API Key Generated",
+  });
+  await expect(successDialog).toBeVisible();
+  const generatedKeyText = await successDialog.locator("pre").textContent();
+  expect(generatedKeyText).toBeTruthy();
+
+  const publicIdMatch = generatedKeyText!.match(/sk-t0-(\w{12})/);
+  const publicIdPart = publicIdMatch ? publicIdMatch[1] : null;
+  expect(publicIdPart).toBeTruthy();
+
+  await successDialog.getByRole("button", { name: "Close" }).first().click();
+  await page.waitForLoadState("networkidle");
+
+  const apiKeyRow = page.locator("tbody tr").filter({
+    hasText: publicIdPart!,
+  });
+  await expect(apiKeyRow).toBeVisible();
+  await expect(apiKeyRow.locator("td").nth(1)).toContainText(
+    originalDescription,
+  );
+
+  const editButton = apiKeyRow.locator("button").first();
+  await expect(editButton).toBeVisible();
+  await editButton.click();
+
+  const editDialog = page.getByRole("dialog", {
+    name: "Edit API key description",
+  });
+  await expect(editDialog).toBeVisible();
+
+  const updatedDescription = `Updated description ${uuidv7()}`;
+  const editInput = editDialog.getByPlaceholder("Optional description");
+  await editInput.fill("");
+  await editInput.fill(updatedDescription);
+
+  const saveButton = editDialog.getByRole("button", { name: "Save" });
+  await expect(saveButton).toBeEnabled();
+  await saveButton.click();
+
+  await expect(editDialog).not.toBeVisible();
+  await page.waitForLoadState("networkidle");
+
+  const updatedRow = page.locator("tbody tr").filter({
+    hasText: publicIdPart!,
+  });
+  await expect(updatedRow.locator("td").nth(1)).toContainText(
+    updatedDescription,
+  );
+
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+
+  const refreshedRow = page.locator("tbody tr").filter({
+    hasText: publicIdPart!,
+  });
+  await expect(refreshedRow).toBeVisible();
+  await expect(refreshedRow.locator("td").nth(1)).toContainText(
+    updatedDescription,
+  );
+});
+
+test("should paginate API keys with custom limit", async ({ page }) => {
+  // 1. Navigate to API Keys page with small limit
+  await page.goto("/api-keys?limit=2");
   await page.waitForLoadState("networkidle");
 
   // Verify page loaded
@@ -248,7 +340,7 @@ test("should paginate API keys with custom page size", async ({ page }) => {
     page.getByRole("heading", { name: "TensorZero API Keys" }),
   ).toBeVisible();
 
-  // 2. Create 5 API keys (more than pageSize)
+  // 2. Create 5 API keys (more than limit)
   for (let i = 0; i < 5; i++) {
     await page.getByRole("button", { name: "Generate API Key" }).click();
     await expect(
@@ -272,7 +364,7 @@ test("should paginate API keys with custom page size", async ({ page }) => {
     await page.waitForLoadState("networkidle");
   }
 
-  // 3. Verify only 2 keys are visible on first page (pageSize=2)
+  // 3. Verify only 2 keys are visible on first page (limit=2)
   const tableRows = page.locator("tbody tr");
   await expect(tableRows).toHaveCount(2);
 
@@ -296,7 +388,7 @@ test("should paginate API keys with custom page size", async ({ page }) => {
 
   // 7. Verify URL changed (offset should be 2)
   expect(page.url()).toContain("offset=2");
-  expect(page.url()).toContain("pageSize=2");
+  expect(page.url()).toContain("limit=2");
 
   // 8. Verify still showing 2 rows on page 2
   await expect(tableRows).toHaveCount(2);

@@ -1,8 +1,13 @@
+//! DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+//! Use `chat_completion` with reasoning instead.
+
+use chrono::Duration;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
@@ -22,15 +27,18 @@ use crate::variant::chat_completion::{ChatCompletionConfig, UninitializedChatCom
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+/// DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+/// Use `chat_completion` with reasoning instead.
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ChainOfThoughtConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+/// DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+/// Use `chat_completion` with reasoning instead.
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChainOfThoughtConfig {
@@ -47,6 +55,15 @@ impl UninitializedChainOfThoughtConfig {
         Ok(ChainOfThoughtConfig {
             inner: self.inner.load(schemas, error_context)?,
         })
+    }
+}
+
+impl ChainOfThoughtConfig {
+    /// Converts this initialized config back to its uninitialized form.
+    pub fn as_uninitialized(self) -> UninitializedChainOfThoughtConfig {
+        UninitializedChainOfThoughtConfig {
+            inner: self.inner.as_uninitialized(),
+        }
     }
 }
 
@@ -143,6 +160,7 @@ impl Variant for ChainOfThoughtConfig {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &Duration,
     ) -> Result<(), Error> {
         if !matches!(function.as_ref(), FunctionConfig::Json(_)) {
             return Err(ErrorDetails::UnsupportedVariantForFunctionType {
@@ -161,6 +179,7 @@ impl Variant for ChainOfThoughtConfig {
                 templates,
                 function_name,
                 variant_name,
+                global_outbound_http_timeout,
             )
             .await
     }
@@ -406,5 +425,85 @@ mod tests {
                 provider_type: None,
             })
         );
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedChainOfThoughtConfig {
+            inner: UninitializedChatCompletionConfig {
+                model: "gpt-4".into(),
+                weight: Some(0.8),
+                temperature: Some(0.7),
+                max_tokens: Some(150),
+                seed: Some(42),
+                ..Default::default()
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.inner.model, "gpt-4".into());
+        assert_eq!(exported.inner.weight, Some(0.8));
+        assert_eq!(exported.inner.temperature, Some(0.7));
+        assert_eq!(exported.inner.max_tokens, Some(150));
+        assert_eq!(exported.inner.seed, Some(42));
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_none_values() {
+        let uninitialized = UninitializedChainOfThoughtConfig {
+            inner: UninitializedChatCompletionConfig {
+                model: "gpt-4".into(),
+                weight: None,
+                temperature: None,
+                stop_sequences: None,
+                ..Default::default()
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.inner.weight, None);
+        assert_eq!(exported.inner.temperature, None);
+        assert_eq!(exported.inner.stop_sequences, None);
+    }
+
+    #[test]
+    fn test_as_uninitialized_serialization_round_trip() {
+        let original = UninitializedChainOfThoughtConfig {
+            inner: UninitializedChatCompletionConfig {
+                model: "gpt-4".into(),
+                weight: Some(0.5),
+                temperature: Some(0.9),
+                ..Default::default()
+            },
+        };
+
+        let config = original
+            .clone()
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedChainOfThoughtConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        assert_eq!(reloaded.inner.model(), &Arc::from("gpt-4"));
+        assert_eq!(reloaded.inner.weight(), Some(0.5));
     }
 }

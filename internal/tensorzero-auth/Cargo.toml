@@ -1,23 +1,26 @@
 [package]
 name = "tensorzero-auth"
-edition = "2024"
+edition.workspace = true
 version.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
 hex = "0.4.3"
+
 secrecy.workspace = true
 serde.workspace = true
 sha2 = "0.10.9"
-# Unfortunately, this cannot be a workspace dependency, since renaming the 'sqlx' package breaks all of the macros
-# (which emit '::sqlx' tokens)
-sqlx = { version = "0.9.0-alpha.1", features = ["sqlx-toml", "postgres", "runtime-tokio", "chrono"] }
-thiserror = "2.0.17"
+sqlx = { workspace = true }
+thiserror = { workspace = true }
 rand = { workspace = true }
 chrono.workspace = true
 futures = { workspace = true }
-ts-rs.workspace = true
+axum = { workspace = true }
+moka = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }
+ts-rs = { workspace = true }
 
 [lints]
 workspace = true

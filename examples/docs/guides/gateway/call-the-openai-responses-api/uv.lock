@@ -411,7 +411,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tensorzero-examples-docs-gateway-call-the-openai-responses-api"
+name = "tensorzero-examples-docs-guides-gateway-call-the-openai-responses-api"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

@@ -4,7 +4,7 @@ ARG PROFILE="performance"
 
 # ========== builder ==========
 
-FROM lukemathwalker/cargo-chef:latest-rust-1.90-bookworm AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.90-trixie AS chef
 
 WORKDIR /src
 
@@ -24,11 +24,11 @@ RUN cargo chef cook --profile ${PROFILE} -p gateway ${CARGO_BUILD_FLAGS}
 COPY . /tensorzero
 
 RUN cargo build --profile ${PROFILE} -p gateway ${CARGO_BUILD_FLAGS}
-RUN cp -r /tensorzero/target/${PROFILE} /release
+RUN if [ "${PROFILE}" = "dev" ]; then cp -r /tensorzero/target/debug /release; else cp -r /tensorzero/target/${PROFILE} /release; fi
 
 # ========== base ==========
 
-FROM debian:bookworm-slim AS base
+FROM debian:trixie-slim AS base
 
 RUN apt-get update && apt-get install -y ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
 

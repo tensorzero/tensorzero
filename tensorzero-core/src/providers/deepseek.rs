@@ -9,40 +9,36 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+    convert_stream_error, inject_extra_request_data_and_send,
+    inject_extra_request_data_and_send_eventsource,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-};
-use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseArgs,
+    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
+    batch::StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::{
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-};
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
+use crate::providers::chat_completions::prepare_chat_completion_tools;
+use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 use crate::providers::openai::OpenAIMessagesConfig;
-use crate::tool::ToolCallChunk;
-
-use super::helpers::convert_stream_error;
-use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_tools, prepare_system_or_developer_message,
-    tensorzero_to_openai_messages, OpenAIAssistantRequestMessage, OpenAIContentBlock,
-    OpenAIFinishReason, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage,
-    OpenAITool, OpenAIToolChoice, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
-    SystemOrDeveloper,
+use crate::providers::openai::{
+    OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
+    OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage,
+    StreamOptions, SystemOrDeveloper, get_chat_url, handle_openai_error,
+    prepare_system_or_developer_message, tensorzero_to_openai_messages,
 };
+use crate::tool::ToolCallChunk;
 
 lazy_static! {
     static ref DEEPSEEK_DEFAULT_BASE_URL: Url = {
@@ -91,40 +87,40 @@ impl DeepSeekCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             DeepSeekCredentials::Static(api_key) => Ok(api_key),
             DeepSeekCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             DeepSeekCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            DeepSeekCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DeepSeekProvider {
     model_name: String,
     #[serde(skip)]
@@ -170,7 +166,10 @@ impl InferenceProvider for DeepSeekProvider {
         })?;
 
         let request_url = get_chat_url(&DEEPSEEK_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
@@ -242,6 +241,7 @@ impl InferenceProvider for DeepSeekProvider {
                 status,
                 &response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -271,7 +271,10 @@ impl InferenceProvider for DeepSeekProvider {
         })?;
 
         let request_url = get_chat_url(&DEEPSEEK_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
@@ -287,7 +290,7 @@ impl InferenceProvider for DeepSeekProvider {
         )
         .await?;
 
-        let stream = stream_deepseek(event_source, start_time).peekable();
+        let stream = stream_deepseek(event_source, start_time, &raw_request).peekable();
         Ok((stream, raw_request))
     }
 
@@ -359,9 +362,9 @@ struct DeepSeekRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    tool_choice: Option<ChatCompletionToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<DeepSeekResponseFormat>,
 }
@@ -372,12 +375,17 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -414,7 +422,9 @@ impl<'a> DeepSeekRequest<'a> {
         };
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
-            tracing::warn!("DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode.");
+            tracing::warn!(
+                "DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode."
+            );
         }
 
         let response_format = DeepSeekResponseFormat::new(request.json_mode);
@@ -434,7 +444,7 @@ impl<'a> DeepSeekRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, false)?;
 
         let mut deepseek_request = DeepSeekRequest {
             messages,
@@ -451,6 +461,7 @@ impl<'a> DeepSeekRequest<'a> {
             response_format,
             tools,
             tool_choice,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
         };
 
         apply_inference_params(&mut deepseek_request, &request.inference_params_v2);
@@ -462,13 +473,15 @@ impl<'a> DeepSeekRequest<'a> {
 fn stream_deepseek(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let mut tool_call_ids = Vec::new();
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -481,7 +494,7 @@ fn stream_deepseek(
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                 ),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
                             }));
@@ -495,8 +508,6 @@ fn stream_deepseek(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 
@@ -823,15 +834,18 @@ mod tests {
     use super::*;
     use std::borrow::Cow;
     use std::time::Duration;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
+    use crate::providers::chat_completions::{
+        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+        ChatCompletionToolChoice, ChatCompletionToolType,
+    };
     use crate::providers::openai::{
         OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
-        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+        OpenAIUsage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
@@ -872,16 +886,19 @@ mod tests {
         let tools = deepseek_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             deepseek_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
 
         let request_with_tools = ModelInferenceRequest {
@@ -923,16 +940,19 @@ mod tests {
         let tools = deepseek_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             deepseek_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
 
         let request_with_tools = ModelInferenceRequest {
@@ -996,8 +1016,8 @@ mod tests {
                 finish_reason: Some(OpenAIFinishReason::Stop),
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1054,8 +1074,8 @@ mod tests {
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1253,10 +1273,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_deepseek_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

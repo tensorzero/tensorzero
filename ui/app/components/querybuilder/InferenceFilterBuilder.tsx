@@ -1,7 +1,7 @@
 import { useState, memo } from "react";
 import { FormLabel } from "~/components/ui/form";
 import { useConfig } from "~/context/config";
-import type { InferenceFilter, MetricConfig } from "tensorzero-node";
+import type { InferenceFilter, MetricConfig } from "~/types/tensorzero";
 import { Button } from "~/components/ui/button";
 import { Plus } from "lucide-react";
 import {
@@ -29,16 +29,17 @@ import {
   TagFilterRow,
   FloatMetricFilterRow,
   BooleanMetricFilterRow,
+  DemonstrationFilterRow,
 } from "./FilterRows";
-import DeleteButton from "./DeleteButton";
 import AddButton from "./AddButton";
+import { DeleteButton } from "../ui/DeleteButton";
 
 // Constants
 const MAX_NESTING_DEPTH = 2;
 
 interface InferenceFilterBuilder {
   inferenceFilter?: InferenceFilter;
-  setInferenceFilter: (filter: InferenceFilter | undefined) => void;
+  setInferenceFilter: (filter?: InferenceFilter) => void;
 }
 
 export default function InferenceFilterBuilder({
@@ -50,6 +51,13 @@ export default function InferenceFilterBuilder({
     setInferenceFilter({
       type: "and",
       children: [createTagFilter()],
+    });
+  };
+
+  const handleAddDemonstration = () => {
+    setInferenceFilter({
+      type: "and",
+      children: [createDemonstrationFilter()],
     });
   };
 
@@ -80,9 +88,9 @@ export default function InferenceFilterBuilder({
 
   return (
     <>
-      <FormLabel>Filter</FormLabel>
+      <FormLabel>Advanced</FormLabel>
       {inferenceFilter ? (
-        <div className="py-1">
+        <div className="py-1 pl-4">
           <FilterNodeRenderer
             filter={inferenceFilter}
             onChange={setInferenceFilter}
@@ -92,6 +100,7 @@ export default function InferenceFilterBuilder({
       ) : (
         <div className="flex gap-2">
           <AddMetricPopover onSelect={handleAddMetric} />
+          <AddButton label="Demonstration" onClick={handleAddDemonstration} />
           <AddButton label="Tag" onClick={handleAddTag} />
           <AddButton label="And" onClick={handleAddAnd} />
           <AddButton label="Or" onClick={handleAddOr} />
@@ -104,7 +113,7 @@ export default function InferenceFilterBuilder({
 // Interfaces for recursive components
 interface FilterNodeProps {
   filter: InferenceFilter;
-  onChange: (newFilter: InferenceFilter | undefined) => void;
+  onChange: (newFilter?: InferenceFilter) => void;
   depth: number;
 }
 
@@ -161,6 +170,10 @@ const FilterGroup = memo(function FilterGroup({
     handleAddChild(createTagFilter());
   };
 
+  const handleAddDemonstration = () => {
+    handleAddChild(createDemonstrationFilter());
+  };
+
   const handleAddMetric = (metricName: string, metricConfig: MetricConfig) => {
     const newFilter = createMetricFilter(metricName, metricConfig);
     if (newFilter) {
@@ -191,10 +204,10 @@ const FilterGroup = memo(function FilterGroup({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-
         <DeleteButton
           onDelete={() => onChange(undefined)}
-          ariaLabel="Delete filter group"
+          label="Delete filter group"
+          icon="x"
         />
       </div>
       <div
@@ -220,6 +233,7 @@ const FilterGroup = memo(function FilterGroup({
         <div className="flex items-center gap-2">
           <AddMetricPopover onSelect={handleAddMetric} />
           <AddButton label="Tag" onClick={handleAddTag} />
+          <AddButton label="Demonstration" onClick={handleAddDemonstration} />
           {depth < MAX_NESTING_DEPTH && (
             <>
               <AddButton
@@ -263,7 +277,8 @@ function MissingMetricError({
       </span>
       <DeleteButton
         onDelete={onDelete}
-        ariaLabel={`Delete missing metric ${metricName}`}
+        label={`Delete missing metric ${metricName}`}
+        icon="x"
       />
     </div>
   );
@@ -323,6 +338,10 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
         onChange={onChange}
       />
     );
+  }
+
+  if (filter.type === "demonstration_feedback") {
+    return <DemonstrationFilterRow filter={filter} onChange={onChange} />;
   }
 
   // Unsupported filter type
@@ -424,4 +443,11 @@ function createMetricFilter(
     };
   }
   return null;
+}
+
+function createDemonstrationFilter(): InferenceFilter {
+  return {
+    type: "demonstration_feedback",
+    has_demonstration: true,
+  };
 }

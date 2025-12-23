@@ -1,5 +1,5 @@
 import { stringify } from "smol-toml";
-import type { OptimizerOutput } from "tensorzero-node";
+import type { OptimizerOutput } from "~/types/tensorzero";
 
 export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
   if (optimizerOutput.type !== "model") {
@@ -22,7 +22,7 @@ export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
       `Provider config not found for model ${modelName} when dumping optimizer output.`,
     );
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
   const { timeouts, ...restProviderConfig } = providerConfig;
   const fullyQualifiedProviderConfig = {
     models: {

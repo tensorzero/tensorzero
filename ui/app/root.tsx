@@ -1,4 +1,5 @@
 import {
+  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -13,12 +14,16 @@ import type { Route } from "./+types/root";
 import "./tailwind.css";
 import { getConfig } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
+import { GatewayRequiredState } from "./components/ui/GatewayRequiredState";
+import { isGatewayConnectionError } from "./utils/tensorzero/errors";
 import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { ReactQueryProvider } from "./providers/react-query";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
 import { TooltipProvider } from "~/components/ui/tooltip";
+import { GlobalToastProvider } from "~/providers/global-toast-provider";
+import { Toaster } from "~/components/ui/toaster";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -40,12 +45,21 @@ export const links: Route.LinksFunction = () => [
 
 export const middleware: Route.MiddlewareFunction[] = [readOnlyMiddleware];
 
+const GATEWAY_UNAVAILABLE_ERROR = "TensorZero Gateway Unavailable";
+
 export async function loader() {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
-  const config = await getConfig();
   const isReadOnly = isReadOnlyMode();
-  return { config, isReadOnly };
+  try {
+    const config = await getConfig();
+    return { config, isReadOnly };
+  } catch (e) {
+    if (isGatewayConnectionError(e)) {
+      throw data({ errorType: GATEWAY_UNAVAILABLE_ERROR }, { status: 503 });
+    }
+    throw e;
+  }
 }
 
 // Global Layout
@@ -69,28 +83,40 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App({ loaderData }: Route.ComponentProps) {
   const { config, isReadOnly } = loaderData;
+
   return (
     <ReactQueryProvider>
-      <ReadOnlyProvider value={isReadOnly}>
-        <ConfigProvider value={config}>
-          <SidebarProvider>
-            <TooltipProvider>
-              <div className="fixed inset-0 flex">
-                <AppSidebar />
-                <ContentLayout>
-                  <Outlet />
-                </ContentLayout>
-              </div>
-            </TooltipProvider>
-          </SidebarProvider>
-        </ConfigProvider>
-      </ReadOnlyProvider>
+      <GlobalToastProvider>
+        <ReadOnlyProvider value={isReadOnly}>
+          <ConfigProvider value={config}>
+            <SidebarProvider>
+              <TooltipProvider>
+                <div className="fixed inset-0 flex">
+                  <AppSidebar />
+                  <ContentLayout>
+                    <Outlet />
+                  </ContentLayout>
+                </div>
+              </TooltipProvider>
+            </SidebarProvider>
+          </ConfigProvider>
+        </ReadOnlyProvider>
+        <Toaster />
+      </GlobalToastProvider>
     </ReactQueryProvider>
   );
 }
 
 // Fallback Error Boundary
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  // Check if this is a gateway connection error
+  if (
+    isRouteErrorResponse(error) &&
+    error.data?.errorType === GATEWAY_UNAVAILABLE_ERROR
+  ) {
+    return <GatewayRequiredState />;
+  }
+
   let message = "Oops!";
   let details = "An unexpected error occurred.";
   let stack: string | undefined;

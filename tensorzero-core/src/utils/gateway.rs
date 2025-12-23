@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
-use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
+use axum::extract::{DefaultBodyLimit, FromRequest, Json, Request, rejection::JsonRejection};
 use moka::sync::Cache;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgPoolOptions;
@@ -17,18 +17,28 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
-use crate::config::{Config, ConfigFileGlob};
+use crate::config::{Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::UnwrittenConfig};
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::feedback::FeedbackQueries;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
+use autopilot_client::AutopilotClient;
 
 #[cfg(test)]
 use crate::db::clickhouse::ClickHouseClient;
+
+/// A wrapper function called when we drop a `GatewayHandle`.
+/// Note the double function type (an `fn` that takes a `Box<dyn FnOnce() + Send + '_>`).
+/// The 'Box<dyn FnOnce() + Send + '_>` represents the drop logic for a `GatewayHandle`,
+/// which needs to be inside a Tokio runtime.
+/// The outer `fn` is responsible for performing any needed setup
+/// (entering the Tokio runtime, releasing the Python GIL, etc)
+/// that needs to wrap the actual drop logic.
+pub type DropWrapper = fn(Box<dyn FnOnce() + Send + '_>);
 
 /// Represents an active gateway (either standalone or embedded)
 /// The contained `app_state` can be freely cloned and dropped.
@@ -45,59 +55,68 @@ use crate::db::clickhouse::ClickHouseClient;
 ///
 /// `GatewayHandle` should *not* be wrapped in an `Arc` (or given a `Clone` impl),
 /// so that it's easy for us to tell where it gets dropped.
-///
-// Using `#[non_exhaustive]` has no effect within the crate
-#[expect(clippy::manual_non_exhaustive)]
 pub struct GatewayHandle {
     pub app_state: AppStateData,
     pub cancel_token: CancellationToken,
+    drop_wrapper: Option<DropWrapper>,
     _private: (),
 }
 
 impl Drop for GatewayHandle {
     fn drop(&mut self) {
-        self.cancel_token.cancel();
-        let handle = self
-            .app_state
-            .clickhouse_connection_info
-            .batcher_join_handle();
-        // Drop our `ClickHouseConnectionInfo`, so that we stop holding on to the `Arc<BatchSender>`
-        // This allows the batch writer task to exit (once all of the remaining `ClickhouseConnectionInfo`s are dropped)
-        self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
-        if let Some(handle) = handle {
-            tracing::info!("Waiting for ClickHouse batch writer to finish");
-            // This could block forever if:
-            // * We spawn a long-lived `tokio::task` that holds on to a `ClickhouseConnectionInfo`,
-            //   and isn't using our `CancellationToken` to exit.
-            // * The `GatewayHandle` is dropped from a task that's running other futures
-            //   concurrently (e.g. a `try_join_all` where one of the futures somehow drops a `GatewayHandle`).
-            //   In this case, the `block_in_place` call would prevent those futures from ever making progress,
-            //   causing a `ClickhouseConnectionInfo` (and therefore the `Arc<BatchSender>`) to never be dropped.
-            //   This is very unlikely, as we only create a `GatewayHandle` in a few places (the main gateway
-            //   and embedded client), and drop it when we're exiting.
-            //
-            // We err on the side of hanging the server on shutdown, rather than potentially exiting while
-            // we still have batched writes in-flight (or about to be written via an active `ClickhouseConnectionInfo`).
-            tokio::task::block_in_place(|| {
-                if let Err(e) = Handle::current().block_on(handle) {
-                    tracing::error!("Error in batch writer: {e}");
-                }
-            });
-            tracing::info!("ClickHouse batch writer finished");
-        }
-        self.app_state.deferred_tasks.close();
-        // The 'wait' future will resolve immediately if the pool is empty.
-        // Closing the pool doesn't block more futures from being added, so checking
-        // if it's empty doesn't introduce any new race conditions (it's still possible
-        // for some existing tokio task to spawn something in this pool after 'wait' resolves).
-        // This check makes it easier to write tests (since we don't need to use a multi-threaded runtime),
-        // as well as reducing the number of log messages in the common case.
-        if !self.app_state.deferred_tasks.is_empty() {
-            tokio::task::block_in_place(|| {
-                tracing::info!("Waiting for deferred tasks to finish");
-                Handle::current().block_on(self.app_state.deferred_tasks.wait());
-                tracing::info!("Deferred tasks finished");
-            });
+        let drop_wrapper = self.drop_wrapper.take();
+        let mut drop_self = || {
+            self.cancel_token.cancel();
+            let handle = self
+                .app_state
+                .clickhouse_connection_info
+                .batcher_join_handle();
+            // Drop our `ClickHouseConnectionInfo`, so that we stop holding on to the `Arc<BatchSender>`
+            // This allows the batch writer task to exit (once all of the remaining `ClickhouseConnectionInfo`s are dropped)
+            self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+            if let Some(handle) = handle {
+                tracing::info!("Waiting for ClickHouse batch writer to finish");
+                // This could block forever if:
+                // * We spawn a long-lived `tokio::task` that holds on to a `ClickhouseConnectionInfo`,
+                //   and isn't using our `CancellationToken` to exit.
+                // * The `GatewayHandle` is dropped from a task that's running other futures
+                //   concurrently (e.g. a `try_join_all` where one of the futures somehow drops a `GatewayHandle`).
+                //   In this case, the `block_in_place` call would prevent those futures from ever making progress,
+                //   causing a `ClickhouseConnectionInfo` (and therefore the `Arc<BatchSender>`) to never be dropped.
+                //   This is very unlikely, as we only create a `GatewayHandle` in a few places (the main gateway
+                //   and embedded client), and drop it when we're exiting.
+                //
+                // We err on the side of hanging the server on shutdown, rather than potentially exiting while
+                // we still have batched writes in-flight (or about to be written via an active `ClickhouseConnectionInfo`).
+                tokio::task::block_in_place(|| {
+                    if let Err(e) = Handle::current().block_on(handle) {
+                        tracing::error!("Error in batch writer: {e}");
+                    }
+                });
+                tracing::info!("ClickHouse batch writer finished");
+            }
+            self.app_state.deferred_tasks.close();
+            // The 'wait' future will resolve immediately if the pool is empty.
+            // Closing the pool doesn't block more futures from being added, so checking
+            // if it's empty doesn't introduce any new race conditions (it's still possible
+            // for some existing tokio task to spawn something in this pool after 'wait' resolves).
+            // This check makes it easier to write tests (since we don't need to use a multi-threaded runtime),
+            // as well as reducing the number of log messages in the common case.
+            if !self.app_state.deferred_tasks.is_empty() {
+                tokio::task::block_in_place(|| {
+                    tracing::info!("Waiting for deferred tasks to finish");
+                    Handle::current().block_on(self.app_state.deferred_tasks.wait());
+                    tracing::info!("Deferred tasks finished");
+                });
+            }
+        };
+        // If we have a `DropWrapper` configured, call it with the `drop_self` function,
+        // so that the `DropWrapper` can perform any needed setup (entering the Tokio runtime, releasing the Python GIL, etc)
+        // that needs to wrap the actual drop logic.
+        if let Some(drop_wrapper) = drop_wrapper {
+            drop_wrapper(Box::new(drop_self));
+        } else {
+            drop_self();
         }
     }
 }
@@ -116,6 +135,10 @@ pub struct AppStateData {
     pub deferred_tasks: TaskTracker,
     /// Optional cache for TensorZero API key authentication
     pub auth_cache: Option<Cache<String, AuthResult>>,
+    /// Optional cache for historical config snapshots loaded from ClickHouse
+    pub config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
+    /// Optional Autopilot API client for proxying requests to the Autopilot API
+    pub autopilot_client: Option<Arc<AutopilotClient>>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -150,25 +173,32 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
 }
 
 impl GatewayHandle {
-    pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
+    pub async fn new(config: UnwrittenConfig) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
-        Self::new_with_databases(config, clickhouse_url, postgres_url).await
+        Box::pin(Self::new_with_databases(
+            config,
+            clickhouse_url,
+            postgres_url,
+        ))
+        .await
     }
 
     async fn new_with_databases(
-        config: Arc<Config>,
+        config: UnwrittenConfig,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
+        let config = Arc::new(config.into_config(&clickhouse_connection_info).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
-        let http_client = TensorzeroHttpClient::new()?;
+        let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,
+            None,
         )
         .await
     }
@@ -177,7 +207,7 @@ impl GatewayHandle {
     /// Panics if a `TensorzeroHttpClient` cannot be constructed
     #[cfg(test)]
     pub fn new_unit_test_data(config: Arc<Config>, test_options: GatewayHandleTestOptions) -> Self {
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info =
             ClickHouseConnectionInfo::new_mock(test_options.clickhouse_client);
         let postgres_connection_info =
@@ -192,34 +222,12 @@ impl GatewayHandle {
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
+                config_snapshot_cache: None,
+                autopilot_client: None,
                 _private: (),
             },
             cancel_token,
-            _private: (),
-        }
-    }
-
-    #[cfg(feature = "pyo3")]
-    pub fn new_dummy(http_client: TensorzeroHttpClient) -> Self {
-        let config = Arc::new(Config::new_dummy_for_pyo3());
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
-        #[cfg(test)]
-        let postgres_connection_info = PostgresConnectionInfo::new_mock(true);
-        #[cfg(not(test))]
-        let postgres_connection_info = PostgresConnectionInfo::new_disabled();
-        let cancel_token = CancellationToken::new();
-        let auth_cache = create_auth_cache_from_config(&config);
-        Self {
-            app_state: AppStateData {
-                config,
-                http_client,
-                clickhouse_connection_info,
-                postgres_connection_info,
-                deferred_tasks: TaskTracker::new(),
-                auth_cache,
-                _private: (),
-            },
-            cancel_token,
+            drop_wrapper: None,
             _private: (),
         }
     }
@@ -229,13 +237,25 @@ impl GatewayHandle {
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
         http_client: TensorzeroHttpClient,
+        drop_wrapper: Option<DropWrapper>,
     ) -> Result<Self, Error> {
+        // Validate that rate limiting is not configured when Postgres is disabled
+        if config.rate_limiting.enabled()
+            && !config.rate_limiting.rules().is_empty()
+            && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the `TENSORZERO_POSTGRES_URL` environment variable and ensure `postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
+            }));
+        }
+
         let cancel_token = CancellationToken::new();
         setup_howdy(
             &config,
             clickhouse_connection_info.clone(),
             cancel_token.clone(),
         );
+
         for (function_name, function_config) in &config.functions {
             function_config
                 .experimentation()
@@ -249,6 +269,17 @@ impl GatewayHandle {
                 .await?;
         }
         let auth_cache = create_auth_cache_from_config(&config);
+
+        // Create config snapshot cache with TTL of 5 minutes and max 100 entries
+        let config_snapshot_cache = Some(
+            Cache::builder()
+                .time_to_live(Duration::from_secs(300))
+                .max_capacity(10)
+                .build(),
+        );
+
+        let autopilot_client = setup_autopilot_client()?;
+
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -257,29 +288,64 @@ impl GatewayHandle {
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
+                config_snapshot_cache,
+                autopilot_client,
                 _private: (),
             },
             cancel_token,
+            drop_wrapper,
             _private: (),
         })
+    }
+}
+
+impl AppStateData {
+    /// Create an AppStateData for use with a historical config snapshot.
+    /// This version does not include auth_cache, config_snapshot_cache, or autopilot_client
+    /// since those are specific to the live gateway.
+    pub fn new_for_snapshot(
+        config: Arc<Config>,
+        http_client: TensorzeroHttpClient,
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        postgres_connection_info: PostgresConnectionInfo,
+        deferred_tasks: TaskTracker,
+    ) -> Self {
+        Self {
+            config,
+            http_client,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            deferred_tasks,
+            auth_cache: None,
+            config_snapshot_cache: None,
+            autopilot_client: None,
+            _private: (),
+        }
     }
 }
 
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
+    setup_clickhouse(
+        &Box::pin(Config::new_empty()).await?,
+        Some(clickhouse_url),
+        true,
+    )
+    .await
 }
 
 pub async fn setup_clickhouse(
-    config: &Config,
+    config: &UnwrittenConfig,
     clickhouse_url: Option<String>,
     embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
     let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
         // Observability disabled by config
         (Some(false), _) => {
-            tracing::info!("Disabling observability: `gateway.observability.enabled` is set to false in config.");
+            tracing::info!(
+                "Disabling observability: `gateway.observability.enabled` is set to false in config."
+            );
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability enabled but no ClickHouse URL
@@ -287,7 +353,7 @@ pub async fn setup_clickhouse(
             return Err(ErrorDetails::AppState {
                 message: "Missing environment variable TENSORZERO_CLICKHOUSE_URL".to_string(),
             }
-            .into())
+            .into());
         }
         // Observability enabled and ClickHouse URL provided
         (Some(true), Some(clickhouse_url)) => {
@@ -304,7 +370,9 @@ pub async fn setup_clickhouse(
             } else {
                 "`TENSORZERO_CLICKHOUSE_URL` is not set."
             };
-            tracing::warn!("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and {msg_suffix}");
+            tracing::warn!(
+                "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and {msg_suffix}"
+            );
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability default and ClickHouse URL provided
@@ -329,45 +397,100 @@ pub async fn setup_clickhouse(
     Ok(clickhouse_connection_info)
 }
 
+async fn create_postgres_connection(
+    postgres_url: &str,
+    connection_pool_size: u32,
+) -> Result<PostgresConnectionInfo, Error> {
+    let pool = PgPoolOptions::new()
+        .max_connections(connection_pool_size)
+        .connect(postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+
+    let connection_info = PostgresConnectionInfo::new_with_pool(pool);
+    connection_info.check_migrations().await?;
+    Ok(connection_info)
+}
+
 pub async fn setup_postgres(
     config: &Config,
     postgres_url: Option<String>,
 ) -> Result<PostgresConnectionInfo, Error> {
-    let Some(postgres_url) = postgres_url else {
-        // Check if rate limiting is configured but Postgres is not available
-        if config.rate_limiting.enabled() && !config.rate_limiting.rules().is_empty() {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "Rate limiting is configured but PostgreSQL is not available. Rate limiting requires PostgreSQL to be configured. Please set the TENSORZERO_POSTGRES_URL environment variable or disable rate limiting.".to_string(),
-            }));
+    let postgres_connection_info = match (config.postgres.enabled, postgres_url.as_deref()) {
+        // Postgres disabled by config
+        (Some(false), _) => {
+            tracing::info!("Disabling Postgres: `postgres.enabled` is set to false in config.");
+            PostgresConnectionInfo::Disabled
         }
-        return Ok(PostgresConnectionInfo::Disabled);
+        // Postgres enabled but no URL
+        (Some(true), None) => {
+            return Err(ErrorDetails::AppState {
+                message: "Missing environment variable `TENSORZERO_POSTGRES_URL`.".to_string(),
+            }
+            .into());
+        }
+        // Postgres enabled and URL provided
+        (Some(true), Some(postgres_url)) => {
+            create_postgres_connection(postgres_url, config.postgres.connection_pool_size).await?
+        }
+        // Postgres default and no URL
+        (None, None) => {
+            tracing::debug!(
+                "Disabling Postgres: `postgres.enabled` is not explicitly specified in config and `TENSORZERO_POSTGRES_URL` is not set."
+            );
+            PostgresConnectionInfo::Disabled
+        }
+        // Postgres default and URL provided
+        (None, Some(postgres_url)) => {
+            create_postgres_connection(postgres_url, config.postgres.connection_pool_size).await?
+        }
     };
 
-    // TODO - decide how we should handle apply `connection_pool_size` to two pools
-    // Hopefully, sqlx does a stable release before we actually start using `alpha_pool`
-    let pool = PgPoolOptions::new()
-        .max_connections(config.postgres.connection_pool_size)
-        .connect(&postgres_url)
-        .await
-        .map_err(|err| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: err.to_string(),
-            })
-        })?;
+    Ok(postgres_connection_info)
+}
 
-    let alpha_pool = sqlx_alpha::postgres::PgPoolOptions::new()
-        .max_connections(config.postgres.connection_pool_size)
-        .connect(&postgres_url)
-        .await
-        .map_err(|err| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: err.to_string(),
-            })
-        })?;
+/// Sets up the Autopilot API client from the environment.
+/// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
+/// `Ok(None)` if not set, or an error if client construction fails.
+///
+/// Environment variables:
+/// - `TENSORZERO_AUTOPILOT_API_KEY`: Required to enable the client
+/// - `TENSORZERO_AUTOPILOT_BASE_URL`: Optional custom base URL (for testing)
+fn setup_autopilot_client() -> Result<Option<Arc<AutopilotClient>>, Error> {
+    match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
+        Ok(api_key) => {
+            let mut builder = AutopilotClient::builder().api_key(api_key);
 
-    let connection_info = PostgresConnectionInfo::new_with_pool(pool, Some(alpha_pool));
-    connection_info.check_migrations().await?;
-    Ok(connection_info)
+            // Allow custom base URL for testing
+            if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
+                let url = base_url.parse().map_err(|e| {
+                    Error::new(ErrorDetails::AppState {
+                        message: format!("Invalid TENSORZERO_AUTOPILOT_BASE_URL: {e}"),
+                    })
+                })?;
+                builder = builder.base_url(url);
+                tracing::info!("Autopilot client using custom base URL: {}", base_url);
+            }
+
+            let client = builder.build().map_err(Error::from)?;
+            // TODO: Handshake with API to validate credentials
+            tracing::info!("Autopilot client initialized");
+            Ok(Some(Arc::new(client)))
+        }
+        Err(std::env::VarError::NotPresent) => {
+            tracing::debug!(
+                "Autopilot client not configured: TENSORZERO_AUTOPILOT_API_KEY not set"
+            );
+            Ok(None)
+        }
+        Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(ErrorDetails::AppState {
+            message: "TENSORZERO_AUTOPILOT_API_KEY contains invalid UTF-8".to_string(),
+        })),
+    }
 }
 
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
@@ -414,6 +537,12 @@ where
 }
 
 // We hold on to these fields so that their Drop impls run when `ShutdownHandle` is dropped
+// IMPORTANT: The 'sender' field must come first in the struct definition, so that Rust will
+// drop it first: https://doc.rust-lang.org/reference/destructors.html#r-destructors.operation
+// This triggers graceful shutdown of the Axum server first, and then waits for the server to
+// exit in the `Drop` impl for `GatewayHandle`.
+// Declaring these fields in the opposite order will cause a deadlock, since we'll wait on
+// an Axum server to shutdown without triggering graceful shutdown first.
 pub struct ShutdownHandle {
     #[expect(dead_code)]
     sender: Sender<()>,
@@ -444,21 +573,27 @@ pub async fn start_openai_compatible_gateway(
             message: format!("Failed to get local address: {e}"),
         })
     })?;
-
-    let config = if let Some(config_file) = config_file {
-        Arc::new(Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?)
+    let config_load_info = if let Some(config_file) = config_file {
+        Box::pin(Config::load_and_verify_from_path(&ConfigFileGlob::new(
+            config_file,
+        )?))
+        .await?
     } else {
-        Arc::new(Config::new_empty().await?)
+        Box::pin(Config::new_empty()).await?
     };
-    let gateway_handle =
-        GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;
+    let gateway_handle = Box::pin(GatewayHandle::new_with_databases(
+        config_load_info,
+        clickhouse_url,
+        postgres_url,
+    ))
+    .await?;
 
     let router = Router::new()
         .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
         .layer(axum::middleware::from_fn(
-            crate::observability::warn_early_drop::warn_on_early_connection_drop,
+            crate::observability::request_logging::request_logging_middleware,
         ))
         .with_state(gateway_handle.app_state.clone());
 
@@ -467,9 +602,10 @@ pub async fn start_openai_compatible_gateway(
         let _ = recv.await;
     };
 
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(
+    // Note - this will cause `gateway_handle` to block on the Axum server shutting down
+    // when `gateway_handle` is dropped.
+    // See the comment on `ShutdownHandle` for more details.
+    gateway_handle.app_state.deferred_tasks.spawn(
         axum::serve(listener, router)
             .with_graceful_shutdown(shutdown_fut)
             .into_future(),
@@ -491,14 +627,14 @@ pub struct GatewayHandleTestOptions {
 
 #[cfg(test)]
 mod tests {
-    use tracing_test::traced_test;
-
     use super::*;
-    use crate::config::{gateway::GatewayConfig, ObservabilityConfig};
-
+    use crate::config::{
+        ObservabilityConfig, PostgresConfig, gateway::GatewayConfig, snapshot::ConfigSnapshot,
+        unwritten::UnwrittenConfig,
+    };
     #[tokio::test]
-    #[traced_test]
     async fn test_setup_clickhouse() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Disabled observability
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
@@ -517,14 +653,17 @@ mod tests {
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
+            global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
 
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
+        };
+        let config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&config, None, false).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -545,11 +684,14 @@ mod tests {
             unstable_error_json: false,
             ..Default::default()
         };
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
-        let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
+        };
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
+            .await
+            .unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -557,7 +699,9 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."));
+        assert!(logs_contain(
+            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."
+        ));
 
         // We do not test the case where a ClickHouse URL is provided but observability is default,
         // as this would require a working ClickHouse and we don't have one in unit tests.
@@ -580,17 +724,23 @@ mod tests {
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
+            global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
 
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
+        };
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let err = setup_clickhouse(config, None, false).await.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"));
+        let err = setup_clickhouse(&unwritten_config, None, false)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL")
+        );
 
         // Bad URL
         let gateway_config = GatewayConfig {
@@ -610,20 +760,23 @@ mod tests {
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
+            global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
-        setup_clickhouse(config, Some("bad_url".to_string()), false)
+        };
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        setup_clickhouse(&unwritten_config, Some("bad_url".to_string()), false)
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_unhealthy_clickhouse() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Sensible URL that doesn't point to ClickHouse
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
@@ -642,13 +795,16 @@ mod tests {
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
+            global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
         let config = Config {
             gateway: gateway_config,
             ..Default::default()
         };
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
         setup_clickhouse(
-            &config,
+            &unwritten_config,
             Some("https://tensorzero.invalid:8123".to_string()),
             false,
         )
@@ -659,5 +815,128 @@ mod tests {
         ));
         // We do not test the case where a ClickHouse URL is provided and observability is on,
         // as this would require a working ClickHouse and we don't have one in unit tests.
+    }
+
+    #[tokio::test]
+    async fn test_setup_postgres_disabled() {
+        let logs_contain = crate::utils::testing::capture_logs();
+
+        // Postgres disabled by config
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(false),
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        let postgres_connection_info = setup_postgres(config, None).await.unwrap();
+        assert!(matches!(
+            postgres_connection_info,
+            PostgresConnectionInfo::Disabled
+        ));
+        assert!(logs_contain(
+            "Disabling Postgres: `postgres.enabled` is set to false in config."
+        ));
+
+        // Postgres disabled even with URL provided
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(false),
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        let postgres_connection_info = setup_postgres(
+            config,
+            Some("postgresql://user:pass@localhost:5432/db".to_string()),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            postgres_connection_info,
+            PostgresConnectionInfo::Disabled
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_setup_postgres_default_no_url() {
+        // Default postgres config (enabled: None) and no URL
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: None,
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        let postgres_connection_info = setup_postgres(config, None).await.unwrap();
+        assert!(matches!(
+            postgres_connection_info,
+            PostgresConnectionInfo::Disabled
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_setup_postgres_enabled_no_url() {
+        // Postgres enabled but URL is missing
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(true),
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        let err = setup_postgres(config, None).await.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Missing environment variable `TENSORZERO_POSTGRES_URL`.")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_setup_postgres_bad_url() {
+        // Postgres enabled with bad URL
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(true),
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        setup_postgres(config, Some("bad_url".to_string()))
+            .await
+            .expect_err("Postgres setup should fail given a bad URL");
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiting_requires_postgres() {
+        // Rate limiting enabled=false should not fail validation (no rules configured)
+        let config_no_rules = Arc::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(false),
+                connection_pool_size: 20,
+            },
+            rate_limiting: Default::default(),
+            ..Default::default()
+        });
+
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+
+        // This should succeed because rate limiting has no rules
+        let _gateway = GatewayHandle::new_with_database_and_http_client(
+            config_no_rules,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+            None,
+        )
+        .await
+        .expect("Gateway setup should succeed when rate limiting has no rules");
     }
 }

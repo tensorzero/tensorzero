@@ -1,0 +1,82 @@
+name: Cancel merge queue workflows on job failure
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *" # Runs every 5 minutes
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check-and-cancel:
+    name: Check merge queue workflows and cancel on failure
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - name: Check running workflows on merge queue branches
+        run: |
+          echo "Checking for running workflows on merge queue branches..."
+
+          # Get all in-progress workflow runs for general.yml
+          workflow_runs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/general.yml/runs?status=in_progress&per_page=100")
+
+          # Filter for merge queue branches
+          merge_queue_runs=$(echo "$workflow_runs" | jq -r '.workflow_runs[] | select(.head_branch // "" | test("^gh-readonly-queue/main/pr-")) | "\(.id) \(.head_branch) \(.name)"')
+
+          if [ -z "$merge_queue_runs" ]; then
+            echo "No running workflows found on merge queue branches"
+            exit 0
+          fi
+
+          echo "Found running workflows on merge queue branches:"
+          echo "$merge_queue_runs"
+          echo ""
+
+          # Check each workflow for failed jobs
+          while IFS= read -r line; do
+            if [ -z "$line" ]; then
+              continue
+            fi
+
+            run_id=$(echo "$line" | awk '{print $1}')
+            branch=$(echo "$line" | awk '{print $2}')
+            workflow_name=$(echo "$line" | cut -d' ' -f3-)
+
+            echo "Checking workflow run $run_id ($workflow_name) on branch $branch..."
+
+            # Get jobs for this workflow run
+            jobs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/jobs")
+
+            # Check if any job has failed
+            failed_jobs=$(echo "$jobs" | jq -r '.jobs[] | select(.conclusion == "failure") | "\(.name) (status: \(.status), conclusion: \(.conclusion))"')
+
+            if [ -n "$failed_jobs" ]; then
+              echo "Found failed jobs in workflow run $run_id:"
+              echo "$failed_jobs"
+              echo ""
+              echo "Cancelling workflow run $run_id on branch $branch..."
+
+              cancel_response=$(curl -s -w "\n%{http_code}" -X POST \
+                -H "Authorization: Bearer ${{ github.token }}" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/cancel")
+
+              http_code=$(echo "$cancel_response" | tail -n1)
+              response_body=$(echo "$cancel_response" | sed '$d')
+
+              if [ "$http_code" = "202" ]; then
+                echo "Successfully cancelled workflow run $run_id"
+              else
+                echo "Failed to cancel workflow run $run_id (HTTP $http_code)"
+                echo "Response: $response_body"
+              fi
+              echo ""
+            else
+              echo "No failed jobs found in workflow run $run_id"
+            fi
+          done <<< "$merge_queue_runs"
+
+          echo "Finished checking all merge queue workflows"

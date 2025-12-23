@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import InferenceFilterBuilder from "./InferenceFilterBuilder";
 import { ConfigProvider } from "~/context/config";
-import type { Config } from "tensorzero-node";
-import type { InferenceFilter } from "tensorzero-node";
+import type { InferenceFilter, UiConfig } from "~/types/tensorzero";
 import { FormProvider, useForm } from "react-hook-form";
 import { useState } from "react";
+import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
 
 const meta = {
   title: "QueryBuilder/InferenceFilterBuilder",
@@ -12,7 +12,7 @@ const meta = {
   decorators: [
     (Story) => {
       return (
-        <div className="border-border w-2xl rounded border p-4">
+        <div className="w-2xl">
           <Story />
         </div>
       );
@@ -58,73 +58,14 @@ const FILLED_INFERENCE_FILTER: InferenceFilter = {
       value: "mobile",
       comparison_operator: "!=",
     },
+    {
+      type: "demonstration_feedback",
+      has_demonstration: true,
+    },
   ],
 };
 
-const mockConfig: Config = {
-  gateway: {
-    disable_pseudonymous_usage_analytics: false,
-    fetch_and_encode_input_files_before_inference: false,
-    auth: {
-      enabled: false,
-      cache: null,
-    },
-    observability: {
-      enabled: true,
-      async_writes: false,
-      batch_writes: {
-        enabled: false,
-        __force_allow_embedded_batch_writes: false,
-        flush_interval_ms: 100n,
-        max_rows: 1000,
-      },
-      disable_automatic_migrations: false,
-    },
-    export: {
-      otlp: {
-        traces: {
-          enabled: false,
-          format: "opentelemetry",
-          extra_headers: {},
-        },
-      },
-    },
-    debug: false,
-    template_filesystem_access: {
-      enabled: false,
-      base_path: null,
-    },
-    bind_address: "localhost:8080",
-    base_path: "/",
-    unstable_error_json: false,
-    unstable_disable_feedback_target_validation: false,
-  },
-  object_store_info: { kind: { type: "disabled" } },
-  provider_types: {
-    anthropic: { defaults: { api_key_location: "" } },
-    azure: { defaults: { api_key_location: "" } },
-    deepseek: { defaults: { api_key_location: "" } },
-    fireworks: { defaults: { api_key_location: "" } },
-    gcp_vertex_gemini: { batch: null, defaults: { credential_location: "" } },
-    gcp_vertex_anthropic: {
-      batch: null,
-      defaults: { credential_location: "" },
-    },
-    google_ai_studio_gemini: { defaults: { api_key_location: "" } },
-    groq: { defaults: { api_key_location: "" } },
-    hyperbolic: { defaults: { api_key_location: "" } },
-    mistral: { defaults: { api_key_location: "" } },
-    openai: { defaults: { api_key_location: "" } },
-    openrouter: { defaults: { api_key_location: "" } },
-    sglang: { defaults: { api_key_location: "" } },
-    tgi: { defaults: { api_key_location: "" } },
-    together: { defaults: { api_key_location: "" } },
-    vllm: { defaults: { api_key_location: "" } },
-    xai: { defaults: { api_key_location: "" } },
-  },
-  optimizers: {},
-  models: { table: {} },
-  embedding_models: { table: {} },
+const mockConfig: UiConfig = {
   functions: {},
   metrics: {
     sentiment_score: {
@@ -161,13 +102,8 @@ const mockConfig: Config = {
   },
   tools: {},
   evaluations: {},
-  postgres: {
-    connection_pool_size: 10,
-  },
-  rate_limiting: {
-    rules: [],
-    enabled: true,
-  },
+  model_names: [],
+  config_hash: "test-config-hash",
 };
 
 export const Default: Story = {
@@ -184,22 +120,15 @@ export const Default: Story = {
     return (
       <ConfigProvider value={mockConfig}>
         <FormProvider {...form}>
-          <InferenceFilterBuilder
-            inferenceFilter={inferenceFilter}
-            setInferenceFilter={setInferenceFilter}
-          />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: Inference Filters
-              </h3>
-            </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter
-                ? JSON.stringify(inferenceFilter, null, 2)
-                : "undefined"}
-            </pre>
-          </div>
+          <StoryDebugWrapper
+            debugLabel="inferenceFilter"
+            debugData={inferenceFilter}
+          >
+            <InferenceFilterBuilder
+              inferenceFilter={inferenceFilter}
+              setInferenceFilter={setInferenceFilter}
+            />
+          </StoryDebugWrapper>
         </FormProvider>
       </ConfigProvider>
     );
@@ -220,22 +149,15 @@ export const Filled: Story = {
     return (
       <ConfigProvider value={mockConfig}>
         <FormProvider {...form}>
-          <InferenceFilterBuilder
-            inferenceFilter={inferenceFilter}
-            setInferenceFilter={setInferenceFilter}
-          />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: Inference Filters
-              </h3>
-            </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter
-                ? JSON.stringify(inferenceFilter, null, 2)
-                : "undefined"}
-            </pre>
-          </div>
+          <StoryDebugWrapper
+            debugLabel="inferenceFilter"
+            debugData={inferenceFilter}
+          >
+            <InferenceFilterBuilder
+              inferenceFilter={inferenceFilter}
+              setInferenceFilter={setInferenceFilter}
+            />
+          </StoryDebugWrapper>
         </FormProvider>
       </ConfigProvider>
     );
@@ -253,7 +175,7 @@ export const EmptyMetrics: Story = {
     >(undefined);
     const form = useForm();
 
-    const emptyMetricsConfig: Config = {
+    const emptyMetricsConfig: UiConfig = {
       ...mockConfig,
       metrics: {},
     };
@@ -261,22 +183,15 @@ export const EmptyMetrics: Story = {
     return (
       <ConfigProvider value={emptyMetricsConfig}>
         <FormProvider {...form}>
-          <InferenceFilterBuilder
-            inferenceFilter={inferenceFilter}
-            setInferenceFilter={setInferenceFilter}
-          />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: Inference Filters
-              </h3>
-            </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter
-                ? JSON.stringify(inferenceFilter, null, 2)
-                : "undefined"}
-            </pre>
-          </div>
+          <StoryDebugWrapper
+            debugLabel="inferenceFilter"
+            debugData={inferenceFilter}
+          >
+            <InferenceFilterBuilder
+              inferenceFilter={inferenceFilter}
+              setInferenceFilter={setInferenceFilter}
+            />
+          </StoryDebugWrapper>
         </FormProvider>
       </ConfigProvider>
     );

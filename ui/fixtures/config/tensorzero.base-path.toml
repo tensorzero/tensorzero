@@ -1,3 +1,0 @@
-[gateway]
-debug = true
-base_path = "/custom/prefix"

@@ -1,77 +1,61 @@
-use super::{ClientInput, ClientInputMessage, ClientInputMessageContent};
+use super::{Input, InputMessage, InputMessageContent};
+use crate::error::Error;
 use crate::inference::types::{
     Base64File, File, ObjectStorageFile, ResolvedInput, ResolvedInputMessage,
-    ResolvedInputMessageContent, TextKind,
+    ResolvedInputMessageContent,
 };
-use crate::tool::{ToolCall, ToolCallInput};
+use crate::tool::{ToolCall, ToolCallWrapper};
 
 /// Convert a resolved input to a client input
-pub fn resolved_input_to_client_input(resolved_input: ResolvedInput) -> ClientInput {
+pub fn resolved_input_to_client_input(resolved_input: ResolvedInput) -> Result<Input, Error> {
     let ResolvedInput { system, messages } = resolved_input;
     let messages = messages
         .into_iter()
         .map(resolved_input_message_to_client_input_message)
-        .collect::<Vec<_>>();
-    ClientInput { system, messages }
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Input { system, messages })
 }
 
 fn resolved_input_message_to_client_input_message(
     resolved_input_message: ResolvedInputMessage,
-) -> ClientInputMessage {
+) -> Result<InputMessage, Error> {
     let ResolvedInputMessage { role, content } = resolved_input_message;
     let content = content
         .into_iter()
         .map(resolved_input_message_content_to_client_input_message_content)
-        .collect::<Vec<_>>();
-    ClientInputMessage { role, content }
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(InputMessage { role, content })
 }
 
-fn convert_tool_call(tool_call: ToolCall) -> ToolCallInput {
-    ToolCallInput {
-        id: tool_call.id,
-        name: Some(tool_call.name),
-        arguments: None,
-        raw_arguments: Some(tool_call.arguments),
-        raw_name: None,
-    }
+fn convert_tool_call(tool_call: ToolCall) -> ToolCallWrapper {
+    ToolCallWrapper::ToolCall(tool_call)
 }
 
 fn resolved_input_message_content_to_client_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
-) -> ClientInputMessageContent {
-    match resolved_input_message_content {
-        ResolvedInputMessageContent::Text(text) => {
-            ClientInputMessageContent::Text(TextKind::Text { text: text.text })
-        }
-        ResolvedInputMessageContent::Template(template) => {
-            ClientInputMessageContent::Template(template)
-        }
+) -> Result<InputMessageContent, Error> {
+    Ok(match resolved_input_message_content {
+        ResolvedInputMessageContent::Text(text) => InputMessageContent::Text(text),
+        ResolvedInputMessageContent::Template(template) => InputMessageContent::Template(template),
         ResolvedInputMessageContent::ToolCall(tool_call) => {
-            ClientInputMessageContent::ToolCall(convert_tool_call(tool_call))
+            InputMessageContent::ToolCall(convert_tool_call(tool_call))
         }
         ResolvedInputMessageContent::ToolResult(tool_result) => {
-            ClientInputMessageContent::ToolResult(tool_result)
+            InputMessageContent::ToolResult(tool_result)
         }
-        ResolvedInputMessageContent::RawText(raw_text) => {
-            ClientInputMessageContent::RawText(raw_text)
-        }
-        ResolvedInputMessageContent::Thought(thought) => {
-            ClientInputMessageContent::Thought(thought)
-        }
+        ResolvedInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(raw_text),
+        ResolvedInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
         ResolvedInputMessageContent::File(resolved) => {
             let ObjectStorageFile { file, data } = *resolved;
             let mime_type = file.mime_type;
+            let detail = file.detail;
+            let filename = file.filename;
 
-            ClientInputMessageContent::File(File::Base64(Base64File {
-                source_url: None,
-                mime_type,
-                data,
-            }))
+            let base64_file = Base64File::new(None, Some(mime_type), data, detail, filename)?;
+            InputMessageContent::File(File::Base64(base64_file))
         }
-        ResolvedInputMessageContent::Unknown(unknown) => {
-            ClientInputMessageContent::Unknown(unknown)
-        }
-    }
+        ResolvedInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),
+    })
 }
 
 #[cfg(test)]
@@ -79,8 +63,8 @@ mod tests {
     use object_store::path::Path;
 
     use crate::inference::types::{
+        ObjectStorageFile, ObjectStoragePointer,
         storage::{StorageKind, StoragePath},
-        Base64File, ObjectStorageFile, ObjectStoragePointer,
     };
     use url::Url;
 
@@ -98,16 +82,18 @@ mod tests {
             .to_string(),
         };
 
-        let result = convert_tool_call(input_tool_call);
+        let result = convert_tool_call(input_tool_call.clone());
 
-        assert_eq!(result.id, "test_id");
-        assert_eq!(result.name, Some("test_tool".to_string()));
-        assert_eq!(result.arguments, None);
-        assert_eq!(
-            result.raw_arguments,
-            Some(r#"{"param1":"value1","param2":"value2"}"#.to_string())
-        );
-        assert_eq!(result.raw_name, None);
+        match result {
+            ToolCallWrapper::ToolCall(tc) => {
+                assert_eq!(tc.id, "test_id");
+                assert_eq!(tc.name, "test_tool");
+                assert_eq!(tc.arguments, r#"{"param1":"value1","param2":"value2"}"#);
+            }
+            ToolCallWrapper::InferenceResponseToolCall(_) => {
+                panic!("Expected ToolCallWrapper::ToolCall variant")
+            }
+        }
     }
 
     #[tokio::test]
@@ -133,25 +119,24 @@ mod tests {
                 source_url: Some(Url::parse("http://notaurl.com").unwrap()),
                 mime_type: mime::IMAGE_JPEG,
                 storage_path: storage_path.clone(),
+                detail: None,
+                filename: None,
             },
             data: image_data.to_string(),
         }));
 
         // Call the function under test
         let result =
-            resolved_input_message_content_to_client_input_message_content(resolved_content);
+            resolved_input_message_content_to_client_input_message_content(resolved_content)
+                .expect("Should convert successfully");
 
         // Verify the result
         match result {
-            ClientInputMessageContent::File(File::Base64(Base64File {
-                mime_type: result_mime_type,
-                data: result_data,
-                ..
-            })) => {
-                assert_eq!(result_mime_type, mime::IMAGE_JPEG);
-                assert_eq!(result_data, image_data);
+            InputMessageContent::File(File::Base64(base64_file)) => {
+                assert_eq!(base64_file.mime_type, mime::IMAGE_JPEG);
+                assert_eq!(base64_file.data(), image_data);
             }
-            _ => panic!("Expected ClientInputMessageContent::Image, got something else"),
+            _ => panic!("Expected InputMessageContent::Image, got something else"),
         }
     }
 }

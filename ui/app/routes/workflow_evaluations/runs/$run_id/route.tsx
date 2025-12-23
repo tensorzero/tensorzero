@@ -10,15 +10,10 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import {
-  getWorkflowEvaluationRuns,
-  getWorkflowEvaluationRunEpisodesByRunIdWithFeedback,
-  getWorkflowEvaluationRunStatisticsByMetricName,
-  countWorkflowEvaluationRunEpisodes,
-} from "~/utils/clickhouse/workflow_evaluations.server";
 import BasicInfo from "./WorkflowEvaluationRunBasicInfo";
 import WorkflowEvaluationRunEpisodesTable from "./WorkflowEvaluationRunEpisodesTable";
 import { logger } from "~/utils/logger";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -32,22 +27,25 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const run_id = params.run_id;
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
-  const pageSize = parseInt(searchParams.get("pageSize") || "15");
+  const limit = parseInt(searchParams.get("limit") || "15");
+  const tensorZeroClient = getTensorZeroClient();
   const [
-    workflowEvaluationRuns,
-    workflowEvaluationRunEpisodes,
+    workflowEvaluationRunsResponse,
+    workflowEvaluationRunEpisodesResponse,
     count,
-    statistics,
+    statisticsResponse,
   ] = await Promise.all([
-    getWorkflowEvaluationRuns(5, 0, run_id),
-    getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
-      pageSize,
-      offset,
+    tensorZeroClient.listWorkflowEvaluationRuns(5, 0, run_id),
+    tensorZeroClient.getWorkflowEvaluationRunEpisodesWithFeedback(
       run_id,
+      limit,
+      offset,
     ),
-    countWorkflowEvaluationRunEpisodes(run_id),
-    getWorkflowEvaluationRunStatisticsByMetricName(run_id),
+    tensorZeroClient.countWorkflowEvaluationRunEpisodes(run_id),
+    tensorZeroClient.getWorkflowEvaluationRunStatistics(run_id),
   ]);
+  const statistics = statisticsResponse.statistics;
+  const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
   if (workflowEvaluationRuns.length != 1) {
     throw new Error(
       `Expected exactly one workflow evaluation run, got ${workflowEvaluationRuns.length}`,
@@ -56,11 +54,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const workflowEvaluationRun = workflowEvaluationRuns[0];
   return {
     workflowEvaluationRun,
-    workflowEvaluationRunEpisodes,
+    workflowEvaluationRunEpisodes:
+      workflowEvaluationRunEpisodesResponse.episodes,
     statistics,
     count,
     offset,
-    pageSize,
+    limit,
   };
 }
 
@@ -74,17 +73,17 @@ export default function WorkflowEvaluationRunSummaryPage({
     statistics,
     count,
     offset,
-    pageSize,
+    limit,
   } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("offset", String(offset - limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -101,7 +100,7 @@ export default function WorkflowEvaluationRunSummaryPage({
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset <= 0}
-          disableNext={offset + pageSize >= count}
+          disableNext={offset + limit >= count}
         />
       </SectionLayout>
     </PageLayout>

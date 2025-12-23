@@ -2,23 +2,11 @@ import { TensorZeroClient } from "tensorzero-node";
 import { describe, it } from "vitest";
 import { createFilters } from "./client";
 
-const configPath = process.env.TENSORZERO_UI_CONFIG_PATH;
-if (!configPath) {
-  throw new Error("TENSORZERO_UI_CONFIG_PATH is not set");
+const gatewayUrl = process.env.TENSORZERO_GATEWAY_URL;
+if (!gatewayUrl) {
+  throw new Error("TENSORZERO_GATEWAY_URL is not set");
 }
-const clickhouseUrl = process.env.TENSORZERO_CLICKHOUSE_URL;
-if (!clickhouseUrl) {
-  throw new Error("TENSORZERO_CLICKHOUSE_URL is not set");
-}
-const postgresUrl = process.env.TENSORZERO_POSTGRES_URL;
-if (!postgresUrl) {
-  throw new Error("TENSORZERO_POSTGRES_URL is not set");
-}
-const client = await TensorZeroClient.buildEmbedded(
-  configPath,
-  clickhouseUrl,
-  postgresUrl,
-);
+const client = await TensorZeroClient.buildHttp(gatewayUrl);
 
 describe("native sft", () => {
   // NOTE: This test hits a fake server so you can run it anytime without paying OpenAI
@@ -31,9 +19,9 @@ describe("native sft", () => {
       template_variant_name: "baseline",
       query_variant_name: null,
       filters: filters,
-      output_source: "Inference",
-      limit: BigInt(100),
-      offset: BigInt(0),
+      output_source: "inference",
+      limit: 100,
+      offset: 0,
       val_fraction: 0.1,
       optimizer_config: {
         type: "openai_sft",

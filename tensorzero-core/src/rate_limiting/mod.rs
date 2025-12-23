@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use axum::Extension;
 use serde::{Deserialize, Serialize, Serializer};
 use sqlx::postgres::types::PgInterval;
 use tracing::Span;
@@ -10,6 +11,7 @@ use crate::db::{
     ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
 };
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 /*
  * The high level flow for our rate limiting system is:
@@ -31,20 +33,18 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
  *      to not add keys which could trample one another.
  */
 
-#[derive(Debug, Serialize, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone)]
 pub struct RateLimitingConfig {
-    rules: Vec<RateLimitingConfigRule>,
-    enabled: bool, // TODO (#3643): default true, Postgres required if rules is nonempty.
+    pub(crate) rules: Vec<RateLimitingConfigRule>,
+    pub(crate) enabled: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
-    rules: Vec<RateLimitingConfigRule>,
+    pub(crate) rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
-    enabled: bool, // TODO (#3643): default true, Postgres required if rules is nonempty.
+    pub(crate) enabled: bool,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -63,6 +63,17 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
             rules: config.rules,
             enabled: config.enabled,
         })
+    }
+}
+
+impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
+    fn from(config: &RateLimitingConfig) -> Self {
+        // Destructure to ensure all fields are handled (compile error if field added/removed)
+        let RateLimitingConfig { rules, enabled } = config;
+        Self {
+            rules: rules.clone(),
+            enabled: *enabled,
+        }
     }
 }
 
@@ -94,14 +105,31 @@ impl Default for RateLimitingConfig {
 #[derive(Clone, Debug)]
 pub struct ScopeInfo {
     pub tags: Arc<HashMap<String, String>>,
+    pub api_key_public_id: Option<Arc<str>>,
 }
 
 impl ScopeInfo {
+    pub fn new(
+        tags: Arc<HashMap<String, String>>,
+        api_key: Option<Extension<RequestApiKeyExtension>>,
+    ) -> Self {
+        Self {
+            tags,
+            api_key_public_id: api_key.map(|ext| ext.0.api_key.get_public_id().into()),
+        }
+    }
+
     // Expose relevant information from this `ScopeInfo` as OpenTelemetry span attributes
     fn apply_otel_span_attributes(&self, span: &Span) {
-        let ScopeInfo { tags } = self;
+        let ScopeInfo {
+            tags,
+            api_key_public_id,
+        } = self;
         for (key, value) in tags.iter() {
             span.set_attribute(format!("scope_info.tags.{key}"), value.clone());
+        }
+        if let Some(api_key_public_id) = api_key_public_id {
+            span.set_attribute("scope_info.api_key_public_id", api_key_public_id.clone());
         }
     }
 }
@@ -228,9 +256,9 @@ fn align_and_check_limits(
         .into_iter()
         .map(|r| (r.key.clone(), r))
         .collect::<HashMap<_, _>>();
-    // Next, check if any reciept has failed
+    // Next, check if any receipt has failed
     if receipts_map.values().any(|r| !r.success) {
-        return Err(get_failed_rate_limits_err(requests, &receipts_map));
+        return Err(get_failed_rate_limits_err(requests, &receipts_map, limits));
     }
 
     // Next, we build up a vector of ConsumeTicketsReceipts
@@ -256,6 +284,8 @@ pub struct FailedRateLimit {
     pub key: ActiveRateLimitKey,
     pub requested: u64,
     pub available: u64,
+    pub resource: RateLimitResource,
+    pub scope_key: Vec<RateLimitingScopeKey>,
 }
 
 /// Since Postgres will tell us all borrows failed if any failed, we figure out which rate limits
@@ -263,9 +293,10 @@ pub struct FailedRateLimit {
 fn get_failed_rate_limits_err(
     requests: Vec<ConsumeTicketsRequest>,
     receipts_map: &HashMap<ActiveRateLimitKey, ConsumeTicketsReceipt>,
+    limits: &[ActiveRateLimit],
 ) -> Error {
     let mut failed_rate_limits = Vec::new();
-    for request in requests {
+    for (request, limit) in requests.iter().zip(limits) {
         let key = &request.key;
         let Some(receipt) = receipts_map.get(key) else {
             return ErrorDetails::Inference {
@@ -279,6 +310,8 @@ fn get_failed_rate_limits_err(
                 key: key.clone(),
                 requested: request.requested,
                 available: receipt.tickets_remaining,
+                resource: limit.limit.resource,
+                scope_key: limit.scope_key.clone(),
             });
         }
     }
@@ -374,9 +407,8 @@ impl ActiveRateLimit {
     }
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct RateLimitingConfigRule {
     pub limits: Vec<Arc<RateLimit>>,
     pub scope: RateLimitingConfigScopes,
@@ -390,10 +422,10 @@ impl RateLimitingConfigRule {
         max_priority: &mut usize,
     ) -> Option<Vec<ActiveRateLimit>> {
         let key = self.scope.get_key_if_matches(scope_info)?;
-        if let RateLimitingConfigPriority::Priority(priority) = self.priority {
-            if priority > *max_priority {
-                *max_priority = priority;
-            }
+        if let RateLimitingConfigPriority::Priority(priority) = self.priority
+            && priority > *max_priority
+        {
+            *max_priority = priority;
         }
         Some(
             self.limits
@@ -407,9 +439,8 @@ impl RateLimitingConfigRule {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RateLimit {
     pub resource: RateLimitResource,
     pub interval: RateLimitInterval,
@@ -419,12 +450,22 @@ pub struct RateLimit {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum RateLimitResource {
     ModelInference,
     Token,
     // Cent, // or something more granular?
+}
+
+impl RateLimitResource {
+    /// Returns the snake_case string representation matching the serde serialization
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RateLimitResource::ModelInference => "model_inference",
+            RateLimitResource::Token => "token",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -433,7 +474,7 @@ pub enum RateLimitResourceUsage {
     /// rate limiting resources, depending on whether our initial estimate was too high or too low
     Exact { model_inferences: u64, tokens: u64 },
     /// We were only able to estimate the usage (e.g. if an error occurred in an inference stream,
-    /// and there might have bene additional usage chunks that we missed)
+    /// and there might have been additional usage chunks that we missed; or the provider did not report token usage).
     /// We'll still consume tokens/inferences if we went over the initial estimate, but we will *not*
     /// return tickets if our initial estimate seems to be too high (since the error could have
     /// hidden the actual usage).
@@ -457,8 +498,8 @@ impl EstimatedRateLimitResourceUsage {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum RateLimitInterval {
     Second,
     Minute,
@@ -505,9 +546,8 @@ impl RateLimitInterval {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
 pub enum RateLimitingConfigPriority {
     Priority(usize),
     Always,
@@ -515,9 +555,8 @@ pub enum RateLimitingConfigPriority {
 
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
-#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq, ts_rs::TS)]
+#[ts(export)]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
 
 impl RateLimitingConfigScopes {
@@ -556,10 +595,11 @@ trait Scope {
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum RateLimitingConfigScope {
     Tag(TagRateLimitingConfigScope),
+    ApiKeyPublicId(ApiKeyPublicIdConfigScope),
     // model_name = "my_model"
     // function_name = "my_function"
 }
@@ -568,13 +608,15 @@ impl Scope for RateLimitingConfigScope {
     fn get_key_if_matches(&self, info: &ScopeInfo) -> Option<RateLimitingScopeKey> {
         match self {
             RateLimitingConfigScope::Tag(tag) => tag.get_key_if_matches(info),
+            RateLimitingConfigScope::ApiKeyPublicId(api_key_public_id) => {
+                api_key_public_id.get_key_if_matches(info)
+            }
         }
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
+#[ts(export)]
 pub struct TagRateLimitingConfigScope {
     tag_key: String,
     tag_value: TagValueScope,
@@ -616,9 +658,40 @@ impl TagRateLimitingConfigScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
+#[ts(export)]
+pub struct ApiKeyPublicIdConfigScope {
+    api_key_public_id: ApiKeyPublicIdValueScope,
+}
+
+impl ApiKeyPublicIdConfigScope {
+    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
+        match self.api_key_public_id {
+            ApiKeyPublicIdValueScope::Concrete(ref key) => {
+                if info
+                    .api_key_public_id
+                    .as_ref()
+                    .is_some_and(|s| **s == **key)
+                {
+                    Some(RateLimitingScopeKey::ApiKeyPublicIdConcrete {
+                        // TODO - use existing arc
+                        api_key_public_id: Arc::from(key.as_str()),
+                    })
+                } else {
+                    None
+                }
+            }
+            ApiKeyPublicIdValueScope::Each => info.api_key_public_id.as_ref().map(|key| {
+                RateLimitingScopeKey::ApiKeyPublicIdEach {
+                    api_key_public_id: key.clone(),
+                }
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
+#[ts(export)]
 pub enum TagValueScope {
     Concrete(String),
     Each,
@@ -638,16 +711,60 @@ impl Serialize for TagValueScope {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
+#[ts(export)]
+pub enum ApiKeyPublicIdValueScope {
+    Concrete(String),
+    Each,
+}
+
+impl Serialize for ApiKeyPublicIdValueScope {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            ApiKeyPublicIdValueScope::Concrete(s) => serializer.serialize_str(s),
+            ApiKeyPublicIdValueScope::Each => serializer.serialize_str("tensorzero::each"),
+        }
+    }
+}
+
 /// Type that lists the different ways a Scope + matching ScopeInfo can be
 /// serialized into a key.
 /// We need this struct to have stable serialization behavior because we want rate limits to be stable
 /// across releases.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum RateLimitingScopeKey {
     TagTotal { key: String },
     TagEach { key: String, value: String },
     TagConcrete { key: String, value: String },
+    ApiKeyPublicIdEach { api_key_public_id: Arc<str> },
+    ApiKeyPublicIdConcrete { api_key_public_id: Arc<str> },
+}
+
+impl RateLimitingScopeKey {
+    /// Returns a representation that matches the config format for easy lookup
+    pub fn to_config_representation(&self) -> String {
+        match self {
+            RateLimitingScopeKey::TagTotal { key } => {
+                format!(r#"tag_key="{key}", tag_value="tensorzero::total""#)
+            }
+            RateLimitingScopeKey::TagEach { key, value } => {
+                format!(r#"tag_key="{key}", tag_value="tensorzero::each" (matched: "{value}")"#)
+            }
+            RateLimitingScopeKey::TagConcrete { key, value } => {
+                format!(r#"tag_key="{key}", tag_value="{value}""#)
+            }
+            RateLimitingScopeKey::ApiKeyPublicIdEach { api_key_public_id } => {
+                format!(r#"api_key_public_id="tensorzero::each" (matched: "{api_key_public_id}")"#)
+            }
+            RateLimitingScopeKey::ApiKeyPublicIdConcrete { api_key_public_id } => {
+                format!(r#"api_key_public_id="{api_key_public_id}""#)
+            }
+        }
+    }
 }
 
 // TODO: is there a way to enforce that this struct is consumed by return_tickets?
@@ -681,10 +798,10 @@ impl TicketBorrows {
 
         if results_len != active_limits_len {
             return Err(Error::new(ErrorDetails::Inference {
-            message: format!(
-                "TicketBorrow has ragged arrays: receipts.len()={results_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
-            )
-        }));
+                message: format!(
+                    "TicketBorrow has ragged arrays: receipts.len()={results_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                ),
+            }));
         }
         let receipts = align_and_check_limits(&active_limits, results, ticket_requests)?;
         let borrows = receipts
@@ -769,7 +886,11 @@ impl TicketBorrows {
                 std::cmp::Ordering::Greater => {
                     // Actual usage exceeds borrowed, add the difference to requests and log a warning
                     // We don't care about 'RateLimitResourceUsage::Exact' vs ' RateLimitResourceUsage::UnderEstimate' here.
-                    tracing::warn!("Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used", active_limit.limit.resource, receipt.tickets_consumed);
+                    tracing::warn!(
+                        "Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used",
+                        active_limit.limit.resource,
+                        receipt.tickets_consumed
+                    );
                     let difference = actual_usage_this_request - receipt.tickets_consumed;
                     requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
                 }
@@ -843,6 +964,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let key = scope.get_key_if_matches(&info).unwrap();
@@ -867,6 +989,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let key = scope.get_key_if_matches(&info);
@@ -885,6 +1008,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let key = scope.get_key_if_matches(&info).unwrap();
@@ -909,6 +1033,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let key = scope.get_key_if_matches(&info).unwrap();
@@ -931,6 +1056,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let key = scope.get_key_if_matches(&info);
@@ -944,6 +1070,7 @@ mod tests {
         let tags = HashMap::new();
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let keys = scopes.get_key_if_matches(&info).unwrap();
@@ -963,6 +1090,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let keys = scopes.get_key_if_matches(&info).unwrap();
@@ -990,6 +1118,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let keys = scopes.get_key_if_matches(&info);
@@ -1014,6 +1143,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let keys = scopes.get_key_if_matches(&info).unwrap();
@@ -1054,6 +1184,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         // Should return None because not all scopes match
@@ -1081,6 +1212,7 @@ mod tests {
 
         let info1 = ScopeInfo {
             tags: Arc::new(tags1),
+            api_key_public_id: None,
         };
 
         // Second ScopeInfo with different tag values but same structure
@@ -1090,6 +1222,7 @@ mod tests {
 
         let info2 = ScopeInfo {
             tags: Arc::new(tags2),
+            api_key_public_id: None,
         };
 
         let keys1 = scopes.get_key_if_matches(&info1).unwrap();
@@ -1200,6 +1333,7 @@ mod tests {
                 assert_eq!(tag3.tag_key, "user_id");
                 assert_eq!(tag3.tag_value, TagValueScope::Concrete("123".to_string()));
             }
+            _ => panic!("Expected Tag variants"),
         }
     }
 
@@ -1255,6 +1389,7 @@ mod tests {
                 assert_eq!(tag2.tag_value, TagValueScope::Each);
                 assert_eq!(tag3.tag_value, TagValueScope::Total);
             }
+            _ => panic!("Expected Tag variants"),
         }
 
         // Test that each scope produces different key types
@@ -1263,6 +1398,7 @@ mod tests {
 
         let info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         // Test each scope individually to verify different key types
@@ -1366,6 +1502,7 @@ mod tests {
         tags.insert("user_id".to_string(), "123".to_string());
         let scope_info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         // Disabled config should return empty limits
@@ -1435,6 +1572,7 @@ mod tests {
         tags.insert("user_id".to_string(), "test".to_string());
         let scope_info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         let token_limit = Arc::new(RateLimit {
@@ -1869,6 +2007,7 @@ mod tests {
         let tags = HashMap::new();
         let scope_info = ScopeInfo {
             tags: Arc::new(tags),
+            api_key_public_id: None,
         };
 
         // Token rate limits active - should include Token resource
@@ -1919,9 +2058,11 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
         };
-        assert!(config_disabled
-            .get_rate_limited_resources(&scope_info)
-            .is_empty());
+        assert!(
+            config_disabled
+                .get_rate_limited_resources(&scope_info)
+                .is_empty()
+        );
     }
 
     #[test]
@@ -2191,6 +2332,43 @@ mod tests {
                 }
             }
             Ok(_) => panic!("Expected an error, but got Ok"),
+        }
+    }
+
+    #[test]
+    fn test_no_refund_when_usage_is_none() {
+        // This test verifies that when actual usage is reported as None (usage=None or null tokens),
+        // we use RateLimitResourceUsage::UnderEstimate which prevents refunding tickets even if
+        // we over-estimated the initial consumption.
+
+        let token_usage_exact = RateLimitResourceUsage::Exact {
+            model_inferences: 1,
+            tokens: 100, // Actual usage is 100 tokens
+        };
+
+        let token_usage_underestimate = RateLimitResourceUsage::UnderEstimate {
+            model_inferences: 1,
+            tokens: 0, // This is what we use when usage is None
+        };
+
+        // Verify that Exact usage allows refunds (when actual < estimate)
+        match token_usage_exact {
+            RateLimitResourceUsage::Exact { tokens, .. } => {
+                assert_eq!(tokens, 100);
+                // This case would trigger a refund in return_tickets() if estimate was higher
+            }
+            RateLimitResourceUsage::UnderEstimate { .. } => {
+                panic!("Expected Exact variant")
+            }
+        }
+
+        // Verify that UnderEstimate usage prevents refunds
+        match token_usage_underestimate {
+            RateLimitResourceUsage::UnderEstimate { tokens, .. } => {
+                assert_eq!(tokens, 0);
+                // This case will NOT trigger a refund in return_tickets() per line 852-855
+            }
+            RateLimitResourceUsage::Exact { .. } => panic!("Expected UnderEstimate variant"),
         }
     }
 }

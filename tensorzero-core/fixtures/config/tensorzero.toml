@@ -69,7 +69,7 @@ type = "chat_completion"
 weight = 0.9
 model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
-json_mode = "implicit_tool"
+json_mode = "tool"
 
 [functions.json_with_schemas.variants.openai_promptB]
 type = "chat_completion"
@@ -84,6 +84,19 @@ tools = ["get_temperature"]
 tool_choice = { specific = "get_temperature" }
 
 [functions.weather_helper.variants.openai_promptA]
+type = "chat_completion"
+weight = 1.0
+model = "gpt-4.1-mini"
+
+# This function uses a tool where the config key differs from the display name
+# key = "get_temperature_with_name", name = "get_temperature"
+# This tests that allowed_tools filtering uses the key, not the display name
+[functions.weather_helper_aliased_tool]
+type = "chat"
+tools = ["get_temperature_with_name"]
+tool_choice = "auto"
+
+[functions.weather_helper_aliased_tool.variants.openai]
 type = "chat_completion"
 weight = 1.0
 model = "gpt-4.1-mini"
@@ -198,7 +211,7 @@ type = "chat_completion"
 active = true
 model = "anthropic::claude-3.5-sonnet"
 system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
-json_mode = "implicit_tool"
+json_mode = "tool"
 
 [evaluations.evaluation1.evaluators.llm_judge_bool.variants.openai_promptA]
 type = "chat_completion"
