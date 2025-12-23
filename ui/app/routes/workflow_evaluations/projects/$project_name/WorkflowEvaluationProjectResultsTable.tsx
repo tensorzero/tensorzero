@@ -16,7 +16,10 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-import type { WorkflowEvaluationRun } from "~/types/tensorzero";
+import type {
+  WorkflowEvaluationRun,
+  WorkflowEvaluationRunStatistics,
+} from "~/types/tensorzero";
 
 import { useConfig } from "~/context/config";
 import {
@@ -25,20 +28,16 @@ import {
 } from "~/utils/config/feedback";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue from "~/components/metric/MetricValue";
-import type {
-  GroupedWorkflowEvaluationRunEpisodeWithFeedback,
-  WorkflowEvaluationRunStatisticsByMetricName,
-} from "~/utils/clickhouse/workflow_evaluations";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
-import type { MetricConfig } from "~/types/tensorzero";
+import type {
+  GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow,
+  MetricConfig,
+} from "~/types/tensorzero";
 
 interface WorkflowEvaluationProjectResultsTableProps {
   selected_run_infos: WorkflowEvaluationRun[];
-  evaluation_results: GroupedWorkflowEvaluationRunEpisodeWithFeedback[][];
-  evaluation_statistics: Record<
-    string,
-    WorkflowEvaluationRunStatisticsByMetricName[]
-  >;
+  evaluation_results: GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow[][];
+  evaluation_statistics: Record<string, WorkflowEvaluationRunStatistics[]>;
 }
 
 export function WorkflowEvaluationProjectResultsTable({
@@ -347,10 +346,7 @@ const EvaluationRunCircle = ({ runId }: { runId: string }) => {
 // to a map from metric_name to a list of statistics with different run_ids,
 // sorted in the order of selected_run_ids.
 function convertStatsByRunIdToStatsByMetricName(
-  evaluation_statistics: Record<
-    string,
-    WorkflowEvaluationRunStatisticsByMetricName[]
-  >,
+  evaluation_statistics: Record<string, WorkflowEvaluationRunStatistics[]>,
   uniqueMetricNames: string[],
   selectedRunIds: string[],
 ) {

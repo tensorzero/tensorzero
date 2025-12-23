@@ -95,7 +95,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // the only place where we actually try to enable OTEL.
     let _delayed_enable = tokio_block_on_without_gil(
         m.py(),
-        tensorzero_rust::observability::setup_observability(LogFormat::Pretty),
+        tensorzero_rust::observability::setup_observability(LogFormat::Pretty, false),
     )
     .map_err(|e| convert_error(m.py(), TensorZeroError::Other { source: e.into() }))?;
     m.add_class::<BaseTensorZeroGateway>()?;

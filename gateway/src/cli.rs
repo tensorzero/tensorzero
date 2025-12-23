@@ -43,4 +43,12 @@ pub struct EarlyExitCommands {
     /// Create an API key then exit.
     #[arg(long)]
     pub create_api_key: bool,
+
+    /// Disable an API key using its public ID then exit.
+    #[arg(long, value_name = "PUBLIC_ID")]
+    pub disable_api_key: Option<String>,
+
+    /// Validate the config file then exit.
+    #[arg(long)]
+    pub validate_and_exit: bool,
 }

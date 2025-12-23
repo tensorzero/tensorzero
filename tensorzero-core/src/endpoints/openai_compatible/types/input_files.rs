@@ -200,7 +200,7 @@ mod tests {
 
     use crate::endpoints::openai_compatible::types::chat_completions::{
         OpenAICompatibleContentBlock, OpenAICompatibleMessage, OpenAICompatibleUserMessage,
-        convert_openai_message_content,
+        convert_openai_message_content, openai_messages_to_input,
     };
     use crate::inference::types::{Input, InputMessageContent, Role};
     use crate::utils::testing::capture_logs;
@@ -579,7 +579,7 @@ mod tests {
             ]),
         })];
 
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
 
         assert_eq!(input.messages.len(), 1);
         assert_eq!(input.messages[0].role, Role::User);
@@ -615,7 +615,7 @@ mod tests {
                 ]),
             })];
 
-        let input_no_filename: Input = messages_no_filename.try_into().unwrap();
+        let input_no_filename: Input = openai_messages_to_input(messages_no_filename).unwrap();
         match &input_no_filename.messages[0].content[0] {
             InputMessageContent::File(File::Base64(base64_file)) => {
                 assert_eq!(base64_file.filename, None);

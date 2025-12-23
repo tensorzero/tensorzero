@@ -10,11 +10,6 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import {
-  getWorkflowEvaluationRunEpisodesByRunIdWithFeedback,
-  getWorkflowEvaluationRunStatisticsByMetricName,
-  countWorkflowEvaluationRunEpisodes,
-} from "~/utils/clickhouse/workflow_evaluations.server";
 import BasicInfo from "./WorkflowEvaluationRunBasicInfo";
 import WorkflowEvaluationRunEpisodesTable from "./WorkflowEvaluationRunEpisodesTable";
 import { logger } from "~/utils/logger";
@@ -36,15 +31,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const tensorZeroClient = getTensorZeroClient();
   const [
     workflowEvaluationRunsResponse,
-    workflowEvaluationRunEpisodes,
+    workflowEvaluationRunEpisodesResponse,
     count,
-    statistics,
+    statisticsResponse,
   ] = await Promise.all([
     tensorZeroClient.listWorkflowEvaluationRuns(5, 0, run_id),
-    getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(limit, offset, run_id),
-    countWorkflowEvaluationRunEpisodes(run_id),
-    getWorkflowEvaluationRunStatisticsByMetricName(run_id),
+    tensorZeroClient.getWorkflowEvaluationRunEpisodesWithFeedback(
+      run_id,
+      limit,
+      offset,
+    ),
+    tensorZeroClient.countWorkflowEvaluationRunEpisodes(run_id),
+    tensorZeroClient.getWorkflowEvaluationRunStatistics(run_id),
   ]);
+  const statistics = statisticsResponse.statistics;
   const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
   if (workflowEvaluationRuns.length != 1) {
     throw new Error(
@@ -54,7 +54,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const workflowEvaluationRun = workflowEvaluationRuns[0];
   return {
     workflowEvaluationRun,
-    workflowEvaluationRunEpisodes,
+    workflowEvaluationRunEpisodes:
+      workflowEvaluationRunEpisodesResponse.episodes,
     statistics,
     count,
     offset,

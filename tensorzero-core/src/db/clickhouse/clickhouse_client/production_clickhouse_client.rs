@@ -36,6 +36,10 @@ pub struct ProductionClickHouseClient {
     sanitized_database_url: String,
     cluster_name: Option<String>,
     database: String,
+    // NOTE - if this is ever changed to use `TensorzeroHttpClient`,
+    // then time taken in ClickHouse requests will start getting excluded from our 'overhead' metric.
+    // This would probably be undesirable (since we want 'overhead' to mean 'everything besides requests to LLMs'),
+    // so we'll need to adjust overhead tracking if we ever use `TensorzeroHttpClient` for ClickHouse.
     client: Client,
     batch_sender: Option<Arc<BatchSender>>,
     batch_config: BatchWritesConfig,

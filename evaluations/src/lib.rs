@@ -11,9 +11,10 @@ use helpers::get_cache_options;
 pub use cli::{Args, OutputFormat};
 pub use stats::{
     EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate, EvaluatorStats,
-    PerEvaluatorStats, mean, std_deviation,
+    PerEvaluatorStats,
 };
 pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
+pub use tensorzero_core::statistics_util::{mean, std_deviation};
 pub use types::*;
 
 use tensorzero_core::cache::CacheEnabledMode;
@@ -29,6 +30,7 @@ use tensorzero_core::endpoints::datasets::v1::{
     types::{GetDatapointsRequest, ListDatapointsRequest},
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::inference::types::InputExt;
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,

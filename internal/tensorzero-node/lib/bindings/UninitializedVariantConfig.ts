@@ -5,6 +5,9 @@ import type { UninitializedChatCompletionConfig } from "./UninitializedChatCompl
 import type { UninitializedDiclConfig } from "./UninitializedDiclConfig";
 import type { UninitializedMixtureOfNConfig } from "./UninitializedMixtureOfNConfig";
 
+/**
+ * NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
+ */
 export type UninitializedVariantConfig =
   | ({ type: "chat_completion" } & UninitializedChatCompletionConfig)
   | ({

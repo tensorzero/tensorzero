@@ -2,12 +2,7 @@ import { PageHeader, SectionLayout } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
 import { WorkflowEvalRunSelector } from "~/routes/workflow_evaluations/projects/$project_name/WorkflowEvalRunSelector";
-import {
-  countWorkflowEvaluationRunEpisodesByTaskName,
-  getWorkflowEvaluationRunEpisodesByTaskName,
-  getWorkflowEvaluationRunStatisticsByMetricName,
-} from "~/utils/clickhouse/workflow_evaluations.server";
-import type { WorkflowEvaluationRunStatisticsByMetricName } from "~/utils/clickhouse/workflow_evaluations";
+import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { WorkflowEvaluationProjectResultsTable } from "./WorkflowEvaluationProjectResultsTable";
 import { useNavigate, type RouteHandle } from "react-router";
@@ -29,28 +24,28 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const runIds = searchParams.get("run_ids")?.split(",") || [];
 
-  const runStats: Record<
-    string,
-    WorkflowEvaluationRunStatisticsByMetricName[]
-  > = {};
+  const runStats: Record<string, WorkflowEvaluationRunStatistics[]> = {};
 
+  const tensorZeroClient = getTensorZeroClient();
   if (runIds.length > 0) {
     // Create promises for fetching statistics for each runId
     const statsPromises = runIds.map((runId) =>
-      getWorkflowEvaluationRunStatisticsByMetricName(runId),
+      tensorZeroClient
+        .getWorkflowEvaluationRunStatistics(runId)
+        .then((response) => response.statistics),
     );
 
     // Create promise for fetching run info
-    const runInfosPromise = getTensorZeroClient()
+    const runInfosPromise = tensorZeroClient
       .getWorkflowEvaluationRuns(runIds, projectName)
       .then((response) => response.runs);
 
-    const episodeInfoPromise = getWorkflowEvaluationRunEpisodesByTaskName(
-      runIds,
-      limit,
-      offset,
-    );
-    const countPromise = countWorkflowEvaluationRunEpisodesByTaskName(runIds);
+    const client = getTensorZeroClient();
+    const episodeInfoPromise = client
+      .listWorkflowEvaluationRunEpisodesByTaskName(runIds, limit, offset)
+      .then((response) => response.episodes);
+    const countPromise =
+      client.countWorkflowEvaluationRunEpisodeGroupsByTaskName(runIds);
     // Run all promises concurrently
     const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
       Promise.all(statsPromises),
