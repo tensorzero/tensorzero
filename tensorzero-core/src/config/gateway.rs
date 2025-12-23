@@ -53,9 +53,10 @@ pub struct AuthConfig {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricsConfig {
-    /// When set, makes the 'tensorzero_inference_latency_overhead_seconds' metric into a Prometheus histogram
+    /// When set, additionally report the 'tensorzero_inference_latency_overhead_seconds_histogram' metric
     /// using the specified buckets.
-    /// When unset, we'll report `tensorzero_inference_latency_overhead_seconds` as a 'summary' metric.
+    /// When unset, we'll only report the `tensorzero_inference_latency_overhead_seconds` metric,
+    /// (which is still reported when this field is set)
     pub inference_overhead_histogram_buckets: Option<Vec<f64>>,
 }
 

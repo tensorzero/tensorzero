@@ -1201,13 +1201,16 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
 pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<PrometheusHandle, Error> {
     let mut builder = PrometheusBuilder::new();
 
-    if let Some(config) = metrics_config
-        && let Some(buckets) = &config.inference_overhead_histogram_buckets
-    {
+    let buckets =
+        metrics_config.and_then(|config| config.inference_overhead_histogram_buckets.as_ref());
+
+    if let Some(buckets) = buckets {
         use metrics_exporter_prometheus::Matcher;
         builder = builder
             .set_buckets_for_metric(
-                Matcher::Full("tensorzero_inference_latency_overhead_seconds".to_string()),
+                Matcher::Full(
+                    "tensorzero_inference_latency_overhead_seconds_histogram".to_string(),
+                ),
                 buckets,
             )
             .map_err(|e| {
@@ -1264,6 +1267,15 @@ pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<Prometheu
         Unit::Seconds,
         "Overhead of TensorZero on HTTP requests"
     );
+
+    if buckets.is_some() {
+        describe_histogram!(
+            "tensorzero_inference_latency_overhead_seconds_histogram",
+            Unit::Seconds,
+            "Overhead of TensorZero on HTTP requests (histogram)"
+        );
+        crate::observability::overhead_timing::enable_histogram_latency_metric();
+    }
 
     Ok(metrics_handle)
 }
