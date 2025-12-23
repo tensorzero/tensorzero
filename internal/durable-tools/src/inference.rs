@@ -447,7 +447,7 @@ impl InferenceClient for EmbeddedInferenceClient {
         .await
         .map_err(|e| InferenceError::TensorZero(TensorZeroError::Other { source: e.into() }))?;
 
-        match result {
+        match result.output {
             InferenceOutput::NonStreaming(response) => Ok(response),
             InferenceOutput::Streaming(_) => Err(InferenceError::StreamingNotSupported),
         }
