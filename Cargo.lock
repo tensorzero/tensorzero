@@ -163,9 +163,12 @@ checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
 name = "arc-swap"
-version = "1.7.1"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
+checksum = "51d03449bb8ca2cc2ef70869af31463d1ae5ccc8fa3e334b307203fbf815207e"
+dependencies = [
+ "rustversion",
+]
 
 [[package]]
 name = "arg_enum_proc_macro"
@@ -307,7 +310,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -322,20 +325,21 @@ dependencies = [
  "tensorzero-types",
  "thiserror 2.0.17",
  "tracing",
+ "ts-rs",
  "url",
  "uuid",
 ]
 
 [[package]]
 name = "autopilot-tools"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "durable-tools",
 ]
 
 [[package]]
 name = "autopilot-worker"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -723,9 +727,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime"
-version = "1.9.6"
+version = "1.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65fda37911905ea4d3141a01364bc5509a0f32ae3f3b22d6e330c0abfb62d247"
+checksum = "a392db6c583ea4a912538afb86b7be7c5d8887d91604f50eb55c262ee1b4a5f5"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-http",
@@ -1803,7 +1807,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=551f3cb4e672ca854cad1b35d912d08e7bf55607#551f3cb4e672ca854cad1b35d912d08e7bf55607"
+source = "git+https://github.com/tensorzero/durable?rev=6984ee936b8315ead4199cc66646bfaf0c76e134#6984ee936b8315ead4199cc66646bfaf0c76e134"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1823,7 +1827,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1848,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "async-trait",
  "durable",
@@ -1992,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -2094,7 +2098,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2340,7 +2344,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "autopilot-worker",
  "axum",
@@ -3036,7 +3040,7 @@ dependencies = [
  "rgb",
  "tiff",
  "zune-core 0.5.0",
- "zune-jpeg 0.5.7",
+ "zune-jpeg 0.5.8",
 ]
 
 [[package]]
@@ -3562,7 +3566,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "minijinja",
  "serde",
@@ -4747,7 +4751,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5152,9 +5156,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd15f8a2c5551a84d56efdc1cd049089e409ac19a3072d5037a17fd70719ff3e"
+checksum = "146c9e247ccc180c1f61615433868c99f3de3ae256a30a43b49f67c2d9171f34"
 dependencies = [
  "bitflags",
  "errno",
@@ -6085,7 +6089,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "axum",
  "chrono",
@@ -6105,7 +6109,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6220,7 +6224,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "evaluations",
  "napi",
@@ -6239,7 +6243,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "async-trait",
  "axum",
@@ -6272,7 +6276,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "evaluations",
  "futures",
@@ -6290,7 +6294,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types"
-version = "2025.12.4"
+version = "2025.12.5"
 dependencies = [
  "aws-smithy-types",
  "chrono",
@@ -6311,7 +6315,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2025.12.4"
+version = "2025.12.5"
 
 [[package]]
 name = "termcolor"
@@ -7803,9 +7807,9 @@ dependencies = [
 
 [[package]]
 name = "zune-jpeg"
-version = "0.5.7"
+version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51d915729b0e7d5fe35c2f294c5dc10b30207cc637920e5b59077bfa3da63f28"
+checksum = "e35aee689668bf9bd6f6f3a6c60bb29ba1244b3b43adfd50edd554a371da37d5"
 dependencies = [
  "zune-core 0.5.0",
 ]

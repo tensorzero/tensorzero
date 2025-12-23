@@ -1,4 +1,4 @@
-//! ClickHouse queries for inference statistics.
+//! ClickHouse queries for inference count.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -9,10 +9,10 @@ use super::ClickHouseConnectionInfo;
 use super::select_queries::parse_count;
 use crate::config::{MetricConfig, MetricConfigOptimize, MetricConfigType};
 use crate::db::TimeWindow;
-use crate::db::inference_stats::{
+use crate::db::inference_count::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
-    CountInferencesWithFeedbackParams, GetFunctionThroughputByVariantParams, InferenceStatsQueries,
-    VariantThroughput,
+    CountInferencesWithFeedbackParams, FunctionInferenceCount,
+    GetFunctionThroughputByVariantParams, InferenceCountQueries, VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
@@ -241,8 +241,27 @@ fn build_function_throughput_by_variant_query(
     (query, query_params)
 }
 
+/// Builds the SQL query for listing functions with inference counts.
+fn build_list_functions_with_inference_count_query() -> String {
+    r"SELECT
+        function_name,
+        formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS last_inference_timestamp,
+        toUInt32(count()) AS inference_count
+    FROM (
+        SELECT function_name, timestamp
+        FROM ChatInference
+        UNION ALL
+        SELECT function_name, timestamp
+        FROM JsonInference
+    )
+    GROUP BY function_name
+    ORDER BY last_inference_timestamp DESC
+    FORMAT JSONEachRow"
+        .to_string()
+}
+
 #[async_trait]
-impl InferenceStatsQueries for ClickHouseConnectionInfo {
+impl InferenceCountQueries for ClickHouseConnectionInfo {
     async fn count_inferences_for_function(
         &self,
         params: CountInferencesParams<'_>,
@@ -350,6 +369,28 @@ impl InferenceStatsQueries for ClickHouseConnectionInfo {
                 serde_json::from_str(line).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseDeserialization {
                         message: format!("Failed to deserialize VariantThroughput: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(result)
+    }
+
+    async fn list_functions_with_inference_count(
+        &self,
+    ) -> Result<Vec<FunctionInferenceCount>, Error> {
+        let query = build_list_functions_with_inference_count_query();
+        let response = self.run_query_synchronous_no_params(query).await?;
+
+        let result: Vec<FunctionInferenceCount> = response
+            .response
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                serde_json::from_str(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize FunctionInferenceCount: {e}"),
                     })
                 })
             })
@@ -1084,6 +1125,67 @@ mod tests {
             .get_function_throughput_by_variant(params)
             .await
             .unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_functions_with_inference_count() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _parameters| {
+                assert_query_contains(
+                    query,
+                    "SELECT
+                        function_name,
+                        formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS last_inference_timestamp,
+                        toUInt32(count()) AS inference_count
+                    FROM (
+                        SELECT function_name, timestamp
+                        FROM ChatInference
+                        UNION ALL
+                        SELECT function_name, timestamp
+                        FROM JsonInference
+                    )
+                    GROUP BY function_name
+                    ORDER BY last_inference_timestamp DESC",
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"function_name":"write_haiku","last_inference_timestamp":"2024-12-20T10:30:00.000Z","inference_count":150}
+{"function_name":"extract_entities","last_inference_timestamp":"2024-12-19T14:20:00.000Z","inference_count":75}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata { read_rows: 2, written_rows: 0 },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn.list_functions_with_inference_count().await.unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].function_name, "write_haiku");
+        assert_eq!(result[0].inference_count, 150);
+        assert_eq!(result[1].function_name, "extract_entities");
+        assert_eq!(result[1].inference_count, 75);
+    }
+
+    #[tokio::test]
+    async fn test_list_functions_with_inference_count_empty() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn.list_functions_with_inference_count().await.unwrap();
         assert!(result.is_empty());
     }
 }

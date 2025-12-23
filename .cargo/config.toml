@@ -123,5 +123,7 @@ tsbuild = [
     "-p",
     "tensorzero-optimizers",
     "-p",
-    "tensorzero-types",
+    "autopilot-client",
+    "-p",
+    "tensorzero-types"
 ] # Export Typescript bindings for TensorZero

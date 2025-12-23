@@ -1,4 +1,4 @@
-//! E2E tests for the inference stats endpoints.
+//! E2E tests for the inference count endpoints.
 //!
 //! These tests use the functions and metrics defined in tensorzero-core/tests/e2e/config/
 //! - Functions: basic_test, weather_helper, json_success
@@ -7,8 +7,9 @@
 
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-use tensorzero_core::endpoints::internal::inference_stats::{
-    InferenceStatsResponse, InferenceWithFeedbackStatsResponse,
+use tensorzero_core::endpoints::internal::inference_count::{
+    InferenceCountResponse, InferenceWithFeedbackCountResponse,
+    ListFunctionsWithInferenceCountResponse,
 };
 use tokio::time::{Duration, sleep};
 use uuid::Uuid;
@@ -106,14 +107,14 @@ async fn submit_episode_feedback(
     Uuid::parse_str(response_json["feedback_id"].as_str().unwrap()).unwrap()
 }
 
-// Tests for inference stats endpoint
+// Tests for inference count endpoint
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_get_inference_stats_chat_function() {
+async fn test_get_inference_count_chat_function() {
     let client = Client::new();
 
     // First get the current count
-    let url = get_gateway_endpoint("/internal/functions/basic_test/inference-stats");
+    let url = get_gateway_endpoint("/internal/functions/basic_test/inference-count");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -121,7 +122,7 @@ async fn test_get_inference_stats_chat_function() {
         status.is_success(),
         "Expected success status, got {status}: {body}"
     );
-    let initial_response: InferenceStatsResponse = serde_json::from_str(&body).unwrap();
+    let initial_response: InferenceCountResponse = serde_json::from_str(&body).unwrap();
     let initial_count = initial_response.inference_count;
 
     // Create a new inference
@@ -132,7 +133,7 @@ async fn test_get_inference_stats_chat_function() {
 
     // Verify the count increased
     let resp = client.get(url).send().await.unwrap();
-    let response: InferenceStatsResponse = resp.json().await.unwrap();
+    let response: InferenceCountResponse = resp.json().await.unwrap();
     assert!(
         response.inference_count > initial_count,
         "Expected inference_count to increase from {} after creating inference, got {}",
@@ -142,11 +143,11 @@ async fn test_get_inference_stats_chat_function() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_get_inference_stats_json_function() {
+async fn test_get_inference_count_json_function() {
     let client = Client::new();
 
     // First get the current count
-    let url = get_gateway_endpoint("/internal/functions/json_success/inference-stats");
+    let url = get_gateway_endpoint("/internal/functions/json_success/inference-count");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -154,7 +155,7 @@ async fn test_get_inference_stats_json_function() {
         status.is_success(),
         "Expected success status, got {status}: {body}"
     );
-    let initial_response: InferenceStatsResponse = serde_json::from_str(&body).unwrap();
+    let initial_response: InferenceCountResponse = serde_json::from_str(&body).unwrap();
     let initial_count = initial_response.inference_count;
 
     // Create a new inference for json_success function
@@ -180,7 +181,7 @@ async fn test_get_inference_stats_json_function() {
 
     // Verify the count increased
     let resp = client.get(url).send().await.unwrap();
-    let response: InferenceStatsResponse = resp.json().await.unwrap();
+    let response: InferenceCountResponse = resp.json().await.unwrap();
     assert!(
         response.inference_count > initial_count,
         "Expected inference_count to increase from {} after creating inference, got {}",
@@ -190,11 +191,11 @@ async fn test_get_inference_stats_json_function() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_get_inference_stats_chat_function_with_variant() {
+async fn test_get_inference_count_chat_function_with_variant() {
     let client = Client::new();
     // Use the "test" variant which exists in basic_test function
     let url =
-        get_gateway_endpoint("/internal/functions/basic_test/inference-stats?variant_name=test");
+        get_gateway_endpoint("/internal/functions/basic_test/inference-count?variant_name=test");
 
     let resp = client.get(url).send().await.unwrap();
     let status = resp.status();
@@ -204,15 +205,15 @@ async fn test_get_inference_stats_chat_function_with_variant() {
         "Expected success status, got {status}: {body}"
     );
 
-    let _response: InferenceStatsResponse = serde_json::from_str(&body).unwrap();
+    let _response: InferenceCountResponse = serde_json::from_str(&body).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_get_inference_stats_json_function_with_variant() {
+async fn test_get_inference_count_json_function_with_variant() {
     let client = Client::new();
     // Use the "test" variant which exists in json_success function
     let url =
-        get_gateway_endpoint("/internal/functions/json_success/inference-stats?variant_name=test");
+        get_gateway_endpoint("/internal/functions/json_success/inference-count?variant_name=test");
 
     let resp = client.get(url).send().await.unwrap();
     let status = resp.status();
@@ -222,13 +223,13 @@ async fn test_get_inference_stats_json_function_with_variant() {
         "Expected success status, got {status}: {body}"
     );
 
-    let _response: InferenceStatsResponse = serde_json::from_str(&body).unwrap();
+    let _response: InferenceCountResponse = serde_json::from_str(&body).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_get_inference_stats_unknown_function() {
+async fn test_get_inference_count_unknown_function() {
     let client = Client::new();
-    let url = get_gateway_endpoint("/internal/functions/nonexistent_function/inference-stats");
+    let url = get_gateway_endpoint("/internal/functions/nonexistent_function/inference-count");
 
     let resp = client.get(url).send().await.unwrap();
 
@@ -239,10 +240,10 @@ async fn test_get_inference_stats_unknown_function() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_get_inference_stats_unknown_variant() {
+async fn test_get_inference_count_unknown_variant() {
     let client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/basic_test/inference-stats?variant_name=nonexistent_variant",
+        "/internal/functions/basic_test/inference-count?variant_name=nonexistent_variant",
     );
 
     let resp = client.get(url).send().await.unwrap();
@@ -263,7 +264,7 @@ async fn test_get_feedback_stats_float_metric() {
     let (inference_id, _episode_id) = create_inference(&client, "basic_test").await;
 
     // Get initial feedback stats
-    let url = get_gateway_endpoint("/internal/functions/basic_test/inference-stats/brevity_score");
+    let url = get_gateway_endpoint("/internal/functions/basic_test/inference-count/brevity_score");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -271,7 +272,7 @@ async fn test_get_feedback_stats_float_metric() {
         status.is_success(),
         "Expected success status, got {status}: {body}"
     );
-    let initial_response: InferenceWithFeedbackStatsResponse = serde_json::from_str(&body).unwrap();
+    let initial_response: InferenceWithFeedbackCountResponse = serde_json::from_str(&body).unwrap();
     let initial_feedback_count = initial_response.feedback_count;
 
     // Submit feedback for the inference
@@ -283,7 +284,7 @@ async fn test_get_feedback_stats_float_metric() {
 
     // Verify feedback count increased
     let resp = client.get(url).send().await.unwrap();
-    let response: InferenceWithFeedbackStatsResponse = resp.json().await.unwrap();
+    let response: InferenceWithFeedbackCountResponse = resp.json().await.unwrap();
     assert!(
         response.feedback_count > initial_feedback_count,
         "Expected feedback_count to increase from {} after submitting feedback, got {}",
@@ -300,7 +301,7 @@ async fn test_get_feedback_stats_boolean_metric() {
     let (inference_id, _episode_id) = create_inference(&client, "basic_test").await;
 
     // Get initial feedback stats
-    let url = get_gateway_endpoint("/internal/functions/basic_test/inference-stats/task_success");
+    let url = get_gateway_endpoint("/internal/functions/basic_test/inference-count/task_success");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -308,7 +309,7 @@ async fn test_get_feedback_stats_boolean_metric() {
         status.is_success(),
         "Expected success status, got {status}: {body}"
     );
-    let initial_response: InferenceWithFeedbackStatsResponse = serde_json::from_str(&body).unwrap();
+    let initial_response: InferenceWithFeedbackCountResponse = serde_json::from_str(&body).unwrap();
     let initial_feedback_count = initial_response.feedback_count;
 
     // Submit boolean feedback for the inference
@@ -320,7 +321,7 @@ async fn test_get_feedback_stats_boolean_metric() {
 
     // Verify feedback count increased
     let resp = client.get(url).send().await.unwrap();
-    let response: InferenceWithFeedbackStatsResponse = resp.json().await.unwrap();
+    let response: InferenceWithFeedbackCountResponse = resp.json().await.unwrap();
     assert!(
         response.feedback_count > initial_feedback_count,
         "Expected feedback_count to increase from {} after submitting feedback, got {}",
@@ -343,7 +344,7 @@ async fn test_get_feedback_stats_with_threshold() {
 
     // Get stats without threshold
     let url_total =
-        get_gateway_endpoint("/internal/functions/basic_test/inference-stats/brevity_score");
+        get_gateway_endpoint("/internal/functions/basic_test/inference-count/brevity_score");
     let resp_total = client.get(url_total).send().await.unwrap();
     let status_total = resp_total.status();
     let body_total = resp_total.text().await.unwrap();
@@ -351,12 +352,12 @@ async fn test_get_feedback_stats_with_threshold() {
         status_total.is_success(),
         "Expected success status for total, got {status_total}: {body_total}"
     );
-    let total_response: InferenceWithFeedbackStatsResponse =
+    let total_response: InferenceWithFeedbackCountResponse =
         serde_json::from_str(&body_total).unwrap();
 
     // Get stats with threshold > our feedback value (should have fewer results)
     let url_high_threshold = get_gateway_endpoint(
-        "/internal/functions/basic_test/inference-stats/brevity_score?threshold=0.9",
+        "/internal/functions/basic_test/inference-count/brevity_score?threshold=0.9",
     );
     let resp_high = client.get(url_high_threshold).send().await.unwrap();
     let status_high = resp_high.status();
@@ -365,12 +366,12 @@ async fn test_get_feedback_stats_with_threshold() {
         status_high.is_success(),
         "Expected success status for high threshold, got {status_high}: {body_high}"
     );
-    let high_threshold_response: InferenceWithFeedbackStatsResponse =
+    let high_threshold_response: InferenceWithFeedbackCountResponse =
         serde_json::from_str(&body_high).unwrap();
 
     // Get stats with threshold < our feedback value (should include our feedback)
     let url_low_threshold = get_gateway_endpoint(
-        "/internal/functions/basic_test/inference-stats/brevity_score?threshold=0.5",
+        "/internal/functions/basic_test/inference-count/brevity_score?threshold=0.5",
     );
     let resp_low = client.get(url_low_threshold).send().await.unwrap();
     let status_low = resp_low.status();
@@ -379,7 +380,7 @@ async fn test_get_feedback_stats_with_threshold() {
         status_low.is_success(),
         "Expected success status for low threshold, got {status_low}: {body_low}"
     );
-    let low_threshold_response: InferenceWithFeedbackStatsResponse =
+    let low_threshold_response: InferenceWithFeedbackCountResponse =
         serde_json::from_str(&body_low).unwrap();
 
     // Verify that high threshold has fewer or equal inferences than low threshold
@@ -405,7 +406,7 @@ async fn test_get_feedback_stats_demonstration() {
     let client = Client::new();
     // Use json_success which should be able to have demonstrations
     let url =
-        get_gateway_endpoint("/internal/functions/json_success/inference-stats/demonstration");
+        get_gateway_endpoint("/internal/functions/json_success/inference-count/demonstration");
 
     let resp = client.get(url).send().await.unwrap();
     let status = resp.status();
@@ -415,14 +416,14 @@ async fn test_get_feedback_stats_demonstration() {
         "Expected success status, got {status}: {body}"
     );
 
-    let _response: InferenceWithFeedbackStatsResponse = serde_json::from_str(&body).unwrap();
+    let _response: InferenceWithFeedbackCountResponse = serde_json::from_str(&body).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_unknown_function() {
     let client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/nonexistent_function/inference-stats/some_metric",
+        "/internal/functions/nonexistent_function/inference-count/some_metric",
     );
 
     let resp = client.get(url).send().await.unwrap();
@@ -437,7 +438,7 @@ async fn test_get_feedback_stats_unknown_function() {
 async fn test_get_feedback_stats_unknown_metric() {
     let client = Client::new();
     let url =
-        get_gateway_endpoint("/internal/functions/basic_test/inference-stats/nonexistent_metric");
+        get_gateway_endpoint("/internal/functions/basic_test/inference-count/nonexistent_metric");
 
     let resp = client.get(url).send().await.unwrap();
 
@@ -456,7 +457,7 @@ async fn test_get_feedback_stats_episode_level_boolean_metric() {
 
     // Get initial feedback stats
     let url =
-        get_gateway_endpoint("/internal/functions/weather_helper/inference-stats/goal_achieved");
+        get_gateway_endpoint("/internal/functions/weather_helper/inference-count/goal_achieved");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -464,7 +465,7 @@ async fn test_get_feedback_stats_episode_level_boolean_metric() {
         status.is_success(),
         "Expected success status, got {status}: {body}"
     );
-    let initial_response: InferenceWithFeedbackStatsResponse = serde_json::from_str(&body).unwrap();
+    let initial_response: InferenceWithFeedbackCountResponse = serde_json::from_str(&body).unwrap();
     let initial_feedback_count = initial_response.feedback_count;
 
     // Submit episode-level boolean feedback
@@ -476,7 +477,7 @@ async fn test_get_feedback_stats_episode_level_boolean_metric() {
 
     // Verify feedback count increased
     let resp = client.get(url).send().await.unwrap();
-    let response: InferenceWithFeedbackStatsResponse = resp.json().await.unwrap();
+    let response: InferenceWithFeedbackCountResponse = resp.json().await.unwrap();
     assert!(
         response.feedback_count > initial_feedback_count,
         "Expected feedback_count to increase from {} after submitting episode feedback, got {}",
@@ -494,7 +495,7 @@ async fn test_get_feedback_stats_episode_level_float_metric() {
 
     // Get initial feedback stats
     let url =
-        get_gateway_endpoint("/internal/functions/weather_helper/inference-stats/user_rating");
+        get_gateway_endpoint("/internal/functions/weather_helper/inference-count/user_rating");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -502,7 +503,7 @@ async fn test_get_feedback_stats_episode_level_float_metric() {
         status.is_success(),
         "Expected success status, got {status}: {body}"
     );
-    let initial_response: InferenceWithFeedbackStatsResponse = serde_json::from_str(&body).unwrap();
+    let initial_response: InferenceWithFeedbackCountResponse = serde_json::from_str(&body).unwrap();
     let initial_feedback_count = initial_response.feedback_count;
 
     // Submit episode-level float feedback
@@ -514,7 +515,7 @@ async fn test_get_feedback_stats_episode_level_float_metric() {
 
     // Verify feedback count increased
     let resp = client.get(url).send().await.unwrap();
-    let response: InferenceWithFeedbackStatsResponse = resp.json().await.unwrap();
+    let response: InferenceWithFeedbackCountResponse = resp.json().await.unwrap();
     assert!(
         response.feedback_count > initial_feedback_count,
         "Expected feedback_count to increase from {} after submitting episode feedback, got {}",
@@ -525,14 +526,14 @@ async fn test_get_feedback_stats_episode_level_float_metric() {
 
 // Tests from fixtures for write_haiku and extract_entities functions
 
-/// Helper function to call the inference stats endpoint (for fixture-based tests)
-async fn get_inference_stats_fixture(
+/// Helper function to call the inference count endpoint (for fixture-based tests)
+async fn get_inference_count_fixture(
     function_name: &str,
     query_params: &str,
-) -> Result<InferenceStatsResponse, Box<dyn std::error::Error>> {
+) -> Result<InferenceCountResponse, Box<dyn std::error::Error>> {
     let http_client = Client::new();
     let url = format!(
-        "/internal/functions/{function_name}/inference-stats{}",
+        "/internal/functions/{function_name}/inference-count{}",
         if query_params.is_empty() {
             String::new()
         } else {
@@ -548,13 +549,13 @@ async fn get_inference_stats_fixture(
         return Err(format!("Request failed: status={status}, body={body}").into());
     }
 
-    let response: InferenceStatsResponse = resp.json().await?;
+    let response: InferenceCountResponse = resp.json().await?;
     Ok(response)
 }
 
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_get_inference_stats_basic() {
-    let res = get_inference_stats_fixture("write_haiku", "")
+pub async fn test_get_inference_count_basic() {
+    let res = get_inference_count_fixture("write_haiku", "")
         .await
         .unwrap();
 
@@ -564,16 +565,16 @@ pub async fn test_get_inference_stats_basic() {
         res.inference_count
     );
 
-    // Should not have stats_by_variant when group_by is not specified
+    // Should not have count_by_variant when group_by is not specified
     assert!(
-        res.stats_by_variant.is_none(),
-        "stats_by_variant should not be present without group_by"
+        res.count_by_variant.is_none(),
+        "count_by_variant should not be present without group_by"
     );
 }
 
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_get_inference_stats_with_variant_filter() {
-    let res = get_inference_stats_fixture("basic_test", "variant_name=test")
+pub async fn test_get_inference_count_with_variant_filter() {
+    let res = get_inference_count_fixture("basic_test", "variant_name=test")
         .await
         .unwrap();
 
@@ -585,8 +586,8 @@ pub async fn test_get_inference_stats_with_variant_filter() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_get_inference_stats_group_by_variant() {
-    let res = get_inference_stats_fixture("basic_test", "group_by=variant")
+pub async fn test_get_inference_count_group_by_variant() {
+    let res = get_inference_count_fixture("basic_test", "group_by=variant")
         .await
         .unwrap();
 
@@ -596,26 +597,26 @@ pub async fn test_get_inference_stats_group_by_variant() {
         "Expected at least 1 inference for basic_test, got {total_count}"
     );
 
-    let stats_by_variant = res
-        .stats_by_variant
-        .expect("Expected stats_by_variant to be present");
+    let count_by_variant = res
+        .count_by_variant
+        .expect("Expected count_by_variant to be present");
 
     // Should have at least 1 variant
     assert!(
-        !stats_by_variant.is_empty(),
+        !count_by_variant.is_empty(),
         "Expected at least 1 variant, got {}",
-        stats_by_variant.len()
+        count_by_variant.len()
     );
 
     // Sum of variant counts should equal total
-    let sum_of_variants: u64 = stats_by_variant.iter().map(|v| v.inference_count).sum();
+    let sum_of_variants: u64 = count_by_variant.iter().map(|v| v.inference_count).sum();
     assert_eq!(
         sum_of_variants, total_count,
         "Sum of variant counts ({sum_of_variants}) should equal total count ({total_count})"
     );
 
     // Variants should be ordered by inference_count DESC
-    let counts: Vec<u64> = stats_by_variant.iter().map(|v| v.inference_count).collect();
+    let counts: Vec<u64> = count_by_variant.iter().map(|v| v.inference_count).collect();
     for i in 1..counts.len() {
         assert!(
             counts[i - 1] >= counts[i],
@@ -624,7 +625,7 @@ pub async fn test_get_inference_stats_group_by_variant() {
     }
 
     // Each variant should have last_used_at in RFC 3339 format
-    for variant in &stats_by_variant {
+    for variant in &count_by_variant {
         assert!(
             variant.last_used_at.contains('T') && variant.last_used_at.ends_with('Z'),
             "last_used_at should be in RFC 3339 format, got: {}",
@@ -634,8 +635,8 @@ pub async fn test_get_inference_stats_group_by_variant() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_get_inference_stats_group_by_variant_json_function() {
-    let res = get_inference_stats_fixture("extract_entities", "group_by=variant")
+pub async fn test_get_inference_count_group_by_variant_json_function() {
+    let res = get_inference_count_fixture("extract_entities", "group_by=variant")
         .await
         .unwrap();
 
@@ -645,12 +646,12 @@ pub async fn test_get_inference_stats_group_by_variant_json_function() {
         res.inference_count
     );
 
-    let stats_by_variant = res
-        .stats_by_variant
-        .expect("Expected stats_by_variant to be present");
+    let count_by_variant = res
+        .count_by_variant
+        .expect("Expected count_by_variant to be present");
 
     // Verify expected variant is present
-    let variant_names: Vec<&str> = stats_by_variant
+    let variant_names: Vec<&str> = count_by_variant
         .iter()
         .map(|v| v.variant_name.as_str())
         .collect();
@@ -661,9 +662,9 @@ pub async fn test_get_inference_stats_group_by_variant_json_function() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_get_inference_stats_nonexistent_function() {
+pub async fn test_get_inference_count_nonexistent_function() {
     let http_client = Client::new();
-    let url = "/internal/functions/nonexistent_function/inference-stats";
+    let url = "/internal/functions/nonexistent_function/inference-count";
 
     let resp = http_client
         .get(get_gateway_endpoint(url))
@@ -678,9 +679,9 @@ pub async fn test_get_inference_stats_nonexistent_function() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_get_inference_stats_nonexistent_variant() {
+pub async fn test_get_inference_count_nonexistent_variant() {
     let http_client = Client::new();
-    let url = "/internal/functions/write_haiku/inference-stats?variant_name=nonexistent_variant";
+    let url = "/internal/functions/write_haiku/inference-count?variant_name=nonexistent_variant";
 
     let resp = http_client
         .get(get_gateway_endpoint(url))
@@ -696,7 +697,7 @@ pub async fn test_get_inference_stats_nonexistent_variant() {
 
 // Tests for function throughput by variant endpoint
 
-use tensorzero_core::endpoints::internal::inference_stats::GetFunctionThroughputByVariantResponse;
+use tensorzero_core::endpoints::internal::inference_count::GetFunctionThroughputByVariantResponse;
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_function_throughput_by_variant_cumulative() {
@@ -936,4 +937,66 @@ pub async fn test_get_function_throughput_by_variant_month() {
             "Variant name should not be empty"
         );
     }
+}
+
+// ============================================================================
+// List Functions With Inference Count Tests
+// ============================================================================
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_functions_with_inference_count() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/functions/inference-counts");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    let response: ListFunctionsWithInferenceCountResponse = serde_json::from_str(&body).unwrap();
+
+    // Should have at least 2 functions from fixture data
+    assert!(
+        response.functions.len() >= 2,
+        "Expected at least 2 functions, got {}",
+        response.functions.len()
+    );
+
+    // Check that we have write_haiku and extract_entities
+    let function_names: Vec<&str> = response
+        .functions
+        .iter()
+        .map(|f| f.function_name.as_str())
+        .collect();
+    assert!(
+        function_names.contains(&"write_haiku"),
+        "Expected write_haiku in results"
+    );
+    assert!(
+        function_names.contains(&"extract_entities"),
+        "Expected extract_entities in results"
+    );
+
+    // Each function should have a positive inference count
+    for func in &response.functions {
+        assert!(
+            func.inference_count > 0,
+            "Expected positive inference_count for {}, got {}",
+            func.function_name,
+            func.inference_count
+        );
+    }
+
+    // Check that last_inference_timestamp is in RFC 3339 format with milliseconds
+    let rfc3339_regex = regex::Regex::new(
+        r#""last_inference_timestamp"\s*:\s*"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z""#,
+    )
+    .unwrap();
+    assert!(
+        rfc3339_regex.is_match(&body),
+        "Response should contain last_inference_timestamp in RFC 3339 format with milliseconds"
+    );
 }

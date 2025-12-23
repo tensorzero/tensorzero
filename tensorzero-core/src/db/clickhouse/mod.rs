@@ -30,8 +30,8 @@ pub mod clickhouse_client; // Public because tests will use clickhouse_client::F
 pub mod dataset_queries;
 pub mod evaluation_queries;
 pub mod feedback;
+pub mod inference_count;
 pub mod inference_queries;
-pub mod inference_stats;
 pub mod migration_manager;
 pub mod model_inferences;
 pub mod query_builder;

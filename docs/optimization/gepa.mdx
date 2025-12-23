@@ -1,0 +1,409 @@
+---
+title: GEPA
+description: Learn how to use automated prompt engineering to optimize your LLM applications.
+---
+
+[GEPA](https://arxiv.org/abs/2507.19457) is an automated prompt engineering algorithm that iteratively refines your [prompt templates](/gateway/create-a-prompt-template) based on an [inference evaluation](/evaluations/inference-evaluations/tutorial).
+You can run GEPA using TensorZero to optimize the prompt templates of any [TensorZero function](/gateway/configure-functions-and-variants).
+
+GEPA works by repeatedly sampling prompt templates, running evaluations, having an LLM analyze what went well or poorly, and then having an LLM mutate the prompt template based on that analysis.
+Mutated templates that improve on the evaluation metrics define a Pareto frontier and can be sampled at later iterations for further refinement.
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/optimization/gepa/) of this guide on GitHub.
+
+</Tip>
+
+## Optimize your prompt templates with GEPA
+
+<Steps>
+
+<Step title="Configure your LLM application">
+
+Define a function and variant for your application.
+The variant must have at least one prompt template (e.g. the LLM system instructions).
+
+```toml title="tensorzero.toml"
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini-2025-08-07"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+```
+
+<Accordion title="Example: Data Extraction (Named Entity Recognition) — Configuration">
+
+```text title="system_template.minijinja"
+You are an assistant that is performing a named entity recognition task.
+Your job is to extract entities from a given text.
+
+The entities you are extracting are:
+
+- people
+- organizations
+- locations
+- miscellaneous other entities
+
+Please return the entities in the following JSON format:
+
+{
+"person": ["person1", "person2", ...],
+"organization": ["organization1", "organization2", ...],
+"location": ["location1", "location2", ...],
+"miscellaneous": ["miscellaneous1", "miscellaneous2", ...]
+}
+
+```
+
+</Accordion>
+
+</Step>
+
+<Step title="Collect your optimization data">
+
+<Tabs>
+
+<Tab title="Historical Inferences">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
+TensorZero automatically collects structured data about those inferences, which can later be used as training examples for GEPA.
+
+```python
+from tensorzero import ListInferencesRequest
+
+inferences_response = t0.list_inferences(
+    request=ListInferencesRequest(
+        function_name="extract_entities",
+        output_source="inference",
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=inferences_response.inferences,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+</Tab>
+
+<Tab title="TensorZero Dataset">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) for the `extract_entities` function you configured.
+You can create datapoints from historical inferences or external/synthetic datasets.
+
+```python
+from tensorzero import ListDatapointsRequest
+
+datapoints = t0.list_datapoints(
+    dataset_name="extract_entities_dataset",
+    request=ListDatapointsRequest(
+        function_name="extract_entities",
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=datapoints.datapoints,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+</Tab>
+
+</Tabs>
+
+GEPA requires two data splits: training (for template mutation) and validation (for Pareto frontier estimation).
+Let's split samples you queries above using numpy:
+
+```python
+import random
+
+random.shuffle(rendered_samples)
+split_idx = len(rendered_samples) // 2
+train_samples = rendered_samples[:split_idx]
+val_samples = rendered_samples[split_idx:]
+```
+
+</Step>
+
+<Step title="Configure an evaluation">
+
+GEPA template refinement is guided by evaluator scores.
+Define an [Inference Evaluation](/evaluations/inference-evaluations/tutorial) in your TensorZero configuration.
+To demonstrate that GEPA works even with noisy evaluators, we don't provide demonstrations (labels), only an LLM judge.
+
+<Accordion title="Example: Data Extraction (Named Entity Recognition) — Evaluation">
+
+```toml title="tensorzero.toml"
+[evaluations.extract_entities_eval]
+type = "inference"
+function_name = "extract_entities"
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement]
+type = "llm_judge"
+output_type = "float"
+include = { reference_output = true }
+optimize = "max"
+description = "Compares generated output against reference output for NER quality. Scores: 1 (better), 0 (similar), -1 (worse). Evaluates: correctness (only proper nouns, no common nouns/numbers/metadata), schema compliance, completeness, verbatim entity extraction (exact spelling/capitalization), and absence of duplicate entities."
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_instructions = "evaluations/extract_entities/judge_improvement/system_instructions.txt"
+json_mode = "strict"
+```
+
+```text title="system_instructions.txt"
+You are an impartial grader for a Named Entity Recognition (NER) task.
+You will receive **Input** (source text), **Generated Output**, and **Reference Output**.
+Compare the generated output against the reference output and return a JSON object with a single key `score` whose value is **-1**, **0**, or **1**.
+
+# Task Description
+Extract named entities from text into four categories:
+- **person**: Names of specific people
+- **organization**: Names of companies, institutions, agencies, or groups
+- **location**: Names of geographical locations (countries, cities, landmarks)
+- **miscellaneous**: Other named entities (events, products, nationalities, etc.)
+
+# Evaluation Criteria (in priority order)
+
+## 1. Correctness
+- Only **proper nouns** should be extracted (specific people, places, organizations, things)
+- Do NOT extract: common nouns, category labels, numbers, statistics, metadata, or headers
+- Ask: "Does this name a SPECIFIC instance rather than a general category?"
+
+## 2. Verbatim Extraction
+- Entities must appear **exactly** as written in the input text
+- Preserve original spelling, capitalization, and formatting
+- Altered or paraphrased entities are a regression
+
+## 3. No Duplicates
+- Each entity should appear **exactly once** in the output
+- Exact duplicates (same string) are a regression
+- Subset duplicates (e.g., both "Obama" and "Barack Obama") are a regression
+
+## 4. Completeness
+- All valid named entities from the input should be captured
+- Missing entities are a regression
+
+## 5. Correct Categorization
+- Entities should be placed in the appropriate category
+
+# Scoring
+
+- **1 (better)**: Generated output is materially better than reference (fewer false positives/negatives, better adherence to criteria) without material regressions.
+- **0 (similar)**: Outputs are comparable, differences are minor, or improvements are offset by regressions.
+- **-1 (worse)**: Generated output is materially worse (more errors, missing entities, duplicates, or incorrect extractions).
+
+Treat the reference as a baseline, not necessarily perfect. Reward genuine improvements.
+
+# Output Format
+Return **only**:
+{
+    "score": <value>
+}
+where value is **-1**, **0**, or **1**. No explanations or additional keys.
+```
+
+</Accordion>
+
+<Tip>
+
+The `description` field of an LLM judge evaluator gives context to the GEPA analyst and mutation LLMs.
+Let them know what is being scored and what the score means.
+
+</Tip>
+
+GEPA supports evaluations with any number of evaluators and any evaluator type (e.g. exact match, LLM judges).
+
+</Step>
+
+<Step title="Configure GEPA">
+
+Configure GEPA by specifying the name of your function and evaluation.
+You are also free to choose the models used to analyze inferences and generate new templates.
+
+The `analysis_model` reflects on individual inferences, reports on whether they are optimal, need improvement, or are erroneous, and provides suggestions for prompt template improvement.
+The `mutation_model` generates new templates based on the collected analysis reports.
+We recommend using strong models for these tasks.
+
+```python
+from tensorzero import GEPAConfig
+
+optimization_config = GEPAConfig(
+    function_name="extract_entities",
+    evaluation_name="extract_entities_eval",
+    analysis_model="openai::gpt-5.2",
+    mutation_model="openai::gpt-5.2",
+    initial_variants=["baseline"],
+    max_iterations=10,
+    max_tokens=16384,
+)
+```
+
+<Tip>
+
+GEPA optimization can take a while to run, so keep `max_iterations` relatively small.
+You can manually iterate further by setting `initial_variants` with the result of a previous GEPA run.
+
+</Tip>
+
+</Step>
+
+<Step title="Launch GEPA">
+
+You can now launch your GEPA optimization job using the TensorZero Gateway:
+
+```python
+job_handle = t0.experimental_launch_optimization(
+    train_samples=train_samples,
+    val_samples=val_samples,
+    optimization_config=optimization_config,
+)
+
+job_info = t0.experimental_poll_optimization(
+    job_handle=job_handle
+)
+```
+
+</Step>
+
+<Step title="Update your configuration">
+
+Review the generated templates and write them to your config directory:
+
+```python
+variant_configs = job_info.output["content"]
+
+for variant_name, variant_config in variant_configs.items():
+    print(f"\n# Optimized variant: {variant_name}")
+    for template_name, template in variant_config["templates"].items():
+        print(f"## '{template_name}' template:")
+        print(template["path"]["__data"])
+```
+
+Finally, add the new variant to your configuration.
+
+<Accordion title="Example: Data Extraction (Named Entity Recognition) — Optimized Variant">
+
+```toml title="tensorzero.toml"
+[functions.extract_entities.variants.gepa_optimized]
+type = "chat_completion"
+model = "openai::gpt-5-mini-2025-08-07"
+templates.system.path = "functions/extract_entities/gepa-iter-9-gepa-iter-6-gepa-iter-4-baseline/system_template.minijinja"
+json_mode = "strict"
+```
+
+```text title="gepa-iter-9-gepa-iter-6-gepa-iter-4-baseline/system_template.minijinja"
+You are an assistant performing **strict Named Entity Recognition (NER)**.
+
+## Task
+Given an input text, extract entity strings and place each extracted string into exactly one bucket:
+- **person**: named individuals (e.g., “Gloria Steinem”, “D. Cox”, “I. Salisbury”)
+- **organization**: companies, institutions, agencies, government bodies, teams/clubs, political/armed groups (e.g., “Ford”, “KDPI”, “Durham”, “Mujahideen Khalq”)
+- **location**: named places (countries, cities, regions, geographic areas, venues) (e.g., “Paris”, “Weston-super-Mare”, “northern Iraq”)
+- **miscellaneous**: named things that are not person/organization/location, such as **named events/competitions/tournaments/cups/leagues**, works of art, products, laws, etc. (e.g., “Cup Winners’ Cup”)
+
+## Critical rules (follow exactly)
+1. **Default = proper-nouns / unique names only**: Prefer true names (usually capitalized) over generic phrases.
+   - Exclude roles/descriptions like: “one dealer”, “the market”, “a company”, “summer holidays”.
+   - Exclude document/section labels/headers/field names like: “Income Statement Data”, “Balance Sheet”, “Table”, “Date”.
+
+2. **Dataset edge-case (salient coined concepts) — allow sparingly**:
+   - If a **distinctive coined/defined concept phrase** appears as a referential label in context (often in quotes or clearly treated as “a thing”), you **may** include it in **miscellaneous** even if not capitalized.
+   - Example of what this rule allows: “... this **artificial atmosphere** is very dangerous ...” → miscellaneous may include ["artificial atmosphere"].
+   - Do **not** use this to extract ordinary noun phrases broadly; when unsure, **do not** add the phrase.
+
+3. **No numbers/metrics/metadata**: Do **NOT** extract standalone numbers, percentages, quantities, rankings, or statistical fragments (e.g., “35,563”, “11.7 percent”, “6-3”, “6-2”, “326”) **unless they are part of an official name**.
+   - Sports note: scoring/status terms like “not out” and standalone run/score numbers are **not entities**.
+
+4. **Verbatim spans (exact copy)**: Copy each entity **exactly as it appears in the text** (same spelling, capitalization, punctuation). Do not normalize, shorten, translate, or paraphrase.
+
+5. **High recall for true entities**: Extract **ALL distinct entity mentions** that appear.
+   - Do **not** drop a specific mention in favor of a broader one (e.g., if “northern Iraq” appears, include “northern Iraq” rather than only “Iraq”).
+
+6. **Capitalized collective group labels are entities (avoid over-pruning)**:
+   - Treat multiword group labels (political/ethnic/religious/armed/opposition groups) as entities when they function as a specific group name in context, **even if the head noun is generic** (e.g., “oppositions”, “rebels”, “forces”).
+   - Extract the full verbatim span as written.
+   - Example: “... between Mujahideen Khalq and the Iranian Kurdish oppositions ...” → organization includes ["Mujahideen Khalq", "Iranian Kurdish oppositions"].
+
+7. **Geographic modifiers can be valid locations** when they denote a place/region in context.
+   - Examples to include as **location** when used as places: “northern Iraq”, “Iraqi Kurdish areas”.
+
+8. **No guessing / no hallucinations**:
+   - Do not add implied entities that do not appear verbatim (e.g., do not add “Iran” if only “Iranian” appears).
+   - If the text contains no clear extractable entities, return empty arrays.
+
+9. **Truncated / ellipsized input handling (strict gate)**:
+   - Add the literal sentinel string **"TRUNCATED_INPUT"** to **miscellaneous** **only** if the input contains an explicit ellipsis (“...”) or truncation marker, **OR** the text is so corrupted/incomplete that you **cannot confidently identify any** named entities.
+   - If the text is cut off but still contains clearly identifiable entities, extract those entities and **do NOT** add “TRUNCATED_INPUT”.
+
+10. **No duplicates / no overlap**: Do not repeat the same string within a list, and do not place the same entity string in multiple categories.
+
+## Output format
+Return **only** a JSON object with exactly these keys and array-of-string values:
+{
+  "person": [],
+  "organization": [],
+  "location": [],
+  "miscellaneous": []
+}
+
+## Mini examples
+- Input: "Income Statement Data :" → {"person":[],"organization":[],"location":[],"miscellaneous":[]}
+- Input: "Third was Ford with 35,563 registrations , or 11.7 percent ." → {"person":[],"organization":["Ford"],"location":[],"miscellaneous":[]}
+- Input: "66 , M. Vaughan 57 ) v Lancashire ." → {"person":["M. Vaughan"],"organization":["Lancashire"],"location":[],"miscellaneous":[]}
+- Input: "this artificial atmosphere is very dangerous ... \" Levy said ." → {"person":["Levy"],"organization":[],"location":[],"miscellaneous":["artificial atmosphere"]}
+- Input: "A spokesman ... between Mujahideen Khalq and the Iranian Kurdish oppositions ..." → {"person":[],"organization":["Mujahideen Khalq","Iranian Kurdish oppositions"],"location":[],"miscellaneous":[]}
+- Input: "The media ..." → {"person":[],"organization":[],"location":[],"miscellaneous":["TRUNCATED_INPUT"]}
+- Input: "At Weston-super-Mare : Durham 326 ( D. Cox 95 not out ," → {"person":["D. Cox"],"organization":["Durham"],"location":["Weston-super-Mare"],"miscellaneous":[]}
+- Sports guideline: teams/clubs → organization; competitions/tournaments/cups/leagues → miscellaneous
+```
+
+</Accordion>
+
+That's it!
+You are now ready to deploy your GEPA-optimized LLM application!
+
+</Step>
+
+</Steps>
+
+<Tip>
+
+GEPA returns a set of Pareto optimal variants based on the evaluation you defined.
+You can roll out your new variants with confidence using [adaptive A/B testing](/experimentation/run-adaptive-ab-tests).
+
+</Tip>
+
+## `GEPAConfig`
+
+Configure GEPA optimization by creating a `GEPAConfig` object with the following parameters:
+
+### Required Parameters
+
+| Parameter         | Type  | Description                                                                      |
+| ----------------- | ----- | -------------------------------------------------------------------------------- |
+| `function_name`   | `str` | Name of the TensorZero function to optimize.                                     |
+| `evaluation_name` | `str` | Name of the evaluation used to score candidate variants.                         |
+| `analysis_model`  | `str` | Model used to analyze inference results (e.g. `"anthropic::claude-sonnet-4-5"`). |
+| `mutation_model`  | `str` | Model used to generate prompt mutations (e.g. `"anthropic::claude-sonnet-4-5"`). |
+
+### Optional Parameters
+
+| Parameter                        | Type          | Default      | Description                                                                                                                                                                             |
+| -------------------------------- | ------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `initial_variants`               | `list[str]`   | All variants | List of variant names to initialize GEPA with. If not specified, uses all variants defined for the function.                                                                            |
+| `variant_prefix`                 | `str`         | `None`       | Prefix for naming newly generated variants.                                                                                                                                             |
+| `batch_size`                     | `int`         | `5`          | Number of training samples to analyze per iteration.                                                                                                                                    |
+| `max_iterations`                 | `int`         | `1`          | Maximum number of optimization iterations.                                                                                                                                              |
+| `max_concurrency`                | `int`         | `10`         | Maximum number of concurrent inference calls.                                                                                                                                           |
+| `seed`                           | `int`         | `None`       | Random seed for reproducibility.                                                                                                                                                        |
+| `timeout`                        | `int`         | `300`        | Client timeout in seconds for TensorZero gateway operations.                                                                                                                            |
+| `include_inference_for_mutation` | `bool`        | `True`       | Whether to include inference input/output in the analysis passed to the mutation model. Useful for few-shot examples but can cause context overflow with long conversations or outputs. |
+| `retries`                        | `RetryConfig` | `None`       | Retry configuration for inference calls during optimization.                                                                                                                            |
+| `max_tokens`                     | `int`         | `None`       | Maximum tokens for analysis and mutation model calls. Required for Anthropic models.                                                                                                    |

@@ -20,6 +20,10 @@ pub enum ToolError {
     #[error("Execution failed: {0}")]
     ExecutionFailed(#[from] anyhow::Error),
 
+    /// Schema generation failed.
+    #[error("Schema generation failed: {0}")]
+    SchemaGeneration(anyhow::Error),
+
     /// JSON serialization/deserialization error.
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
@@ -81,6 +85,7 @@ impl From<ToolError> for TaskError {
             ToolError::DuplicateToolName(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
             ToolError::InvalidParams(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
             ToolError::ExecutionFailed(e) => TaskError::TaskInternal(e),
+            ToolError::SchemaGeneration(e) => TaskError::TaskInternal(e),
         }
     }
 }

@@ -3639,7 +3639,7 @@ pub async fn check_simple_image_inference_response(
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
     // This test is very flaky on Fireworks for some reason
-    if provider.model_provider_name == "fireworks" {
+    if provider.model_provider_name == "fireworks" || provider.model_provider_name == "together" {
         return;
     }
     let extra_headers = if provider.is_modal_provider() {

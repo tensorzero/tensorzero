@@ -16,7 +16,8 @@ use uuid::Uuid;
 // =============================================================================
 
 /// A session representing an autopilot conversation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Session {
     pub id: Uuid,
     pub organization_id: String,
@@ -27,7 +28,8 @@ pub struct Session {
 }
 
 /// An event within a session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Event {
     pub id: Uuid,
     pub payload: EventPayload,
@@ -36,8 +38,9 @@ pub struct Event {
 }
 
 /// The payload of an event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     Message(InputMessage),
     StatusUpdate {
@@ -66,8 +69,9 @@ impl EventPayload {
 }
 
 /// A status update within a session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum StatusUpdate {
     Text { text: String },
 }
@@ -76,27 +80,27 @@ pub enum StatusUpdate {
 // Tool Call Types
 // =============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallDecisionSource {
     Ui,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 pub struct ToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
     pub status: ToolCallAuthorizationStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallAuthorizationStatus {
     Approved,
     Rejected { reason: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutcome {
     Success(ToolResult),
@@ -113,7 +117,8 @@ pub enum ToolOutcome {
 // =============================================================================
 
 /// Request body for creating an event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateEventRequest {
     pub deployment_id: Uuid,
     pub tensorzero_version: String,
@@ -124,36 +129,45 @@ pub struct CreateEventRequest {
     /// the most recent `user_message` event in the session. This prevents duplicate events
     /// from being created if a client retries a create user request that already succeeded.
     /// This should only apply to Message events.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_user_message_event_id: Option<Uuid>,
 }
 
 /// Query parameters for listing events.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListEventsParams {
     /// Maximum number of events to return. Defaults to 20.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Cursor for pagination: return events with id < before.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<Uuid>,
 }
 
 /// Query parameters for listing sessions.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListSessionsParams {
     /// Maximum number of sessions to return. Defaults to 20.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Offset for pagination.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
 }
 
 /// Query parameters for streaming events.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StreamEventsParams {
     /// Resume streaming from this event ID (exclusive).
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_event_id: Option<Uuid>,
 }
@@ -163,14 +177,16 @@ pub struct StreamEventsParams {
 // =============================================================================
 
 /// Response from creating an event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateEventResponse {
     pub event_id: Uuid,
     pub session_id: Uuid,
 }
 
 /// Response from listing events.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListEventsResponse {
     pub events: Vec<Event>,
     /// The most recent `message` event with role `user` in this session.
@@ -183,7 +199,8 @@ pub struct ListEventsResponse {
 }
 
 /// Response from listing sessions.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListSessionsResponse {
     pub sessions: Vec<Session>,
 }

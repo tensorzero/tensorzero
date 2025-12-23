@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use autopilot_client::ToolResult as AutopilotToolResult;
 use durable_tools::{
     CreateEventRequest, EventPayload, TaskTool, ToolAppState, ToolContext, ToolMetadata,
-    ToolOutcome, ToolResult as DurableToolResult,
+    ToolOutcome, ToolResult as DurableToolResult, ToolResult,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -64,7 +64,7 @@ impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
         T::description()
     }
 
-    fn parameters_schema() -> Schema {
+    fn parameters_schema() -> ToolResult<Schema> {
         T::parameters_schema()
     }
 

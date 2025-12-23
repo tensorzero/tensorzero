@@ -30,12 +30,16 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::functions::internal::get_variant_performances_handler),
         )
         .route(
-            "/internal/functions/{function_name}/inference-stats",
-            get(endpoints::internal::inference_stats::get_inference_stats_handler),
+            "/internal/functions/inference-counts",
+            get(endpoints::internal::inference_count::list_functions_with_inference_count_handler),
         )
         .route(
-            "/internal/functions/{function_name}/inference-stats/{metric_name}",
-            get(endpoints::internal::inference_stats::get_inference_with_feedback_stats_handler),
+            "/internal/functions/{function_name}/inference-count",
+            get(endpoints::internal::inference_count::get_inference_count_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/inference-count/{metric_name}",
+            get(endpoints::internal::inference_count::get_inference_with_feedback_count_handler),
         )
         .route(
             "/internal/feedback/{target_id}",
@@ -63,7 +67,7 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         )
         .route(
             "/internal/functions/{function_name}/throughput-by-variant",
-            get(endpoints::internal::inference_stats::get_function_throughput_by_variant_handler),
+            get(endpoints::internal::inference_count::get_function_throughput_by_variant_handler),
         )
         .route(
             "/internal/model_inferences/{inference_id}",
@@ -121,8 +125,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
          )
         // Evaluation endpoints
         .route(
-            "/internal/evaluations/run-stats",
-            get(endpoints::internal::evaluations::get_evaluation_run_stats_handler),
+            "/internal/evaluations/runs/count",
+            get(endpoints::internal::evaluations::count_evaluation_runs_handler),
         )
         .route(
             "/internal/evaluations/datapoint-count",
