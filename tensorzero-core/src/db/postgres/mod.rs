@@ -1,14 +1,13 @@
 use async_trait::async_trait;
 use futures::TryStreamExt;
-use futures::future::try_join;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
 use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
 
-use super::HealthCheckable;
 use crate::error::{Error, ErrorDetails};
-use durable;
+
+use super::HealthCheckable;
 
 pub mod experimentation;
 pub mod rate_limiting;
@@ -24,9 +23,6 @@ fn get_run_migrations_command() -> String {
 pub enum PostgresConnectionInfo {
     Enabled {
         pool: PgPool,
-        /// The `tensorzero-auth` crate currently uses an alpha release of `sqlx`, so the `PgPool` type is different.
-        /// As a result, we need to create a separate pool for it.
-        alpha_pool: Option<sqlx_alpha::PgPool>,
     },
     #[cfg(test)]
     Mock {
@@ -36,8 +32,8 @@ pub enum PostgresConnectionInfo {
 }
 
 impl PostgresConnectionInfo {
-    pub fn new_with_pool(pool: PgPool, alpha_pool: Option<sqlx_alpha::PgPool>) -> Self {
-        Self::Enabled { pool, alpha_pool }
+    pub fn new_with_pool(pool: PgPool) -> Self {
+        Self::Enabled { pool }
     }
 
     #[cfg(test)]
@@ -51,22 +47,7 @@ impl PostgresConnectionInfo {
 
     pub fn get_pool(&self) -> Option<&PgPool> {
         match self {
-            Self::Enabled {
-                pool,
-                alpha_pool: _,
-            } => Some(pool),
-            #[cfg(test)]
-            Self::Mock { .. } => None,
-            Self::Disabled => None,
-        }
-    }
-
-    pub fn get_alpha_pool(&self) -> Option<&sqlx_alpha::PgPool> {
-        match self {
-            Self::Enabled {
-                pool: _,
-                alpha_pool,
-            } => alpha_pool.as_ref(),
+            Self::Enabled { pool } => Some(pool),
             #[cfg(test)]
             Self::Mock { .. } => None,
             Self::Disabled => None,
@@ -75,10 +56,7 @@ impl PostgresConnectionInfo {
 
     pub fn get_pool_result(&self) -> Result<&PgPool, Error> {
         match self {
-            Self::Enabled {
-                pool,
-                alpha_pool: _,
-            } => Ok(pool),
+            Self::Enabled { pool } => Ok(pool),
             #[cfg(test)]
             Self::Mock { .. } => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: "Mock database is not supported".to_string(),
@@ -97,21 +75,19 @@ impl PostgresConnectionInfo {
             let expected_migrations: HashSet<i64> = migrator.iter().map(|m| m.version).collect();
             // Query the database for all successfully applied migration versions.
             let applied_migrations = get_applied_migrations(pool).await.map_err(|e| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: format!("Failed to retrieve applied `tensorzero-core` migrations: {e}. You may need to run the migrations with `{}`", get_run_migrations_command()),
-            })
-        })?;
+                Error::new(ErrorDetails::PostgresConnectionInitialization {
+                    message: format!("Failed to retrieve applied `tensorzero-core` migrations: {e}. You may need to run the migrations with `{}`", get_run_migrations_command()),
+                })
+            })?;
 
             Self::check_applied_expected(
                 "tensorzero-core",
                 &applied_migrations,
                 &expected_migrations,
             )?;
-        }
 
-        if let Some(alpha_pool) = self.get_alpha_pool() {
             let tensorzero_auth_migrations_data =
-                tensorzero_auth::postgres::get_migrations_data(alpha_pool).await.map_err(|e| {
+                tensorzero_auth::postgres::get_migrations_data(pool).await.map_err(|e| {
                     Error::new(ErrorDetails::PostgresConnectionInitialization {
                         message: format!("Failed to retrieve applied `tensorzero-auth` migrations: {e}. You may need to run the migrations with `{}`", get_run_migrations_command()),
                     })
@@ -160,38 +136,20 @@ impl HealthCheckable for PostgresConnectionInfo {
                     }))
                 }
             }
-            Self::Enabled { pool, alpha_pool } => {
+            Self::Enabled { pool } => {
                 let check = async {
-                    let _result = sqlx::query("SELECT 1")
-                        .fetch_one(pool)
-                        .await
-                        .map_err(|_e| {
-                            Error::new(ErrorDetails::PostgresConnection {
-                                message: _e.to_string(),
-                            })
-                        })?;
+                    let _result = sqlx::query("SELECT 1").fetch_one(pool).await.map_err(|e| {
+                        Error::new(ErrorDetails::PostgresConnection {
+                            message: e.to_string(),
+                        })
+                    })?;
 
                     Ok(())
                 };
-                let alpha_check = async {
-                    if let Some(alpha_pool) = alpha_pool {
-                        let _result = sqlx_alpha::query("SELECT 1")
-                            .fetch_one(alpha_pool)
-                            .await
-                            .map_err(|_e| {
-                                Error::new(ErrorDetails::PostgresConnection {
-                                    message: _e.to_string(),
-                                })
-                            })?;
-                        Ok(())
-                    } else {
-                        Ok(())
-                    }
-                };
 
                 // TODO(shuyang): customize postgres timeout
-                match timeout(Duration::from_millis(1000), try_join(check, alpha_check)).await {
-                    Ok(Ok(((), ()))) => Ok(()),
+                match timeout(Duration::from_millis(1000), check).await {
+                    Ok(Ok(())) => Ok(()),
                     Ok(Err(e)) => Err(e),
                     Err(_) => Err(Error::new(ErrorDetails::PostgresConnection {
                         message: "Postgres healthcheck query timed out.".to_string(),
@@ -216,35 +174,6 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
 }
 
 pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Result<(), Error> {
-    // Our 'tensorzero-auth' and 'durable' crates currently use an alpha release of 'sqlx',
-    // so the `PgPool` type is different from the one used by tensorzero-core.
-    let sqlx_alpha_pool = sqlx_alpha::PgPool::connect(postgres_url)
-        .await
-        .map_err(|err| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: err.to_string(),
-            })
-        })?;
-
-    // Run tensorzero-auth migrations
-    tensorzero_auth::postgres::make_migrator()
-        .run(&sqlx_alpha_pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresMigration {
-                message: format!("Failed to run tensorzero-auth migrations: {e}"),
-            })
-        })?;
-
-    // Run durable migrations to create the durable schema,
-    // which is required by some tensorzero-core migrations.
-    durable::MIGRATOR.run(&sqlx_alpha_pool).await.map_err(|e| {
-        Error::new(ErrorDetails::PostgresMigration {
-            message: format!("Failed to run durable migrations: {e}"),
-        })
-    })?;
-
-    // Run tensorzero-core migrations
     let pool = PgPoolOptions::new()
         .connect(postgres_url)
         .await
@@ -259,6 +188,14 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
         })
     })?;
 
+    tensorzero_auth::postgres::make_migrator()
+        .run(&pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresMigration {
+                message: format!("Failed to run tensorzero-auth migrations: {e}"),
+            })
+        })?;
     Ok(())
 }
 

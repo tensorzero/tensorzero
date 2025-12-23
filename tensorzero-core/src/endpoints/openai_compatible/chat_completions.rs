@@ -97,7 +97,8 @@ pub async fn chat_completions_handler(
         params,
         api_key_ext,
     ))
-    .await?;
+    .await?
+    .output;
 
     match response {
         InferenceOutput::NonStreaming(response) => {

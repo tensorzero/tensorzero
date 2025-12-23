@@ -9,7 +9,6 @@ use rand::Rng;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tokio::time::timeout;
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
@@ -46,7 +45,6 @@ use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 #[ts(export)]
 pub struct BestOfNSamplingConfig {
     weight: Option<f64>,
-    timeout_s: f64,
     candidates: Vec<String>,
     evaluator: BestOfNEvaluatorConfig,
 }
@@ -60,10 +58,6 @@ impl BestOfNSamplingConfig {
         self.weight = weight;
     }
 
-    pub fn timeout_s(&self) -> f64 {
-        self.timeout_s
-    }
-
     pub fn candidates(&self) -> &Vec<String> {
         &self.candidates
     }
@@ -73,10 +67,11 @@ impl BestOfNSamplingConfig {
     }
 
     /// Converts this initialized config back to its uninitialized form.
+    #[expect(deprecated)]
     pub fn as_uninitialized(self) -> UninitializedBestOfNSamplingConfig {
         UninitializedBestOfNSamplingConfig {
             weight: self.weight,
-            timeout_s: self.timeout_s,
+            timeout_s: None,
             candidates: self.candidates,
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: self.evaluator.inner.as_uninitialized(),
@@ -86,30 +81,27 @@ impl BestOfNSamplingConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
     pub weight: Option<f64>,
-    #[serde(default = "default_timeout")]
-    pub timeout_s: f64,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
     pub candidates: Vec<String>,
     pub evaluator: UninitializedBestOfNEvaluatorConfig,
 }
 
-fn default_timeout() -> f64 {
-    300.0
-}
-
 #[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct BestOfNEvaluatorConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNEvaluatorConfig {
     #[serde(flatten)]
@@ -124,7 +116,6 @@ impl UninitializedBestOfNSamplingConfig {
     ) -> Result<BestOfNSamplingConfig, Error> {
         Ok(BestOfNSamplingConfig {
             weight: self.weight,
-            timeout_s: self.timeout_s,
             candidates: self.candidates,
             evaluator: BestOfNEvaluatorConfig {
                 inner: self.evaluator.inner.load(
@@ -138,6 +129,12 @@ impl UninitializedBestOfNSamplingConfig {
                 )?,
             },
         })
+    }
+
+    /// Returns the deprecated `timeout_s` value if set.
+    #[expect(deprecated)]
+    pub fn timeout_s(&self) -> Option<f64> {
+        self.timeout_s
     }
 }
 
@@ -365,21 +362,18 @@ impl BestOfNSamplingConfig {
             let input = Arc::new(input.clone());
             inference_futures.push((
                 candidate_name.clone(),
-                timeout(
-                    tokio::time::Duration::from_secs_f64(self.timeout_s),
-                    unbounded_recursion_wrapper(async move {
-                        candidate_variant
-                            .infer(
-                                input,
-                                models,
-                                function,
-                                config,
-                                clients,
-                                InferenceParams::default(),
-                            )
-                            .await
-                    }),
-                ),
+                unbounded_recursion_wrapper(async move {
+                    candidate_variant
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            config,
+                            clients,
+                            InferenceParams::default(),
+                        )
+                        .await
+                }),
             ));
         }
 
@@ -393,20 +387,9 @@ impl BestOfNSamplingConfig {
 
         // Collect the successful results
         let mut successful_results = Vec::new();
-        for (candidate_name, result) in inference_results {
-            match result {
-                Ok(inner_result) => {
-                    if let Ok(res) = inner_result {
-                        successful_results.push(res);
-                    }
-                }
-                Err(_timeout_error) => {
-                    // Map the Tokio timeout error to our own TimeoutError type
-                    // It logs on construction
-                    Error::new(ErrorDetails::InferenceTimeout {
-                        variant_name: candidate_name.clone(),
-                    });
-                }
+        for (_candidate_name, result) in inference_results {
+            if let Ok(res) = result {
+                successful_results.push(res);
             }
         }
 
@@ -1268,7 +1251,6 @@ mod tests {
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
         };
@@ -1461,7 +1443,6 @@ mod tests {
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
         };
@@ -1537,7 +1518,6 @@ mod tests {
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
         };
@@ -1624,7 +1604,6 @@ mod tests {
         // Test case: Index returned too large (should return an error)
         let best_of_n_big_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             evaluator: BestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1711,10 +1690,11 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated)]
     fn test_as_uninitialized_preserves_basic_fields() {
         let uninitialized = UninitializedBestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: 60.0,
+            timeout_s: Some(60.0), // deprecated, will be None in exported
             candidates: vec!["variant1".to_string(), "variant2".to_string()],
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1732,7 +1712,11 @@ mod tests {
         let exported = config.as_uninitialized();
 
         assert_eq!(exported.weight, Some(1.0));
-        assert_eq!(exported.timeout_s, 60.0);
+        // timeout_s is deprecated and not stored in initialized config, so it's None in exported
+        assert_eq!(
+            exported.timeout_s, None,
+            "timeout_s should be None in exported config"
+        );
         assert_eq!(
             exported.candidates,
             vec!["variant1".to_string(), "variant2".to_string()]
@@ -1742,10 +1726,11 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated)]
     fn test_as_uninitialized_preserves_nested_evaluator() {
         let uninitialized = UninitializedBestOfNSamplingConfig {
             weight: None,
-            timeout_s: 300.0,
+            timeout_s: None,
             candidates: vec!["v1".to_string()],
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1771,10 +1756,11 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated)]
     fn test_as_uninitialized_with_empty_candidates() {
         let uninitialized = UninitializedBestOfNSamplingConfig {
             weight: None,
-            timeout_s: 300.0,
+            timeout_s: None,
             candidates: vec![],
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1794,10 +1780,11 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated)]
     fn test_as_uninitialized_serialization_round_trip() {
         let original = UninitializedBestOfNSamplingConfig {
             weight: Some(0.7),
-            timeout_s: 120.0,
+            timeout_s: None, // deprecated field
             candidates: vec!["a".to_string(), "b".to_string()],
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1824,7 +1811,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(reloaded.weight(), Some(0.7));
-        assert_eq!(reloaded.timeout_s(), 120.0);
         assert_eq!(
             reloaded.candidates(),
             &vec!["a".to_string(), "b".to_string()]

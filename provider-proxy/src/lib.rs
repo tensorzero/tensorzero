@@ -218,6 +218,21 @@ async fn check_cache<
                 .modified()
                 .with_context(|| format!("Failed to read cache file mtime for {path_str}"))?;
             let use_cache = current_file_mtime <= start_time;
+            // If we have a file on disk but we decided not to use it, then *delete* the existing file.
+            // This file might have been a bad response from the provider (which we decided to retry),
+            // so we don't want to leave it on disk in case our successful response fails to write to disk
+            // for some reason.
+            // This can delete 'good' files (if multiple independent tests happen to make identical requests
+            // to the same provider), but whichever run finishes last should still write a file to disk.
+            // Additionally, we can miss writing good files to disk, since the stream might get closed early
+            // by the client (when it sees a `[DONE]` event).
+            // However, both of these cases don't affect correctness. The important requirement is that all
+            // cache files left on disk at the end of a successful test suite run are 'good' files
+            // (since we'll upload them to our S3 bucket)
+            if !use_cache {
+                std::fs::remove_file(&path)
+                    .with_context(|| format!("Failed to remove cache file {path_str}"))?;
+            }
             file_mtime = Some(current_file_mtime);
             Ok(use_cache)
         }

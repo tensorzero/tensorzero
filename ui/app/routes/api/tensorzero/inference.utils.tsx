@@ -514,8 +514,7 @@ function variantInfoToUninitializedVariantInfo(
       return {
         ...baseUninitialized,
         type: "experimental_best_of_n_sampling" as const,
-        weight: inner.weight,
-        timeout_s: inner.timeout_s,
+        weight: inner.weight ?? undefined,
         candidates: inner.candidates,
         evaluator: {
           weight: inner.evaluator.weight,
@@ -568,8 +567,7 @@ function variantInfoToUninitializedVariantInfo(
       return {
         ...baseUninitialized,
         type: "experimental_mixture_of_n" as const,
-        weight: inner.weight,
-        timeout_s: inner.timeout_s,
+        weight: inner.weight ?? undefined,
         candidates: inner.candidates,
         fuser: {
           weight: inner.fuser.weight,

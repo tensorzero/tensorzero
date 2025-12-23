@@ -16,7 +16,7 @@ use crate::{
     utils::gateway::AppState,
 };
 
-/// Response type for GET /internal/ui-config
+/// Response type for GET /internal/ui_config
 ///
 /// Contains only UI-safe fields from the gateway config, excluding sensitive
 /// information like provider credentials, API keys, and internal settings.
@@ -56,7 +56,7 @@ impl UiConfig {
     }
 }
 
-/// Handler for GET /internal/ui-config
+/// Handler for GET /internal/ui_config
 ///
 /// Returns a UI-safe subset of the Config.
 pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {

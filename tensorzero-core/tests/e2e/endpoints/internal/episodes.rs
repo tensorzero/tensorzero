@@ -151,7 +151,7 @@ async fn test_get_episode_inference_count() {
     let bounds: TableBoundsWithCount = bounds_resp.json().await.unwrap();
 
     if let Some(first_id) = bounds.first_id {
-        let url = get_gateway_endpoint(&format!("/internal/episodes/{first_id}/inference-count"));
+        let url = get_gateway_endpoint(&format!("/internal/episodes/{first_id}/inference_count"));
         let resp = http_client.get(url).send().await.unwrap();
         assert!(
             resp.status().is_success(),
@@ -174,7 +174,7 @@ async fn test_get_episode_inference_count_nonexistent_episode() {
     // Use a UUID that likely doesn't exist
     let nonexistent_id = Uuid::now_v7();
     let url = get_gateway_endpoint(&format!(
-        "/internal/episodes/{nonexistent_id}/inference-count"
+        "/internal/episodes/{nonexistent_id}/inference_count"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();

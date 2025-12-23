@@ -354,7 +354,7 @@ jobs:
         shell: bash
 
       - name: Install cargo-hack
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-hack
 
@@ -544,12 +544,17 @@ jobs:
         shell: bash
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
       - name: Build (Rust)
         run: cargo build --workspace --verbose
+
+      - name: Validate config
+        run: |
+          unset TENSORZERO_CLICKHOUSE_URL
+          cargo run-e2e --validate-and-exit
 
   rust-test:
     permissions:
@@ -574,7 +579,7 @@ jobs:
         shell: bash
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -701,7 +706,7 @@ jobs:
       #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -777,7 +782,7 @@ jobs:
       - name: "Free up disk space"
         run: ./ci/free-disk-space.sh
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest
 
@@ -980,7 +985,7 @@ jobs:
           shared-key: "build-gateway-cache"
           save-if: false
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest
 
@@ -1121,8 +1126,40 @@ jobs:
           docker compose -f examples/production-deployment/docker-compose.yml down
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
+  # Test that the ui e2e tests still pass after we regenerate the model inference cache
+  ui-tests-e2e-regen-model-inference-cache:
+    permissions:
+      contents: read
+      actions: write
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
+    with:
+      regen_cache: true
+      is_merge_group: true
+      force_no_auth: true
+    needs:
+      [
+        build-gateway-container,
+        build-ui-container,
+        build-mock-inference-container,
+      ]
+    secrets:
+      S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
   run-merge-queue-checks:
-    needs: [build-gateway-container, build-gateway-e2e-container, build-mock-inference-container]
+    needs:
+      [
+        build-gateway-container,
+        build-gateway-e2e-container,
+        build-mock-inference-container,
+      ]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
@@ -1178,6 +1215,7 @@ jobs:
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,
+        ui-tests-e2e-regen-model-inference-cache,
         mock-optimization-tests,
         run-merge-queue-checks,
       ]
