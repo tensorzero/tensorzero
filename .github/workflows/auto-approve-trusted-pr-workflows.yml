@@ -5,6 +5,8 @@ on:
     # Runs every 5 minutes
     - cron: "*/5 * * * *"
   workflow_dispatch: # Allow manual triggering
+  pull_request_target:
+    types: [synchronize, opened, labeled, reopened]
 
 permissions:
   actions: write
