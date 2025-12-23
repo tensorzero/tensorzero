@@ -6,7 +6,6 @@ on:
     paths-ignore:
       - "docs/**"
   pull_request:
-    branches: ["main"]
   workflow_dispatch:
 
 concurrency:
