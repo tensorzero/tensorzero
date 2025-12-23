@@ -62,8 +62,8 @@
 //!         Cow::Borrowed("Search the web")
 //!     }
 //!
-//!     fn parameters_schema() -> Schema {
-//!         schema_for!(SearchParams)
+//!     fn parameters_schema() -> ToolResult<Schema> {
+//!         Ok(schema_for!(SearchParams))
 //!     }
 //!
 //!     type LlmParams = SearchParams;
@@ -107,8 +107,8 @@
 //!         Cow::Borrowed("Research a topic")
 //!     }
 //!
-//!     fn parameters_schema() -> Schema {
-//!         schema_for!(ResearchParams)
+//!     fn parameters_schema() -> ToolResult<Schema> {
+//!         Ok(schema_for!(ResearchParams))
 //!     }
 //!
 //!     type LlmParams = ResearchParams;

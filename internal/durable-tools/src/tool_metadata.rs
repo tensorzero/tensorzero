@@ -3,6 +3,8 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::time::Duration;
 
+use crate::error::ToolResult;
+
 /// Common metadata trait for all tools (both `TaskTool` and `SimpleTool`).
 ///
 /// This trait defines the metadata required to expose a tool to an LLM,
@@ -36,8 +38,8 @@ use std::time::Duration;
 ///         Cow::Borrowed("A tool that does something")
 ///     }
 ///
-///     fn parameters_schema() -> Schema {
-///         schema_for!(MyToolParams)
+///     fn parameters_schema() -> ToolResult<Schema> {
+///         Ok(schema_for!(MyToolParams))
 ///     }
 ///
 ///     type LlmParams = MyToolParams;
@@ -55,7 +57,7 @@ pub trait ToolMetadata: Send + Sync + 'static {
     fn description() -> Cow<'static, str>;
 
     /// JSON Schema for the tool's LLM-visible parameters.
-    fn parameters_schema() -> Schema;
+    fn parameters_schema() -> ToolResult<Schema>;
 
     /// The LLM-visible parameter type.
     ///

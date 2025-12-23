@@ -35,8 +35,8 @@
 //!         Cow::Borrowed("Read the contents of a file at the given path")
 //!     }
 //!
-//!     fn parameters_schema() -> Schema {
-//!         schema_for!(ReadFileParams)
+//!     fn parameters_schema() -> ToolResult<Schema> {
+//!         Ok(schema_for!(ReadFileParams))
 //!     }
 //!
 //!     type LlmParams = ReadFileParams;

@@ -36,8 +36,8 @@ impl ToolMetadata for EchoTool {
         Cow::Borrowed("Echoes back the input message. Used for testing the autopilot worker.")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
