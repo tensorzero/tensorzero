@@ -356,12 +356,12 @@ model_name = "accounts/fireworks/models/deepseek-r1-0528"
 type = "fireworks"
 model_name = "accounts/fireworks/models/qwen2p5-72b-instruct"
 
-[models."llama3.1-8b-instruct-together"]
+[models."qwen3-next-80b-a3b-instruct-together"]
 routing = ["together"]
 
-[models."llama3.1-8b-instruct-together".providers.together]
+[models."qwen3-next-80b-a3b-instruct-together".providers.together]
 type = "together"
-model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
 
 [models."phi-3.5-mini-instruct-tgi"]
 routing = ["tgi"]
@@ -370,12 +370,12 @@ routing = ["tgi"]
 type = "tgi"
 api_base = "https://zr0gj152lrhnrr-80.proxy.runpod.net/v1/"
 
-[models."llama3.1-8b-instruct-together-dynamic"]
+[models."qwen3-next-80b-a3b-instruct-together-dynamic"]
 routing = ["together"]
 
-[models."llama3.1-8b-instruct-together-dynamic".providers.together]
+[models."qwen3-next-80b-a3b-instruct-together-dynamic".providers.together]
 type = "together"
-model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
 api_key_location = "dynamic::together_api_key"
 
 [models."llama3.1-405b-instruct-turbo-together"]
