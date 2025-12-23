@@ -1,3 +1,6 @@
+//! DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+//! Use `chat_completion` with reasoning instead.
+
 use chrono::Duration;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -24,6 +27,8 @@ use crate::variant::chat_completion::{ChatCompletionConfig, UninitializedChatCom
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
+/// DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+/// Use `chat_completion` with reasoning instead.
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ChainOfThoughtConfig {
@@ -31,6 +36,8 @@ pub struct ChainOfThoughtConfig {
     pub inner: ChatCompletionConfig,
 }
 
+/// DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+/// Use `chat_completion` with reasoning instead.
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]

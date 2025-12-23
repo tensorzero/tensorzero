@@ -164,3 +164,21 @@ describe("getFeedbackStats", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("getUsedVariants", () => {
+  test("getUsedVariants for extract_entities", async () => {
+    const functionName = "extract_entities";
+    const result = await tensorZeroClient.getUsedVariants(functionName);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        "baseline",
+        "dicl",
+        "llama_8b_initial_prompt",
+        "gpt4o_mini_initial_prompt",
+        "gpt4o_initial_prompt",
+        "turbo",
+      ]),
+    );
+    expect(result.length).toBe(6);
+  });
+});

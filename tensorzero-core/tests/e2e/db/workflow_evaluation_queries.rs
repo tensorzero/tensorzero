@@ -498,3 +498,359 @@ async fn test_get_workflow_evaluation_run_statistics_exact_values() {
         solved.ci_upper
     );
 }
+
+// =====================================================================
+// Tests for list_workflow_evaluation_run_episodes_by_task_name
+// =====================================================================
+
+/// Test listing workflow evaluation run episodes by task name with fixture data.
+#[tokio::test]
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a known run_id from the fixture data that has episodes with task_names
+    let run_id = uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap();
+
+    let result = clickhouse
+        .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 100, 0)
+        .await
+        .unwrap();
+
+    // Should have episodes from the fixture data
+    assert!(
+        !result.is_empty(),
+        "Expected at least one episode group from fixture data"
+    );
+
+    // Verify the returned data has expected fields
+    for episode in &result {
+        assert!(!episode.episode_id.is_nil(), "Episode ID should not be nil");
+        assert!(!episode.run_id.is_nil(), "Run ID should not be nil");
+        assert!(
+            !episode.group_key.is_empty(),
+            "Group key should not be empty"
+        );
+    }
+}
+
+/// Test listing workflow evaluation run episodes with multiple run IDs.
+#[tokio::test]
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_multiple_runs() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use multiple run_ids from the fixture data
+    let run_ids = vec![
+        uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap(),
+        uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-dabb145a9dbe").unwrap(),
+    ];
+
+    let result = clickhouse
+        .list_workflow_evaluation_run_episodes_by_task_name(&run_ids, 100, 0)
+        .await
+        .unwrap();
+
+    // Should have episodes from both runs
+    assert!(!result.is_empty(), "Expected episodes from multiple runs");
+}
+
+/// Test listing workflow evaluation run episodes with pagination.
+#[tokio::test]
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_with_pagination() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap();
+
+    // Get first page with small limit
+    let first_page = clickhouse
+        .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 3, 0)
+        .await
+        .unwrap();
+
+    // Get a large page to compare
+    let all_groups = clickhouse
+        .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 1000, 0)
+        .await
+        .unwrap();
+
+    // First page should be a subset of all groups
+    assert!(
+        first_page.len() <= 3 || first_page.len() <= all_groups.len(),
+        "First page should respect limit or be <= total"
+    );
+
+    // Verify first page results are at the beginning of all results (by group ordering)
+    if !first_page.is_empty() && !all_groups.is_empty() {
+        // The first episode in the first page should appear in all_groups
+        let first_episode_id = &first_page[0].episode_id;
+        assert!(
+            all_groups.iter().any(|e| &e.episode_id == first_episode_id),
+            "First page's first episode should be in all results"
+        );
+    }
+}
+
+/// Test listing workflow evaluation run episodes with empty run IDs.
+#[tokio::test]
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_empty_run_ids() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .list_workflow_evaluation_run_episodes_by_task_name(&[], 100, 0)
+        .await
+        .unwrap();
+
+    assert!(result.is_empty(), "Expected empty result for empty run IDs");
+}
+
+/// Test listing workflow evaluation run episodes for a nonexistent run.
+#[tokio::test]
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_nonexistent_run() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a run_id that doesn't exist
+    let nonexistent_run_id = uuid::Uuid::nil();
+
+    let result = clickhouse
+        .list_workflow_evaluation_run_episodes_by_task_name(&[nonexistent_run_id], 100, 0)
+        .await
+        .unwrap();
+
+    assert!(
+        result.is_empty(),
+        "Expected empty result for nonexistent run"
+    );
+}
+
+// =====================================================================
+// Tests for count_workflow_evaluation_run_episodes_by_task_name
+// =====================================================================
+
+/// Test counting workflow evaluation run episode groups with fixture data.
+#[tokio::test]
+async fn test_count_workflow_evaluation_run_episodes_by_task_name_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a known run_id from the fixture data
+    let run_id = uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap();
+
+    let count = clickhouse
+        .count_workflow_evaluation_run_episodes_by_task_name(&[run_id])
+        .await
+        .unwrap();
+
+    // Should have at least some groups from the fixture data
+    assert!(
+        count > 0,
+        "Expected at least one episode group from fixture data, got {count}"
+    );
+}
+
+/// Test counting workflow evaluation run episode groups with multiple run IDs.
+#[tokio::test]
+async fn test_count_workflow_evaluation_run_episodes_by_task_name_multiple_runs() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use multiple run_ids from the fixture data
+    let run_ids = vec![
+        uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap(),
+        uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-dabb145a9dbe").unwrap(),
+    ];
+
+    let count = clickhouse
+        .count_workflow_evaluation_run_episodes_by_task_name(&run_ids)
+        .await
+        .unwrap();
+
+    // Count should be at least as many as for a single run
+    let single_run_count = clickhouse
+        .count_workflow_evaluation_run_episodes_by_task_name(&[run_ids[0]])
+        .await
+        .unwrap();
+
+    assert!(
+        count >= single_run_count,
+        "Expected count for multiple runs ({count}) to be >= single run count ({single_run_count})"
+    );
+}
+
+/// Test counting workflow evaluation run episode groups with empty run IDs.
+#[tokio::test]
+async fn test_count_workflow_evaluation_run_episodes_by_task_name_empty_run_ids() {
+    let clickhouse = get_clickhouse().await;
+
+    let count = clickhouse
+        .count_workflow_evaluation_run_episodes_by_task_name(&[])
+        .await
+        .unwrap();
+
+    assert_eq!(count, 0, "Expected count to be 0 for empty run IDs");
+}
+
+/// Test counting workflow evaluation run episode groups for a nonexistent run.
+#[tokio::test]
+async fn test_count_workflow_evaluation_run_episodes_by_task_name_nonexistent_run() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a run_id that doesn't exist
+    let nonexistent_run_id = uuid::Uuid::nil();
+
+    let count = clickhouse
+        .count_workflow_evaluation_run_episodes_by_task_name(&[nonexistent_run_id])
+        .await
+        .unwrap();
+
+    assert_eq!(count, 0, "Expected count to be 0 for nonexistent run");
+}
+
+/// Test that count matches list length (within pagination limits).
+#[tokio::test]
+async fn test_count_matches_list_length() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap();
+
+    let count = clickhouse
+        .count_workflow_evaluation_run_episodes_by_task_name(&[run_id])
+        .await
+        .unwrap();
+
+    // Get all groups with a large limit
+    let list = clickhouse
+        .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 1000, 0)
+        .await
+        .unwrap();
+
+    // Count the unique group_keys
+    let unique_groups: std::collections::HashSet<_> = list.iter().map(|e| &e.group_key).collect();
+
+    assert_eq!(
+        count as usize,
+        unique_groups.len(),
+        "Count ({count}) should match number of unique groups ({})",
+        unique_groups.len()
+    );
+}
+
+/// Test getting workflow evaluation run episodes with feedback.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_episodes_with_feedback() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a known run ID from the fixture data
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_run_episodes_with_feedback(run_id, 10, 0)
+        .await
+        .unwrap();
+
+    // Should return episodes (fixture has at least 2)
+    assert!(
+        result.len() >= 2,
+        "Expected at least 2 episodes, got {}",
+        result.len()
+    );
+
+    // Verify all episodes belong to the specified run
+    for episode in &result {
+        assert_eq!(
+            episode.run_id, run_id,
+            "Expected all episodes to belong to run {run_id}"
+        );
+    }
+
+    // The first episode in the fixture has feedback for elapsed_ms and solved
+    let first_episode = &result[0];
+    assert!(
+        !first_episode.episode_id.is_nil(),
+        "Episode ID should not be nil"
+    );
+    // Feedback metric names should be sorted alphabetically
+    for i in 1..first_episode.feedback_metric_names.len() {
+        assert!(
+            first_episode.feedback_metric_names[i - 1] <= first_episode.feedback_metric_names[i],
+            "Feedback metric names should be sorted alphabetically"
+        );
+    }
+}
+
+/// Test getting workflow evaluation run episodes with pagination limit.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_episodes_with_feedback_limit() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    // With limit=1, should get at most 1 episode
+    let result = clickhouse
+        .get_workflow_evaluation_run_episodes_with_feedback(run_id, 1, 0)
+        .await
+        .unwrap();
+
+    // Should return at most 1 episode with limit=1
+    assert!(
+        result.len() <= 1,
+        "Expected at most 1 episode with limit=1, got {}",
+        result.len()
+    );
+}
+
+/// Test getting workflow evaluation run episodes with offset beyond data.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_episodes_with_feedback_beyond_data() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_run_episodes_with_feedback(run_id, 10, 1000)
+        .await
+        .unwrap();
+
+    // Should return empty when offset is beyond data
+    assert_eq!(
+        result.len(),
+        0,
+        "Expected 0 episodes with offset beyond data, got {}",
+        result.len()
+    );
+}
+
+// =====================================================================
+// Count Workflow Evaluation Run Episodes Tests
+// =====================================================================
+
+/// Test counting workflow evaluation run episodes with fixture data.
+/// This mirrors the TypeScript test for countWorkflowEvaluationRunEpisodes.
+#[tokio::test]
+async fn test_count_workflow_evaluation_run_episodes_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let count = clickhouse
+        .count_workflow_evaluation_run_episodes(run_id)
+        .await
+        .unwrap();
+
+    // The fixture data has exactly 50 episodes for this run
+    assert_eq!(count, 50, "Expected 50 episodes for this run, got {count}",);
+}
+
+/// Test counting workflow evaluation run episodes for non-existent run.
+#[tokio::test]
+async fn test_count_workflow_evaluation_run_episodes_nonexistent_run() {
+    let clickhouse = get_clickhouse().await;
+
+    let non_existent_run_id = uuid::Uuid::now_v7();
+
+    let count = clickhouse
+        .count_workflow_evaluation_run_episodes(non_existent_run_id)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        count, 0,
+        "Expected 0 episodes for non-existent run, got {count}",
+    );
+}

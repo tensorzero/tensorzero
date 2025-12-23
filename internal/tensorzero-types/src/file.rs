@@ -24,13 +24,13 @@ pub enum Detail {
     Auto,
 }
 
-/// A file already encoded as base64.
+/// A file already encoded as base64
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
 #[export_schema]
 pub struct Base64File {
-    /// The original URL we used to download the file (if any).
+    // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
     #[ts(optional)]
     #[schemars(with = "Option<String>")]
@@ -38,9 +38,8 @@ pub struct Base64File {
     #[ts(type = "string")]
     #[schemars(with = "String")]
     pub mime_type: MediaType,
-    /// Unprefixed base64-encoded data.
-    /// This field is private and validated during deserialization to ensure
-    /// it doesn't contain a `data:` prefix.
+    // This field contains *unprefixed* base64-encoded data.
+    // It's private and validated by the constructor.
     data: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -252,7 +251,7 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
     }
 }
 
-/// A file that can be located at a URL.
+/// A file that can be located at a URL
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[export_schema]
@@ -298,6 +297,7 @@ impl<'de> Deserialize<'de> for UrlFile {
 
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
+/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[export_schema]
@@ -358,6 +358,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
+/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[export_schema]
 #[ts(export)]

@@ -16,6 +16,7 @@ members = [
     "internal/tensorzero-unsafe-helpers",
     "internal/minijinja-utils",
     "internal/autopilot-client",
+    "internal/durable-tools-spawn",
     "internal/autopilot-tools",
     "internal/durable-tools",
     "internal/tensorzero-types",
@@ -30,7 +31,7 @@ license = "Apache-2.0"
 edition = "2024"
 
 [workspace.dependencies]
-reqwest = { version = "0.12.26", features = [
+reqwest = { version = "0.12.28", features = [
     "json",
     "multipart",
     "rustls-tls",
@@ -106,6 +107,7 @@ schemars = "1.1.0"
 blake3 = "1.8.2"
 moka = { version = "0.12.10", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", rev = "6984ee936b8315ead4199cc66646bfaf0c76e134" }
+durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"

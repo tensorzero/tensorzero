@@ -1,4 +1,6 @@
+use crate::config::{MetricConfig, MetricConfigLevel};
 use crate::error::Error;
+use crate::function::FunctionConfigType;
 use async_trait::async_trait;
 use std::collections::HashMap;
 
@@ -9,7 +11,7 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockall::automock;
 
-use super::TableBounds;
+use super::{TableBounds, TimeWindow};
 use crate::serde_util::deserialize_u64;
 
 #[async_trait]
@@ -101,6 +103,23 @@ pub trait FeedbackQueries {
         &self,
         target_id: Uuid,
     ) -> Result<Vec<LatestFeedbackRow>, Error>;
+
+    /// Get variant performance statistics for a given function and metric.
+    ///
+    /// Returns performance statistics (average, stdev, count, confidence interval) for each
+    /// variant, optionally grouped by time period.
+    ///
+    /// # Parameters
+    ///
+    /// - `params`: Parameters specifying the function, metric configuration, time window, and optional variant filter
+    ///
+    /// # Returns
+    ///
+    /// A vector of `VariantPerformanceRow` containing statistics for each (variant, time_period) combination.
+    async fn get_variant_performances(
+        &self,
+        params: GetVariantPerformanceParams<'_>,
+    ) -> Result<Vec<VariantPerformanceRow>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -258,4 +277,63 @@ pub enum MetricType {
 pub struct LatestFeedbackRow {
     pub metric_name: String,
     pub latest_id: String,
+}
+
+/// Parameters for getting variant performance statistics.
+#[derive(Debug)]
+pub struct GetVariantPerformanceParams<'a> {
+    /// The name of the function to query
+    pub function_name: &'a str,
+    /// The type of the function (Chat or Json) - determines inference table
+    pub function_type: FunctionConfigType,
+    /// The name of the metric to query
+    pub metric_name: &'a str,
+    /// Configuration for the metric - determines metric table and level
+    pub metric_config: &'a MetricConfig,
+    /// Time granularity for grouping performance data
+    pub time_window: TimeWindow,
+    /// Optional variant name filter. If provided, only returns data for this variant.
+    pub variant_name: Option<&'a str>,
+}
+
+/// Row returned from the variant performance query.
+/// Contains statistics for each (variant, time_period) combination.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[ts(export)]
+pub struct VariantPerformanceRow {
+    /// Start datetime of the period in RFC 3339 format.
+    /// For cumulative time window, this is '1970-01-01T00:00:00Z'.
+    pub period_start: DateTime<Utc>,
+    /// The variant name
+    pub variant_name: String,
+    /// Number of data points in this (variant, period) combination
+    pub count: u32,
+    /// Average metric value
+    pub avg_metric: f64,
+    /// Sample standard deviation (null if count < 2)
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdev: Option<f64>,
+    /// 95% confidence interval error margin (1.96 * stdev / sqrt(count))
+    /// Null if count < 2 (when stdev is null)
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ci_error: Option<f64>,
+}
+
+impl GetVariantPerformanceParams<'_> {
+    /// Returns the ClickHouse table name for the inference table based on function type.
+    pub fn inference_table_name(&self) -> &'static str {
+        self.function_type.table_name()
+    }
+
+    /// Returns the ClickHouse table name for the metric feedback table based on metric type.
+    pub fn metric_table_name(&self) -> &'static str {
+        self.metric_config.r#type.to_clickhouse_table_name()
+    }
+
+    /// Returns the level of the metric (inference or episode).
+    pub fn metric_level(&self) -> MetricConfigLevel {
+        self.metric_config.level.clone()
+    }
 }

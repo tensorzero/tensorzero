@@ -11,7 +11,8 @@ use crate::context::{DurableClient, ToolAppState};
 use crate::inference::InferenceClient;
 use crate::registry::ToolRegistry;
 use crate::simple_tool::SimpleTool;
-use crate::task_tool::{TaskTool, TaskToolAdapter, TaskToolParams};
+use crate::task_tool::{TaskTool, TaskToolAdapter};
+use durable_tools_spawn::TaskToolParams;
 
 /// High-level orchestrator for tool execution.
 ///

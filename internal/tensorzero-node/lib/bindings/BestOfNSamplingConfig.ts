@@ -3,7 +3,6 @@ import type { BestOfNEvaluatorConfig } from "./BestOfNEvaluatorConfig";
 
 export type BestOfNSamplingConfig = {
   weight: number | null;
-  timeout_s: number;
   candidates: Array<string>;
   evaluator: BestOfNEvaluatorConfig;
 };
