@@ -61,6 +61,29 @@ impl InferenceClient for MockInferenceClient {
             .clone()
             .ok_or(InferenceError::StreamingNotSupported)
     }
+
+    async fn create_autopilot_event(
+        &self,
+        _session_id: Uuid,
+        _request: durable_tools::CreateEventRequest,
+    ) -> Result<durable_tools::CreateEventResponse, InferenceError> {
+        Err(InferenceError::AutopilotUnavailable)
+    }
+
+    async fn list_autopilot_events(
+        &self,
+        _session_id: Uuid,
+        _params: durable_tools::ListEventsParams,
+    ) -> Result<durable_tools::ListEventsResponse, InferenceError> {
+        Err(InferenceError::AutopilotUnavailable)
+    }
+
+    async fn list_autopilot_sessions(
+        &self,
+        _params: durable_tools::ListSessionsParams,
+    ) -> Result<durable_tools::ListSessionsResponse, InferenceError> {
+        Err(InferenceError::AutopilotUnavailable)
+    }
 }
 
 /// Create a mock chat inference response with the given text content.
@@ -375,11 +398,8 @@ async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<(
     executor
         .register_simple_tool::<EchoSimpleTool>()
         .await
-        .expect("Failed to register EchoSimpleTool");
-    executor
-        .register_task_tool::<EchoTaskTool>()
-        .await
-        .expect("Failed to register EchoTaskTool");
+        .unwrap();
+    executor.register_task_tool::<EchoTaskTool>().await.unwrap();
 
     let definitions = executor.tool_definitions().await.unwrap();
     assert_eq!(definitions.len(), 2);
@@ -417,10 +437,7 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("Failed to create queue");
 
-    executor
-        .register_task_tool::<EchoTaskTool>()
-        .await
-        .expect("Failed to register EchoTaskTool");
+    executor.register_task_tool::<EchoTaskTool>().await.unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -459,10 +476,7 @@ async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("Failed to create queue");
 
-    executor
-        .register_task_tool::<EchoTaskTool>()
-        .await
-        .expect("Failed to register EchoTaskTool");
+    executor.register_task_tool::<EchoTaskTool>().await.unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -611,11 +625,11 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
     executor
         .register_simple_tool::<KeyCapturingSimpleTool>()
         .await
-        .expect("Failed to register KeyCapturingSimpleTool");
+        .unwrap();
     executor
         .register_task_tool::<MultiCallTaskTool>()
         .await
-        .expect("Failed to register MultiCallTaskTool");
+        .unwrap();
 
     // Spawn the task
     let episode_id = Uuid::now_v7();
@@ -724,7 +738,7 @@ async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Resul
     executor
         .register_task_tool::<InferenceTaskTool>()
         .await
-        .expect("Failed to register InferenceTaskTool");
+        .unwrap();
 
     let definitions = executor.tool_definitions().await.unwrap();
     let names: Vec<&str> = definitions
@@ -767,7 +781,7 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
     executor
         .register_task_tool::<InferenceTaskTool>()
         .await
-        .expect("Failed to register InferenceTaskTool");
+        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor

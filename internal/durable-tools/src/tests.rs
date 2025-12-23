@@ -54,6 +54,7 @@ impl ToolMetadata for EchoSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
+
     type SideInfo = ();
     type Output = EchoOutput;
 }

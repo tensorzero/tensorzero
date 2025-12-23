@@ -1778,7 +1778,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=551f3cb4e672ca854cad1b35d912d08e7bf55607#551f3cb4e672ca854cad1b35d912d08e7bf55607"
+source = "git+https://github.com/tensorzero/durable?rev=6984ee936b8315ead4199cc66646bfaf0c76e134#6984ee936b8315ead4199cc66646bfaf0c76e134"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1802,6 +1802,7 @@ version = "2025.12.5"
 dependencies = [
  "anyhow",
  "async-trait",
+ "autopilot-client",
  "chrono",
  "durable",
  "durable-tools-spawn",

@@ -105,6 +105,7 @@ use durable_tools::{
     http_gateway_client,
 };
 use schemars::{schema_for, JsonSchema, Schema};
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use uuid::Uuid;
