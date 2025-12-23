@@ -67,8 +67,8 @@ impl SideInfo for () {}
 ///         Cow::Borrowed("Research a topic")
 ///     }
 ///
-///     fn parameters_schema() -> Schema {
-///         schema_for!(ResearchParams)
+///     fn parameters_schema() -> ToolResult<Schema> {
+///         Ok(schema_for!(ResearchParams))
 ///     }
 ///
 ///     type LlmParams = ResearchParams;
@@ -131,8 +131,8 @@ impl SideInfo for () {}
 ///         Cow::Borrowed("Search GitHub")
 ///     }
 ///
-///     fn parameters_schema() -> Schema {
-///         schema_for!(GitHubSearchParams)  // Only LlmParams in schema
+///     fn parameters_schema() -> ToolResult<Schema> {
+///         Ok(schema_for!(GitHubSearchParams))  // Only LlmParams in schema
 ///     }
 ///
 ///     type LlmParams = GitHubSearchParams;

@@ -1576,13 +1576,13 @@ fn prepare_candidate_variants(
             )?;
 
             // Replace templates in the template config with the ones passed in
-            // We Clone here so that we can still reference the old templates that don't conflict
+            // We clone here so that we can still reference the old templates that don't conflict
             let mut dynamic_template_config: TemplateConfig = (**template_config).clone();
             for path_with_contents in candidate_variant_info.get_all_template_paths() {
                 let template_name = path_with_contents.path.get_template_key();
                 if dynamic_template_config.contains_template(&template_name) {
-                    tracing::warn!(
-                        "Dynamic template '{}' is overriding an existing template",
+                    tracing::debug!(
+                        "Dynamic template `{}` is overriding an existing template.",
                         template_name
                     );
                 }
