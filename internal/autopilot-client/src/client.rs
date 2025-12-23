@@ -19,6 +19,7 @@ use crate::error::AutopilotError;
 use crate::types::{
     CreateEventRequest, CreateEventResponse, ErrorResponse, Event, EventPayload, ListEventsParams,
     ListEventsResponse, ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCall,
+    ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
@@ -415,7 +416,11 @@ impl AutopilotClient {
         request: CreateEventRequest,
     ) -> Result<CreateEventResponse, AutopilotError> {
         let tool_call_event_id = match &request.payload {
-            EventPayload::ToolCallApproval(approval) => Some(approval.tool_call_event_id),
+            EventPayload::ToolCallAuthorization(auth) => match auth.status {
+                ToolCallAuthorizationStatus::Approved => Some(auth.tool_call_event_id),
+                // Don't start the tool if rejected
+                ToolCallAuthorizationStatus::Rejected { .. } => None,
+            },
             _ => None,
         };
         let deployment_id = request.deployment_id;
