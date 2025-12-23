@@ -17,7 +17,7 @@ async fn test_get_evaluation_run_infos_endpoint() {
     let evaluation_run_id1 = "0196368f-19bd-7082-a677-1c0bf346ff24";
     let evaluation_run_id2 = "0196368e-53a8-7e82-a88d-db7086926d81";
 
-    let url = get_gateway_endpoint("/internal/evaluations/run-infos").to_string()
+    let url = get_gateway_endpoint("/internal/evaluations/run_infos").to_string()
         + &format!(
             "?evaluation_run_ids={evaluation_run_id1},{evaluation_run_id2}&function_name=extract_entities"
         );
@@ -60,7 +60,7 @@ async fn test_get_evaluation_run_infos_single_run() {
 
     let evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
 
-    let url = get_gateway_endpoint("/internal/evaluations/run-infos").to_string()
+    let url = get_gateway_endpoint("/internal/evaluations/run_infos").to_string()
         + &format!("?evaluation_run_ids={evaluation_run_id}&function_name=extract_entities");
 
     let resp = http_client.get(&url).send().await.unwrap();
@@ -91,7 +91,7 @@ async fn test_get_evaluation_run_infos_single_run() {
 async fn test_get_evaluation_run_infos_nonexistent_run() {
     let http_client = Client::new();
 
-    let url = get_gateway_endpoint("/internal/evaluations/run-infos").to_string()
+    let url = get_gateway_endpoint("/internal/evaluations/run_infos").to_string()
         + "?evaluation_run_ids=00000000-0000-0000-0000-000000000000&function_name=extract_entities";
 
     let resp = http_client.get(&url).send().await.unwrap();
@@ -117,7 +117,7 @@ async fn test_get_evaluation_run_infos_wrong_function() {
     // Use a valid evaluation run ID but with wrong function name
     let evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
 
-    let url = get_gateway_endpoint("/internal/evaluations/run-infos").to_string()
+    let url = get_gateway_endpoint("/internal/evaluations/run_infos").to_string()
         + &format!("?evaluation_run_ids={evaluation_run_id}&function_name=nonexistent_function");
 
     let resp = http_client.get(&url).send().await.unwrap();
@@ -148,7 +148,7 @@ async fn test_get_evaluation_run_infos_for_datapoint_json_function() {
     let datapoint_id = "0196368e-0b64-7321-ab5b-c32eefbf3e9f";
 
     let url = get_gateway_endpoint(&format!(
-        "/internal/evaluations/datapoints/{datapoint_id}/run-infos"
+        "/internal/evaluations/datapoints/{datapoint_id}/run_infos"
     ))
     .to_string()
         + "?function_name=extract_entities";
@@ -185,7 +185,7 @@ async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
     let datapoint_id = "0196374a-d03f-7420-9da5-1561cba71ddb";
 
     let url = get_gateway_endpoint(&format!(
-        "/internal/evaluations/datapoints/{datapoint_id}/run-infos"
+        "/internal/evaluations/datapoints/{datapoint_id}/run_infos"
     ))
     .to_string()
         + "?function_name=write_haiku";
@@ -220,7 +220,7 @@ async fn test_get_evaluation_run_infos_for_datapoint_nonexistent() {
     let datapoint_id = "00000000-0000-0000-0000-000000000000";
 
     let url = get_gateway_endpoint(&format!(
-        "/internal/evaluations/datapoints/{datapoint_id}/run-infos"
+        "/internal/evaluations/datapoints/{datapoint_id}/run_infos"
     ))
     .to_string()
         + "?function_name=extract_entities";
@@ -250,7 +250,7 @@ async fn test_get_evaluation_run_infos_for_datapoint_wrong_function() {
     let datapoint_id = "0196368e-0b64-7321-ab5b-c32eefbf3e9f";
 
     let url = get_gateway_endpoint(&format!(
-        "/internal/evaluations/datapoints/{datapoint_id}/run-infos"
+        "/internal/evaluations/datapoints/{datapoint_id}/run_infos"
     ))
     .to_string()
         + "?function_name=nonexistent_function";

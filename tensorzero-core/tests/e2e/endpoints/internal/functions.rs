@@ -172,7 +172,7 @@ async fn test_get_variant_performances_cumulative() {
 
     // Query variant performances
     let url = get_gateway_endpoint(
-        "/internal/functions/basic_test/variant-performances?metric_name=task_success&time_window=cumulative",
+        "/internal/functions/basic_test/variant_performances?metric_name=task_success&time_window=cumulative",
     );
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -198,7 +198,7 @@ async fn test_get_variant_performances_with_time_window() {
     // Test with different time windows
     for time_window in ["minute", "hour", "day", "week", "month"] {
         let url = get_gateway_endpoint(&format!(
-            "/internal/functions/basic_test/variant-performances?metric_name=task_success&time_window={time_window}"
+            "/internal/functions/basic_test/variant_performances?metric_name=task_success&time_window={time_window}"
         ));
         let resp = http_client.get(url).send().await.unwrap();
 
@@ -231,7 +231,7 @@ async fn test_get_variant_performances_with_variant_filter() {
 
     // Query with variant_name filter - use "test" which is a valid variant for basic_test
     let url = get_gateway_endpoint(
-        "/internal/functions/basic_test/variant-performances?metric_name=task_success&time_window=cumulative&variant_name=test",
+        "/internal/functions/basic_test/variant_performances?metric_name=task_success&time_window=cumulative&variant_name=test",
     );
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -254,7 +254,7 @@ async fn test_get_variant_performances_nonexistent_function() {
     let http_client = Client::new();
 
     let url = get_gateway_endpoint(
-        "/internal/functions/nonexistent_function/variant-performances?metric_name=task_success&time_window=cumulative",
+        "/internal/functions/nonexistent_function/variant_performances?metric_name=task_success&time_window=cumulative",
     );
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -270,7 +270,7 @@ async fn test_get_variant_performances_nonexistent_metric() {
     let http_client = Client::new();
 
     let url = get_gateway_endpoint(
-        "/internal/functions/basic_test/variant-performances?metric_name=nonexistent_metric&time_window=cumulative",
+        "/internal/functions/basic_test/variant_performances?metric_name=nonexistent_metric&time_window=cumulative",
     );
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -286,7 +286,7 @@ async fn test_get_variant_performances_nonexistent_variant() {
     let http_client = Client::new();
 
     let url = get_gateway_endpoint(
-        "/internal/functions/basic_test/variant-performances?metric_name=task_success&time_window=cumulative&variant_name=nonexistent_variant",
+        "/internal/functions/basic_test/variant_performances?metric_name=task_success&time_window=cumulative&variant_name=nonexistent_variant",
     );
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -303,7 +303,7 @@ async fn test_get_variant_performances_missing_required_params() {
 
     // Missing metric_name
     let url = get_gateway_endpoint(
-        "/internal/functions/basic_test/variant-performances?time_window=cumulative",
+        "/internal/functions/basic_test/variant_performances?time_window=cumulative",
     );
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -313,7 +313,7 @@ async fn test_get_variant_performances_missing_required_params() {
 
     // Missing time_window
     let url = get_gateway_endpoint(
-        "/internal/functions/basic_test/variant-performances?metric_name=task_success",
+        "/internal/functions/basic_test/variant_performances?metric_name=task_success",
     );
     let resp = http_client.get(url).send().await.unwrap();
     assert!(

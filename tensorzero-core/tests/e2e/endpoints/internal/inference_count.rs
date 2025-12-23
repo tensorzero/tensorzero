@@ -114,7 +114,7 @@ async fn test_get_inference_count_chat_function() {
     let client = Client::new();
 
     // First get the current count
-    let url = get_gateway_endpoint("/internal/functions/basic_test/inference-count");
+    let url = get_gateway_endpoint("/internal/functions/basic_test/inference_count");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -147,7 +147,7 @@ async fn test_get_inference_count_json_function() {
     let client = Client::new();
 
     // First get the current count
-    let url = get_gateway_endpoint("/internal/functions/json_success/inference-count");
+    let url = get_gateway_endpoint("/internal/functions/json_success/inference_count");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -195,7 +195,7 @@ async fn test_get_inference_count_chat_function_with_variant() {
     let client = Client::new();
     // Use the "test" variant which exists in basic_test function
     let url =
-        get_gateway_endpoint("/internal/functions/basic_test/inference-count?variant_name=test");
+        get_gateway_endpoint("/internal/functions/basic_test/inference_count?variant_name=test");
 
     let resp = client.get(url).send().await.unwrap();
     let status = resp.status();
@@ -213,7 +213,7 @@ async fn test_get_inference_count_json_function_with_variant() {
     let client = Client::new();
     // Use the "test" variant which exists in json_success function
     let url =
-        get_gateway_endpoint("/internal/functions/json_success/inference-count?variant_name=test");
+        get_gateway_endpoint("/internal/functions/json_success/inference_count?variant_name=test");
 
     let resp = client.get(url).send().await.unwrap();
     let status = resp.status();
@@ -229,7 +229,7 @@ async fn test_get_inference_count_json_function_with_variant() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_inference_count_unknown_function() {
     let client = Client::new();
-    let url = get_gateway_endpoint("/internal/functions/nonexistent_function/inference-count");
+    let url = get_gateway_endpoint("/internal/functions/nonexistent_function/inference_count");
 
     let resp = client.get(url).send().await.unwrap();
 
@@ -243,7 +243,7 @@ async fn test_get_inference_count_unknown_function() {
 async fn test_get_inference_count_unknown_variant() {
     let client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/basic_test/inference-count?variant_name=nonexistent_variant",
+        "/internal/functions/basic_test/inference_count?variant_name=nonexistent_variant",
     );
 
     let resp = client.get(url).send().await.unwrap();
@@ -264,7 +264,7 @@ async fn test_get_feedback_stats_float_metric() {
     let (inference_id, _episode_id) = create_inference(&client, "basic_test").await;
 
     // Get initial feedback stats
-    let url = get_gateway_endpoint("/internal/functions/basic_test/inference-count/brevity_score");
+    let url = get_gateway_endpoint("/internal/functions/basic_test/inference_count/brevity_score");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -301,7 +301,7 @@ async fn test_get_feedback_stats_boolean_metric() {
     let (inference_id, _episode_id) = create_inference(&client, "basic_test").await;
 
     // Get initial feedback stats
-    let url = get_gateway_endpoint("/internal/functions/basic_test/inference-count/task_success");
+    let url = get_gateway_endpoint("/internal/functions/basic_test/inference_count/task_success");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -344,7 +344,7 @@ async fn test_get_feedback_stats_with_threshold() {
 
     // Get stats without threshold
     let url_total =
-        get_gateway_endpoint("/internal/functions/basic_test/inference-count/brevity_score");
+        get_gateway_endpoint("/internal/functions/basic_test/inference_count/brevity_score");
     let resp_total = client.get(url_total).send().await.unwrap();
     let status_total = resp_total.status();
     let body_total = resp_total.text().await.unwrap();
@@ -357,7 +357,7 @@ async fn test_get_feedback_stats_with_threshold() {
 
     // Get stats with threshold > our feedback value (should have fewer results)
     let url_high_threshold = get_gateway_endpoint(
-        "/internal/functions/basic_test/inference-count/brevity_score?threshold=0.9",
+        "/internal/functions/basic_test/inference_count/brevity_score?threshold=0.9",
     );
     let resp_high = client.get(url_high_threshold).send().await.unwrap();
     let status_high = resp_high.status();
@@ -371,7 +371,7 @@ async fn test_get_feedback_stats_with_threshold() {
 
     // Get stats with threshold < our feedback value (should include our feedback)
     let url_low_threshold = get_gateway_endpoint(
-        "/internal/functions/basic_test/inference-count/brevity_score?threshold=0.5",
+        "/internal/functions/basic_test/inference_count/brevity_score?threshold=0.5",
     );
     let resp_low = client.get(url_low_threshold).send().await.unwrap();
     let status_low = resp_low.status();
@@ -406,7 +406,7 @@ async fn test_get_feedback_stats_demonstration() {
     let client = Client::new();
     // Use json_success which should be able to have demonstrations
     let url =
-        get_gateway_endpoint("/internal/functions/json_success/inference-count/demonstration");
+        get_gateway_endpoint("/internal/functions/json_success/inference_count/demonstration");
 
     let resp = client.get(url).send().await.unwrap();
     let status = resp.status();
@@ -423,7 +423,7 @@ async fn test_get_feedback_stats_demonstration() {
 async fn test_get_feedback_stats_unknown_function() {
     let client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/nonexistent_function/inference-count/some_metric",
+        "/internal/functions/nonexistent_function/inference_count/some_metric",
     );
 
     let resp = client.get(url).send().await.unwrap();
@@ -438,7 +438,7 @@ async fn test_get_feedback_stats_unknown_function() {
 async fn test_get_feedback_stats_unknown_metric() {
     let client = Client::new();
     let url =
-        get_gateway_endpoint("/internal/functions/basic_test/inference-count/nonexistent_metric");
+        get_gateway_endpoint("/internal/functions/basic_test/inference_count/nonexistent_metric");
 
     let resp = client.get(url).send().await.unwrap();
 
@@ -457,7 +457,7 @@ async fn test_get_feedback_stats_episode_level_boolean_metric() {
 
     // Get initial feedback stats
     let url =
-        get_gateway_endpoint("/internal/functions/weather_helper/inference-count/goal_achieved");
+        get_gateway_endpoint("/internal/functions/weather_helper/inference_count/goal_achieved");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -495,7 +495,7 @@ async fn test_get_feedback_stats_episode_level_float_metric() {
 
     // Get initial feedback stats
     let url =
-        get_gateway_endpoint("/internal/functions/weather_helper/inference-count/user_rating");
+        get_gateway_endpoint("/internal/functions/weather_helper/inference_count/user_rating");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -533,7 +533,7 @@ async fn get_inference_count_fixture(
 ) -> Result<InferenceCountResponse, Box<dyn std::error::Error>> {
     let http_client = Client::new();
     let url = format!(
-        "/internal/functions/{function_name}/inference-count{}",
+        "/internal/functions/{function_name}/inference_count{}",
         if query_params.is_empty() {
             String::new()
         } else {
@@ -664,7 +664,7 @@ pub async fn test_get_inference_count_group_by_variant_json_function() {
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_inference_count_nonexistent_function() {
     let http_client = Client::new();
-    let url = "/internal/functions/nonexistent_function/inference-count";
+    let url = "/internal/functions/nonexistent_function/inference_count";
 
     let resp = http_client
         .get(get_gateway_endpoint(url))
@@ -681,7 +681,7 @@ pub async fn test_get_inference_count_nonexistent_function() {
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_inference_count_nonexistent_variant() {
     let http_client = Client::new();
-    let url = "/internal/functions/write_haiku/inference-count?variant_name=nonexistent_variant";
+    let url = "/internal/functions/write_haiku/inference_count?variant_name=nonexistent_variant";
 
     let resp = http_client
         .get(get_gateway_endpoint(url))
@@ -703,7 +703,7 @@ use tensorzero_core::endpoints::internal::inference_count::GetFunctionThroughput
 pub async fn test_get_function_throughput_by_variant_cumulative() {
     let http_client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/write_haiku/throughput-by-variant?time_window=cumulative",
+        "/internal/functions/write_haiku/throughput_by_variant?time_window=cumulative",
     );
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -735,7 +735,7 @@ pub async fn test_get_function_throughput_by_variant_cumulative() {
 pub async fn test_get_function_throughput_by_variant_week() {
     let http_client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/write_haiku/throughput-by-variant?time_window=week&max_periods=5",
+        "/internal/functions/write_haiku/throughput_by_variant?time_window=week&max_periods=5",
     );
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -762,7 +762,7 @@ pub async fn test_get_function_throughput_by_variant_week() {
 pub async fn test_get_function_throughput_by_variant_day() {
     let http_client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/basic_test/throughput-by-variant?time_window=day&max_periods=30",
+        "/internal/functions/basic_test/throughput_by_variant?time_window=day&max_periods=30",
     );
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -780,7 +780,7 @@ pub async fn test_get_function_throughput_by_variant_day() {
 pub async fn test_get_function_throughput_by_variant_nonexistent_function() {
     let http_client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/nonexistent_function/throughput-by-variant?time_window=week",
+        "/internal/functions/nonexistent_function/throughput_by_variant?time_window=week",
     );
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -793,7 +793,7 @@ pub async fn test_get_function_throughput_by_variant_nonexistent_function() {
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_function_throughput_by_variant_missing_time_window() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/functions/write_haiku/throughput-by-variant");
+    let url = get_gateway_endpoint("/internal/functions/write_haiku/throughput_by_variant");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -807,7 +807,7 @@ pub async fn test_get_function_throughput_by_variant_default_max_periods() {
     let http_client = Client::new();
     // Don't specify max_periods, should use default of 10
     let url = get_gateway_endpoint(
-        "/internal/functions/write_haiku/throughput-by-variant?time_window=month",
+        "/internal/functions/write_haiku/throughput_by_variant?time_window=month",
     );
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -825,7 +825,7 @@ pub async fn test_get_function_throughput_by_variant_default_max_periods() {
 pub async fn test_get_function_throughput_by_variant_extract_entities_week() {
     let http_client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/extract_entities/throughput-by-variant?time_window=week&max_periods=10",
+        "/internal/functions/extract_entities/throughput_by_variant?time_window=week&max_periods=10",
     );
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -866,7 +866,7 @@ pub async fn test_get_function_throughput_by_variant_extract_entities_week() {
 pub async fn test_get_function_throughput_by_variant_sorting_order() {
     let http_client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/write_haiku/throughput-by-variant?time_window=day&max_periods=30",
+        "/internal/functions/write_haiku/throughput_by_variant?time_window=day&max_periods=30",
     );
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -908,7 +908,7 @@ pub async fn test_get_function_throughput_by_variant_sorting_order() {
 pub async fn test_get_function_throughput_by_variant_month() {
     let http_client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/functions/extract_entities/throughput-by-variant?time_window=month&max_periods=3",
+        "/internal/functions/extract_entities/throughput_by_variant?time_window=month&max_periods=3",
     );
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -946,7 +946,7 @@ pub async fn test_get_function_throughput_by_variant_month() {
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_functions_with_inference_count() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/functions/inference-counts");
+    let url = get_gateway_endpoint("/internal/functions/inference_counts");
 
     let resp = http_client.get(url).send().await.unwrap();
     let status = resp.status();

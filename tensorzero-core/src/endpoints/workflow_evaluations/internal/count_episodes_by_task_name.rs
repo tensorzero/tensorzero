@@ -18,7 +18,7 @@ pub struct CountWorkflowEvaluationRunEpisodesByTaskNameParams {
     pub run_ids: Option<String>,
 }
 
-/// Handler for `GET /internal/workflow-evaluations/episodes-by-task-name/count`
+/// Handler for `GET /internal/workflow_evaluations/episodes_by_task_name/count`
 ///
 /// Returns the count of distinct episode groups (by task_name) for the given run IDs.
 #[axum::debug_handler(state = AppStateData)]
