@@ -2,7 +2,7 @@
 import type { InputMessage } from "./InputMessage";
 import type { StatusUpdate } from "./StatusUpdate";
 import type { ToolCall } from "./ToolCall";
-import type { ToolCallApproval } from "./ToolCallApproval";
+import type { ToolCallAuthorization } from "./ToolCallAuthorization";
 import type { ToolOutcome } from "./ToolOutcome";
 
 /**
@@ -12,6 +12,6 @@ export type EventPayload =
   | ({ type: "message" } & InputMessage)
   | { type: "status_update"; status_update: StatusUpdate }
   | ({ type: "tool_call" } & ToolCall)
-  | ({ type: "tool_call_approval" } & ToolCallApproval)
+  | ({ type: "tool_call_approval" } & ToolCallAuthorization)
   | { type: "tool_result"; tool_call_event_id: string; outcome: ToolOutcome }
   | { type: "other" };
