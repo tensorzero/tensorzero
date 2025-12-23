@@ -40,7 +40,7 @@ fn print_key(key: &secrecy::SecretString) {
 #[derive(Debug, Clone)]
 enum ApiKeyExpirySetting {
     /// Denotes an API key that has no expiration datetime.
-    Inifinite,
+    Infinite,
     /// Denotes an API key that is set to expire at the corresponding datetime.
     Finite(DateTime<Utc>),
 }
@@ -48,10 +48,10 @@ enum ApiKeyExpirySetting {
 impl From<&str> for ApiKeyExpirySetting {
     fn from(v: &str) -> Self {
         if v == "infinite" {
-            Self::Inifinite
+            Self::Infinite
         } else {
             v.parse::<DateTime<Utc>>()
-                .map_or(Self::Inifinite, Self::Finite)
+                .map_or(Self::Infinite, Self::Finite)
         }
     }
 }
@@ -62,7 +62,7 @@ impl std::fmt::Display for ApiKeyExpirySetting {
             f,
             "{}",
             match self {
-                ApiKeyExpirySetting::Inifinite => "infinite".to_string(),
+                ApiKeyExpirySetting::Infinite => "infinite".to_string(),
                 ApiKeyExpirySetting::Finite(dt) => dt.to_string(),
             }
         )
@@ -85,7 +85,7 @@ async fn handle_create_api_key(
         DEFAULT_WORKSPACE,
         None,
         match expiration {
-            ApiKeyExpirySetting::Inifinite => None,
+            ApiKeyExpirySetting::Infinite => None,
             ApiKeyExpirySetting::Finite(datetime) => Some(datetime),
         },
         &pool,
