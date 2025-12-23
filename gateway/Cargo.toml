@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
+evaluations = { path = "../evaluations" }
 axum = { workspace = true }
 tracing = { version = "0.1.43", features = ["log", "release_max_level_debug"] }
 tokio = { workspace = true }
@@ -23,6 +24,14 @@ autopilot-worker = { path = "../internal/autopilot-worker" }
 durable-tools = { path = "../internal/durable-tools" }
 sqlx = { version = "0.9.0-alpha.1", features = ["sqlx-toml", "postgres", "runtime-tokio", "chrono"] }
 secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+ts-rs = { workspace = true }
+url = { workspace = true }
+async-stream = { workspace = true }
 
 [lints]
 workspace = true

@@ -100,13 +100,13 @@ fn get_evaluation_result_datapoint_id_subquery(
     let query = format!(
         "all_inference_ids AS (
             SELECT DISTINCT inference_id
-            FROM TagInference FINAL WHERE key = 'tensorzero::evaluation_run_id'
+            FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
             AND function_name = {{function_name:String}}
             AND value IN ({{evaluation_run_ids:Array(String)}})
         ),
         all_datapoint_ids AS (
             SELECT DISTINCT value as datapoint_id
-            FROM TagInference FINAL
+            FROM TagInference
             WHERE key = 'tensorzero::datapoint_id'
             AND function_name = {{function_name:String}}
             AND inference_id IN (SELECT inference_id FROM all_inference_ids)
@@ -153,7 +153,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     any(function_name) AS inference_function_name,
                     any(variant_name) AS variant_name,
                     max(toUInt128(inference_id)) AS max_inference_id
-                FROM TagInference FINAL
+                FROM TagInference
                 WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
                 GROUP BY inference_id
             )
@@ -223,7 +223,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     AND value = {evaluation_name:String}
                 )
             SELECT DISTINCT value as evaluation_run_id, variant_name
-            FROM TagInference FINAL
+            FROM TagInference
             WHERE key = 'tensorzero::evaluation_run_id'
                 AND function_name = {function_name:String}
                 AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
@@ -273,7 +273,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     '%Y-%m-%dT%H:%i:%SZ'
                 ) as most_recent_inference_date
             FROM
-                TagInference AS run_tag FINAL
+                TagInference AS run_tag
             WHERE
                 run_tag.key = 'tensorzero::evaluation_run_id'
                 AND run_tag.value IN ({evaluation_run_ids:Array(String)})
@@ -308,7 +308,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             r"
             WITH datapoint_inference_ids AS (
                 SELECT inference_id
-                FROM TagInference FINAL
+                FROM TagInference
                 WHERE key = 'tensorzero::datapoint_id'
                 AND value = {{datapoint_id:String}}
             )
@@ -486,7 +486,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             r"
             WITH {datapoint_id_subquery},
             filtered_dp AS (
-                SELECT * FROM {datapoint_table_name} FINAL
+                SELECT * FROM {datapoint_table_name}
                 WHERE function_name = {{function_name:String}}
                 AND id IN (SELECT datapoint_id FROM all_datapoint_ids)
             ),
@@ -617,7 +617,7 @@ mod tests {
                 // Verify the query contains the expected structure
                 assert_query_contains(query, "SELECT");
                 assert_query_contains(query, "evaluation_run_id");
-                assert_query_contains(query, "FROM TagInference FINAL");
+                assert_query_contains(query, "FROM TagInference");
                 assert_query_contains(query, "LIMIT {limit:UInt32}");
                 assert_query_contains(query, "OFFSET {offset:UInt32}");
 
@@ -745,13 +745,13 @@ mod tests {
                     "
                 WITH all_inference_ids AS (
                     SELECT DISTINCT inference_id
-                    FROM TagInference FINAL WHERE key = 'tensorzero::evaluation_run_id'
+                    FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
                     AND function_name = {function_name:String}
                     AND value IN ({evaluation_run_ids:Array(String)})
                 ),
                 all_datapoint_ids AS (
                     SELECT DISTINCT value as datapoint_id
-                    FROM TagInference FINAL
+                    FROM TagInference
                     WHERE key = 'tensorzero::datapoint_id'
                     AND function_name = {function_name:String}
                     AND inference_id IN (SELECT inference_id FROM all_inference_ids)
@@ -871,7 +871,7 @@ mod tests {
                         AND value = {evaluation_name:String}
                     )
                 SELECT DISTINCT value as evaluation_run_id, variant_name
-                FROM TagInference FINAL
+                FROM TagInference
                 WHERE key = 'tensorzero::evaluation_run_id'
                     AND function_name = {function_name:String}
                     AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
@@ -949,7 +949,7 @@ mod tests {
                         '%Y-%m-%dT%H:%i:%SZ'
                     ) as most_recent_inference_date
                 FROM
-                    TagInference AS run_tag FINAL
+                    TagInference AS run_tag
                 WHERE
                     run_tag.key = 'tensorzero::evaluation_run_id'
                     AND run_tag.value IN ({evaluation_run_ids:Array(String)})
@@ -1073,7 +1073,7 @@ mod tests {
                     query,
                     "WITH datapoint_inference_ids AS (
                         SELECT inference_id
-                        FROM TagInference FINAL
+                        FROM TagInference
                         WHERE key = 'tensorzero::datapoint_id'
                         AND value = {datapoint_id:String}
                     )
@@ -1137,7 +1137,7 @@ mod tests {
                     query,
                     "WITH datapoint_inference_ids AS (
                         SELECT inference_id
-                        FROM TagInference FINAL
+                        FROM TagInference
                         WHERE key = 'tensorzero::datapoint_id'
                         AND value = {datapoint_id:String}
                     )

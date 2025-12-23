@@ -1,5 +1,6 @@
 //! Route definitions and endpoint mappings for the TensorZero Gateway API.
 
+pub mod evaluations;
 mod external;
 mod internal;
 
