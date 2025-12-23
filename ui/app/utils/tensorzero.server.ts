@@ -1,5 +1,6 @@
 import { getConfig } from "./config/index.server";
 import { getTensorZeroClient } from "./get-tensorzero-client.server";
+import { getAutopilotClient } from "./get-autopilot-client.server";
 import {
   FeedbackRequestSchema,
   TensorZeroServerError,
@@ -10,6 +11,7 @@ import { getFeedbackConfig } from "./config/feedback";
 
 // Re-export for backcompat.
 export { getTensorZeroClient };
+export { getAutopilotClient };
 
 export async function addHumanFeedback(formData: FormData) {
   const metricName = formData.get("metricName")?.toString();

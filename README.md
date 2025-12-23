@@ -301,15 +301,13 @@ Boost performance by dynamically updating your prompts with relevant examples, c
   </tr>
   <tr>
     <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl">Dynamic In-Context Learning (DICL)</a></b></td>
-    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#chain-of-thought-cot">Chain-of-Thought (CoT)</a></b></td>
+    <td width="50%" align="center" valign="middle"></td>
   </tr>
   <tr>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d8489e92-ce93-46ac-9aab-289ce19bb67d"></td>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/ea13d73c-76a4-4e0c-a35b-0c648f898311" height="320"></td>
+    <td width="50%" align="center" valign="middle"></td>
   </tr>
 </table>
-
-_More coming soon..._
 
 <br>
 

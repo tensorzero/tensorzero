@@ -14,9 +14,10 @@ secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+ts-rs.workspace = true
 url.workspace = true
 uuid.workspace = true
-tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-types = { path = "../tensorzero-types" }
 
 [lints]
 workspace = true
