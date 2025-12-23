@@ -29,6 +29,7 @@ import type {
   CreateDatapointsRequest,
   CreateDatapointsResponse,
   FeedbackRow,
+  FunctionInferenceCount,
   MetricsWithFeedbackResponse,
   Datapoint,
   GetDatapointCountResponse,
@@ -56,6 +57,7 @@ import type {
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListEvaluationRunsResponse,
+  ListFunctionsWithInferenceCountResponse,
   ListInferencesRequest,
   ListInferenceMetadataResponse,
   ListWorkflowEvaluationRunEpisodesByTaskNameResponse,
@@ -873,6 +875,24 @@ export class TensorZeroClient {
     return (response.stats_by_variant ?? []).map(
       (v: InferenceStatsByVariant) => v.variant_name,
     );
+  }
+
+  /**
+   * Lists all functions with their inference counts, ordered by most recent inference.
+   * @returns A promise that resolves with the function inference counts
+   * @throws Error if the request fails
+   */
+  async listFunctionsWithInferenceCount(): Promise<FunctionInferenceCount[]> {
+    const endpoint = `/internal/functions/inference-counts`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as ListFunctionsWithInferenceCountResponse;
+    return body.functions;
   }
 
   /**

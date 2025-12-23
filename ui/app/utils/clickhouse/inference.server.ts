@@ -1,7 +1,5 @@
 import { data } from "react-router";
 import type { StoredInference, InferenceFilter } from "~/types/tensorzero";
-import { getClickhouseClient } from "./client.server";
-import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "../tensorzero.server";
 import { isTensorZeroServerError } from "../tensorzero";
@@ -104,37 +102,4 @@ export async function countInferencesForVariant(
     variantName: variant_name,
   });
   return Number(result.inference_count);
-}
-
-const functionCountInfoSchema = z.object({
-  function_name: z.string(),
-  max_timestamp: z.string().datetime(),
-  count: z.number(),
-});
-
-export type FunctionCountInfo = z.infer<typeof functionCountInfoSchema>;
-
-export async function countInferencesByFunction(): Promise<
-  FunctionCountInfo[]
-> {
-  const query = `SELECT
-        function_name,
-        formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%SZ') AS max_timestamp,
-        toUInt32(count()) AS count
-    FROM (
-        SELECT function_name, timestamp
-        FROM ChatInference
-        UNION ALL
-        SELECT function_name, timestamp
-        FROM JsonInference
-    )
-    GROUP BY function_name
-    ORDER BY max_timestamp DESC`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await resultSet.json<FunctionCountInfo[]>();
-  const validatedRows = z.array(functionCountInfoSchema).parse(rows);
-  return validatedRows;
 }
