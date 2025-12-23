@@ -28,7 +28,6 @@ use crate::config::{
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::model_table::ProviderKind;
-use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
@@ -68,13 +67,17 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 use crate::providers::{
-    anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
-    deepseek::DeepSeekProvider, fireworks::FireworksProvider,
-    gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
-    xai::XAIProvider,
+    anthropic::AnthropicProvider, azure::AzureProvider, deepseek::DeepSeekProvider,
+    fireworks::FireworksProvider, gcp_vertex_anthropic::GCPVertexAnthropicProvider,
+    gcp_vertex_gemini::GCPVertexGeminiProvider, groq::GroqProvider, mistral::MistralProvider,
+    openai::OpenAIProvider, openrouter::OpenRouterProvider, together::TogetherProvider,
+    vllm::VLLMProvider, xai::XAIProvider,
 };
+
+#[cfg(feature = "aws")]
+use crate::providers::aws_bedrock::AWSBedrockProvider;
+#[cfg(feature = "aws")]
+use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
@@ -879,7 +882,9 @@ impl ModelProvider {
     fn genai_system_name(&self) -> &'static str {
         match &self.config {
             ProviderConfig::Anthropic(_) => "anthropic",
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSBedrock(_) => "aws_bedrock",
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSSagemaker(_) => "aws_sagemaker",
             ProviderConfig::Azure(_) => "azure",
             ProviderConfig::Fireworks(_) => "fireworks",
@@ -906,8 +911,10 @@ impl ModelProvider {
     fn genai_model_name(&self) -> Option<&str> {
         match &self.config {
             ProviderConfig::Anthropic(provider) => Some(provider.model_name()),
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSBedrock(provider) => Some(provider.model_id()),
             // SageMaker doesn't have a meaningful model name concept, as we just invoke an endpoint
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSSagemaker(_) => None,
             ProviderConfig::Azure(provider) => Some(provider.deployment_id()),
             ProviderConfig::Fireworks(provider) => Some(provider.model_name()),
@@ -956,8 +963,10 @@ pub struct ModelProviderRequestInfo {
 #[ts(export)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
+    #[cfg(feature = "aws")]
     #[serde(rename = "aws_bedrock")]
     AWSBedrock(AWSBedrockProvider),
+    #[cfg(feature = "aws")]
     #[serde(rename = "aws_sagemaker")]
     AWSSagemaker(AWSSagemakerProvider),
     Azure(AzureProvider),
@@ -993,12 +1002,14 @@ impl ProviderConfig {
             ProviderConfig::Anthropic(_) => {
                 Cow::Borrowed(crate::providers::anthropic::PROVIDER_TYPE)
             }
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSBedrock(_) => {
                 Cow::Borrowed(crate::providers::aws_bedrock::PROVIDER_TYPE)
             }
             // Note - none of our current  wrapped provider types emit thought blocks
             // If any of them ever start producing thoughts, we'll need to make sure that the `provider_type`
             // field uses `thought_block_provider_type` on the parent SageMaker provider.
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSSagemaker(sagemaker) => Cow::Owned(format!(
                 "aws_sagemaker::{}",
                 sagemaker
@@ -1067,6 +1078,7 @@ pub enum UninitializedProviderConfig {
         #[serde(default)]
         beta_structured_outputs: bool,
     },
+    #[cfg(feature = "aws")]
     #[strum(serialize = "aws_bedrock")]
     #[serde(rename = "aws_bedrock")]
     AWSBedrock {
@@ -1075,6 +1087,7 @@ pub enum UninitializedProviderConfig {
         #[serde(default)]
         allow_auto_detect_region: bool,
     },
+    #[cfg(feature = "aws")]
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
     AWSSagemaker {
@@ -1226,6 +1239,7 @@ impl UninitializedProviderConfig {
                     .await?,
                 beta_structured_outputs,
             )),
+            #[cfg(feature = "aws")]
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
                 region,
@@ -1240,6 +1254,7 @@ impl UninitializedProviderConfig {
                     AWSBedrockProvider::new(model_id, region, http_client).await?,
                 )
             }
+            #[cfg(feature = "aws")]
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
                 region,
@@ -1638,11 +1653,13 @@ impl ModelProvider {
                     .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSBedrock(provider) => {
                 provider
                     .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSSagemaker(provider) => {
                 provider
                     .infer(request, &clients.http_client, &clients.credentials, self)
@@ -1776,11 +1793,13 @@ impl ModelProvider {
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSBedrock(provider) => {
                 provider
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSSagemaker(provider) => {
                 provider
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
@@ -1897,11 +1916,13 @@ impl ModelProvider {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSBedrock(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSSagemaker(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
@@ -2008,11 +2029,13 @@ impl ModelProvider {
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
             }
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSBedrock(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
             }
+            #[cfg(feature = "aws")]
             ProviderConfig::AWSSagemaker(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)

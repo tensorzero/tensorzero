@@ -1,7 +1,11 @@
 pub mod anthropic;
+#[cfg(feature = "aws")]
 pub mod aws_bedrock;
+#[cfg(feature = "aws")]
 pub mod aws_common;
+#[cfg(feature = "aws")]
 mod aws_http_client;
+#[cfg(feature = "aws")]
 pub mod aws_sagemaker;
 pub mod azure;
 pub mod chat_completions;

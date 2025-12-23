@@ -12,7 +12,7 @@ use crate::{
     inference::types::storage::StoragePath,
     utils::gateway::{AppState, AppStateData},
 };
-use aws_smithy_types::base64;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "e2e_tests", derive(PartialEq))]
@@ -93,7 +93,7 @@ pub async fn get_object(
         })
     })?;
     Ok(ObjectResponse {
-        data: base64::encode(&bytes),
+        data: BASE64_STANDARD.encode(&bytes),
         reused_object_store: matches!(store, Cow::Borrowed(_)),
     })
 }
