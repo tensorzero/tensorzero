@@ -223,11 +223,7 @@ model_name = "mock-inference-finetune-1234"
     ).toBeVisible();
   });
 
-  // Skip: GCP SFT config (project_id, region, bucket_name, api_base) is now in gateway's
-  // provider_types.gcp_vertex_gemini.sft section. Testing with mock server requires building
-  // the gateway with e2e_tests feature to enable sft_api_base override. GCP SFT is tested
-  // in the live optimizer tests (optimization-test-cron.yml) instead.
-  test.skip("@slow @credentials should fine-tune with a mocked GCP Vertex Gemini server", async ({
+  test("@slow should fine-tune with a mocked GCP Vertex Gemini server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");

@@ -1,6 +1,5 @@
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "e2e_tests")]
 use url::Url;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -146,8 +145,6 @@ pub struct GCPProviderTypeConfig {
     pub batch_inference_api_base: Option<Url>,
     #[serde(default)]
     pub sft: Option<GCPSFTConfig>,
-    #[cfg(feature = "e2e_tests")]
-    pub sft_api_base: Option<Url>,
     #[serde(default)]
     pub defaults: GCPDefaults,
 }
@@ -183,6 +180,9 @@ pub struct GCPSFTConfig {
     pub service_account: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kms_key_name: Option<String>,
+    /// API base URL override for testing with mock servers
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_base: Option<Url>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

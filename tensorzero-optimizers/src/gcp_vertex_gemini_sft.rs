@@ -49,11 +49,6 @@ fn get_sft_config(provider_types: &ProviderTypesConfig) -> Result<&GCPSFTConfig,
         })
 }
 
-#[cfg(feature = "e2e_tests")]
-fn get_sft_api_base(provider_types: &ProviderTypesConfig) -> Option<&Url> {
-    provider_types.gcp_vertex_gemini.sft_api_base.as_ref()
-}
-
 #[async_trait]
 impl Optimizer for GCPVertexGeminiSFTConfig {
     type Handle = GCPVertexGeminiSFTJobHandle;
@@ -173,8 +168,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         };
 
         // Build URL - use api_base override for testing if available
-        #[cfg(feature = "e2e_tests")]
-        let url = if let Some(api_base) = get_sft_api_base(&config.provider_types) {
+        let url = if let Some(api_base) = &sft_config.api_base {
             api_base
                 .join(&format!(
                     "v1/projects/{}/locations/{}/tuningJobs",
@@ -192,15 +186,6 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                 })
             })?
         };
-
-        #[cfg(not(feature = "e2e_tests"))]
-        let url = gcp_vertex_gemini_base_url(&sft_config.project_id, &sft_config.region).map_err(
-            |e| {
-                Error::new(ErrorDetails::InvalidBaseUrl {
-                    message: e.to_string(),
-                })
-            },
-        )?;
 
         let auth_headers = gcp_credentials
             .get_auth_headers(
@@ -304,8 +289,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
             .map_err(|e| e.log())?;
 
         // Construct the API URL from job_name
-        #[cfg(feature = "e2e_tests")]
-        let api_url = if let Some(api_base) = get_sft_api_base(provider_types) {
+        let api_url = if let Some(api_base) = &sft_config.api_base {
             api_base
                 .join(&format!("v1/{}", self.job_name))
                 .map_err(|e| {
@@ -325,18 +309,6 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                 })
             })?
         };
-
-        #[cfg(not(feature = "e2e_tests"))]
-        let api_url = Url::parse(&format!(
-            "https://{}aiplatform.googleapis.com/v1/{}",
-            location_subdomain_prefix(&sft_config.region),
-            self.job_name
-        ))
-        .map_err(|e| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!("Failed to parse API URL: {e}"),
-            })
-        })?;
 
         let res = client
             .get(api_url)
