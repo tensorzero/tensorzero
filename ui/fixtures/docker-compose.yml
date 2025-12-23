@@ -30,7 +30,7 @@ services:
     volumes:
       - ./config:/app/config:ro
       # Mount GCP JWT key file (optional - only needed for GCP providers)
-      - ../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
+      - ${GCP_CREDENTIALS_PATH:-../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures

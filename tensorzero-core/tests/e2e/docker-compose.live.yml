@@ -112,7 +112,7 @@ services:
       # Mount the UI fixtures directory because we depend on some of those templates
       - ../../../ui/fixtures:/app/ui/fixtures:ro
       # Mount GCP JWT key file
-      - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
+      - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:
@@ -228,7 +228,7 @@ services:
       # Buildkite analytics
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
     volumes:
-      - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
+      - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
       - ./config:/app/tensorzero-core/tests/e2e/config:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
