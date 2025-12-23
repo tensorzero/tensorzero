@@ -15,14 +15,17 @@ class EnvironmentVariableError extends Error {
 // Note: TENSORZERO_UI_LOG_LEVEL is handled in logger.ts to avoid circular dependencies.
 interface Env {
   TENSORZERO_CLICKHOUSE_URL: string;
-  TENSORZERO_POSTGRES_URL: string | null;
+  TENSORZERO_POSTGRES_URL?: string;
   TENSORZERO_UI_READ_ONLY: boolean;
   TENSORZERO_GATEWAY_URL: string;
-  TENSORZERO_API_KEY: string | null;
-  OPENAI_BASE_URL: string | null;
-  FIREWORKS_BASE_URL: string | null;
-  FIREWORKS_ACCOUNT_ID: string | null;
-  TOGETHER_BASE_URL: string | null;
+  TENSORZERO_API_KEY?: string;
+  FIREWORKS_ACCOUNT_ID?: string; // TODO (#5384): Migrate to the configuration
+  // For testing only:
+  // TODO (#5384): Migrate to the configuration
+  FIREWORKS_BASE_URL?: string;
+  GCP_VERTEX_BASE_URL?: string;
+  OPENAI_BASE_URL?: string;
+  TOGETHER_BASE_URL?: string;
 }
 
 let _env: Env | undefined;
@@ -63,14 +66,17 @@ export function getEnv(): Env {
 
   _env = {
     TENSORZERO_CLICKHOUSE_URL,
-    TENSORZERO_POSTGRES_URL: process.env.TENSORZERO_POSTGRES_URL || null,
+    TENSORZERO_POSTGRES_URL: process.env.TENSORZERO_POSTGRES_URL,
     TENSORZERO_UI_READ_ONLY: process.env.TENSORZERO_UI_READ_ONLY === "1",
     TENSORZERO_GATEWAY_URL,
-    FIREWORKS_ACCOUNT_ID: process.env.FIREWORKS_ACCOUNT_ID || null,
-    FIREWORKS_BASE_URL: process.env.FIREWORKS_BASE_URL || null,
-    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
-    TOGETHER_BASE_URL: process.env.TOGETHER_BASE_URL || null,
-    TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY || null,
+    TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY,
+    FIREWORKS_ACCOUNT_ID: process.env.FIREWORKS_ACCOUNT_ID, // TODO (#5384): Migrate to the configuration
+    // For testing only only
+    // TODO (#5384): Migrate to the configuration
+    FIREWORKS_BASE_URL: process.env.FIREWORKS_BASE_URL,
+    GCP_VERTEX_BASE_URL: process.env.GCP_VERTEX_BASE_URL,
+    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
+    TOGETHER_BASE_URL: process.env.TOGETHER_BASE_URL,
   };
 
   return _env;

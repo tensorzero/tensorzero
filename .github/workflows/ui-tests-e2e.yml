@@ -20,6 +20,8 @@ on:
         required: true
       S3_SECRET_ACCESS_KEY:
         required: true
+      GCP_JWT_KEY:
+        required: true
     inputs:
       is_merge_group:
         required: true
@@ -199,6 +201,11 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Setup GCP credentials
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -248,6 +255,7 @@ jobs:
           # We need these set in the ui container, so that we construct the correct optimizer config
           # to pass to 'experimentalLaunchOptimizationWorkflow'
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
+          echo "GCP_VERTEX_BASE_URL=http://mock-inference-provider:3030/gcp_vertex_gemini/" >> fixtures/.env
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
           echo "TOGETHER_BASE_URL=http://mock-inference-provider:3030/together/" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env

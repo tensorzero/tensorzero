@@ -13,6 +13,7 @@ services:
       - OPENAI_BASE_URL
       - FIREWORKS_BASE_URL
       - FIREWORKS_ACCOUNT_ID
+      - GCP_VERTEX_BASE_URL
       - TOGETHER_BASE_URL
     env_file:
       - .env

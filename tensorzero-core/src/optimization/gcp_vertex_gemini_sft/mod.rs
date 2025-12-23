@@ -13,7 +13,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct GCPVertexGeminiSFTConfig {
     pub model: String,
     pub bucket_name: String,
@@ -36,7 +36,7 @@ pub struct GCPVertexGeminiSFTConfig {
 }
 
 #[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "GCPVertexGeminiSFTConfig"))]
 pub struct UninitializedGCPVertexGeminiSFTConfig {
     pub model: String,
@@ -188,14 +188,19 @@ impl UninitializedGCPVertexGeminiSFTConfig {
 }
 
 #[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct GCPVertexGeminiSFTJobHandle {
     pub job_url: Url,
+    /// The API resource name (e.g., projects/{project}/locations/{region}/tuningJobs/{job_id})
+    pub job_name: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocationWithFallback>,
     pub region: String,
     pub project_id: String,
+    /// Optional API base URL override (used for testing)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_base: Option<Url>,
 }
 
 impl std::fmt::Display for GCPVertexGeminiSFTJobHandle {

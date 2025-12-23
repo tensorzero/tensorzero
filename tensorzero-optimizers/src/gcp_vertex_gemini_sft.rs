@@ -137,11 +137,23 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             encryption_spec,
         };
 
-        let url = gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
-            Error::new(ErrorDetails::InvalidBaseUrl {
-                message: e.to_string(),
-            })
-        })?;
+        let url = match &self.api_base {
+            Some(base) => base
+                .join(&format!(
+                    "v1/projects/{}/locations/{}/tuningJobs",
+                    self.project_id, self.region
+                ))
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: e.to_string(),
+                    })
+                })?,
+            None => gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
+                Error::new(ErrorDetails::InvalidBaseUrl {
+                    message: e.to_string(),
+                })
+            })?,
+        };
 
         let auth_headers = self
             .credentials
@@ -193,10 +205,15 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-        let subdomain_prefix = location_subdomain_prefix(&self.region);
+        // Extract job ID from job.name (format: projects/{project}/locations/{region}/tuningJobs/{job_id})
+        let job_id = job.name.rsplit('/').next().ok_or_else(|| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to extract job ID from job name: {}", job.name),
+            })
+        })?;
         let job_url = Url::parse(&format!(
-            "https://{subdomain_prefix}aiplatform.googleapis.com/v1/{}",
-            job.name
+            "https://console.cloud.google.com/vertex-ai/tuning/locations/{}/tuningJob/{}/monitor?project={}",
+            self.region, job_id, self.project_id
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::InternalError {
@@ -206,9 +223,11 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
 
         Ok(GCPVertexGeminiSFTJobHandle {
             job_url,
+            job_name: job.name,
             credential_location: self.credential_location.clone(),
             region: self.region.clone(),
             project_id: self.project_id.clone(),
+            api_base: self.api_base.clone(),
         })
     }
 }
@@ -236,9 +255,26 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
             .await
             .map_err(|e| e.log())?;
 
-        // Use the stored job_url directly (it was already constructed with the helper)
+        // Construct the API URL from job_name
+        let api_url = match &self.api_base {
+            Some(base) => base.join(&format!("v1/{}", self.job_name)).map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to parse API URL: {e}"),
+                })
+            })?,
+            None => Url::parse(&format!(
+                "https://{}aiplatform.googleapis.com/v1/{}",
+                location_subdomain_prefix(&self.region),
+                self.job_name
+            ))
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to parse API URL: {e}"),
+                })
+            })?,
+        };
         let res = client
-            .get(self.job_url.clone())
+            .get(api_url)
             .headers(auth_headers)
             .send()
             .await

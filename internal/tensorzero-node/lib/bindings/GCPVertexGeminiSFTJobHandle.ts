@@ -2,7 +2,15 @@
 
 export type GCPVertexGeminiSFTJobHandle = {
   job_url: string;
+  /**
+   * The API resource name (e.g., projects/{project}/locations/{region}/tuningJobs/{job_id})
+   */
+  job_name: string;
   credential_location: string | null;
   region: string;
   project_id: string;
+  /**
+   * Optional API base URL override (used for testing)
+   */
+  api_base?: string;
 };

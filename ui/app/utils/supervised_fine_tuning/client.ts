@@ -26,6 +26,7 @@ export async function launch_sft_job(
 ): Promise<OptimizationJobHandle> {
   const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
   const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
+  const gcpVertexNativeSFTBase = getEnv().GCP_VERTEX_BASE_URL;
   const togetherNativeSFTBase = getEnv().TOGETHER_BASE_URL;
   let filters: InferenceFilter | null = null;
   let output_source: InferenceOutputSource = "inference";
@@ -40,88 +41,76 @@ export async function launch_sft_job(
   }
   const client = await getNativeTensorZeroClient();
   let optimizerConfig: UninitializedOptimizerInfo;
-  if (data.model.provider == "openai") {
-    optimizerConfig = {
-      type: "openai_sft",
-      model: data.model.name,
-      batch_size: 1,
-      learning_rate_multiplier: 1,
-      n_epochs: 1,
-      credentials: null,
-      api_base: openAINativeSFTBase,
-      seed: null,
-      suffix: null,
-    };
-  } else if (data.model.provider == "fireworks") {
-    const accountId = getEnv().FIREWORKS_ACCOUNT_ID;
-    if (!accountId) {
-      throw new Error("FIREWORKS_ACCOUNT_ID is not set");
+  switch (data.model.provider) {
+    case "openai": {
+      optimizerConfig = {
+        type: "openai_sft",
+        model: data.model.name,
+        batch_size: 1,
+        learning_rate_multiplier: 1,
+        n_epochs: 1,
+        api_base: openAINativeSFTBase,
+      };
+      break;
     }
-    optimizerConfig = {
-      type: "fireworks_sft",
-      model: data.model.name,
-      early_stop: null,
-      epochs: null,
-      learning_rate: null,
-      max_context_length: null,
-      lora_rank: null,
-      batch_size: null,
-      display_name: null,
-      output_model: null,
-      warm_start_from: null,
-      is_turbo: null,
-      eval_auto_carveout: null,
-      nodes: null,
-      mtp_enabled: null,
-      mtp_num_draft_tokens: null,
-      mtp_freeze_base_model: null,
-      credentials: null,
-      api_base: fireworksNativeSFTBase,
-      account_id: accountId,
-    };
-  } else if (data.model.provider == "together") {
-    optimizerConfig = {
-      type: "together_sft",
-      model: data.model.name,
-      credentials: null,
-      api_base: togetherNativeSFTBase,
-      n_epochs: 1,
-      n_checkpoints: 1,
-      n_evals: null,
-      batch_size: "max",
-      learning_rate: 0.00001,
-      warmup_ratio: 0,
-      max_grad_norm: 1,
-      weight_decay: 0,
-      suffix: null,
-      lr_scheduler: {
-        lr_scheduler_type: "linear",
-        min_lr_ratio: 0,
-      },
-      wandb_api_key: null,
-      wandb_base_url: null,
-      wandb_project_name: null,
-      wandb_name: null,
-      training_method: {
-        method: "sft",
-      },
-      training_type: {
-        type: "Lora",
-        lora_r: 8,
-        lora_alpha: 16,
-        lora_dropout: 0,
-        lora_trainable_modules: "all-linear",
-      },
-      from_checkpoint: null,
-      from_hf_model: null,
-      hf_model_revision: null,
-      hf_api_token: null,
-      hf_output_repo_name: null,
-    };
-  } else {
-    throw new Error(
-      `Native SFT is not supported for provider ${data.model.provider}`,
-    );
+    case "fireworks": {
+      const accountId = getEnv().FIREWORKS_ACCOUNT_ID;
+      if (!accountId) {
+        throw new Error("FIREWORKS_ACCOUNT_ID is not set");
+      }
+      optimizerConfig = {
+        type: "fireworks_sft",
+        model: data.model.name,
+        api_base: fireworksNativeSFTBase,
+        account_id: accountId,
+      };
+      break;
+    }
+    case "together": {
+      optimizerConfig = {
+        type: "together_sft",
+        model: data.model.name,
+        api_base: togetherNativeSFTBase,
+        n_epochs: 1,
+        n_checkpoints: 1,
+        batch_size: "max",
+        learning_rate: 0.00001,
+        warmup_ratio: 0,
+        max_grad_norm: 1,
+        weight_decay: 0,
+        lr_scheduler: {
+          lr_scheduler_type: "linear",
+          min_lr_ratio: 0,
+        },
+        training_method: {
+          method: "sft",
+        },
+        training_type: {
+          type: "Lora",
+          lora_r: 8,
+          lora_alpha: 16,
+          lora_dropout: 0,
+          lora_trainable_modules: "all-linear",
+        },
+      };
+      break;
+    }
+    case "gcp_vertex_gemini": {
+      if (!data.gcpProjectId || !data.gcpRegion || !data.gcpBucketName) {
+        throw new Error(
+          "GCP Project ID, Region, and Bucket Name are required for GCP Vertex Gemini",
+        );
+      }
+      optimizerConfig = {
+        type: "gcp_vertex_gemini_sft",
+        model: data.model.name,
+        project_id: data.gcpProjectId,
+        region: data.gcpRegion,
+        bucket_name: data.gcpBucketName,
+        api_base: gcpVertexNativeSFTBase,
+      };
+      break;
+    }
   }
 
   const job = await client.experimentalLaunchOptimizationWorkflow({

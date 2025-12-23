@@ -9,7 +9,8 @@ import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
-import { Form } from "~/components/ui/form";
+import { Form, FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { Input } from "~/components/ui/input";
 import type {
   ChatCompletionConfig,
   UiConfig,
@@ -56,10 +57,10 @@ export function SFTForm({
 
   const watchedFields = useWatch({
     control: form.control,
-    name: ["function", "metric", "threshold"] as const,
+    name: ["function", "metric", "threshold", "model"] as const,
   });
 
-  const [functionName, metricName, threshold] = watchedFields;
+  const [functionName, metricName, threshold, selectedModel] = watchedFields;
   const functionConfig = useFunctionConfig(functionName);
   const parsedThreshold =
     typeof threshold === "string" ? parseFloat(threshold) : threshold;
@@ -214,6 +215,76 @@ export function SFTForm({
                 <p className="text-xs text-red-500">{errors.model.message}</p>
               )}
             </div>
+
+            {selectedModel?.provider === "gcp_vertex_gemini" && (
+              <div className="grid gap-x-8 md:grid-cols-2">
+                <div className="border-border bg-muted/30 rounded-lg border p-4">
+                  <h3 className="text-muted-foreground mb-4 text-sm font-semibold">
+                    GCP Vertex AI Configuration
+                  </h3>
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="gcpProjectId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Project ID</FormLabel>
+                          <Input
+                            placeholder="my-gcp-project"
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                          />
+                          {errors.gcpProjectId && (
+                            <p className="text-xs text-red-500">
+                              {errors.gcpProjectId.message}
+                            </p>
+                          )}
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="gcpRegion"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Region</FormLabel>
+                          <Input
+                            placeholder="us-central1"
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                          />
+                          {errors.gcpRegion && (
+                            <p className="text-xs text-red-500">
+                              {errors.gcpRegion.message}
+                            </p>
+                          )}
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="gcpBucketName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>GCS Bucket Name</FormLabel>
+                          <Input
+                            placeholder="my-training-bucket"
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                          />
+                          {errors.gcpBucketName && (
+                            <p className="text-xs text-red-500">
+                              {errors.gcpBucketName.message}
+                            </p>
+                          )}
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <AdvancedParametersAccordion
               control={form.control}
               maxSamplesLimit={counts.inferenceCount ?? undefined}
@@ -225,7 +296,8 @@ export function SFTForm({
             disabled={
               submissionPhase !== "idle" ||
               isCuratedInferenceCountLow ||
-              isReadOnly
+              isReadOnly ||
+              !form.formState.isValid
             }
           >
             {getButtonText()}
