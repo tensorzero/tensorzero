@@ -227,7 +227,7 @@ async fn main() -> Result<(), ExitCode> {
         .log_err_pretty("Failed to initialize AppState")?;
 
     // Start autopilot worker if configured
-    let _autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle);
+    let autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle).await?;
 
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
@@ -333,7 +333,7 @@ async fn main() -> Result<(), ExitCode> {
     }
 
     // Print whether Autopilot Worker is enabled
-    if _autopilot_worker_handle.is_some() {
+    if autopilot_worker_handle.is_some() {
         tracing::info!("├ Autopilot Worker: enabled");
     } else {
         tracing::info!("├ Autopilot Worker: disabled");
@@ -476,13 +476,13 @@ pub async fn shutdown_signal() {
 }
 
 /// Spawn the autopilot worker if environment variables are set.
-fn spawn_autopilot_worker_if_configured(
+async fn spawn_autopilot_worker_if_configured(
     gateway_handle: &gateway::GatewayHandle,
-) -> Option<AutopilotWorkerHandle> {
+) -> Result<Option<AutopilotWorkerHandle>, ExitCode> {
     // Only start if autopilot client is configured
     if gateway_handle.app_state.autopilot_client.is_none() {
         tracing::debug!("Autopilot worker not configured: TENSORZERO_AUTOPILOT_API_KEY not set");
-        return None;
+        return Ok(None);
     }
 
     // Only start if postgres is enabled (needed for durable task queue)
@@ -492,11 +492,11 @@ fn spawn_autopilot_worker_if_configured(
             tracing::debug!(
                 "Autopilot worker not configured: Postgres is required for the durable task queue"
             );
-            return None;
+            return Ok(None);
         }
         #[cfg(test)]
         #[expect(unreachable_patterns)]
-        _ => return None,
+        _ => return Ok(None),
     };
 
     // Create an embedded inference client using the gateway's state
@@ -511,11 +511,15 @@ fn spawn_autopilot_worker_if_configured(
 
     let config = AutopilotWorkerConfig::new(pool, inference_client);
 
-    spawn_autopilot_worker(
-        &gateway_handle.app_state.deferred_tasks,
-        gateway_handle.cancel_token.clone(),
-        config,
-    )
+    Ok(Some(
+        spawn_autopilot_worker(
+            &gateway_handle.app_state.deferred_tasks,
+            gateway_handle.cancel_token.clone(),
+            config,
+        )
+        .await
+        .log_err_pretty("Failed to spawn autopilot worker")?,
+    ))
 }
 
 /// ┌──────────────────────────────────────────────────────────────────────────┐

@@ -129,52 +129,19 @@ impl AutopilotWorkerHandle {
 ///
 /// # Returns
 ///
-/// Returns `Some(AutopilotWorkerHandle)` if the worker was successfully spawned,
-/// `None` if spawning failed (error is logged).
-pub fn spawn_autopilot_worker(
+/// Returns `Ok(AutopilotWorkerHandle)` if the worker was successfully spawned,
+pub async fn spawn_autopilot_worker(
     deferred_tasks: &TaskTracker,
     cancel_token: CancellationToken,
     config: AutopilotWorkerConfig,
-) -> Option<AutopilotWorkerHandle> {
-    // We use a oneshot channel to get the handle back from the spawned task
-    let (tx, rx) = tokio::sync::oneshot::channel();
+) -> Result<AutopilotWorkerHandle> {
+    let worker = AutopilotWorker::new(config).await?;
+    worker.register_tools().await;
 
-    deferred_tasks.spawn(async move {
-        match AutopilotWorker::new(config).await {
-            Ok(worker) => {
-                tracing::info!("Autopilot worker started");
-                worker.register_tools().await;
-
-                // Create the handle with a shared reference to the executor
-                let handle = AutopilotWorkerHandle {
-                    executor: worker.executor(),
-                };
-
-                // Send the handle back before starting the run loop
-                let _ = tx.send(Some(handle));
-
-                if let Err(e) = worker.run(cancel_token).await {
-                    tracing::error!("Autopilot worker error: {e}");
-                }
-
-                tracing::info!("Autopilot worker stopped");
-            }
-            Err(e) => {
-                tracing::error!("Failed to create autopilot worker: {e}");
-                let _ = tx.send(None);
-            }
-        }
-    });
-
-    // Block briefly to get the handle (this happens during startup)
-    // Using a small timeout to avoid blocking forever if something goes wrong
-    tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async {
-            tokio::time::timeout(std::time::Duration::from_secs(30), rx)
-                .await
-                .ok()
-                .and_then(|r| r.ok())
-                .flatten()
-        })
-    })
+    // Create the handle with a shared reference to the executor
+    let handle = AutopilotWorkerHandle {
+        executor: worker.executor(),
+    };
+    deferred_tasks.spawn(async move { worker.run(cancel_token).await });
+    Ok(handle)
 }
