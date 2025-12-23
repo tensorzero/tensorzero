@@ -436,7 +436,7 @@ async fn best_of_n_other_candidate(payload: Value) {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
         model_names.push(model_name);
     }
-    model_names.sort();
+    model_names.sort_unstable();
     assert_eq!(
         model_names,
         ["dummy::best_of_n_0", "dummy::good", "dummy::reasoner"]
@@ -509,7 +509,7 @@ async fn best_of_n_judge_timeout(payload: Value) {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
         model_names.push(model_name);
     }
-    model_names.sort();
+    model_names.sort_unstable();
     assert_eq!(model_names, ["dummy::good", "dummy::reasoner"]);
 }
 
