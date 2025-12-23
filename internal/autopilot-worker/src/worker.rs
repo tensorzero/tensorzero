@@ -32,8 +32,12 @@ impl AutopilotWorkerConfig {
     /// Environment variables:
     /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Queue name (default: "autopilot")
     pub fn new(pool: PgPool, inference_client: Arc<dyn InferenceClient>) -> Self {
-        let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
-            .unwrap_or_else(|_| "autopilot".to_string());
+        let mut queue_name = "autopilot".to_string();
+        if cfg!(feature = "e2e_tests")
+            && let Some(name) = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME").ok()
+        {
+            queue_name = name;
+        }
 
         Self {
             pool,
