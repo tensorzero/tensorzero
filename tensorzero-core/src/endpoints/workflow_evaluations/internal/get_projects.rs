@@ -20,7 +20,7 @@ pub struct GetWorkflowEvaluationProjectsParams {
 const DEFAULT_GET_WORKFLOW_EVALUATION_PROJECTS_LIMIT: u32 = 100;
 const DEFAULT_GET_WORKFLOW_EVALUATION_PROJECTS_OFFSET: u32 = 0;
 
-/// Handler for `GET /internal/workflow-evaluations/projects`
+/// Handler for `GET /internal/workflow_evaluations/projects`
 ///
 /// Returns a paginated list of workflow evaluation projects.
 #[axum::debug_handler(state = AppStateData)]

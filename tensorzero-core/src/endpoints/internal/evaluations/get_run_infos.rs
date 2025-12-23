@@ -41,7 +41,7 @@ pub struct GetEvaluationRunInfosResponse {
     pub run_infos: Vec<EvaluationRunInfoById>,
 }
 
-/// Handler for `GET /internal/evaluations/run-infos`
+/// Handler for `GET /internal/evaluations/run_infos`
 ///
 /// Returns information about specific evaluation runs.
 #[axum::debug_handler(state = AppStateData)]
@@ -96,7 +96,7 @@ pub async fn get_evaluation_run_infos(
     Ok(GetEvaluationRunInfosResponse { run_infos })
 }
 
-/// Handler for `GET /internal/evaluations/datapoints/{datapoint_id}/run-infos`
+/// Handler for `GET /internal/evaluations/datapoints/{datapoint_id}/run_infos`
 ///
 /// Returns information about evaluation runs associated with a specific datapoint.
 #[axum::debug_handler(state = AppStateData)]

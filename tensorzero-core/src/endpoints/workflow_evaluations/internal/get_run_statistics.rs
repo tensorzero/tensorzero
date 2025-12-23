@@ -20,7 +20,7 @@ pub struct GetWorkflowEvaluationRunStatisticsParams {
     pub metric_name: Option<String>,
 }
 
-/// Handler for `GET /internal/workflow-evaluations/run-statistics`
+/// Handler for `GET /internal/workflow_evaluations/run_statistics`
 ///
 /// Gets aggregated statistics (count, mean, stdev, confidence intervals) for a workflow
 /// evaluation run, grouped by metric name.
