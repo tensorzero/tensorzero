@@ -1,3 +1,3 @@
 # Mock optimization config for e2e tests with mock server
 [provider_types.gcp_vertex_gemini.sft]
-api_base = "http://mock-inference-provider:3030/gcp_vertex_gemini/"
+internal_mock_api_base = "http://mock-inference-provider:3030/gcp_vertex_gemini/"

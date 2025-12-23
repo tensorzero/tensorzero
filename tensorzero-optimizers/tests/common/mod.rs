@@ -83,8 +83,8 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
 
-    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
+    // Use centralized config path helper which handles mock mode conditional glob pattern
+    let config_path = tensorzero::test_helpers::get_e2e_config_path();
 
     // Create an embedded client so that we run migrations
     let tensorzero_client =

@@ -4,8 +4,6 @@ use tensorzero_core::optimization::{
     gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
 };
 
-// Currently unused in 'mock_tests.rs'
-#[allow(clippy::allow_attributes, dead_code)]
 pub struct GCPVertexGeminiSFTTestCase();
 
 impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {

@@ -65,10 +65,19 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         // Get provider-level config
         let sft_config = get_sft_config(&config.provider_types)?;
 
-        // Get credentials from provider defaults
-        let gcp_credentials = GCPVertexGeminiKind
-            .get_defaulted_credential(None, &config.models.default_credentials)
-            .await?;
+        // Check if we're in mock mode (internal_mock_api_base is set)
+        let is_mock_mode = sft_config.internal_mock_api_base.is_some();
+
+        // Get credentials from provider defaults (only needed in real mode)
+        let gcp_credentials = if is_mock_mode {
+            None
+        } else {
+            Some(
+                GCPVertexGeminiKind
+                    .get_defaulted_credential(None, &config.models.default_credentials)
+                    .await?,
+            )
+        };
 
         let train_examples = train_examples
             .into_iter()
@@ -111,34 +120,37 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             None => format!("gs://{}/{}", sft_config.bucket_name, train_filename),
         };
 
-        // Run uploads concurrently
-        let train_fut = upload_rows_to_gcp_object_store(
-            &train_rows,
-            &train_gs_url,
-            &gcp_credentials,
-            credentials,
-        );
+        // Upload to GCS (skip in mock mode - mock server ignores gs:// URLs)
+        let val_gs_url = if let Some(gcp_creds) = &gcp_credentials {
+            let train_fut =
+                upload_rows_to_gcp_object_store(&train_rows, &train_gs_url, gcp_creds, credentials);
 
-        let val_gs_url = if let Some(val_rows) = &val_rows {
-            let val_filename = format!("val_{}.jsonl", Uuid::now_v7());
-            let val_url = match &sft_config.bucket_path_prefix {
-                Some(prefix) => format!(
-                    "gs://{}/{}/{}",
-                    sft_config.bucket_name, prefix, val_filename
-                ),
-                None => format!("gs://{}/{}", sft_config.bucket_name, val_filename),
-            };
+            if let Some(val_rows) = &val_rows {
+                let val_filename = format!("val_{}.jsonl", Uuid::now_v7());
+                let val_url = match &sft_config.bucket_path_prefix {
+                    Some(prefix) => format!(
+                        "gs://{}/{}/{}",
+                        sft_config.bucket_name, prefix, val_filename
+                    ),
+                    None => format!("gs://{}/{}", sft_config.bucket_name, val_filename),
+                };
 
-            let val_fut =
-                upload_rows_to_gcp_object_store(val_rows, &val_url, &gcp_credentials, credentials);
+                let val_fut =
+                    upload_rows_to_gcp_object_store(val_rows, &val_url, gcp_creds, credentials);
 
-            // Run both futures concurrently
-            try_join!(train_fut, val_fut)?;
-            Some(val_url)
+                // Run both futures concurrently
+                try_join!(train_fut, val_fut)?;
+                Some(val_url)
+            } else {
+                // Just run the training file upload
+                train_fut.await?;
+                None
+            }
         } else {
-            // Just run the training file upload
-            train_fut.await?;
-            None
+            // Mock mode: skip uploads, use placeholder URL for validation if needed
+            val_rows
+                .as_ref()
+                .map(|_| format!("gs://{}/mock_validation.jsonl", sft_config.bucket_name))
         };
 
         let supervised_tuning_spec = SupervisedTuningSpec {
@@ -167,8 +179,8 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             encryption_spec,
         };
 
-        // Build URL - use api_base override for testing if available
-        let url = if let Some(api_base) = &sft_config.api_base {
+        // Build URL - use internal_mock_api_base override for testing if available
+        let url = if let Some(api_base) = &sft_config.internal_mock_api_base {
             api_base
                 .join(&format!(
                     "v1/projects/{}/locations/{}/tuningJobs",
@@ -187,18 +199,22 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             })?
         };
 
-        let auth_headers = gcp_credentials
-            .get_auth_headers(
-                &format!(
-                    "https://{}aiplatform.googleapis.com/",
-                    location_subdomain_prefix(&sft_config.region)
-                ),
-                credentials,
-            )
-            .await
-            .map_err(|e| e.log())?;
-
-        let request = client.post(url).headers(auth_headers);
+        let request = if let Some(gcp_creds) = &gcp_credentials {
+            let auth_headers = gcp_creds
+                .get_auth_headers(
+                    &format!(
+                        "https://{}aiplatform.googleapis.com/",
+                        location_subdomain_prefix(&sft_config.region)
+                    ),
+                    credentials,
+                )
+                .await
+                .map_err(|e| e.log())?;
+            client.post(url).headers(auth_headers)
+        } else {
+            // Mock mode: no auth headers needed
+            client.post(url)
+        };
         let res = request.json(&body).send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
                 status_code: e.status(),
@@ -273,23 +289,11 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
         // Get provider-level config
         let sft_config = get_sft_config(provider_types)?;
 
-        let gcp_credentials = GCPVertexGeminiKind
-            .get_defaulted_credential(None, default_credentials)
-            .await?;
-
-        let auth_headers = gcp_credentials
-            .get_auth_headers(
-                &format!(
-                    "https://{}aiplatform.googleapis.com/",
-                    location_subdomain_prefix(&sft_config.region)
-                ),
-                credentials,
-            )
-            .await
-            .map_err(|e| e.log())?;
+        // Check if we're in mock mode
+        let is_mock_mode = sft_config.internal_mock_api_base.is_some();
 
         // Construct the API URL from job_name
-        let api_url = if let Some(api_base) = &sft_config.api_base {
+        let api_url = if let Some(api_base) = &sft_config.internal_mock_api_base {
             api_base
                 .join(&format!("v1/{}", self.job_name))
                 .map_err(|e| {
@@ -310,23 +314,40 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
             })?
         };
 
-        let res = client
-            .get(api_url)
-            .headers(auth_headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to GCP Vertex Gemini: {}",
-                        DisplayOrDebugGateway::new(e)
+        let request = if is_mock_mode {
+            // Mock mode: no auth headers needed
+            client.get(api_url)
+        } else {
+            let gcp_credentials = GCPVertexGeminiKind
+                .get_defaulted_credential(None, default_credentials)
+                .await?;
+
+            let auth_headers = gcp_credentials
+                .get_auth_headers(
+                    &format!(
+                        "https://{}aiplatform.googleapis.com/",
+                        location_subdomain_prefix(&sft_config.region)
                     ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: None,
-                    raw_response: None,
-                })
-            })?;
+                    credentials,
+                )
+                .await
+                .map_err(|e| e.log())?;
+
+            client.get(api_url).headers(auth_headers)
+        };
+
+        let res = request.send().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                status_code: e.status(),
+                message: format!(
+                    "Error sending request to GCP Vertex Gemini: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
+            })
+        })?;
 
         let raw_response = res.text().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {

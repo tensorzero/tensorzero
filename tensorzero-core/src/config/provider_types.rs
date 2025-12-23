@@ -180,9 +180,9 @@ pub struct GCPSFTConfig {
     pub service_account: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kms_key_name: Option<String>,
-    /// API base URL override for testing with mock servers
+    /// INTERNAL ONLY: Overrides API base for testing. Skips GCS upload and credential checks if set.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub api_base: Option<Url>,
+    pub internal_mock_api_base: Option<Url>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -368,7 +368,7 @@ mod tests {
             bucket_path_prefix: None,
             service_account: None,
             kms_key_name: None,
-            api_base: None,
+            internal_mock_api_base: None,
         };
 
         // Test for "succeeded" status with a model output
