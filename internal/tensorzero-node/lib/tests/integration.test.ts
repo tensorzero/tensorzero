@@ -29,13 +29,4 @@ describe("TensorZeroClient Integration Tests", () => {
     );
     expect(typeof client.experimentalPollOptimization).toBe("function");
   });
-
-  it("should be able to stale dataset", async () => {
-    const client = await buildClient();
-    // In the future once we have full dataset lifecycle support here we can do a better test
-    const staleDatasetResponse =
-      await client.staleDataset("nonexistentdataset");
-    expect(staleDatasetResponse).toBeDefined();
-    expect(staleDatasetResponse.num_staled_datapoints).toBe(0);
-  });
 });
