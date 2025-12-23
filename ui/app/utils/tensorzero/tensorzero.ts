@@ -18,6 +18,8 @@ import type {
   CountInferencesRequest,
   CountInferencesResponse,
   CountModelsResponse,
+  CountWorkflowEvaluationRunEpisodesByTaskNameResponse,
+  CountWorkflowEvaluationRunEpisodesResponse,
   CountWorkflowEvaluationRunsResponse,
   CreateDatapointsFromInferenceRequest,
   CumulativeFeedbackTimeSeriesPoint,
@@ -40,6 +42,7 @@ import type {
   GetModelUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
+  GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
   GetWorkflowEvaluationRunsResponse,
   GetWorkflowEvaluationRunStatisticsResponse,
   InferenceWithFeedbackStatsResponse,
@@ -55,6 +58,7 @@ import type {
   ListEvaluationRunsResponse,
   ListInferencesRequest,
   ListInferenceMetadataResponse,
+  ListWorkflowEvaluationRunEpisodesByTaskNameResponse,
   ListWorkflowEvaluationRunsResponse,
   SearchEvaluationRunsResponse,
   SearchWorkflowEvaluationRunsResponse,
@@ -68,8 +72,11 @@ import type {
   UpdateDatapointsResponse,
   ListEpisodesResponse,
   GetEpisodeInferenceCountResponse,
+  GetEvaluationResultsResponse,
   GetEvaluationRunInfosResponse,
   GetEvaluationStatisticsResponse,
+  VariantPerformancesResponse,
+  InferenceStatsByVariant,
 } from "~/types/tensorzero";
 
 /**
@@ -853,6 +860,22 @@ export class TensorZeroClient {
   }
 
   /**
+   * Fetches the variants used for a function.
+   * @param functionName - The name of the function to get variants for
+   * @returns A promise that resolves with the variants used for the function
+   * @throws Error if the request fails
+   */
+  async getUsedVariants(functionName: string): Promise<string[]> {
+    const response = await this.getInferenceStats(functionName, {
+      groupBy: "variant",
+    });
+
+    return (response.stats_by_variant ?? []).map(
+      (v: InferenceStatsByVariant) => v.variant_name,
+    );
+  }
+
+  /**
    * Fetches feedback statistics for a function and metric.
    * @param functionName - The name of the function to get stats for
    * @param metricName - The name of the metric to get stats for (or "demonstration")
@@ -931,6 +954,38 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as MetricsWithFeedbackResponse;
+  }
+
+  /**
+   * Fetches variant performance statistics for a function and metric.
+   * @param functionName - The name of the function to get performance stats for
+   * @param metricName - The name of the metric to compute performance for
+   * @param timeWindow - Time granularity for grouping performance data
+   * @param variantName - Optional variant name to filter by
+   * @returns A promise that resolves with variant performance statistics
+   * @throws Error if the request fails
+   */
+  async getVariantPerformances(
+    functionName: string,
+    metricName: string,
+    timeWindow: TimeWindow,
+    variantName?: string,
+  ): Promise<VariantPerformancesResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("metric_name", metricName);
+    searchParams.append("time_window", timeWindow);
+    if (variantName) {
+      searchParams.append("variant_name", variantName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant-performances?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as VariantPerformancesResponse;
   }
 
   /**
@@ -1244,6 +1299,119 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetWorkflowEvaluationRunStatisticsResponse;
+  }
+
+  /**
+   * Lists workflow evaluation run episodes grouped by task name.
+   *
+   * Returns episodes grouped by task_name. Episodes with NULL task_name are grouped
+   * individually using a generated key based on their episode_id.
+   *
+   * @param runIds - List of run IDs to filter episodes by
+   * @param limit - Maximum number of groups to return (default: 15)
+   * @param offset - Number of groups to skip (default: 0)
+   * @returns A promise that resolves with the grouped episodes response
+   * @throws Error if the request fails
+   */
+  async listWorkflowEvaluationRunEpisodesByTaskName(
+    runIds: string[],
+    limit: number = 15,
+    offset: number = 0,
+  ): Promise<ListWorkflowEvaluationRunEpisodesByTaskNameResponse> {
+    const searchParams = new URLSearchParams();
+    if (runIds.length > 0) {
+      searchParams.append("run_ids", runIds.join(","));
+    }
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/episodes-by-task-name${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListWorkflowEvaluationRunEpisodesByTaskNameResponse;
+  }
+
+  /**
+   * Counts the number of distinct episode groups (by task_name) for the given run IDs.
+   *
+   * Episodes with NULL task_name are counted as individual groups.
+   *
+   * @param runIds - List of run IDs to filter episodes by
+   * @returns A promise that resolves with the count of episode groups
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationRunEpisodeGroupsByTaskName(
+    runIds: string[],
+  ): Promise<number> {
+    const searchParams = new URLSearchParams();
+    if (runIds.length > 0) {
+      searchParams.append("run_ids", runIds.join(","));
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/episodes-by-task-name/count${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as CountWorkflowEvaluationRunEpisodesByTaskNameResponse;
+    return body.count;
+  }
+
+  /**
+   * Gets workflow evaluation run episodes with their feedback for a specific run.
+   * @param runId - The run ID to get episodes for
+   * @param limit - Maximum number of episodes to return (default: 15)
+   * @param offset - Offset for pagination (default: 0)
+   * @returns A promise that resolves with the workflow evaluation run episodes response
+   * @throws Error if the request fails
+   */
+  async getWorkflowEvaluationRunEpisodesWithFeedback(
+    runId: string,
+    limit: number = 15,
+    offset: number = 0,
+  ): Promise<GetWorkflowEvaluationRunEpisodesWithFeedbackResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("run_id", runId);
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/run-episodes?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetWorkflowEvaluationRunEpisodesWithFeedbackResponse;
+  }
+
+  /**
+   * Counts the total number of episodes for a workflow evaluation run.
+   * @param runId - The run ID to count episodes for
+   * @returns A promise that resolves with the count of episodes
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationRunEpisodes(runId: string): Promise<number> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("run_id", runId);
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/run-episodes/count?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as CountWorkflowEvaluationRunEpisodesResponse;
+    return body.count;
   }
 
   /**
@@ -1591,6 +1759,37 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetEvaluationStatisticsResponse;
+  }
+
+  /**
+   * Gets paginated evaluation results across one or more evaluation runs.
+   * @param evaluationName - The name of the evaluation
+   * @param evaluationRunIds - Array of evaluation run UUIDs to query
+   * @param limit - Maximum number of datapoints to return (default: 100)
+   * @param offset - Number of datapoints to skip (default: 0)
+   * @returns A promise that resolves with the evaluation results
+   * @throws Error if the request fails
+   */
+  async getEvaluationResults(
+    evaluationName: string,
+    evaluationRunIds: string[],
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<GetEvaluationResultsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_name", evaluationName);
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/results?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationResultsResponse;
   }
 
   private async fetch(

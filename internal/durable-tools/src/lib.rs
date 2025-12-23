@@ -4,6 +4,15 @@
 //! This crate provides abstractions for defining and executing tools in a durable
 //! execution environment backed by the `durable` crate.
 //!
+//! # Lightweight Spawning
+//!
+//! For consumers who only need to spawn tasks without the full tool framework,
+//! use the `durable-tools-spawn` crate directly or the re-exported types:
+//!
+//! ```ignore
+//! use durable_tools::spawn::{SpawnClient, TaskToolParams};
+//! ```
+//!
 //! # Tool Types
 //!
 //! - **`TaskTool`**: Durable tools that run as full durable tasks. Can call other
@@ -175,13 +184,23 @@ mod tool_metadata;
 #[cfg(test)]
 mod tests;
 
+// Re-export spawn crate types for lightweight spawning
+pub mod spawn {
+    //! Lightweight spawning types re-exported from `durable-tools-spawn`.
+    pub use durable_tools_spawn::{
+        SpawnClient, SpawnClientBuilder, SpawnError, SpawnResult, TaskToolParams,
+    };
+}
+
 // Re-export main types
 pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext};
 pub use error::{ToolError, ToolResult};
 pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 pub use simple_tool::SimpleTool;
-pub use task_tool::{SideInfo, TaskTool, TaskToolAdapter, TaskToolParams};
+// Re-export TaskToolParams from spawn crate for backward compatibility
+pub use durable_tools_spawn::TaskToolParams;
+pub use task_tool::{SideInfo, TaskTool, TaskToolAdapter};
 pub use tool_metadata::ToolMetadata;
 
 // Re-export inference trait and helpers

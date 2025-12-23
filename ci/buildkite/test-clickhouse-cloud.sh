@@ -10,6 +10,8 @@ export CLICKHOUSE_API_KEY=$(buildkite-agent secret get clickhouse_api_key)
 export CLICKHOUSE_KEY_SECRET=$(buildkite-agent secret get clickhouse_key_secret)
 export CLICKHOUSE_USERNAME=$(buildkite-agent secret get clickhouse_username)
 export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get clickhouse_password)
+export R2_ACCESS_KEY_ID=$(buildkite-agent secret get R2_ACCESS_KEY_ID)
+export R2_SECRET_ACCESS_KEY=$(buildkite-agent secret get R2_SECRET_ACCESS_KEY)
 # We concatenate our clickhouse instance prefix, along with our chosen clickhouse id (e.g. 'dev-tensorzero-e2e-tests-instance-' and '0'), to form the instance name
 # Then, we look up the instance url for this name, and add basic-auth credentials to the url to get our full TENSORZERO_CLICKHOUSE_URL
 # The 'export' statements go on separate lines to prevent the return code from the $() command from being ignored

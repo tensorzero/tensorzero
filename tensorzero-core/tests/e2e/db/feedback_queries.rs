@@ -1,8 +1,13 @@
 #![expect(clippy::print_stdout)]
-use tensorzero_core::db::{
-    TimeWindow, clickhouse::test_helpers::get_clickhouse, feedback::FeedbackQueries,
-    feedback::FeedbackRow,
+use tensorzero_core::config::{
+    MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
 };
+use tensorzero_core::db::{
+    TimeWindow,
+    clickhouse::test_helpers::get_clickhouse,
+    feedback::{FeedbackQueries, FeedbackRow, GetVariantPerformanceParams},
+};
+use tensorzero_core::function::FunctionConfigType;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -465,5 +470,455 @@ async fn test_get_cumulative_feedback_timeseries_max_periods() {
     assert!(
         unique_periods_more.len() >= unique_periods.len(),
         "More max_periods should give equal or more unique time periods"
+    );
+}
+
+// =====================================================================
+// Tests for get_variant_performances
+// =====================================================================
+
+#[tokio::test]
+async fn test_get_variant_performances_inference_level_cumulative() {
+    let clickhouse = get_clickhouse().await;
+
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+    };
+
+    let params = GetVariantPerformanceParams {
+        function_name: "weather_helper",
+        function_type: FunctionConfigType::Chat,
+        metric_name: "user_rating",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Cumulative,
+        variant_name: None,
+    };
+
+    let results = clickhouse.get_variant_performances(params).await.unwrap();
+
+    println!("Variant performance results (cumulative):");
+    for result in &results {
+        println!("  {result:?}");
+    }
+
+    // All results should have the epoch timestamp for cumulative
+    for result in &results {
+        assert_eq!(
+            result.period_start.to_rfc3339(),
+            "1970-01-01T00:00:00+00:00",
+            "Cumulative results should have epoch timestamp"
+        );
+        assert!(result.count > 0, "Count should be positive");
+    }
+}
+
+#[tokio::test]
+async fn test_get_variant_performances_inference_level_week() {
+    let clickhouse = get_clickhouse().await;
+
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+    };
+
+    let params = GetVariantPerformanceParams {
+        function_name: "weather_helper",
+        function_type: FunctionConfigType::Chat,
+        metric_name: "user_rating",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Week,
+        variant_name: None,
+    };
+
+    let results = clickhouse.get_variant_performances(params).await.unwrap();
+
+    println!("Variant performance results (weekly):");
+    for result in &results {
+        println!("  {result:?}");
+    }
+
+    // Results should be ordered by period_start ASC, then variant_name ASC
+    for window in results.windows(2) {
+        assert!(
+            window[0].period_start <= window[1].period_start
+                || (window[0].period_start == window[1].period_start
+                    && window[0].variant_name <= window[1].variant_name),
+            "Results should be ordered by period_start ASC, variant_name ASC"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_get_variant_performances_episode_level_cumulative() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use episode-level metric
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Episode,
+    };
+
+    let params = GetVariantPerformanceParams {
+        function_name: "weather_helper",
+        function_type: FunctionConfigType::Chat,
+        metric_name: "task_success", // Assume this is an episode-level metric
+        metric_config: &metric_config,
+        time_window: TimeWindow::Cumulative,
+        variant_name: None,
+    };
+
+    let results = clickhouse.get_variant_performances(params).await.unwrap();
+
+    println!("Episode-level variant performance results (cumulative):");
+    for result in &results {
+        println!("  {result:?}");
+    }
+
+    // All results should have the epoch timestamp for cumulative
+    for result in &results {
+        assert_eq!(
+            result.period_start.to_rfc3339(),
+            "1970-01-01T00:00:00+00:00",
+            "Cumulative results should have epoch timestamp"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_get_variant_performances_with_variant_filter() {
+    let clickhouse = get_clickhouse().await;
+
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+    };
+
+    // First get all variants
+    let params_all = GetVariantPerformanceParams {
+        function_name: "weather_helper",
+        function_type: FunctionConfigType::Chat,
+        metric_name: "user_rating",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Cumulative,
+        variant_name: None,
+    };
+
+    let all_results = clickhouse
+        .get_variant_performances(params_all)
+        .await
+        .unwrap();
+
+    if !all_results.is_empty() {
+        // Filter by specific variant
+        let target_variant = &all_results[0].variant_name;
+        let params_filtered = GetVariantPerformanceParams {
+            function_name: "weather_helper",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "user_rating",
+            metric_config: &metric_config,
+            time_window: TimeWindow::Cumulative,
+            variant_name: Some(target_variant.as_str()),
+        };
+
+        let filtered_results = clickhouse
+            .get_variant_performances(params_filtered)
+            .await
+            .unwrap();
+
+        println!("Filtered results for variant '{target_variant}': {filtered_results:?}");
+
+        // All filtered results should be for the target variant
+        for result in &filtered_results {
+            assert_eq!(
+                &result.variant_name, target_variant,
+                "Filtered results should only contain target variant"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_get_variant_performances_empty_for_nonexistent_function() {
+    let clickhouse = get_clickhouse().await;
+
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+    };
+
+    let params = GetVariantPerformanceParams {
+        function_name: "nonexistent_function_12345",
+        function_type: FunctionConfigType::Chat,
+        metric_name: "user_rating",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Cumulative,
+        variant_name: None,
+    };
+
+    let results = clickhouse.get_variant_performances(params).await.unwrap();
+
+    assert!(
+        results.is_empty(),
+        "Should return empty results for nonexistent function"
+    );
+}
+
+#[tokio::test]
+async fn test_get_variant_performances_different_time_windows() {
+    let clickhouse = get_clickhouse().await;
+
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+    };
+
+    // Test each time window type (excluding cumulative which is tested separately)
+    let time_windows = [
+        TimeWindow::Minute,
+        TimeWindow::Hour,
+        TimeWindow::Day,
+        TimeWindow::Week,
+        TimeWindow::Month,
+    ];
+
+    for time_window in time_windows {
+        let params = GetVariantPerformanceParams {
+            function_name: "weather_helper",
+            function_type: FunctionConfigType::Chat,
+            metric_name: "user_rating",
+            metric_config: &metric_config,
+            time_window: time_window.clone(),
+            variant_name: None,
+        };
+
+        let results = clickhouse.get_variant_performances(params).await;
+        assert!(
+            results.is_ok(),
+            "Query should succeed for time window {time_window:?}"
+        );
+
+        println!(
+            "Time window {:?}: {} results",
+            time_window,
+            results.unwrap().len()
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_get_variant_performances_boolean_metric() {
+    let clickhouse = get_clickhouse().await;
+
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Boolean,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+    };
+
+    let params = GetVariantPerformanceParams {
+        function_name: "weather_helper",
+        function_type: FunctionConfigType::Chat,
+        metric_name: "thumbs_up",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Cumulative,
+        variant_name: None,
+    };
+
+    let results = clickhouse.get_variant_performances(params).await.unwrap();
+
+    println!("Boolean metric variant performance results:");
+    for result in &results {
+        println!("  {result:?}");
+        // For boolean metrics, avg_metric should be between 0 and 1
+        assert!(
+            result.avg_metric >= 0.0 && result.avg_metric <= 1.0,
+            "Boolean metric avg should be between 0 and 1, got {}",
+            result.avg_metric
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_get_variant_performances_ask_question_solved_with_variant() {
+    let clickhouse = get_clickhouse().await;
+
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Boolean,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Episode,
+    };
+
+    let params = GetVariantPerformanceParams {
+        function_name: "ask_question",
+        function_type: FunctionConfigType::Json,
+        metric_name: "solved",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Week,
+        variant_name: Some("baseline"),
+    };
+
+    let results = clickhouse.get_variant_performances(params).await.unwrap();
+
+    // Find the expected data points
+    let dec30_result = results
+        .iter()
+        .find(|r| {
+            r.period_start.to_rfc3339().starts_with("2024-12-30") && r.variant_name == "baseline"
+        })
+        .expect("There should be a result for 2024-12-30 and baseline variant");
+    let apr28_result = results
+        .iter()
+        .find(|r| {
+            r.period_start.to_rfc3339().starts_with("2025-04-28") && r.variant_name == "baseline"
+        })
+        .expect("There should be a result for 2025-04-28 and baseline variant");
+
+    // Verify the 2024-12-30 data point
+    assert_eq!(dec30_result.variant_name, "baseline");
+    assert_eq!(dec30_result.count, 23);
+    assert!(
+        (dec30_result.avg_metric - 0.043478260869565216).abs() < 1e-6,
+        "avg_metric mismatch: {}",
+        dec30_result.avg_metric
+    );
+    assert!(
+        (dec30_result.stdev.expect("Result should contain stdev") - 0.20851441405707477).abs()
+            < 1e-6,
+        "stdev mismatch",
+    );
+    assert!(
+        (dec30_result
+            .ci_error
+            .expect("Result should contain ci_error")
+            - 0.08521739130434784)
+            .abs()
+            < 1e-6,
+        "ci_error mismatch",
+    );
+
+    // Verify the 2025-04-28 data point
+    assert_eq!(apr28_result.variant_name, "baseline");
+    assert_eq!(apr28_result.count, 48);
+    assert!(
+        (apr28_result.avg_metric - 0.4791666666666667).abs() < 1e-6,
+        "avg_metric mismatch: {}",
+        apr28_result.avg_metric
+    );
+    assert!(
+        (apr28_result.stdev.expect("Result should contain stdev") - 0.5048523413086471).abs()
+            < 1e-6,
+        "stdev mismatch",
+    );
+    assert!(
+        (apr28_result
+            .ci_error
+            .expect("Result should contain ci_error")
+            - 0.1428235512262245)
+            .abs()
+            < 1e-6,
+        "ci_error mismatch",
+    );
+
+    // All results should be for the baseline variant
+    for result in &results {
+        assert_eq!(
+            result.variant_name, "baseline",
+            "All results should be for baseline variant"
+        );
+    }
+}
+
+/// Matches TypeScript test: "getVariantPerformances for ask_question and num_questions with specific variant"
+#[tokio::test]
+async fn test_get_variant_performances_ask_question_num_questions_with_variant() {
+    let clickhouse = get_clickhouse().await;
+
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Min,
+        level: MetricConfigLevel::Episode,
+    };
+
+    let params = GetVariantPerformanceParams {
+        function_name: "ask_question",
+        function_type: FunctionConfigType::Json,
+        metric_name: "num_questions",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Week,
+        variant_name: Some("baseline"),
+    };
+
+    let results = clickhouse.get_variant_performances(params).await.unwrap();
+
+    // Find the expected data point
+    let dec30_result = results
+        .iter()
+        .find(|r| {
+            r.period_start.to_rfc3339().starts_with("2024-12-30") && r.variant_name == "baseline"
+        })
+        .expect("There should be a result for 2024-12-30 and baseline variant");
+
+    // Verify the 2024-12-30 data point
+    assert_eq!(dec30_result.variant_name, "baseline");
+    assert_eq!(dec30_result.count, 49);
+    assert!(
+        (dec30_result.avg_metric - 15.653061224489797).abs() < 1e-6,
+        "avg_metric mismatch: {}",
+        dec30_result.avg_metric
+    );
+    assert!(
+        (dec30_result.stdev.expect("Result should contain stdev") - 5.9496174).abs() < 1e-5,
+        "stdev mismatch",
+    );
+    assert!(
+        (dec30_result
+            .ci_error
+            .expect("Result should contain ci_error")
+            - 1.665892868041992)
+            .abs()
+            < 1e-6,
+        "ci_error mismatch",
+    );
+
+    // All results should be for the baseline variant
+    for result in &results {
+        assert_eq!(
+            result.variant_name, "baseline",
+            "All results should be for baseline variant"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_get_variant_performances_empty_for_nonexistent_metric() {
+    let clickhouse = get_clickhouse().await;
+
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+    };
+
+    let params = GetVariantPerformanceParams {
+        function_name: "extract_entities",
+        function_type: FunctionConfigType::Json,
+        metric_name: "non_existent_metric",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Week,
+        variant_name: Some("gpt4o_initial_prompt"),
+    };
+
+    let results = clickhouse.get_variant_performances(params).await.unwrap();
+
+    assert!(
+        results.is_empty(),
+        "Should return empty results for non-existent metric"
     );
 }

@@ -18,6 +18,9 @@ syn = { version = "2.0.111", features = ["full"] }
 [lints]
 workspace = true
 
+[features]
+e2e_tests = []
+
 [dev-dependencies]
 serde.workspace = true
 serde_json.workspace = true
