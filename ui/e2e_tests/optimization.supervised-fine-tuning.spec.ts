@@ -223,7 +223,11 @@ model_name = "mock-inference-finetune-1234"
     ).toBeVisible();
   });
 
-  test("@slow @credentials should fine-tune with a mocked GCP Vertex Gemini server", async ({
+  // Skip: GCP SFT config (project_id, region, bucket_name, api_base) is now in gateway's
+  // provider_types.gcp_vertex_gemini.sft section. Testing with mock server requires building
+  // the gateway with e2e_tests feature to enable sft_api_base override. GCP SFT is tested
+  // in the live optimizer tests (optimization-test-cron.yml) instead.
+  test.skip("@slow @credentials should fine-tune with a mocked GCP Vertex Gemini server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -253,11 +257,6 @@ model_name = "mock-inference-finetune-1234"
     const modelInput = page.getByPlaceholder("Select model...");
     await modelInput.click();
     await page.getByRole("option", { name: "gemini-2.5-flash-lite" }).click();
-
-    // Fill in GCP-specific fields
-    await page.getByLabel("Project ID").fill("tensorzero-public");
-    await page.getByLabel("Region").fill("us-central1");
-    await page.getByLabel("Bucket Name").fill("tensorzero-e2e-tests");
 
     // Start the fine-tuning job
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();

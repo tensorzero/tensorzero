@@ -112,7 +112,6 @@ services:
       OPENAI_BASE_URL: http://mock-inference-provider:3030/openai/
       FIREWORKS_BASE_URL: http://mock-inference-provider:3030/fireworks/
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
-      GCP_VERTEX_BASE_URL: http://mock-inference-provider:3030/gcp_vertex_gemini/
       TOGETHER_BASE_URL: http://mock-inference-provider:3030/together/
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
     env_file:
@@ -160,7 +159,6 @@ services:
       OPENAI_BASE_URL: http://mock-inference-provider:3030/openai
       FIREWORKS_BASE_URL: http://mock-inference-provider:3030/fireworks
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
-      GCP_VERTEX_BASE_URL: http://mock-inference-provider:3030/gcp_vertex_gemini/
       # Force cache on for tests
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
     volumes:

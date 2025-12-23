@@ -7,7 +7,7 @@ use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    config::Config,
+    config::{Config, provider_types::GCPSFTConfig, provider_types::ProviderTypesConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
@@ -18,8 +18,7 @@ use tensorzero_core::{
         gcp_vertex_gemini_sft::{GCPVertexGeminiSFTConfig, GCPVertexGeminiSFTJobHandle},
     },
     providers::gcp_vertex_gemini::{
-        GCPVertexCredentials, GCPVertexGeminiSupervisedRow, PROVIDER_TYPE,
-        location_subdomain_prefix,
+        GCPVertexGeminiSupervisedRow, PROVIDER_TYPE, location_subdomain_prefix,
         optimization::{
             EncryptionSpec, GCPVertexGeminiFineTuningJob, GCPVertexGeminiFineTuningRequest,
             SupervisedHyperparameters, SupervisedTuningSpec, convert_to_optimizer_status,
@@ -38,6 +37,23 @@ pub fn gcp_vertex_gemini_base_url(project_id: &str, region: &str) -> Result<Url,
     ))
 }
 
+fn get_sft_config(provider_types: &ProviderTypesConfig) -> Result<&GCPSFTConfig, Error> {
+    provider_types
+        .gcp_vertex_gemini
+        .sft
+        .as_ref()
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidRequest {
+                message: "GCP Vertex Gemini SFT requires `[provider_types.gcp_vertex_gemini.sft]` configuration section".to_string(),
+            })
+        })
+}
+
+#[cfg(feature = "e2e_tests")]
+fn get_sft_api_base(provider_types: &ProviderTypesConfig) -> Option<&Url> {
+    provider_types.gcp_vertex_gemini.sft_api_base.as_ref()
+}
+
 #[async_trait]
 impl Optimizer for GCPVertexGeminiSFTConfig {
     type Handle = GCPVertexGeminiSFTJobHandle;
@@ -49,8 +65,16 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: Arc<Config>,
+        config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
+        // Get provider-level config
+        let sft_config = get_sft_config(&config.provider_types)?;
+
+        // Get credentials from provider defaults
+        let gcp_credentials = GCPVertexGeminiKind
+            .get_defaulted_credential(None, &config.models.default_credentials)
+            .await?;
+
         let train_examples = train_examples
             .into_iter()
             .map(RenderedSample::into_lazy_rendered_sample)
@@ -61,6 +85,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                 .map(RenderedSample::into_lazy_rendered_sample)
                 .collect::<Vec<_>>()
         });
+
         // TODO(#2642): improve error handling here so we know what index of example failed
         let train_rows: Vec<GCPVertexGeminiSupervisedRow> = try_join_all(
             train_examples
@@ -82,28 +107,35 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             None
         };
 
-        let train_filename = format!("train_{}.jsonl", Uuid::now_v7()); // or use job ID
-        let train_gs_url = match &self.bucket_path_prefix {
-            Some(prefix) => format!("gs://{}/{}/{}", self.bucket_name, prefix, train_filename),
-            None => format!("gs://{}/{}", self.bucket_name, train_filename),
+        let train_filename = format!("train_{}.jsonl", Uuid::now_v7());
+        let train_gs_url = match &sft_config.bucket_path_prefix {
+            Some(prefix) => format!(
+                "gs://{}/{}/{}",
+                sft_config.bucket_name, prefix, train_filename
+            ),
+            None => format!("gs://{}/{}", sft_config.bucket_name, train_filename),
         };
+
         // Run uploads concurrently
         let train_fut = upload_rows_to_gcp_object_store(
             &train_rows,
             &train_gs_url,
-            &self.credentials,
+            &gcp_credentials,
             credentials,
         );
 
         let val_gs_url = if let Some(val_rows) = &val_rows {
             let val_filename = format!("val_{}.jsonl", Uuid::now_v7());
-            let val_url = match &self.bucket_path_prefix {
-                Some(prefix) => format!("gs://{}/{}/{}", self.bucket_name, prefix, val_filename),
-                None => format!("gs://{}/{}", self.bucket_name, val_filename),
+            let val_url = match &sft_config.bucket_path_prefix {
+                Some(prefix) => format!(
+                    "gs://{}/{}/{}",
+                    sft_config.bucket_name, prefix, val_filename
+                ),
+                None => format!("gs://{}/{}", sft_config.bucket_name, val_filename),
             };
 
             let val_fut =
-                upload_rows_to_gcp_object_store(val_rows, &val_url, &self.credentials, credentials);
+                upload_rows_to_gcp_object_store(val_rows, &val_url, &gcp_credentials, credentials);
 
             // Run both futures concurrently
             try_join!(train_fut, val_fut)?;
@@ -125,42 +157,56 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             export_last_checkpoint_only: self.export_last_checkpoint_only,
         };
 
-        let encryption_spec = self.kms_key_name.as_ref().map(|kms_key| EncryptionSpec {
-            kms_key_name: Some(kms_key.clone()),
-        });
+        let encryption_spec = sft_config
+            .kms_key_name
+            .as_ref()
+            .map(|kms_key| EncryptionSpec {
+                kms_key_name: Some(kms_key.clone()),
+            });
 
         let body = GCPVertexGeminiFineTuningRequest {
             base_model: self.model.clone(),
             supervised_tuning_spec,
             tuned_model_display_name: self.tuned_model_display_name.clone(),
-            service_account: self.service_account.clone(),
+            service_account: sft_config.service_account.clone(),
             encryption_spec,
         };
 
-        let url = match &self.api_base {
-            Some(base) => base
+        // Build URL - use api_base override for testing if available
+        #[cfg(feature = "e2e_tests")]
+        let url = if let Some(api_base) = get_sft_api_base(&config.provider_types) {
+            api_base
                 .join(&format!(
                     "v1/projects/{}/locations/{}/tuningJobs",
-                    self.project_id, self.region
+                    sft_config.project_id, sft_config.region
                 ))
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidBaseUrl {
                         message: e.to_string(),
                     })
-                })?,
-            None => gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
+                })?
+        } else {
+            gcp_vertex_gemini_base_url(&sft_config.project_id, &sft_config.region).map_err(|e| {
                 Error::new(ErrorDetails::InvalidBaseUrl {
                     message: e.to_string(),
                 })
-            })?,
+            })?
         };
 
-        let auth_headers = self
-            .credentials
+        #[cfg(not(feature = "e2e_tests"))]
+        let url = gcp_vertex_gemini_base_url(&sft_config.project_id, &sft_config.region).map_err(
+            |e| {
+                Error::new(ErrorDetails::InvalidBaseUrl {
+                    message: e.to_string(),
+                })
+            },
+        )?;
+
+        let auth_headers = gcp_credentials
             .get_auth_headers(
                 &format!(
                     "https://{}aiplatform.googleapis.com/",
-                    location_subdomain_prefix(&self.region)
+                    location_subdomain_prefix(&sft_config.region)
                 ),
                 credentials,
             )
@@ -193,6 +239,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                 raw_response: None,
             })
         })?;
+
         let job: GCPVertexGeminiFineTuningJob =
             serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
@@ -205,6 +252,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
+
         // Extract job ID from job.name (format: projects/{project}/locations/{region}/tuningJobs/{job_id})
         let job_id = job.name.rsplit('/').next().ok_or_else(|| {
             Error::new(ErrorDetails::InternalError {
@@ -213,7 +261,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         })?;
         let job_url = Url::parse(&format!(
             "https://console.cloud.google.com/vertex-ai/tuning/locations/{}/tuningJob/{}/monitor?project={}",
-            self.region, job_id, self.project_id
+            sft_config.region, job_id, sft_config.project_id
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::InternalError {
@@ -224,10 +272,6 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         Ok(GCPVertexGeminiSFTJobHandle {
             job_url,
             job_name: job.name,
-            credential_location: self.credential_location.clone(),
-            region: self.region.clone(),
-            project_id: self.project_id.clone(),
-            api_base: self.api_base.clone(),
         })
     }
 }
@@ -239,16 +283,20 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
+        provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error> {
-        let gcp_credentials: GCPVertexCredentials = GCPVertexGeminiKind
-            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+        // Get provider-level config
+        let sft_config = get_sft_config(provider_types)?;
+
+        let gcp_credentials = GCPVertexGeminiKind
+            .get_defaulted_credential(None, default_credentials)
             .await?;
 
         let auth_headers = gcp_credentials
             .get_auth_headers(
                 &format!(
                     "https://{}aiplatform.googleapis.com/",
-                    location_subdomain_prefix(&self.region)
+                    location_subdomain_prefix(&sft_config.region)
                 ),
                 credentials,
             )
@@ -256,23 +304,40 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
             .map_err(|e| e.log())?;
 
         // Construct the API URL from job_name
-        let api_url = match &self.api_base {
-            Some(base) => base.join(&format!("v1/{}", self.job_name)).map_err(|e| {
-                Error::new(ErrorDetails::InternalError {
-                    message: format!("Failed to parse API URL: {e}"),
-                })
-            })?,
-            None => Url::parse(&format!(
+        #[cfg(feature = "e2e_tests")]
+        let api_url = if let Some(api_base) = get_sft_api_base(provider_types) {
+            api_base
+                .join(&format!("v1/{}", self.job_name))
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to parse API URL: {e}"),
+                    })
+                })?
+        } else {
+            Url::parse(&format!(
                 "https://{}aiplatform.googleapis.com/v1/{}",
-                location_subdomain_prefix(&self.region),
+                location_subdomain_prefix(&sft_config.region),
                 self.job_name
             ))
             .map_err(|e| {
                 Error::new(ErrorDetails::InternalError {
                     message: format!("Failed to parse API URL: {e}"),
                 })
-            })?,
+            })?
         };
+
+        #[cfg(not(feature = "e2e_tests"))]
+        let api_url = Url::parse(&format!(
+            "https://{}aiplatform.googleapis.com/v1/{}",
+            location_subdomain_prefix(&sft_config.region),
+            self.job_name
+        ))
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to parse API URL: {e}"),
+            })
+        })?;
+
         let res = client
             .get(api_url)
             .headers(auth_headers)
@@ -317,11 +382,6 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                 })
             })?;
 
-        convert_to_optimizer_status(
-            job,
-            self.region.clone(),
-            self.project_id.clone(),
-            self.credential_location.clone(),
-        )
+        convert_to_optimizer_status(job, sft_config)
     }
 }

@@ -107,13 +107,15 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .clone();
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(
-        &config_glob,
-        false, // don't validate credentials in tests
-    )
-    .await
-    .unwrap()
-    .into_config_without_writing_for_tests();
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &config_glob,
+            false, // don't validate credentials in tests
+        )
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests(),
+    );
     let job_handle = optimizer_info
         .launch(
             &client,
@@ -121,7 +123,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             val_examples,
             &credentials,
             &clickhouse,
-            Arc::new(config),
+            config.clone(),
         )
         .await
         .unwrap();
@@ -132,6 +134,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 &client,
                 &credentials,
                 &ProviderTypeDefaultCredentials::default(),
+                &config.provider_types,
             )
             .await
             .unwrap();

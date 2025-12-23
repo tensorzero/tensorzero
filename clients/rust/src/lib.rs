@@ -612,14 +612,14 @@ impl ClientExt for Client {
                 Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                Ok(Box::pin(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::internal::action::action(
                         &gateway.handle.app_state,
                         params,
                     )
                     .await
                     .map_err(err_to_http)
-                })
+                }))
                 .await?)
             }
         }
@@ -1377,6 +1377,7 @@ impl ClientExt for Client {
                         &gateway.handle.app_state.http_client,
                         job_handle,
                         &gateway.handle.app_state.config.models.default_credentials,
+                        &gateway.handle.app_state.config.provider_types,
                     )
                     .await
                     .map_err(err_to_http)

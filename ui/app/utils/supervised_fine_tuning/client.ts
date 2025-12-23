@@ -26,7 +26,6 @@ export async function launch_sft_job(
 ): Promise<OptimizationJobHandle> {
   const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
   const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
-  const gcpVertexNativeSFTBase = getEnv().GCP_VERTEX_BASE_URL;
   const togetherNativeSFTBase = getEnv().TOGETHER_BASE_URL;
   let filters: InferenceFilter | null = null;
   let output_source: InferenceOutputSource = "inference";
@@ -96,18 +95,11 @@ export async function launch_sft_job(
       break;
     }
     case "gcp_vertex_gemini": {
-      if (!data.gcpProjectId || !data.gcpRegion || !data.gcpBucketName) {
-        throw new Error(
-          "GCP Project ID, Region, and Bucket Name are required for GCP Vertex Gemini",
-        );
-      }
+      // GCP Vertex Gemini SFT configuration (project_id, region, bucket_name, etc.)
+      // comes from [provider_types.gcp_vertex_gemini.sft] in the gateway config
       optimizerConfig = {
         type: "gcp_vertex_gemini_sft",
         model: data.model.name,
-        project_id: data.gcpProjectId,
-        region: data.gcpRegion,
-        bucket_name: data.gcpBucketName,
-        api_base: gcpVertexNativeSFTBase,
       };
       break;
     }

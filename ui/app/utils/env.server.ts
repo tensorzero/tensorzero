@@ -23,7 +23,6 @@ interface Env {
   // For testing only:
   // TODO (#5384): Migrate to the configuration
   FIREWORKS_BASE_URL?: string;
-  GCP_VERTEX_BASE_URL?: string;
   OPENAI_BASE_URL?: string;
   TOGETHER_BASE_URL?: string;
 }
@@ -71,10 +70,9 @@ export function getEnv(): Env {
     TENSORZERO_GATEWAY_URL,
     TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY,
     FIREWORKS_ACCOUNT_ID: process.env.FIREWORKS_ACCOUNT_ID, // TODO (#5384): Migrate to the configuration
-    // For testing only only
+    // For testing only
     // TODO (#5384): Migrate to the configuration
     FIREWORKS_BASE_URL: process.env.FIREWORKS_BASE_URL,
-    GCP_VERTEX_BASE_URL: process.env.GCP_VERTEX_BASE_URL,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
     TOGETHER_BASE_URL: process.env.TOGETHER_BASE_URL,
   };

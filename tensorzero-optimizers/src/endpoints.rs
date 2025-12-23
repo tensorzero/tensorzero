@@ -14,7 +14,7 @@ use axum::{
 use rand::seq::SliceRandom;
 
 use tensorzero_core::{
-    config::Config,
+    config::{Config, provider_types::ProviderTypesConfig},
     db::{
         clickhouse::ClickHouseConnectionInfo,
         clickhouse::query_builder::{InferenceFilter, OrderBy},
@@ -186,7 +186,13 @@ pub async fn poll_optimization_handler(
 ) -> Result<Response<Body>, Error> {
     let job_handle = OptimizationJobHandle::from_base64_urlencoded(&job_handle)?;
     let default_credentials = &config.models.default_credentials;
-    let info = poll_optimization(&http_client, &job_handle, default_credentials).await?;
+    let info = poll_optimization(
+        &http_client,
+        &job_handle,
+        default_credentials,
+        &config.provider_types,
+    )
+    .await?;
     Ok(Json(info).into_response())
 }
 
@@ -196,12 +202,14 @@ pub async fn poll_optimization(
     http_client: &TensorzeroHttpClient,
     job_handle: &OptimizationJobHandle,
     default_credentials: &ProviderTypeDefaultCredentials,
+    provider_types: &ProviderTypesConfig,
 ) -> Result<OptimizationJobInfo, Error> {
     job_handle
         .poll(
             http_client,
             &InferenceCredentials::default(),
             default_credentials,
+            provider_types,
         )
         .await
 }

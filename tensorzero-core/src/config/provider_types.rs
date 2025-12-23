@@ -145,6 +145,10 @@ pub struct GCPProviderTypeConfig {
     #[cfg(feature = "e2e_tests")]
     pub batch_inference_api_base: Option<Url>,
     #[serde(default)]
+    pub sft: Option<GCPSFTConfig>,
+    #[cfg(feature = "e2e_tests")]
+    pub sft_api_base: Option<Url>,
+    #[serde(default)]
     pub defaults: GCPDefaults,
 }
 
@@ -164,6 +168,21 @@ pub enum GCPBatchConfigType {
 pub struct GCPBatchConfigCloudStorage {
     pub input_uri_prefix: String,
     pub output_uri_prefix: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub struct GCPSFTConfig {
+    pub project_id: String,
+    pub region: String,
+    pub bucket_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bucket_path_prefix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_account: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kms_key_name: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
