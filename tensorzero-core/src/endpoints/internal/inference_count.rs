@@ -1,4 +1,4 @@
-//! Inference statistics endpoint for getting inference counts and feedback counts.
+//! Inference count endpoint for getting inference counts and feedback counts.
 
 use axum::extract::{Path, Query, State};
 use axum::{Json, debug_handler};
@@ -8,47 +8,47 @@ use tracing::instrument;
 
 use crate::config::Config;
 use crate::db::TimeWindow;
-use crate::db::inference_stats::{
+use crate::db::inference_count::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
     CountInferencesWithFeedbackParams, FunctionInferenceCount,
-    GetFunctionThroughputByVariantParams, InferenceStatsQueries, VariantThroughput,
+    GetFunctionThroughputByVariantParams, InferenceCountQueries, VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
 
-/// Query parameters for the inference stats endpoint
+/// Query parameters for the inference count endpoint
 #[derive(Debug, Deserialize)]
-pub struct InferenceStatsQueryParams {
+pub struct InferenceCountQueryParams {
     /// Optional variant name to filter by
     pub variant_name: Option<String>,
     /// Optional grouping for the results
-    pub group_by: Option<InferenceStatsGroupBy>,
+    pub group_by: Option<InferenceCountGroupBy>,
 }
 
-/// Grouping options for inference statistics
+/// Grouping options for inference count
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
-pub enum InferenceStatsGroupBy {
+pub enum InferenceCountGroupBy {
     /// Group by variant name
     Variant,
 }
 
-/// Response containing inference statistics
+/// Response containing inference count
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-pub struct InferenceStatsResponse {
+pub struct InferenceCountResponse {
     /// The count of inferences for the function (and optionally variant)
     pub inference_count: u64,
     /// Counts grouped by variant (only present when group_by=variant)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub stats_by_variant: Option<Vec<InferenceStatsByVariant>>,
+    pub count_by_variant: Option<Vec<InferenceCountByVariant>>,
 }
 
-/// Inference stats for a variant
+/// Inference count for a variant
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
-pub struct InferenceStatsByVariant {
+pub struct InferenceCountByVariant {
     /// The variant name
     pub variant_name: String,
     /// Number of inferences for this variant
@@ -57,7 +57,7 @@ pub struct InferenceStatsByVariant {
     pub last_used_at: String,
 }
 
-impl From<CountByVariant> for InferenceStatsByVariant {
+impl From<CountByVariant> for InferenceCountByVariant {
     fn from(row: CountByVariant) -> Self {
         Self {
             variant_name: row.variant_name,
@@ -69,16 +69,16 @@ impl From<CountByVariant> for InferenceStatsByVariant {
 
 /// Query parameters for the feedback stats endpoint
 #[derive(Debug, Deserialize)]
-pub struct InferenceWithFeedbackStatsQueryParams {
+pub struct InferenceWithFeedbackCountQueryParams {
     /// Optional threshold for curated inference filtering (float metrics only)
     #[serde(default)]
     pub threshold: f64,
 }
 
-/// Response containing inference stats with feedback statistics
+/// Response containing inference count with feedback count
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
-pub struct InferenceWithFeedbackStatsResponse {
+pub struct InferenceWithFeedbackCountResponse {
     /// Number of feedbacks for the metric
     pub feedback_count: u64,
     /// Number of inferences matching the metric threshold criteria
@@ -115,22 +115,22 @@ pub struct ListFunctionsWithInferenceCountResponse {
     pub functions: Vec<FunctionInferenceCount>,
 }
 
-/// HTTP handler for the inference stats endpoint
+/// HTTP handler for the inference count endpoint
 #[debug_handler(state = AppStateData)]
 #[instrument(
-    name = "get_inference_stats_handler",
+    name = "get_inference_count_handler",
     skip_all,
     fields(
         function_name = %function_name,
     )
 )]
-pub async fn get_inference_stats_handler(
+pub async fn get_inference_count_handler(
     State(app_state): AppState,
     Path(function_name): Path<String>,
-    Query(params): Query<InferenceStatsQueryParams>,
-) -> Result<Json<InferenceStatsResponse>, Error> {
+    Query(params): Query<InferenceCountQueryParams>,
+) -> Result<Json<InferenceCountResponse>, Error> {
     Ok(Json(
-        get_inference_stats(
+        get_inference_count(
             &app_state.config,
             &app_state.clickhouse_connection_info,
             &function_name,
@@ -143,20 +143,20 @@ pub async fn get_inference_stats_handler(
 /// HTTP handler for the feedback stats endpoint
 #[debug_handler(state = AppStateData)]
 #[instrument(
-    name = "get_inference_with_feedback_stats_handler",
+    name = "get_inference_with_feedback_count_handler",
     skip_all,
     fields(
         function_name = %function_name,
         metric_name = %metric_name,
     )
 )]
-pub async fn get_inference_with_feedback_stats_handler(
+pub async fn get_inference_with_feedback_count_handler(
     State(app_state): AppState,
     Path((function_name, metric_name)): Path<(String, String)>,
-    Query(params): Query<InferenceWithFeedbackStatsQueryParams>,
-) -> Result<Json<InferenceWithFeedbackStatsResponse>, Error> {
+    Query(params): Query<InferenceWithFeedbackCountQueryParams>,
+) -> Result<Json<InferenceWithFeedbackCountResponse>, Error> {
     Ok(Json(
-        get_inference_with_feedback_stats(
+        get_inference_with_feedback_count(
             &app_state.config,
             &app_state.clickhouse_connection_info,
             function_name,
@@ -167,13 +167,13 @@ pub async fn get_inference_with_feedback_stats_handler(
     ))
 }
 
-/// Core business logic for getting inference statistics
-async fn get_inference_stats(
+/// Core business logic for getting inference count
+async fn get_inference_count(
     config: &Config,
-    clickhouse: &impl InferenceStatsQueries,
+    clickhouse: &impl InferenceCountQueries,
     function_name: &str,
-    params: InferenceStatsQueryParams,
-) -> Result<InferenceStatsResponse, Error> {
+    params: InferenceCountQueryParams,
+) -> Result<InferenceCountResponse, Error> {
     // Get the function config to determine the function type
     let function = config.get_function(function_name)?;
 
@@ -195,15 +195,15 @@ async fn get_inference_stats(
     };
 
     // Handle group_by=variant case
-    if let Some(InferenceStatsGroupBy::Variant) = params.group_by {
+    if let Some(InferenceCountGroupBy::Variant) = params.group_by {
         let variant_rows = clickhouse.count_inferences_by_variant(count_params).await?;
 
         let inference_count = variant_rows.iter().map(|r| r.inference_count).sum();
-        let stats_by_variant = variant_rows.into_iter().map(Into::into).collect();
+        let count_by_variant = variant_rows.into_iter().map(Into::into).collect();
 
-        return Ok(InferenceStatsResponse {
+        return Ok(InferenceCountResponse {
             inference_count,
-            stats_by_variant: Some(stats_by_variant),
+            count_by_variant: Some(count_by_variant),
         });
     }
 
@@ -211,20 +211,20 @@ async fn get_inference_stats(
         .count_inferences_for_function(count_params)
         .await?;
 
-    Ok(InferenceStatsResponse {
+    Ok(InferenceCountResponse {
         inference_count,
-        stats_by_variant: None,
+        count_by_variant: None,
     })
 }
 
-/// Core business logic for getting feedback statistics
-async fn get_inference_with_feedback_stats(
+/// Core business logic for getting feedback count
+async fn get_inference_with_feedback_count(
     config: &Config,
-    clickhouse_connection_info: &impl InferenceStatsQueries,
+    clickhouse_connection_info: &impl InferenceCountQueries,
     function_name: String,
     metric_name: String,
-    params: InferenceWithFeedbackStatsQueryParams,
-) -> Result<InferenceWithFeedbackStatsResponse, Error> {
+    params: InferenceWithFeedbackCountQueryParams,
+) -> Result<InferenceWithFeedbackCountResponse, Error> {
     // Get the function config (validates function exists)
     let function_config = config.get_function(&function_name)?;
     let function_type = function_config.config_type();
@@ -243,7 +243,7 @@ async fn get_inference_with_feedback_stats(
             .await?;
 
         // Each inference has one demonstration feedback
-        return Ok(InferenceWithFeedbackStatsResponse {
+        return Ok(InferenceWithFeedbackCountResponse {
             feedback_count,
             inference_count: feedback_count,
         });
@@ -275,7 +275,7 @@ async fn get_inference_with_feedback_stats(
     )
     .await?;
 
-    Ok(InferenceWithFeedbackStatsResponse {
+    Ok(InferenceWithFeedbackCountResponse {
         feedback_count,
         inference_count,
     })
@@ -307,7 +307,7 @@ pub async fn get_function_throughput_by_variant_handler(
 /// Validates the function exists and returns throughput data grouped by variant and time period.
 pub async fn get_function_throughput_by_variant(
     config: &Config,
-    clickhouse_connection_info: &impl InferenceStatsQueries,
+    clickhouse_connection_info: &impl InferenceCountQueries,
     function_name: &str,
     params: FunctionThroughputByVariantQueryParams,
 ) -> Result<GetFunctionThroughputByVariantResponse, Error> {
@@ -337,7 +337,7 @@ pub async fn list_functions_with_inference_count_handler(
 
 /// Core business logic for listing all functions with their inference counts
 async fn list_functions_with_inference_count(
-    clickhouse_connection_info: &impl InferenceStatsQueries,
+    clickhouse_connection_info: &impl InferenceCountQueries,
 ) -> Result<ListFunctionsWithInferenceCountResponse, Error> {
     let functions = clickhouse_connection_info
         .list_functions_with_inference_count()
@@ -358,16 +358,16 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[tokio::test]
-    async fn test_get_inference_stats_function_not_found() {
+    async fn test_get_inference_count_function_not_found() {
         let config = Arc::new(Config::default());
         let gateway_handle = get_unit_test_gateway_handle(config);
 
-        let params = InferenceStatsQueryParams {
+        let params = InferenceCountQueryParams {
             variant_name: None,
             group_by: None,
         };
 
-        let result = get_inference_stats(
+        let result = get_inference_count(
             &gateway_handle.app_state.config,
             &gateway_handle.app_state.clickhouse_connection_info,
             "nonexistent_function",
@@ -381,7 +381,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_inference_stats_variant_not_found() {
+    async fn test_get_inference_count_variant_not_found() {
         // Create a config with a function but without the requested variant
         let config_str = r#"
             [functions.test_function]
@@ -405,12 +405,12 @@ mod tests {
 
         let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
 
-        let params = InferenceStatsQueryParams {
+        let params = InferenceCountQueryParams {
             variant_name: Some("nonexistent_variant".to_string()),
             group_by: None,
         };
 
-        let result = get_inference_stats(
+        let result = get_inference_count(
             &gateway_handle.app_state.config,
             &gateway_handle.app_state.clickhouse_connection_info,
             "test_function",
@@ -424,13 +424,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_inference_with_feedback_stats_unknown_function() {
+    async fn test_get_inference_with_feedback_count_unknown_function() {
         let config = Arc::new(Config::default());
         let gateway_handle = get_unit_test_gateway_handle(config);
 
-        let params = InferenceWithFeedbackStatsQueryParams { threshold: 0.0 };
+        let params = InferenceWithFeedbackCountQueryParams { threshold: 0.0 };
 
-        let result = get_inference_with_feedback_stats(
+        let result = get_inference_with_feedback_count(
             &gateway_handle.app_state.config,
             &gateway_handle.app_state.clickhouse_connection_info,
             "nonexistent_function".to_string(),
@@ -445,7 +445,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_inference_with_feedback_stats_unknown_metric() {
+    async fn test_get_inference_with_feedback_count_unknown_metric() {
         // Create a config with a function but no metrics
         let config_str = r#"
             [functions.test_function]
@@ -469,9 +469,9 @@ mod tests {
 
         let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
 
-        let params = InferenceWithFeedbackStatsQueryParams { threshold: 0.0 };
+        let params = InferenceWithFeedbackCountQueryParams { threshold: 0.0 };
 
-        let result = get_inference_with_feedback_stats(
+        let result = get_inference_with_feedback_count(
             &gateway_handle.app_state.config,
             &gateway_handle.app_state.clickhouse_connection_info,
             "test_function".to_string(),
@@ -489,7 +489,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_inference_stats_calls_clickhouse() {
+    async fn test_get_inference_count_calls_clickhouse() {
         // Create a config with a function
         let config_str = r#"
             [functions.test_function]
@@ -513,7 +513,7 @@ mod tests {
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_stats_queries
+            .inference_count_queries
             .expect_count_inferences_for_function()
             .withf(|params| {
                 assert_eq!(params.function_name, "test_function");
@@ -524,17 +524,17 @@ mod tests {
             .times(1)
             .returning(|_| Box::pin(async move { Ok(42) }));
 
-        let params = InferenceStatsQueryParams {
+        let params = InferenceCountQueryParams {
             variant_name: None,
             group_by: None,
         };
 
-        let result = get_inference_stats(&config, &mock_clickhouse, "test_function", params)
+        let result = get_inference_count(&config, &mock_clickhouse, "test_function", params)
             .await
             .unwrap();
 
         assert_eq!(result.inference_count, 42);
-        assert!(result.stats_by_variant.is_none());
+        assert!(result.count_by_variant.is_none());
     }
 
     #[tokio::test]
@@ -543,7 +543,7 @@ mod tests {
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_stats_queries
+            .inference_count_queries
             .expect_list_functions_with_inference_count()
             .times(1)
             .returning(|| {
@@ -578,7 +578,7 @@ mod tests {
     async fn test_list_functions_with_inference_count_empty() {
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_stats_queries
+            .inference_count_queries
             .expect_list_functions_with_inference_count()
             .times(1)
             .returning(|| Box::pin(async move { Ok(vec![]) }));
