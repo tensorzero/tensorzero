@@ -1022,6 +1022,10 @@ jobs:
       - name: Test (Rust)
         run: cargo test-optimization-mock
 
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
+
   build-gateway-e2e-container:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
