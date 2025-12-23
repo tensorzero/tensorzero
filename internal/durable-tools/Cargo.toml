@@ -28,8 +28,5 @@ secrecy.workspace = true
 
 tensorzero-core.workspace = true
 
-[features]
-e2e_tests = []
-
 [dev-dependencies]
 mockall = "0.14"

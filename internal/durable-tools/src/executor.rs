@@ -111,8 +111,7 @@ impl ToolExecutor {
         }
 
         // Register the adapter with durable
-        // Note: We ignore the error here as duplicate registration is handled by the registry check above
-        let _ = self.durable.register::<TaskToolAdapter<T>>().await;
+        self.durable.register::<TaskToolAdapter<T>>().await?;
 
         Ok(self)
     }

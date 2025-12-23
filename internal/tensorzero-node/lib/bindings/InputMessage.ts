@@ -3,6 +3,8 @@ import type { InputMessageContent } from "./InputMessageContent";
 import type { Role } from "./Role";
 
 /**
- * An input message in a conversation.
+ * InputMessage and Role are our representation of the input sent by the client
+ * prior to any processing into LLM representations below.
+ * `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
  */
 export type InputMessage = { role: Role; content: Array<InputMessageContent> };

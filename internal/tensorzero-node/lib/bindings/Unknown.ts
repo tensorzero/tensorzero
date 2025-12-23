@@ -2,7 +2,7 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
- * An unknown provider-specific content block.
+ * Struct that represents an unknown provider-specific content block.
  * We pass this along as-is without any validation or transformation.
  */
 export type Unknown = {
