@@ -401,7 +401,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.together]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-together"
+model = "qwen3-next-80b-a3b-instruct-together"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
@@ -409,7 +409,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.together-strict]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-together"
+model = "qwen3-next-80b-a3b-instruct-together"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
@@ -417,7 +417,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.together-implicit]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-together"
+model = "qwen3-next-80b-a3b-instruct-together"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "tool"

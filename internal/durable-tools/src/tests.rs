@@ -45,8 +45,8 @@ impl ToolMetadata for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -54,13 +54,13 @@ impl ToolMetadata for EchoSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
+
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -85,8 +85,8 @@ impl ToolMetadata for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -94,13 +94,12 @@ impl ToolMetadata for EchoTaskTool {
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -124,20 +123,19 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
         Cow::Borrowed("Uses default timeout")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
 
     // Uses default timeout (60 seconds from ToolMetadata)
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for DefaultTimeoutTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -162,20 +160,19 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
         Cow::Borrowed("Uses default timeout")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
 
     // Uses default timeout (60 seconds from ToolMetadata)
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for DefaultTimeoutSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -198,7 +195,7 @@ mod registry_tests {
     #[test]
     fn register_task_tool_adds_to_tools_map() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
 
         assert!(registry.get("echo_task").is_some());
         assert_eq!(registry.len(), 1);
@@ -207,7 +204,7 @@ mod registry_tests {
     #[test]
     fn register_simple_tool_adds_to_both_maps() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>();
+        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         // Should be in both tools and simple_tools
         assert!(registry.get("echo_simple").is_some());
@@ -218,7 +215,7 @@ mod registry_tests {
     #[test]
     fn get_returns_registered_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
 
         let tool = registry.get("echo_task").unwrap();
         assert_eq!(tool.name(), "echo_task");
@@ -237,7 +234,7 @@ mod registry_tests {
     #[test]
     fn get_simple_tool_returns_simple_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>();
+        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         let tool = registry.get_simple_tool("echo_simple");
         assert!(tool.is_some());
@@ -246,7 +243,7 @@ mod registry_tests {
     #[test]
     fn get_simple_tool_returns_none_for_task_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
 
         // TaskTools are not in simple_tools map
         assert!(registry.get_simple_tool("echo_task").is_none());
@@ -255,7 +252,7 @@ mod registry_tests {
     #[test]
     fn is_durable_returns_true_for_task_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
 
         assert_eq!(registry.is_durable("echo_task"), Some(true));
     }
@@ -263,7 +260,7 @@ mod registry_tests {
     #[test]
     fn is_durable_returns_false_for_simple_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>();
+        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         assert_eq!(registry.is_durable("echo_simple"), Some(false));
     }
@@ -277,8 +274,8 @@ mod registry_tests {
     #[test]
     fn list_tools_returns_all_names() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>();
-        registry.register_simple_tool::<EchoSimpleTool>();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         let tools = registry.list_tools();
         assert_eq!(tools.len(), 2);
@@ -289,8 +286,8 @@ mod registry_tests {
     #[test]
     fn list_task_tools_filters_to_durable_only() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>();
-        registry.register_simple_tool::<EchoSimpleTool>();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         let task_tools = registry.list_task_tools();
         assert_eq!(task_tools.len(), 1);
@@ -300,8 +297,8 @@ mod registry_tests {
     #[test]
     fn list_simple_tools_filters_to_non_durable_only() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>();
-        registry.register_simple_tool::<EchoSimpleTool>();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         let simple_tools = registry.list_simple_tools();
         assert_eq!(simple_tools.len(), 1);
@@ -313,7 +310,7 @@ mod registry_tests {
         use tensorzero::Tool;
 
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>();
+        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         let tools = registry.to_tensorzero_tools().unwrap();
         assert_eq!(tools.len(), 1);
@@ -337,14 +334,111 @@ mod registry_tests {
         assert!(registry.is_empty());
         assert_eq!(registry.len(), 0);
 
-        registry.register_task_tool::<EchoTaskTool>();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
 
         assert!(!registry.is_empty());
         assert_eq!(registry.len(), 1);
 
-        registry.register_simple_tool::<EchoSimpleTool>();
+        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         assert_eq!(registry.len(), 2);
+    }
+
+    #[test]
+    fn register_task_tool_errors_on_duplicate() {
+        use crate::error::ToolError;
+
+        let mut registry = ToolRegistry::new();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
+
+        // Second registration should fail
+        let result = registry.register_task_tool::<EchoTaskTool>();
+        match result {
+            Err(ToolError::DuplicateToolName(name)) => {
+                assert_eq!(name, "echo_task");
+            }
+            _ => panic!("Expected DuplicateToolName error"),
+        }
+
+        // Registry should still have only one tool
+        assert_eq!(registry.len(), 1);
+    }
+
+    #[test]
+    fn register_simple_tool_errors_on_duplicate() {
+        use crate::error::ToolError;
+
+        let mut registry = ToolRegistry::new();
+        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+
+        // Second registration should fail
+        let result = registry.register_simple_tool::<EchoSimpleTool>();
+        match result {
+            Err(ToolError::DuplicateToolName(name)) => {
+                assert_eq!(name, "echo_simple");
+            }
+            _ => panic!("Expected DuplicateToolName error"),
+        }
+
+        // Registry should still have only one tool
+        assert_eq!(registry.len(), 1);
+    }
+
+    #[test]
+    fn register_tools_with_same_name_errors() {
+        use crate::error::ToolError;
+        use std::borrow::Cow;
+
+        // Create a SimpleTool with the same name as EchoTaskTool
+        #[derive(Default)]
+        struct ConflictingSimpleTool;
+
+        impl ToolMetadata for ConflictingSimpleTool {
+            fn name() -> Cow<'static, str> {
+                Cow::Borrowed("echo_task") // Same name as EchoTaskTool
+            }
+
+            fn description() -> Cow<'static, str> {
+                Cow::Borrowed("Conflicting tool")
+            }
+
+            fn parameters_schema() -> ToolResult<schemars::Schema> {
+                Ok(schemars::schema_for!(EchoParams))
+            }
+
+            type LlmParams = EchoParams;
+            type SideInfo = ();
+            type Output = EchoOutput;
+        }
+
+        #[async_trait::async_trait]
+        impl SimpleTool for ConflictingSimpleTool {
+            async fn execute(
+                llm_params: <Self as ToolMetadata>::LlmParams,
+                _side_info: Self::SideInfo,
+                _ctx: SimpleToolContext<'_>,
+                _idempotency_key: &str,
+            ) -> ToolResult<Self::Output> {
+                Ok(EchoOutput {
+                    echoed: llm_params.message,
+                })
+            }
+        }
+
+        let mut registry = ToolRegistry::new();
+        registry.register_task_tool::<EchoTaskTool>().unwrap();
+
+        // Registering a SimpleTool with the same name should fail
+        let result = registry.register_simple_tool::<ConflictingSimpleTool>();
+        match result {
+            Err(ToolError::DuplicateToolName(name)) => {
+                assert_eq!(name, "echo_task");
+            }
+            _ => panic!("Expected DuplicateToolName error"),
+        }
+
+        // Registry should still have only one tool
+        assert_eq!(registry.len(), 1);
     }
 }
 
@@ -411,7 +505,7 @@ mod erasure_tests {
     #[test]
     fn erased_task_tool_wrapper_parameters_schema_has_message_field() {
         let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
-        let schema = wrapper.parameters_schema();
+        let schema = wrapper.parameters_schema().unwrap();
 
         // The schema should be an object with a "message" property
         let schema_json = serde_json::to_value(&schema).unwrap();

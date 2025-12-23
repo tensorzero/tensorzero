@@ -480,3 +480,88 @@ async fn test_count_feedbacks_for_episode_level_float_metric() {
         "Should have feedbacks for float metric jaccard_similarity_episode on extract_entities"
     );
 }
+
+#[tokio::test]
+async fn test_list_functions_with_inference_count() {
+    let clickhouse = get_clickhouse().await;
+
+    let rows = clickhouse
+        .list_functions_with_inference_count()
+        .await
+        .unwrap();
+
+    // The test database should have at least 2 functions with inferences
+    assert!(
+        rows.len() >= 2,
+        "Expected at least 2 functions with inferences, got {}",
+        rows.len()
+    );
+
+    // Verify expected functions are present
+    let function_names: Vec<&str> = rows.iter().map(|r| r.function_name.as_str()).collect();
+    assert!(
+        function_names.contains(&"write_haiku"),
+        "Expected write_haiku function to be present"
+    );
+    assert!(
+        function_names.contains(&"extract_entities"),
+        "Expected extract_entities function to be present"
+    );
+
+    // Results should be ordered by last_inference_timestamp DESC
+    for i in 1..rows.len() {
+        assert!(
+            rows[i - 1].last_inference_timestamp >= rows[i].last_inference_timestamp,
+            "Results should be ordered by last_inference_timestamp DESC"
+        );
+    }
+
+    // Each row should have a positive inference_count
+    for row in &rows {
+        assert!(
+            row.inference_count > 0,
+            "Each function should have at least one inference, {} has inference_count {}",
+            row.function_name,
+            row.inference_count
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_list_functions_with_inference_count_includes_both_chat_and_json() {
+    let clickhouse = get_clickhouse().await;
+
+    let rows = clickhouse
+        .list_functions_with_inference_count()
+        .await
+        .unwrap();
+
+    // write_haiku is a chat function, extract_entities is a json function
+    // Both should be present in the results
+    let write_haiku = rows.iter().find(|r| r.function_name == "write_haiku");
+    let extract_entities = rows.iter().find(|r| r.function_name == "extract_entities");
+
+    assert!(
+        write_haiku.is_some(),
+        "Chat function write_haiku should be present"
+    );
+    assert!(
+        extract_entities.is_some(),
+        "Json function extract_entities should be present"
+    );
+
+    // Verify inference_counts are reasonable based on test fixtures
+    let write_haiku = write_haiku.unwrap();
+    let extract_entities = extract_entities.unwrap();
+
+    assert!(
+        write_haiku.inference_count >= 804,
+        "Expected at least 804 inferences for write_haiku, got {}",
+        write_haiku.inference_count
+    );
+    assert!(
+        extract_entities.inference_count >= 604,
+        "Expected at least 604 inferences for extract_entities, got {}",
+        extract_entities.inference_count
+    );
+}

@@ -2,7 +2,6 @@ import type { Route } from "./+types/route";
 import { isRouteErrorResponse } from "react-router";
 import FunctionsTable from "./FunctionsTable";
 import { useConfig } from "~/context/config";
-import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import {
   PageHeader,
   PageLayout,
@@ -10,9 +9,11 @@ import {
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
 import { useMemo, useState } from "react";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader() {
-  const countsInfo = await countInferencesByFunction();
+  const httpClient = getTensorZeroClient();
+  const countsInfo = await httpClient.listFunctionsWithInferenceCount();
   return { countsInfo };
 }
 

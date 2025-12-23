@@ -473,6 +473,7 @@ async fn test_get_evaluation_results_haiku() {
                 "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"
                     .to_string(),
             ],
+            None,
             5,
             0,
         )
@@ -536,6 +537,7 @@ async fn test_get_evaluation_results_entity_extraction() {
                 "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
                     .to_string(),
             ],
+            None,
             2,
             0,
         )
@@ -605,6 +607,7 @@ async fn test_get_evaluation_results_multiple_runs() {
                 "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"
                     .to_string(),
             ],
+            None,
             5,
             0,
         )
@@ -652,6 +655,7 @@ async fn test_get_evaluation_results_nonexistent_function() {
             "ChatInference",
             "ChatInferenceDatapoint",
             &["some_metric".to_string()],
+            None,
             100,
             0,
         )
@@ -680,6 +684,7 @@ async fn test_get_evaluation_results_pagination() {
             "ChatInference",
             "ChatInferenceDatapoint",
             &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
+            None,
             5,
             0,
         )
@@ -694,6 +699,7 @@ async fn test_get_evaluation_results_pagination() {
             "ChatInference",
             "ChatInferenceDatapoint",
             &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
+            None,
             5,
             5,
         )
@@ -715,4 +721,269 @@ async fn test_get_evaluation_results_pagination() {
         overlap.is_empty(),
         "Pages should not have overlapping datapoints"
     );
+}
+
+/// Test that get_evaluation_results with datapoint_id filter returns results for only that datapoint.
+#[tokio::test]
+async fn test_get_evaluation_results_with_datapoint_id_filter() {
+    let clickhouse = get_clickhouse().await;
+
+    let evaluation_run_id =
+        Uuid::parse_str("01963691-9d3c-7793-a8be-3937ebb849c1").expect("Valid UUID");
+
+    // First get all results without a filter to find a valid datapoint_id
+    let all_results = clickhouse
+        .get_evaluation_results(
+            "write_haiku",
+            &[evaluation_run_id],
+            "ChatInference",
+            "ChatInferenceDatapoint",
+            &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
+            None,
+            1,
+            0,
+        )
+        .await
+        .unwrap();
+
+    assert!(!all_results.is_empty(), "Need at least one result to test");
+    let target_datapoint_id = all_results[0].datapoint_id;
+
+    // Now filter by that specific datapoint_id
+    let filtered_results = clickhouse
+        .get_evaluation_results(
+            "write_haiku",
+            &[evaluation_run_id],
+            "ChatInference",
+            "ChatInferenceDatapoint",
+            &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
+            Some(&target_datapoint_id),
+            u32::MAX,
+            0,
+        )
+        .await
+        .unwrap();
+
+    // All results should be for the filtered datapoint
+    assert!(
+        !filtered_results.is_empty(),
+        "Should have results for the datapoint"
+    );
+    for result in &filtered_results {
+        assert_eq!(
+            result.datapoint_id, target_datapoint_id,
+            "All results should be for the filtered datapoint"
+        );
+    }
+}
+
+/// Test that get_evaluation_results with datapoint_id filter returns empty for nonexistent datapoint.
+#[tokio::test]
+async fn test_get_evaluation_results_with_datapoint_id_filter_nonexistent() {
+    let clickhouse = get_clickhouse().await;
+
+    let evaluation_run_id =
+        Uuid::parse_str("01963691-9d3c-7793-a8be-3937ebb849c1").expect("Valid UUID");
+    let nonexistent_datapoint_id =
+        Uuid::parse_str("00000000-0000-0000-0000-000000000000").expect("Valid UUID");
+
+    let results = clickhouse
+        .get_evaluation_results(
+            "write_haiku",
+            &[evaluation_run_id],
+            "ChatInference",
+            "ChatInferenceDatapoint",
+            &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
+            Some(&nonexistent_datapoint_id),
+            u32::MAX,
+            0,
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        results.is_empty(),
+        "Should have no results for nonexistent datapoint"
+    );
+}
+
+/// Test get_evaluation_results for a specific chat datapoint with detailed assertions.
+/// This mirrors the TypeScript test "should return correct array for chat datapoint".
+#[tokio::test]
+async fn test_get_evaluation_results_chat_datapoint_details() {
+    let clickhouse = get_clickhouse().await;
+
+    let datapoint_id = Uuid::parse_str("0196374a-d03f-7420-9da5-1561cba71ddb").expect("Valid UUID");
+    let evaluation_run_id =
+        Uuid::parse_str("0196374b-04a3-7013-9049-e59ed5fe3f74").expect("Valid UUID");
+
+    let results = clickhouse
+        .get_evaluation_results(
+            "write_haiku",
+            &[evaluation_run_id],
+            "ChatInference",
+            "ChatInferenceDatapoint",
+            &[
+                "tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string(),
+                "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"
+                    .to_string(),
+            ],
+            Some(&datapoint_id),
+            u32::MAX,
+            0,
+        )
+        .await
+        .unwrap();
+
+    // Should have 2 results (1 datapoint * 2 metrics)
+    assert_eq!(results.len(), 2, "Expected 2 results for chat datapoint");
+
+    // Verify all results are for the correct datapoint and evaluation run
+    for result in &results {
+        assert_eq!(result.datapoint_id, datapoint_id);
+        assert_eq!(result.evaluation_run_id, evaluation_run_id);
+        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+    }
+
+    // Verify we have both metrics
+    let metric_names: std::collections::HashSet<_> = results
+        .iter()
+        .filter_map(|r| r.metric_name.as_ref())
+        .collect();
+    assert!(
+        metric_names.contains(
+            &"tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()
+        ),
+        "Should have exact_match metric"
+    );
+    assert!(
+        metric_names.contains(
+            &"tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f".to_string()
+        ),
+        "Should have topic_starts_with_f metric"
+    );
+
+    // Verify the exact_match metric value is "true"
+    let exact_match_result = results
+        .iter()
+        .find(|r| {
+            r.metric_name.as_ref()
+                == Some(
+                    &"tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string(),
+                )
+        })
+        .expect("Should have exact_match result");
+    assert_eq!(
+        exact_match_result.metric_value.as_deref(),
+        Some("true"),
+        "exact_match metric value should be 'true'"
+    );
+
+    // Verify the topic_starts_with_f metric value is "false"
+    let topic_result = results
+        .iter()
+        .find(|r| {
+            r.metric_name.as_ref()
+                == Some(
+                    &"tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"
+                        .to_string(),
+                )
+        })
+        .expect("Should have topic_starts_with_f result");
+    assert_eq!(
+        topic_result.metric_value.as_deref(),
+        Some("false"),
+        "topic_starts_with_f metric value should be 'false'"
+    );
+
+    // Verify input contains the expected topic
+    assert!(
+        exact_match_result.input.contains("sheet"),
+        "Input should contain the topic 'sheet'"
+    );
+
+    // Verify generated output contains expected text
+    assert!(
+        exact_match_result
+            .generated_output
+            .contains("Swallowing moonlight"),
+        "Generated output should contain 'Swallowing moonlight'"
+    );
+}
+
+/// Test get_evaluation_results for a specific JSON datapoint with detailed assertions.
+/// This mirrors the TypeScript test "should return correct array for json datapoint".
+#[tokio::test]
+async fn test_get_evaluation_results_json_datapoint_details() {
+    let clickhouse = get_clickhouse().await;
+
+    let datapoint_id = Uuid::parse_str("0193994e-5560-7610-a3a0-45fdd59338aa").expect("Valid UUID");
+    let evaluation_run_id =
+        Uuid::parse_str("0196368f-19bd-7082-a677-1c0bf346ff24").expect("Valid UUID");
+
+    let results = clickhouse
+        .get_evaluation_results(
+            "extract_entities",
+            &[evaluation_run_id],
+            "JsonInference",
+            "JsonInferenceDatapoint",
+            &[
+                "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
+                    .to_string(),
+                "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
+                    .to_string(),
+            ],
+            Some(&datapoint_id),
+            u32::MAX,
+            0,
+        )
+        .await
+        .unwrap();
+
+    // Should have 2 results (1 datapoint * 2 metrics)
+    assert_eq!(results.len(), 2, "Expected 2 results for JSON datapoint");
+
+    // Verify all results are for the correct datapoint and evaluation run
+    for result in &results {
+        assert_eq!(result.datapoint_id, datapoint_id);
+        assert_eq!(result.evaluation_run_id, evaluation_run_id);
+        assert_eq!(result.variant_name, "gpt4o_mini_initial_prompt");
+    }
+
+    // Verify we have both metrics
+    let metric_names: std::collections::HashSet<_> = results
+        .iter()
+        .filter_map(|r| r.metric_name.as_ref())
+        .collect();
+    assert!(
+        metric_names.contains(
+            &"tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
+                .to_string()
+        ),
+        "Should have exact_match metric"
+    );
+    assert!(
+        metric_names.contains(
+            &"tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
+                .to_string()
+        ),
+        "Should have count_sports metric"
+    );
+
+    // Verify metric values are defined
+    for result in &results {
+        assert!(
+            result.metric_value.is_some(),
+            "Metric value should be defined"
+        );
+    }
+
+    // Verify JSON structure of input and output
+    for result in &results {
+        assert!(result.input.starts_with('{'), "Input should be JSON object");
+        assert!(
+            result.generated_output.contains("\"raw\""),
+            "Generated output should have 'raw' field"
+        );
+    }
 }

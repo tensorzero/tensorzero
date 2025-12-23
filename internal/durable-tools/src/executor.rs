@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::context::{DurableClient, ToolAppState};
+use crate::error::ToolError;
 use crate::inference::InferenceClient;
 use crate::registry::ToolRegistry;
 use crate::simple_tool::SimpleTool;
@@ -97,28 +98,35 @@ impl ToolExecutor {
     ///
     /// This registers the tool with both the tool registry and the durable
     /// client (so it can be executed by workers).
-    pub async fn register_task_tool<T: TaskTool>(&self) -> &Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub async fn register_task_tool<T: TaskTool>(&self) -> Result<&Self, ToolError> {
         // Register with tool registry
         {
             let mut registry = self.registry.write().await;
-            registry.register_task_tool::<T>();
+            registry.register_task_tool::<T>()?;
         }
 
         // Register the adapter with durable
-        // Note: We ignore the error here as duplicate registration is handled by the registry check above
-        let _ = self.durable.register::<TaskToolAdapter<T>>().await;
+        self.durable.register::<TaskToolAdapter<T>>().await?;
 
-        self
+        Ok(self)
     }
 
     /// Register a `SimpleTool`.
     ///
     /// `SimpleTools` don't need to be registered with the durable client
     /// since they run inside `TaskTool` steps.
-    pub async fn register_simple_tool<T: SimpleTool + Default>(&self) -> &Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub async fn register_simple_tool<T: SimpleTool + Default>(&self) -> Result<&Self, ToolError> {
         let mut registry = self.registry.write().await;
-        registry.register_simple_tool::<T>();
-        self
+        registry.register_simple_tool::<T>()?;
+        Ok(self)
     }
 
     /// Spawn a `TaskTool` execution.
@@ -234,8 +242,8 @@ impl ToolExecutor {
     ///
     /// # Errors
     ///
-    /// Returns an error if a tool's parameter schema fails to serialize.
-    pub async fn tool_definitions(&self) -> Result<Vec<Tool>, serde_json::Error> {
+    /// Returns an error if a tool's parameter schema generation or serialization fails.
+    pub async fn tool_definitions(&self) -> Result<Vec<Tool>, ToolError> {
         let registry = self.registry.read().await;
         registry.to_tensorzero_tools()
     }
