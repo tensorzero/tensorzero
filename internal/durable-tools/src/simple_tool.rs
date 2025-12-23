@@ -56,8 +56,8 @@ use crate::tool_metadata::ToolMetadata;
 ///         Cow::Borrowed("Search the web")
 ///     }
 ///
-///     fn parameters_schema() -> Schema {
-///         schema_for!(SearchParams)
+///     fn parameters_schema() -> ToolResult<Schema> {
+///         Ok(schema_for!(SearchParams))
 ///     }
 ///
 ///     type LlmParams = SearchParams;

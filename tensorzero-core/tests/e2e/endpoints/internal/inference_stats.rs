@@ -937,3 +937,152 @@ pub async fn test_get_function_throughput_by_variant_month() {
         );
     }
 }
+
+// Tests for list functions with inference count endpoint
+
+use tensorzero_core::endpoints::internal::inference_stats::ListFunctionsWithInferenceCountResponse;
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_functions_with_inference_count() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/functions/inference-counts");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    let response: ListFunctionsWithInferenceCountResponse = serde_json::from_str(&body).unwrap();
+
+    // Should have at least 2 functions with inferences from fixtures
+    assert!(
+        response.functions.len() >= 2,
+        "Expected at least 2 functions with inferences, got {}",
+        response.functions.len()
+    );
+
+    // Verify expected functions are present
+    let function_names: Vec<&str> = response
+        .functions
+        .iter()
+        .map(|f| f.function_name.as_str())
+        .collect();
+    assert!(
+        function_names.contains(&"write_haiku"),
+        "Expected write_haiku function to be present"
+    );
+    assert!(
+        function_names.contains(&"extract_entities"),
+        "Expected extract_entities function to be present"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_functions_with_inference_count_ordering() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/functions/inference-counts");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    let response: ListFunctionsWithInferenceCountResponse = serde_json::from_str(&body).unwrap();
+
+    // Results should be ordered by last_inference_timestamp DESC
+    for i in 1..response.functions.len() {
+        assert!(
+            response.functions[i - 1].last_inference_timestamp
+                >= response.functions[i].last_inference_timestamp,
+            "Results should be ordered by last_inference_timestamp DESC: {} >= {} failed",
+            response.functions[i - 1].last_inference_timestamp,
+            response.functions[i].last_inference_timestamp
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_functions_with_inference_count_response_format() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/functions/inference-counts");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    // Check that the raw response has last_inference_timestamp in RFC 3339 format with milliseconds
+    let rfc3339_regex = regex::Regex::new(
+        r#""last_inference_timestamp"\s*:\s*"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z""#,
+    )
+    .unwrap();
+    assert!(
+        rfc3339_regex.is_match(&body),
+        "Response should contain last_inference_timestamp in RFC 3339 format with milliseconds, got: {body}"
+    );
+
+    let response: ListFunctionsWithInferenceCountResponse = serde_json::from_str(&body).unwrap();
+
+    // Each function should have a positive inference_count
+    for func in &response.functions {
+        assert!(
+            func.inference_count > 0,
+            "Each function should have at least one inference, {} has inference_count {}",
+            func.function_name,
+            func.inference_count
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_functions_with_inference_count_includes_both_chat_and_json() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/functions/inference-counts");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let response: ListFunctionsWithInferenceCountResponse = resp.json().await.unwrap();
+
+    // write_haiku is a chat function, extract_entities is a json function
+    // Both should be present in the results
+    let write_haiku = response
+        .functions
+        .iter()
+        .find(|f| f.function_name == "write_haiku");
+    let extract_entities = response
+        .functions
+        .iter()
+        .find(|f| f.function_name == "extract_entities");
+
+    assert!(
+        write_haiku.is_some(),
+        "Chat function write_haiku should be present"
+    );
+    assert!(
+        extract_entities.is_some(),
+        "Json function extract_entities should be present"
+    );
+
+    // Verify inference_counts are reasonable based on test fixtures
+    let write_haiku = write_haiku.unwrap();
+    let extract_entities = extract_entities.unwrap();
+
+    assert!(
+        write_haiku.inference_count >= 804,
+        "Expected at least 804 inferences for write_haiku, got {}",
+        write_haiku.inference_count
+    );
+    assert!(
+        extract_entities.inference_count >= 604,
+        "Expected at least 604 inferences for extract_entities, got {}",
+        extract_entities.inference_count
+    );
+}

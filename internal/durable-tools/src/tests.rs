@@ -45,8 +45,8 @@ impl ToolMetadata for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -84,8 +84,8 @@ impl ToolMetadata for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -122,8 +122,8 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
         Cow::Borrowed("Uses default timeout")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -159,8 +159,8 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
         Cow::Borrowed("Uses default timeout")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -401,8 +401,8 @@ mod registry_tests {
                 Cow::Borrowed("Conflicting tool")
             }
 
-            fn parameters_schema() -> schemars::Schema {
-                schemars::schema_for!(EchoParams)
+            fn parameters_schema() -> ToolResult<schemars::Schema> {
+                Ok(schemars::schema_for!(EchoParams))
             }
 
             type LlmParams = EchoParams;
@@ -504,7 +504,7 @@ mod erasure_tests {
     #[test]
     fn erased_task_tool_wrapper_parameters_schema_has_message_field() {
         let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
-        let schema = wrapper.parameters_schema();
+        let schema = wrapper.parameters_schema().unwrap();
 
         // The schema should be an object with a "message" property
         let schema_json = serde_json::to_value(&schema).unwrap();

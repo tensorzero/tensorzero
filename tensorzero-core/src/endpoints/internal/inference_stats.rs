@@ -10,8 +10,8 @@ use crate::config::Config;
 use crate::db::TimeWindow;
 use crate::db::inference_stats::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
-    CountInferencesWithFeedbackParams, GetFunctionThroughputByVariantParams, InferenceStatsQueries,
-    VariantThroughput,
+    CountInferencesWithFeedbackParams, FunctionInferenceCount,
+    GetFunctionThroughputByVariantParams, InferenceStatsQueries, VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
@@ -105,6 +105,14 @@ fn default_max_periods() -> u32 {
 pub struct GetFunctionThroughputByVariantResponse {
     /// Throughput data for each (period, variant) combination
     pub throughput: Vec<VariantThroughput>,
+}
+
+/// Response containing all functions with their inference counts
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ListFunctionsWithInferenceCountResponse {
+    /// List of functions with their inference counts, ordered by most recent inference
+    pub functions: Vec<FunctionInferenceCount>,
 }
 
 /// HTTP handler for the inference stats endpoint
@@ -317,6 +325,27 @@ pub async fn get_function_throughput_by_variant(
     Ok(GetFunctionThroughputByVariantResponse { throughput })
 }
 
+/// HTTP handler for listing all functions with their inference counts
+#[debug_handler(state = AppStateData)]
+#[instrument(name = "list_functions_with_inference_count_handler", skip_all)]
+pub async fn list_functions_with_inference_count_handler(
+    State(state): State<AppStateData>,
+) -> Result<Json<ListFunctionsWithInferenceCountResponse>, Error> {
+    let response = list_functions_with_inference_count(&state.clickhouse_connection_info).await?;
+    Ok(Json(response))
+}
+
+/// Core business logic for listing all functions with their inference counts
+async fn list_functions_with_inference_count(
+    clickhouse_connection_info: &impl InferenceStatsQueries,
+) -> Result<ListFunctionsWithInferenceCountResponse, Error> {
+    let functions = clickhouse_connection_info
+        .list_functions_with_inference_count()
+        .await?;
+
+    Ok(ListFunctionsWithInferenceCountResponse { functions })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -506,5 +535,58 @@ mod tests {
 
         assert_eq!(result.inference_count, 42);
         assert!(result.stats_by_variant.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_list_functions_with_inference_count_calls_clickhouse() {
+        use chrono::Utc;
+
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_stats_queries
+            .expect_list_functions_with_inference_count()
+            .times(1)
+            .returning(|| {
+                Box::pin(async move {
+                    Ok(vec![
+                        FunctionInferenceCount {
+                            function_name: "write_haiku".to_string(),
+                            last_inference_timestamp: Utc::now(),
+                            inference_count: 150,
+                        },
+                        FunctionInferenceCount {
+                            function_name: "extract_entities".to_string(),
+                            last_inference_timestamp: Utc::now(),
+                            inference_count: 75,
+                        },
+                    ])
+                })
+            });
+
+        let result = list_functions_with_inference_count(&mock_clickhouse)
+            .await
+            .unwrap();
+
+        assert_eq!(result.functions.len(), 2);
+        assert_eq!(result.functions[0].function_name, "write_haiku");
+        assert_eq!(result.functions[0].inference_count, 150);
+        assert_eq!(result.functions[1].function_name, "extract_entities");
+        assert_eq!(result.functions[1].inference_count, 75);
+    }
+
+    #[tokio::test]
+    async fn test_list_functions_with_inference_count_empty() {
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_stats_queries
+            .expect_list_functions_with_inference_count()
+            .times(1)
+            .returning(|| Box::pin(async move { Ok(vec![]) }));
+
+        let result = list_functions_with_inference_count(&mock_clickhouse)
+            .await
+            .unwrap();
+
+        assert!(result.functions.is_empty());
     }
 }
