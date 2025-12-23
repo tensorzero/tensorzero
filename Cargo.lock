@@ -318,6 +318,7 @@ dependencies = [
  "serde_json",
  "tensorzero-types",
  "thiserror 2.0.17",
+ "ts-rs",
  "url",
  "uuid",
 ]
