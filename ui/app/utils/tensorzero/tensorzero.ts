@@ -1765,22 +1765,35 @@ export class TensorZeroClient {
    * Gets paginated evaluation results across one or more evaluation runs.
    * @param evaluationName - The name of the evaluation
    * @param evaluationRunIds - Array of evaluation run UUIDs to query
-   * @param limit - Maximum number of datapoints to return (default: 100)
-   * @param offset - Number of datapoints to skip (default: 0)
+   * @param options - Optional parameters for filtering and pagination
+   * @param options.datapointId - Optional datapoint ID to filter results to a specific datapoint
+   * @param options.limit - Maximum number of datapoints to return (default: 100)
+   * @param options.offset - Number of datapoints to skip (default: 0)
    * @returns A promise that resolves with the evaluation results
    * @throws Error if the request fails
    */
   async getEvaluationResults(
     evaluationName: string,
     evaluationRunIds: string[],
-    limit: number = 100,
-    offset: number = 0,
+    options: {
+      datapointId?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
   ): Promise<GetEvaluationResultsResponse> {
+    const { datapointId, limit = 100, offset = 0 } = options;
     const searchParams = new URLSearchParams();
     searchParams.append("evaluation_name", evaluationName);
     searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
-    searchParams.append("limit", limit.toString());
-    searchParams.append("offset", offset.toString());
+    if (datapointId) {
+      searchParams.append("datapoint_id", datapointId);
+    }
+    if (limit) {
+      searchParams.append("limit", limit.toString());
+    }
+    if (offset) {
+      searchParams.append("offset", offset.toString());
+    }
     const queryString = searchParams.toString();
     const endpoint = `/internal/evaluations/results?${queryString}`;
 
