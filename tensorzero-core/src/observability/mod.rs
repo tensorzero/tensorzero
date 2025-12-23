@@ -1201,8 +1201,11 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
 pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<PrometheusHandle, Error> {
     let mut builder = PrometheusBuilder::new();
 
-    let buckets =
-        metrics_config.and_then(|config| config.inference_overhead_histogram_buckets.as_ref());
+    let buckets = metrics_config.and_then(|config| {
+        config
+            .tensorzero_inference_latency_overhead_seconds_histogram_buckets
+            .as_ref()
+    });
 
     if let Some(buckets) = buckets {
         use metrics_exporter_prometheus::Matcher;

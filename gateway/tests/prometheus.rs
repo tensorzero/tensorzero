@@ -140,7 +140,7 @@ async fn test_prometheus_metrics_custom_histogram_buckets() {
 observability.enabled = false
 
 [gateway.metrics]
-inference_overhead_histogram_buckets = [0.0001, 1.0, 10]
+tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.0001, 1.0, 10]
 ",
         None,
     )
