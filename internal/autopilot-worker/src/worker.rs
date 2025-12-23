@@ -68,13 +68,14 @@ impl AutopilotWorker {
     }
 
     /// Register all autopilot tools with the executor.
-    pub async fn register_tools(&self) {
+    pub async fn register_tools(&self) -> Result<()> {
         // Register the echo tool for testing
         self.executor
             .register_task_tool::<ClientToolWrapper<EchoTool>>()
-            .await;
+            .await?;
 
         // Additional tools will be registered here as they are implemented
+        Ok(())
     }
 
     /// Get a clone of the Arc-wrapped executor for tool spawning.
@@ -143,7 +144,11 @@ pub fn spawn_autopilot_worker(
         match AutopilotWorker::new(config).await {
             Ok(worker) => {
                 tracing::info!("Autopilot worker started");
-                worker.register_tools().await;
+                // TODO: how can this fail more loudly?
+                if let Err(e) = worker.register_tools().await {
+                    tracing::error!("Failed to register tools: {e}");
+                    return;
+                }
 
                 // Create the handle with a shared reference to the executor
                 let handle = AutopilotWorkerHandle {

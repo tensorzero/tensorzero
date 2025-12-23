@@ -140,13 +140,12 @@ impl ToolMetadata for EchoSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -180,13 +179,12 @@ impl ToolMetadata for EchoTaskTool {
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -248,13 +246,12 @@ impl ToolMetadata for InferenceSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(30)
     }
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
 }
 
 #[async_trait]
 impl SimpleTool for InferenceSimpleTool {
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -308,13 +305,12 @@ impl ToolMetadata for InferenceTaskTool {
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
 }
 
 #[async_trait]
 impl TaskTool for InferenceTaskTool {
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -399,8 +395,14 @@ async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<(
         .await
         .expect("Failed to build executor");
 
-    executor.register_simple_tool::<EchoSimpleTool>().await;
-    executor.register_task_tool::<EchoTaskTool>().await;
+    executor
+        .register_simple_tool::<EchoSimpleTool>()
+        .await
+        .expect("Failed to register EchoSimpleTool");
+    executor
+        .register_task_tool::<EchoTaskTool>()
+        .await
+        .expect("Failed to register EchoTaskTool");
 
     let definitions = executor.tool_definitions().await.unwrap();
     assert_eq!(definitions.len(), 2);
@@ -438,7 +440,10 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("Failed to create queue");
 
-    executor.register_task_tool::<EchoTaskTool>().await;
+    executor
+        .register_task_tool::<EchoTaskTool>()
+        .await
+        .expect("Failed to register EchoTaskTool");
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -477,7 +482,10 @@ async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("Failed to create queue");
 
-    executor.register_task_tool::<EchoTaskTool>().await;
+    executor
+        .register_task_tool::<EchoTaskTool>()
+        .await
+        .expect("Failed to register EchoTaskTool");
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -524,13 +532,12 @@ impl ToolMetadata for KeyCapturingSimpleTool {
     }
 
     type LlmParams = EchoParams;
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for KeyCapturingSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -563,13 +570,12 @@ impl ToolMetadata for MultiCallTaskTool {
     }
 
     type LlmParams = EchoParams;
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for MultiCallTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         _llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -627,8 +633,12 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
     // Register both tools
     executor
         .register_simple_tool::<KeyCapturingSimpleTool>()
-        .await;
-    executor.register_task_tool::<MultiCallTaskTool>().await;
+        .await
+        .expect("Failed to register KeyCapturingSimpleTool");
+    executor
+        .register_task_tool::<MultiCallTaskTool>()
+        .await
+        .expect("Failed to register MultiCallTaskTool");
 
     // Spawn the task
     let episode_id = Uuid::now_v7();
@@ -734,7 +744,10 @@ async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Resul
         .await
         .expect("Failed to build executor");
 
-    executor.register_task_tool::<InferenceTaskTool>().await;
+    executor
+        .register_task_tool::<InferenceTaskTool>()
+        .await
+        .expect("Failed to register InferenceTaskTool");
 
     let definitions = executor.tool_definitions().await.unwrap();
     let names: Vec<&str> = definitions
@@ -774,7 +787,10 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
         .await
         .expect("Failed to create queue");
 
-    executor.register_task_tool::<InferenceTaskTool>().await;
+    executor
+        .register_task_tool::<InferenceTaskTool>()
+        .await
+        .expect("Failed to register InferenceTaskTool");
 
     let episode_id = Uuid::now_v7();
     let result = executor

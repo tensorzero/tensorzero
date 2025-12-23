@@ -10,9 +10,9 @@ use tensorzero_derive::export_schema;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
-/// Configuration for the object storage backend.
-/// Currently, we only support S3-compatible object storage and local filesystem storage.
-/// We test against Amazon S3, GCS, Cloudflare R2, and Minio.
+/// Configuration for the object storage backend
+/// Currently, we only support S3-compatible object storage and local filesystem storage
+/// We test against Amazon S3, GCS, Cloudflare R2, and Minio
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[derive(ts_rs::TS)]

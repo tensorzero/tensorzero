@@ -445,7 +445,8 @@ impl InferenceClient for EmbeddedInferenceClient {
             None, // No API key in embedded mode
         ))
         .await
-        .map_err(|e| InferenceError::TensorZero(TensorZeroError::Other { source: e.into() }))?;
+        .map_err(|e| InferenceError::TensorZero(TensorZeroError::Other { source: e.into() }))?
+        .output;
 
         match result {
             InferenceOutput::NonStreaming(response) => Ok(response),

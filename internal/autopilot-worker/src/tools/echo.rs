@@ -41,13 +41,12 @@ impl ToolMetadata for EchoTool {
     }
 
     type LlmParams = EchoParams;
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for EchoTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,

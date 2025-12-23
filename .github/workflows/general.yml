@@ -1126,7 +1126,6 @@ jobs:
           docker compose -f examples/production-deployment/docker-compose.yml down
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
-
   # Test that the ui e2e tests still pass after we regenerate the model inference cache
   ui-tests-e2e-regen-model-inference-cache:
     permissions:

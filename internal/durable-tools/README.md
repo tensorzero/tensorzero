@@ -13,7 +13,21 @@ This crate provides abstractions for building AI agent tools with durable execut
 
 ### Core Traits
 
-All tools provide a human-readable description via `fn description() -> Cow<'static, str>`.
+All tools implement the `ToolMetadata` trait for metadata, plus either `TaskTool` or `SimpleTool` for execution.
+
+#### `ToolMetadata`
+
+Provides the tool's name, description, parameter schema, and LLM parameter type:
+
+```rust
+pub trait ToolMetadata: Send + Sync + 'static {
+    fn name() -> Cow<'static, str>;
+    fn description() -> Cow<'static, str>;
+    fn parameters_schema() -> Schema;
+
+    type LlmParams: Serialize + DeserializeOwned + Send + 'static;
+}
+```
 
 #### `TaskTool`
 
@@ -21,19 +35,12 @@ For complex, durable operations that may need to call other tools or checkpoint 
 
 ```rust
 #[async_trait]
-pub trait TaskTool: Send + Sync + 'static {
-    fn name() -> Cow<'static, str>;
-    fn description() -> Cow<'static, str>;
-    fn parameters_schema() -> Schema;
-
-    type LlmParams: Serialize + DeserializeOwned + Send + 'static;
+pub trait TaskTool: ToolMetadata {
     type SideInfo: SideInfo;
     type Output: Serialize + DeserializeOwned + Send + 'static;
 
-    fn timeout() -> Duration { Duration::from_secs(120) }
-
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
     ) -> ToolResult<Self::Output>;
@@ -46,19 +53,12 @@ For simple, stateless operations like API calls or database queries:
 
 ```rust
 #[async_trait]
-pub trait SimpleTool: Send + Sync + 'static {
-    fn name() -> Cow<'static, str>;
-    fn description() -> Cow<'static, str>;
-    fn parameters_schema() -> Schema;
-
-    type LlmParams: Serialize + DeserializeOwned + Send + 'static;
+pub trait SimpleTool: ToolMetadata {
     type SideInfo: SideInfo;
     type Output: Serialize + DeserializeOwned + Send + 'static;
 
-    fn timeout() -> Duration { Duration::from_secs(30) }
-
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: Self::SideInfo,
         ctx: SimpleToolContext<'_>,
         idempotency_key: &str,
@@ -100,7 +100,7 @@ The crate re-exports commonly needed types:
 
 ```rust
 use durable_tools::{
-    SimpleTool, TaskTool, ToolContext, SimpleToolContext,
+    SimpleTool, TaskTool, ToolContext, SimpleToolContext, ToolMetadata,
     ToolExecutor, ToolResult, async_trait, WorkerOptions,
     http_gateway_client,
 };
@@ -120,8 +120,7 @@ struct SearchResult { results: Vec<String> }
 #[derive(Default)]
 struct SearchTool;
 
-#[async_trait]
-impl SimpleTool for SearchTool {
+impl ToolMetadata for SearchTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("search")
     }
@@ -130,22 +129,26 @@ impl SimpleTool for SearchTool {
         Cow::Borrowed("Search the web")
     }
 
-    fn parameters_schema() -> Schema { schema_for!(SearchParams).schema }
+    fn parameters_schema() -> Schema {
+        schema_for!(SearchParams)
+    }
 
     type LlmParams = SearchParams;
+}
+
+#[async_trait]
+impl SimpleTool for SearchTool {
     type SideInfo = ();
     type Output = SearchResult;
 
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<Self::Output> {
         // Implementation...
-        Ok(SearchResult {
-            results: vec![],
-        })
+        Ok(SearchResult { results: vec![] })
     }
 }
 
@@ -158,8 +161,7 @@ struct ResearchResult { summary: String }
 
 struct ResearchTool;
 
-#[async_trait]
-impl TaskTool for ResearchTool {
+impl ToolMetadata for ResearchTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("research")
     }
@@ -168,14 +170,20 @@ impl TaskTool for ResearchTool {
         Cow::Borrowed("Research a topic")
     }
 
-    fn parameters_schema() -> Schema { schema_for!(ResearchParams).schema }
+    fn parameters_schema() -> Schema {
+        schema_for!(ResearchParams)
+    }
 
     type LlmParams = ResearchParams;
+}
+
+#[async_trait]
+impl TaskTool for ResearchTool {
     type SideInfo = ();
     type Output = ResearchResult;
 
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
     ) -> ToolResult<Self::Output> {
@@ -198,10 +206,9 @@ impl TaskTool for ResearchTool {
 // Setup and run
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let database_url: SecretString = std::env::var("DATABASE_URL")?.into();
     let inference_client = http_gateway_client(url::Url::parse("http://localhost:3000")?)?;
     let executor = ToolExecutor::builder()
-        .database_url(database_url)
+        .database_url(std::env::var("DATABASE_URL")?.into())
         .queue_name("tools")
         .inference_client(inference_client)
         .build()
