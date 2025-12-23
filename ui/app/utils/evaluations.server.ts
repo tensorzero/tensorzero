@@ -4,14 +4,13 @@ import {
   type DisplayEvaluationError,
 } from "./evaluations";
 import { logger } from "~/utils/logger";
-import { getEnv } from "./env.server";
-import { runNativeEvaluationStreaming } from "./tensorzero/native_client.server";
 import type {
   EvaluationRunEvent,
   FunctionConfig,
   EvaluationFunctionConfig,
 } from "~/types/tensorzero";
 import { getConfig } from "./config/index.server";
+import { getTensorZeroClient } from "./tensorzero.server";
 
 /**
  * Converts a FunctionConfig to the minimal EvaluationFunctionConfig format
@@ -115,7 +114,6 @@ export async function runEvaluation(
   maxDatapoints?: number,
   precisionTargets?: Record<string, number>,
 ): Promise<EvaluationStartInfo> {
-  const env = getEnv();
   const startTime = new Date();
   let evaluationRunId: string | null = null;
   let startResolved = false;
@@ -134,10 +132,8 @@ export async function runEvaluation(
     );
   }
 
-  // Convert to minimal EvaluationFunctionConfig and serialize
+  // Convert to minimal EvaluationFunctionConfig
   const evaluationFunctionConfig = toEvaluationFunctionConfig(functionConfig);
-  const serializedEvaluationConfig = JSON.stringify(evaluationConfig);
-  const serializedFunctionConfig = JSON.stringify(evaluationFunctionConfig);
 
   let resolveStart: (value: EvaluationStartInfo) => void = () => {};
   let rejectStart: (reason?: unknown) => void = () => {};
@@ -216,24 +212,22 @@ export async function runEvaluation(
     }
   };
 
-  const nativePromise = runNativeEvaluationStreaming({
-    gatewayUrl: env.TENSORZERO_GATEWAY_URL,
-    clickhouseUrl: env.TENSORZERO_CLICKHOUSE_URL,
-    evaluationConfig: serializedEvaluationConfig,
-    functionConfig: serializedFunctionConfig,
+  // Use the HTTP client instead of native bindings
+  const client = getTensorZeroClient();
+  const evaluationPromise = client.runEvaluationStreaming({
+    evaluationConfig,
+    functionConfig: evaluationFunctionConfig,
     evaluationName,
     datasetName,
     variantName,
     concurrency,
     inferenceCache,
     maxDatapoints,
-    precisionTargets: precisionTargets
-      ? JSON.stringify(precisionTargets)
-      : undefined,
+    precisionTargets,
     onEvent: handleEvent,
   });
 
-  void nativePromise
+  void evaluationPromise
     .then(() => {
       if (evaluationRunId) {
         const evaluation = runningEvaluations.get(evaluationRunId);
