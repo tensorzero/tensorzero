@@ -445,10 +445,9 @@ impl InferenceClient for EmbeddedInferenceClient {
             None, // No API key in embedded mode
         ))
         .await
-        .map_err(|e| InferenceError::TensorZero(TensorZeroError::Other { source: e.into() }))?
-        .output;
+        .map_err(|e| InferenceError::TensorZero(TensorZeroError::Other { source: e.into() }))?;
 
-        match result {
+        match result.output {
             InferenceOutput::NonStreaming(response) => Ok(response),
             InferenceOutput::Streaming(_) => Err(InferenceError::StreamingNotSupported),
         }

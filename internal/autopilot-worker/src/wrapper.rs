@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use autopilot_client::ToolResult as AutopilotToolResult;
 use durable_tools::{
     CreateEventRequest, EventPayload, TaskTool, ToolAppState, ToolContext, ToolMetadata,
-    ToolOutcome, ToolResult as DurableToolResult, ToolResult,
+    ToolOutcome, ToolResult as DurableToolResult,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -64,7 +64,7 @@ impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
         T::description()
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema() -> DurableToolResult<Schema> {
         T::parameters_schema()
     }
 
@@ -91,8 +91,7 @@ where
         let tool_name = T::name().to_string();
         let outcome = match &result {
             Ok(output) => {
-                let result_json = serde_json::to_string(output)
-                    .unwrap_or_else(|e| format!("{{\"error\": \"{e}\"}}"));
+                let result_json = serde_json::to_string(output)?;
                 ToolOutcome::Success(AutopilotToolResult {
                     name: tool_name.clone(),
                     result: result_json,

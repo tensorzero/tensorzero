@@ -25,7 +25,7 @@ pub struct ListWorkflowEvaluationRunEpisodesByTaskNameParams {
 const DEFAULT_LIMIT: u32 = 15;
 const DEFAULT_OFFSET: u32 = 0;
 
-/// Handler for `GET /internal/workflow-evaluations/episodes-by-task-name`
+/// Handler for `GET /internal/workflow_evaluations/episodes_by_task_name`
 ///
 /// Returns a list of workflow evaluation run episodes grouped by task_name.
 /// Episodes with NULL task_name are grouped individually.

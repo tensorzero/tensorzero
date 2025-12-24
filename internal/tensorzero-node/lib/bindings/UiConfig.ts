@@ -5,7 +5,7 @@ import type { MetricConfig } from "./MetricConfig";
 import type { StaticToolConfig } from "./StaticToolConfig";
 
 /**
- * Response type for GET /internal/ui-config
+ * Response type for GET /internal/ui_config
  *
  * Contains only UI-safe fields from the gateway config, excluding sensitive
  * information like provider credentials, API keys, and internal settings.

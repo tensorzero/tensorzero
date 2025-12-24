@@ -199,8 +199,8 @@ pub use error::{ToolError, ToolResult};
 pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 pub use simple_tool::SimpleTool;
-pub use task_tool::{SideInfo, TaskTool, TaskToolAdapter};
-pub use tool_metadata::ToolMetadata;
+pub use task_tool::{TaskTool, TaskToolAdapter};
+pub use tool_metadata::{SideInfo, ToolMetadata};
 
 // Re-export inference trait and helpers
 pub use inference::{

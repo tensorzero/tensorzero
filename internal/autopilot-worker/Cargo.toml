@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+e2e_tests = []
+
 [dependencies]
 # Internal crates
 durable-tools = { path = "../durable-tools" }

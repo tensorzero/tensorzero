@@ -28,7 +28,7 @@ secrecy = { workspace = true }
 workspace = true
 
 [features]
-e2e_tests = ["tensorzero-core/e2e_tests"]
+e2e_tests = ["tensorzero-core/e2e_tests", "autopilot-worker/e2e_tests"]
 default = []
 
 [dev-dependencies]

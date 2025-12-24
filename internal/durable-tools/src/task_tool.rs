@@ -1,24 +1,11 @@
 use async_trait::async_trait;
 use durable::{Task, TaskContext, TaskResult};
-use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use crate::context::{ToolAppState, ToolContext};
 use crate::error::ToolResult as ToolExecResult;
 use crate::tool_metadata::ToolMetadata;
-
-/// Marker trait for side information types.
-///
-/// Types implementing this can be used as side information for tools.
-/// Side information is provided at spawn time and is hidden from the LLM
-/// (not included in the tool's JSON schema).
-///
-/// The unit type `()` implements this trait for tools that don't need side info.
-pub trait SideInfo: Serialize + DeserializeOwned + Send + 'static {}
-
-/// Unit type implements `SideInfo` for tools without side information.
-impl SideInfo for () {}
 
 /// A durable tool that runs as a full durable Task.
 ///
@@ -169,9 +156,9 @@ pub trait TaskTool: ToolMetadata {
     /// * `ctx` - The tool execution context
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        side_info: Self::SideInfo,
+        side_info: <Self as ToolMetadata>::SideInfo,
         ctx: &mut ToolContext<'_>,
-    ) -> ToolExecResult<Self::Output>;
+    ) -> ToolExecResult<<Self as ToolMetadata>::Output>;
 }
 
 // Re-export TaskToolParams from spawn crate
