@@ -11,7 +11,7 @@ This feature is primarily for large organizations with complex deployment and go
 </Tip>
 
 With gateway relay, an LLM inference request can be routed through multiple independent TensorZero Gateway deployments before reaching a model provider.
-This enables you to enforce organization-wide controls (e.g. [auth](/operations/set-up-auth-for-tensorzero), [rate limits](/operations/centralize-auth-rate-limits-and-more), [credentials](/operations/manage-credentials)) without restricting how teams build their LLM features.
+This enables you to enforce organization-wide controls (e.g. [auth](/operations/set-up-auth-for-tensorzero), [rate limits](/operations/enforce-custom-rate-limits), [credentials](/operations/manage-credentials)) without restricting how teams build their LLM features.
 
 A typical setup has two tiers:
 
@@ -28,7 +28,7 @@ This guide shows you how to set up a two-tier TensorZero Gateway deployment that
 
 <Step title="Configure your relay gateway">
 
-You can configure [auth](/operations/set-up-auth-for-tensorzero), [rate limits](/operations/centralize-auth-rate-limits-and-more), [credentials](/operations/manage-credentials), and other organization-wide controls in the relay gateway. See below for an example that enforces auth on the relay.
+You can configure [auth](/operations/set-up-auth-for-tensorzero), [rate limits](/operations/enforce-custom-rate-limits), [credentials](/operations/manage-credentials), and other organization-wide controls in the relay gateway. See below for an example that enforces auth on the relay.
 
 We'll keep this example minimal and use the default gateway configuration for the relay gateway.
 
