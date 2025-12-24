@@ -57,6 +57,8 @@ env:
   TENSORZERO_E2E_PROXY: http://localhost:3003
   TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
   TENSORZERO_CI: 1
+  # Nextest filter expression for flaky tests to skip (e.g. "test(hyperbolic)|test(tgi)")
+  CARGO_NEXTEST_FLAKY_TESTS: ${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}
 
 jobs:
   live-tests:
