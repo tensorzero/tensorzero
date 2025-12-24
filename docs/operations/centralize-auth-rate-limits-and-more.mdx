@@ -36,7 +36,7 @@ We'll keep this example minimal and use the default gateway configuration for th
 
 <Step title="Configure your edge gateway">
 
-Configure the edge gateway route inference requests to the relay gateway:
+Configure the edge gateway to route inference requests to the relay gateway:
 
 ```toml title="edge-config/tensorzero.toml"
 [gateway.relay]
@@ -105,7 +105,7 @@ curl -X POST "http://localhost:3000/inference" \
 
 <Accordion title="Sample Output">
 
-```python
+```json
 {
   "inference_id": "01940627-935f-7fa1-a398-e1f57f18064a",
   "episode_id": "01940627-8fe2-75d3-9b65-91be2c7ba622",
@@ -178,7 +178,7 @@ See [Configuration Reference](/gateway/configuration-reference) for more details
 ### Bypass the relay for specific requests
 
 When a relay gateway is configured, the edge gateway will route every inference request through it by default.
-However, you may want to bypass the relay for in some scenarios.
+However, you may want to bypass the relay in some scenarios.
 
 You can circumvent the relay for specific requests by configuring a custom model with `skip_relay = true` in the edge gateway:
 
