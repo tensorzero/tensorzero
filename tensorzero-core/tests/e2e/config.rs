@@ -973,3 +973,94 @@ model = "test_model_{random_id}"
         "Function from snapshot should still be present"
     );
 }
+
+/// Test that tags are merged when writing the same config snapshot twice.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_write_config_snapshot_tag_merging() {
+    let clickhouse = get_clickhouse().await;
+
+    let random_id = Uuid::now_v7();
+
+    // Create a test config snapshot with initial tags
+    let config_toml = format!(
+        r#"
+[metrics.tag_test_metric_{random_id}]
+type = "boolean"
+level = "inference"
+optimize = "max"
+"#
+    );
+
+    // Use from_stored_config to create snapshots with tags
+    use tensorzero_core::config::stored::StoredConfig;
+
+    let stored_config: StoredConfig = toml::from_str(&config_toml).unwrap();
+    let mut tags1 = HashMap::new();
+    tags1.insert("key1".to_string(), "value1".to_string());
+    tags1.insert("key2".to_string(), "original".to_string());
+
+    let snapshot1 =
+        ConfigSnapshot::from_stored_config(stored_config.clone(), HashMap::new(), tags1).unwrap();
+
+    let hash = snapshot1.hash.clone();
+
+    // Write the first config snapshot
+    write_config_snapshot(&clickhouse, snapshot1).await.unwrap();
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Verify initial tags
+    let retrieved1 = clickhouse.get_config_snapshot(hash.clone()).await.unwrap();
+    assert_eq!(
+        retrieved1.tags.get("key1"),
+        Some(&"value1".to_string()),
+        "key1 should have initial value"
+    );
+    assert_eq!(
+        retrieved1.tags.get("key2"),
+        Some(&"original".to_string()),
+        "key2 should have initial value"
+    );
+
+    // Write the same config with different tags
+    let mut tags2 = HashMap::new();
+    tags2.insert("key2".to_string(), "updated".to_string()); // Update existing key
+    tags2.insert("key3".to_string(), "new".to_string()); // Add new key
+
+    let snapshot2 =
+        ConfigSnapshot::from_stored_config(stored_config.clone(), HashMap::new(), tags2).unwrap();
+
+    // Verify the hash is the same (since config content is the same)
+    assert_eq!(snapshot2.hash, hash, "Same config should produce same hash");
+
+    // Write the second snapshot (should merge tags)
+    write_config_snapshot(&clickhouse, snapshot2).await.unwrap();
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Verify tags were merged
+    let retrieved2 = clickhouse.get_config_snapshot(hash).await.unwrap();
+
+    // key1 should be preserved from first write
+    assert_eq!(
+        retrieved2.tags.get("key1"),
+        Some(&"value1".to_string()),
+        "key1 should be preserved from first write"
+    );
+
+    // key2 should be updated from second write
+    assert_eq!(
+        retrieved2.tags.get("key2"),
+        Some(&"updated".to_string()),
+        "key2 should be updated from second write"
+    );
+
+    // key3 should be added from second write
+    assert_eq!(
+        retrieved2.tags.get("key3"),
+        Some(&"new".to_string()),
+        "key3 should be added from second write"
+    );
+}

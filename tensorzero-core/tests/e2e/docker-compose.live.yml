@@ -109,6 +109,8 @@ services:
       - ./:/app/tensorzero-core/tests/e2e:ro
       # Mount the fixtures directory so template paths can be resolved
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
+      # Mount the UI fixtures directory because we depend on some of those templates
+      - ../../../ui/fixtures:/app/ui/fixtures:ro
       # Mount GCP JWT key file
       - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
       # Shared tmpdir filesystem

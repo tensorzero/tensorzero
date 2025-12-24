@@ -15,7 +15,8 @@ pub mod types;
 pub mod wire;
 
 // Re-export core types for convenience
-pub use call::{InferenceResponseToolCall, ToolCallChunk};
+pub use call::{InferenceResponseToolCallExt, ToolCallChunk};
+// Re-export InferenceResponseToolCall from tensorzero-types
 pub use config::{
     AllowedTools, AllowedToolsChoice, DynamicImplicitToolConfig, DynamicToolConfig,
     FunctionToolConfig, ImplicitToolConfig, StaticToolConfig, ToolCallConfig,
@@ -27,11 +28,16 @@ pub use storage::{
     apply_dynamic_tool_params_update_to_tool_call_config, deserialize_optional_tool_info,
     deserialize_tool_info,
 };
+pub use tensorzero_types::InferenceResponseToolCall;
 pub use types::{
     FunctionTool, OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarDefinition,
     OpenAIGrammarSyntax, ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider, Tool,
 };
-pub use wire::{ToolCall, ToolCallWrapper, ToolChoice, ToolResult};
+// Re-export tool wire types from tensorzero-types
+pub use tensorzero_types::{ToolCall, ToolCallWrapper, ToolChoice, ToolResult};
+
+// Extension traits for tool types
+pub use wire::{ToolCallExt, ToolResultExt};
 
 use serde_json::Value;
 
@@ -428,7 +434,7 @@ mod tests {
         .unwrap();
         // Tool call is valid, so we should get a valid InferenceResponseToolCall
         let inference_response_tool_call =
-            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+            InferenceResponseToolCall::new_from_tool_call(tool_call, Some(&tool_call_config)).await;
         assert_eq!(inference_response_tool_call.raw_name, "get_temperature");
         assert_eq!(
             inference_response_tool_call.raw_arguments,
@@ -454,7 +460,7 @@ mod tests {
             id: "321".to_string(),
         };
         let inference_response_tool_call =
-            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+            InferenceResponseToolCall::new_from_tool_call(tool_call, Some(&tool_call_config)).await;
         assert_eq!(
             inference_response_tool_call.name,
             Some("get_temperature".to_string())
@@ -474,7 +480,7 @@ mod tests {
             id: "321".to_string(),
         };
         let inference_response_tool_call =
-            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+            InferenceResponseToolCall::new_from_tool_call(tool_call, Some(&tool_call_config)).await;
         assert_eq!(inference_response_tool_call.name, None);
         assert_eq!(inference_response_tool_call.arguments, None);
         assert_eq!(inference_response_tool_call.id, "321");
@@ -508,7 +514,7 @@ mod tests {
             id: "321".to_string(),
         };
         let inference_response_tool_call =
-            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+            InferenceResponseToolCall::new_from_tool_call(tool_call, Some(&tool_call_config)).await;
         assert_eq!(
             inference_response_tool_call.raw_name,
             "establish_campground"
@@ -555,7 +561,7 @@ mod tests {
             id: "ctc_123".to_string(),
         };
         let inference_response_tool_call =
-            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+            InferenceResponseToolCall::new_from_tool_call(tool_call, Some(&tool_call_config)).await;
 
         // The parsed_name should be set since this is a valid custom tool
         assert_eq!(
@@ -578,7 +584,7 @@ mod tests {
             id: "ctc_456".to_string(),
         };
         let inference_response_tool_call =
-            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+            InferenceResponseToolCall::new_from_tool_call(tool_call, Some(&tool_call_config)).await;
 
         // The parsed_name should be None since this tool doesn't exist
         assert_eq!(inference_response_tool_call.name, None);
@@ -620,7 +626,7 @@ mod tests {
             id: "123".to_string(),
         };
         let inference_response_tool_call =
-            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+            InferenceResponseToolCall::new_from_tool_call(tool_call, Some(&tool_call_config)).await;
         assert_eq!(
             inference_response_tool_call.name,
             Some("get_temperature".to_string())
@@ -640,7 +646,7 @@ mod tests {
             id: "ctc_789".to_string(),
         };
         let inference_response_tool_call =
-            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+            InferenceResponseToolCall::new_from_tool_call(tool_call, Some(&tool_call_config)).await;
         assert_eq!(
             inference_response_tool_call.name,
             Some("calculator".to_string())
@@ -678,7 +684,7 @@ mod tests {
             "id": "123"
         });
         let tool_call_wrapper: ToolCallWrapper = serde_json::from_value(tool_call).unwrap();
-        let tool_call: ToolCall = tool_call_wrapper.try_into().unwrap();
+        let tool_call: ToolCall = tool_call_wrapper.into_tool_call();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "my raw arguments");
         assert_eq!(tool_call.id, "123");
@@ -692,7 +698,7 @@ mod tests {
             "id": "123"
         });
         let tool_call_wrapper = serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap();
-        let tool_call = TryInto::<ToolCall>::try_into(tool_call_wrapper).unwrap();
+        let tool_call = tool_call_wrapper.into_tool_call();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "{\"my\":\"arguments\"}");
         assert_eq!(tool_call.id, "123");
@@ -744,7 +750,7 @@ mod tests {
             }
         });
         let tool_call_wrapper = serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap();
-        let tool_call = TryInto::<ToolCall>::try_into(tool_call_wrapper).unwrap();
+        let tool_call = tool_call_wrapper.into_tool_call();
         assert_eq!(tool_call.arguments, "{\"role\":\"intern\"}");
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.id, "123");

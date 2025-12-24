@@ -11,9 +11,10 @@ use helpers::get_cache_options;
 pub use cli::{Args, OutputFormat};
 pub use stats::{
     EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate, EvaluatorStats,
-    PerEvaluatorStats, mean, std_deviation,
+    PerEvaluatorStats,
 };
 pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
+pub use tensorzero_core::statistics_util::{mean, std_deviation};
 pub use types::*;
 
 use tensorzero_core::cache::CacheEnabledMode;
@@ -29,6 +30,7 @@ use tensorzero_core::endpoints::datasets::v1::{
     types::{GetDatapointsRequest, ListDatapointsRequest},
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::inference::types::InputExt;
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
@@ -486,8 +488,8 @@ pub async fn run_evaluation_core_streaming(
                     }
 
                     Some(EvaluationUpdate::Success(EvaluationInfo::new(
-                        success.datapoint,
-                        success.inference_response,
+                        (*success.datapoint).clone(),
+                        (*success.inference_response).clone(),
                         success.evaluation_result,
                     )))
                 }
@@ -715,13 +717,19 @@ pub struct ProcessBatchParams {
 }
 
 /// Result of processing a single (datapoint, variant) pair.
+///
+/// Note: Fields are wrapped in `Arc` because they are shared across multiple concurrent tasks
+/// during batch processing:
+/// - `datapoint`: Shared across evaluator tasks for the same (datapoint, variant) pair
+/// - `variant`: Shared across all datapoints being evaluated against this variant
+/// - `inference_response`: Shared across evaluator tasks for the same (datapoint, variant) pair
 pub struct DatapointVariantResult {
     /// The datapoint that was evaluated
-    pub datapoint: Datapoint,
+    pub datapoint: Arc<Datapoint>,
     /// The variant that was used
     pub variant: Arc<EvaluationVariant>,
     /// The inference response
-    pub inference_response: InferenceResponse,
+    pub inference_response: Arc<InferenceResponse>,
     /// Results from all evaluators (evaluator_name -> result)
     pub evaluation_result: evaluators::EvaluationResult,
 }
@@ -880,11 +888,9 @@ pub async fn process_batch(
                 );
 
                 Ok(DatapointVariantResult {
-                    datapoint: Arc::into_inner(datapoint)
-                        .ok_or_else(|| anyhow!("Failed to unwrap datapoint Arc"))?,
-                    variant: variant.clone(),
-                    inference_response: Arc::into_inner(inference_response)
-                        .ok_or_else(|| anyhow!("Failed to unwrap inference_response Arc"))?,
+                    datapoint,
+                    variant,
+                    inference_response,
                     evaluation_result,
                 })
             });

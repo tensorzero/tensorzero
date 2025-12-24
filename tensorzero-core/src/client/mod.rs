@@ -6,6 +6,7 @@ use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
+use crate::http::TensorzeroResponseWrapper;
 use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
@@ -83,8 +84,8 @@ pub struct HTTPGateway {
 impl HTTPGateway {
     pub async fn check_http_response(
         &self,
-        resp: Result<reqwest::Response, reqwest::Error>,
-    ) -> Result<reqwest::Response, TensorZeroError> {
+        resp: Result<TensorzeroResponseWrapper, reqwest::Error>,
+    ) -> Result<TensorzeroResponseWrapper, TensorZeroError> {
         let resp = resp.map_err(|e| {
             if e.is_timeout() {
                 TensorZeroError::RequestTimeout
@@ -1094,7 +1095,8 @@ impl Client {
                         None,
                     ))
                     .await
-                    .map_err(err_to_http)?;
+                    .map_err(err_to_http)?
+                    .output;
                     match res {
                         InferenceOutput::NonStreaming(response) => {
                             Ok(InferenceOutput::NonStreaming(response))

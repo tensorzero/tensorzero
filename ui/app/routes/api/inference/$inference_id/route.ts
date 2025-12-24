@@ -1,8 +1,6 @@
 import { data, type LoaderFunctionArgs } from "react-router";
 import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { resolveModelInferences } from "~/utils/resolve.server";
-import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { logger } from "~/utils/logger";
 import type { InferenceDetailData } from "~/components/inference/InferenceDetailContent";
@@ -22,7 +20,6 @@ export async function loader({
   }
 
   try {
-    const dbClient = await getNativeDatabaseClient();
     const client = getTensorZeroClient();
 
     const inferencesPromise = client.getInferences({
@@ -32,11 +29,10 @@ export async function loader({
     const modelInferencesPromise = client
       .getModelInferences(inference_id)
       .then((response) => resolveModelInferences(response.model_inferences));
-    const demonstrationFeedbackPromise =
-      dbClient.queryDemonstrationFeedbackByInferenceId({
-        inference_id,
-        limit: 1,
-      });
+    const demonstrationFeedbackPromise = client.getDemonstrationFeedback(
+      inference_id,
+      { limit: 1 },
+    );
 
     // If there is a freshly inserted feedback, ClickHouse may take some time to
     // update the feedback table and materialized views as it is eventually consistent.
@@ -67,7 +63,7 @@ export async function loader({
 
       // Query these after polling completes to avoid race condition with materialized views
       [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
-        dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+        client.getFeedbackBoundsByTargetId(inference_id),
         client.getLatestFeedbackIdByMetric(inference_id),
       ]);
     } else {
@@ -83,7 +79,7 @@ export async function loader({
         inferencesPromise,
         modelInferencesPromise,
         demonstrationFeedbackPromise,
-        dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+        client.getFeedbackBoundsByTargetId(inference_id),
         feedbackDataPromise,
         client.getLatestFeedbackIdByMetric(inference_id),
       ]);
@@ -100,7 +96,7 @@ export async function loader({
     // Get used variants for default function
     const usedVariants =
       inference.function_name === DEFAULT_FUNCTION
-        ? await getUsedVariants(inference.function_name)
+        ? await client.getUsedVariants(inference.function_name)
         : [];
 
     const inferenceData: InferenceDetailData = {

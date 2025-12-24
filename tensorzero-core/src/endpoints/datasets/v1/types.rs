@@ -143,6 +143,8 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
             #[serde(default)]
             input: Option<Input>,
             #[serde(default, deserialize_with = "deserialize_double_option")]
+            // Expect to distinguish between an omitted field, JSON null, and a concrete value.
+            #[expect(clippy::option_option)]
             output: Option<Option<Vec<ContentBlockChatOutput>>>,
             #[serde(flatten)]
             tool_params_new: UpdateDynamicToolParamsRequest,
@@ -329,6 +331,8 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
             #[serde(default)]
             input: Option<Input>,
             #[serde(default, deserialize_with = "deserialize_double_option")]
+            // Expect to distinguish between an omitted field, JSON null, and a concrete value.
+            #[expect(clippy::option_option)]
             output: Option<Option<JsonDatapointOutputUpdate>>,
             #[serde(default)]
             output_schema: Option<Value>,

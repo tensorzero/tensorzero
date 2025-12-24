@@ -442,7 +442,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
                 let tool_refs = allowed_tool_names
                     .iter()
                     .map(|name| OpenAIResponsesToolReference::Function {
-                        name: name.to_string(),
+                        name: (*name).to_owned(),
                     })
                     .collect();
 
@@ -566,7 +566,7 @@ fn apply_inference_params(
     }
 
     if service_tier.is_some() {
-        request.service_tier = service_tier.clone();
+        request.service_tier.clone_from(service_tier);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -578,7 +578,7 @@ fn apply_inference_params(
     }
 
     if verbosity.is_some() {
-        request.text.verbosity = verbosity.clone();
+        request.text.verbosity.clone_from(verbosity);
     }
 }
 
@@ -1109,6 +1109,7 @@ pub(super) enum OpenAIResponsesStreamEvent {
 
 /// Stream function for OpenAI Responses API
 /// Similar to stream_openai but uses the Responses API streaming format
+#[expect(clippy::too_many_arguments)]
 pub fn stream_openai_responses(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
@@ -1116,6 +1117,7 @@ pub fn stream_openai_responses(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    request_id: Option<String>,
     raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
@@ -1123,18 +1125,28 @@ pub fn stream_openai_responses(
     let mut current_tool_name: Option<String> = None;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
+    let mut saw_content_block = false;
+    let mut encountered_error = false;
 
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
+                    let request_id_for_error = match &e {
+                        TensorZeroEventError::TensorZero(_) => request_id.clone(),
+                        TensorZeroEventError::EventSource(inner) => {
+                            request_id.clone().or_else(|| super::request_id_from_event_source_error(inner))
+                        }
+                    };
                     match e {
                         TensorZeroEventError::TensorZero(e) => {
-                            yield Err(e);
+                            encountered_error = true;
+                            yield Err(super::with_request_id(e, request_id_for_error.as_deref()));
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
+                            encountered_error = true;
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -1182,6 +1194,9 @@ pub fn stream_openai_responses(
 
                         match stream_message {
                             Ok(Some(chunk)) => {
+                                if !chunk.content.is_empty() {
+                                    saw_content_block = true;
+                                }
                                 yield Ok(chunk);
                                 // Break after yielding terminal events
                                 if is_terminal {
@@ -1190,6 +1205,7 @@ pub fn stream_openai_responses(
                             }
                             Ok(None) => continue, // Skip lifecycle events
                             Err(e) => {
+                                encountered_error = true;
                                 yield Err(e);
                                 // Break on error events too
                                 break;
@@ -1198,6 +1214,13 @@ pub fn stream_openai_responses(
                     }
                 },
             }
+        }
+        if !saw_content_block && !encountered_error {
+            tracing::warn!(
+                provider = %provider_type,
+                request_id = request_id.as_deref(),
+                "OpenAI Responses streaming response returned no content blocks"
+            );
         }
     })
 }

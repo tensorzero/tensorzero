@@ -6,13 +6,13 @@ use serde_json::Value;
 use crate::common::get_gateway_endpoint;
 
 /// Test the count evaluation runs endpoint.
-/// This tests GET /internal/evaluations/run-stats
+/// This tests GET /internal/evaluations/runs/count
 #[tokio::test]
 async fn test_count_evaluation_runs() {
     let client = Client::new();
 
     let response = client
-        .get(get_gateway_endpoint("/internal/evaluations/run-stats"))
+        .get(get_gateway_endpoint("/internal/evaluations/runs/count"))
         .send()
         .await
         .unwrap();

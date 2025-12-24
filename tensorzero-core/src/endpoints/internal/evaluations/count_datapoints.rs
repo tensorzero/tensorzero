@@ -10,7 +10,7 @@ use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
-/// Handler for `GET /internal/evaluations/datapoint-count`
+/// Handler for `GET /internal/evaluations/datapoint_count`
 ///
 /// Returns the count of unique datapoints across the specified evaluation runs.
 #[axum::debug_handler(state = AppStateData)]

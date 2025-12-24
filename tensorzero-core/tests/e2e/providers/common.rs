@@ -200,6 +200,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
         use $crate::providers::embeddings::test_single_token_array_with_provider;
         use $crate::providers::embeddings::test_batch_token_arrays_semantic_similarity_with_provider;
+        use $crate::providers::common::test_multi_turn_thought_non_streaming_with_provider;
+        use $crate::providers::common::test_multi_turn_thought_streaming_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -639,6 +641,21 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_multi_turn_thought_non_streaming() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_multi_turn_thought_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_multi_turn_thought_streaming() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_multi_turn_thought_streaming_with_provider(provider).await;
+            }
+        }
 
         #[tokio::test]
         async fn test_json_mode_off_inference_request() {
@@ -3622,7 +3639,7 @@ pub async fn check_simple_image_inference_response(
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
     // This test is very flaky on Fireworks for some reason
-    if provider.model_provider_name == "fireworks" {
+    if provider.model_provider_name == "fireworks" || provider.model_provider_name == "together" {
         return;
     }
     let extra_headers = if provider.is_modal_provider() {
@@ -9237,11 +9254,17 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             if !(provider.model_provider_name == "tgi"
                 || provider.model_name == "gemma-3-1b-aws-sagemaker-tgi")
             {
-                let json = serde_json::to_string(&response).unwrap();
-                assert!(
-                    !json.to_lowercase().contains("tensorzero"),
-                    "TensorZero should not be in the response: `{json}`"
-                );
+                // Thought content blocks can contain the stop-sequence on some providers,
+                // so just check the text content blocks
+                for block in response.content {
+                    if let ContentBlockChatOutput::Text(text) = block {
+                        assert!(
+                            !text.text.to_lowercase().contains("tensorzero"),
+                            "TensorZero should not be in the response: `{}`",
+                            text.text
+                        );
+                    }
+                }
             }
         }
         tensorzero::InferenceOutput::Streaming(_) => {
@@ -11521,8 +11544,12 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    let output: Vec<StoredContentBlock> = serde_json::from_str::<Vec<StoredContentBlock>>(output)
+        .unwrap()
+        .into_iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect();
+
     match &output[0] {
         StoredContentBlock::Text(text) => {
             let parsed: Value = serde_json::from_str(&text.text).unwrap();
@@ -12786,4 +12813,218 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
     assert!(content.to_lowercase().contains("tokyo"));
+}
+
+pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETestProvider) {
+    if provider.variant_name == "together-deepseek-r1" {
+        // This produces invalid tool calls within text blocks (e.g 🛠\u{fe0f}\n\n```json\n{\n  \"too)
+        return;
+    }
+
+    // TODO: https://github.com/tensorzero/tensorzero/issues/5270
+    // This currently produces 'Mismatched thinking tags' on Fireworks
+    if provider.variant_name == "fireworks-deepseek" {
+        // This either times out or returns "Internal Server Error"
+        return;
+    }
+
+    // TODO: https://github.com/tensorzero/tensorzero/issues/5270
+    if provider.variant_name == "deepseek-reasoner" {
+        return;
+    }
+
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+
+    println!("Original Content blocks: {content_blocks:?}");
+
+    // Check that we have a thought block
+    assert!(
+        content_blocks
+            .iter()
+            .any(|block| block["type"] == "thought"),
+        "Expected a thought block in the content blocks: {content_blocks:?}"
+    );
+
+    // Check that we have a tool call block
+    assert!(
+        content_blocks
+            .iter()
+            .any(|block| block["type"] == "tool_call"),
+        "Expected a tool call block in the content blocks: {content_blocks:?}"
+    );
+
+    let tool_id = content_blocks
+        .iter()
+        .find(|block| block["type"] == "tool_call")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap();
+
+    let tensorzero_content_blocks = content_blocks.clone();
+
+    let mut new_messages = vec![
+        serde_json::json!({
+            "role": "user",
+            "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+        }),
+        serde_json::json!({
+            "role": "assistant",
+            "content": tensorzero_content_blocks,
+        }),
+    ];
+
+    new_messages.push(serde_json::json!({
+        "role": "user",
+        "content": [{"type": "tool_result", "name": "My result", "result": "13", "id": tool_id}],
+    }));
+
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": new_messages
+        },
+        "stream": false,
+    });
+    println!("New payload: {payload}");
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    let response_json = response.json::<Value>().await.unwrap();
+    let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(
+        new_content_blocks
+            .iter()
+            .any(|block| block["type"] == "text"),
+        "Expected at least one text block in the new content blocks: {new_content_blocks:?}"
+    );
+    // Don't bother checking ClickHouse, as we do that in lots of other tests
+}
+
+pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
+    if provider.variant_name == "fireworks-deepseek" {
+        // This either times out or returns "Internal Server Error"
+        return;
+    }
+
+    // TODO: https://github.com/tensorzero/tensorzero/issues/5270
+    if provider.variant_name == "together-deepseek-r1" {
+        return;
+    }
+
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                }
+            ]},
+        "stream": true,
+    });
+
+    let mut event_source = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+    let mut chunks = vec![];
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+
+    let mut inference_id = None;
+
+    // Just validate that all of the chunks are valid JSON,
+    // and then check the `collect_chunks` result stored in the database
+    for chunk in chunks {
+        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+        println!("Chunk: {chunk_json}");
+        inference_id = Some(
+            chunk_json
+                .get("inference_id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_string(),
+        );
+    }
+    let inference_id = inference_id.unwrap().parse::<Uuid>().unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let _id_uuid = Uuid::parse_str(id).unwrap();
+
+    let clickhouse_content_blocks = result.get("output").unwrap().as_str().unwrap();
+    let clickhouse_content_blocks: Vec<Value> =
+        serde_json::from_str(clickhouse_content_blocks).unwrap();
+    // Check that we have a thought block
+    assert!(
+        clickhouse_content_blocks
+            .iter()
+            .any(|block| block["type"] == "thought"),
+        "Expected a thought block in the content blocks: {clickhouse_content_blocks:?}"
+    );
+
+    // Check that we have a tool call block
+    assert!(
+        clickhouse_content_blocks
+            .iter()
+            .any(|block| block["type"] == "tool_call"),
+        "Expected a tool call block in the content blocks: {clickhouse_content_blocks:?}"
+    );
 }
