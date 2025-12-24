@@ -267,11 +267,15 @@ impl Variant for DiclConfig {
             )
             .await?;
 
-        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model().to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(self.model(), clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model().to_string(),
+                })
+            })?;
 
         // Instantiate the InferModelRequestArgs struct
         let args = InferModelRequestArgs {
@@ -332,11 +336,15 @@ impl Variant for DiclConfig {
             )
             .await?;
 
-        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model().to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(self.model(), clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model().to_string(),
+                })
+            })?;
 
         // Actually run the inference
         let (inference_result_stream, mut model_used_info) = infer_model_request_stream(
@@ -558,7 +566,7 @@ impl DiclConfig {
         })?;
 
         let embedding_model = embedding_models
-            .get(self.embedding_model())
+            .get(self.embedding_model(), clients.relay.as_ref())
             .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {

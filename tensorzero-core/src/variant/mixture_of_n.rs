@@ -661,11 +661,14 @@ async fn inner_fuse_candidates<'a>(
         }
         .into());
     }
-    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model().to_string(),
-        })
-    })?;
+    let model_config = models
+        .get(fuser.inner.model(), clients.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: fuser.inner.model().to_string(),
+            })
+        })?;
     let infer_model_request_args = InferModelRequestArgs {
         request: inference_request,
         model_name: fuser.inner.model().clone(),
@@ -714,11 +717,14 @@ async fn inner_fuse_candidates_stream<'a>(
         }
         .into());
     }
-    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model().to_string(),
-        })
-    })?;
+    let model_config = models
+        .get(fuser.inner.model(), clients.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: fuser.inner.model().to_string(),
+            })
+        })?;
     infer_model_request_stream(
         inference_request,
         fuser.inner.model().clone(),

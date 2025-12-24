@@ -42,6 +42,7 @@ use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWi
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::rate_limiting::ScopeInfo;
+use crate::relay::TensorzeroRelay;
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
@@ -512,9 +513,14 @@ pub async fn poll_batch_inference_handler(
         BatchStatus::Pending => {
             // For now, we don't support dynamic API keys for batch inference
             let credentials = InferenceCredentials::default();
-            let response =
-                poll_batch_inference(&batch_request, http_client, &config.models, &credentials)
-                    .await?;
+            let response = poll_batch_inference(
+                &batch_request,
+                http_client,
+                &config.models,
+                &credentials,
+                config.gateway.relay.as_ref(),
+            )
+            .await?;
             let response = write_poll_batch_inference(
                 &clickhouse_connection_info,
                 &batch_request,
@@ -682,11 +688,12 @@ async fn poll_batch_inference(
     http_client: TensorzeroHttpClient,
     models: &ModelTable,
     credentials: &InferenceCredentials,
+    relay: Option<&TensorzeroRelay>,
 ) -> Result<PollBatchInferenceResponse, Error> {
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
-        .get(batch_request.model_name.as_ref())
+        .get(batch_request.model_name.as_ref(), relay)
         .await?
         .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidModel {

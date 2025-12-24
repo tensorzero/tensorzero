@@ -516,11 +516,14 @@ async fn inner_select_best_candidate<'a>(
         // Return the selected index and None for the model inference result
         return Ok((Some(selected_index), None));
     }
-    let model_config = models.get(evaluator.inner.model()).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::UnknownModel {
-            name: evaluator.inner.model().to_string(),
-        })
-    })?;
+    let model_config = models
+        .get(evaluator.inner.model(), clients.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: evaluator.inner.model().to_string(),
+            })
+        })?;
     let model_inference_response = evaluator
         .inner
         .retries()

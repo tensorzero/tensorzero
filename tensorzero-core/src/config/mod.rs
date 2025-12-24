@@ -1,6 +1,7 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
+use crate::relay::TensorzeroRelay;
 use crate::utils::deprecation_warning;
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
@@ -1467,8 +1468,9 @@ impl Config {
     pub async fn get_model<'a>(
         &'a self,
         model_name: &Arc<str>,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<CowNoClone<'a, ModelConfig>, Error> {
-        self.models.get(model_name).await?.ok_or_else(|| {
+        self.models.get(model_name, relay).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })
