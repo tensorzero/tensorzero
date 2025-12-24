@@ -1,4 +1,5 @@
 use crate::config::SchemaData;
+use crate::config::gateway::GatewayConfig;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::experimentation::ExperimentationConfig;
@@ -9,7 +10,6 @@ use crate::variant::{
     BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
     DiclConfigPyClass, MixtureOfNConfigPyClass, VariantConfig,
 };
-use chrono::Duration;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
 #[cfg(feature = "pyo3")]
@@ -621,7 +621,7 @@ impl FunctionConfig {
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
-        global_outbound_http_timeout: &Duration,
+        gateway_config: &GatewayConfig,
     ) -> Result<(), Error> {
         // Validate each variant
         for (variant_name, variant) in self.variants() {
@@ -641,8 +641,8 @@ impl FunctionConfig {
                     templates,
                     function_name,
                     variant_name,
-                    global_outbound_http_timeout,
-                    None,
+                    &gateway_config.global_outbound_http_timeout,
+                    gateway_config.relay.as_ref(),
                 )
                 .await?;
         }

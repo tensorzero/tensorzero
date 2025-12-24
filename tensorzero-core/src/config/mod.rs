@@ -1318,7 +1318,7 @@ impl Config {
                         &config.embedding_models,
                         &config.templates,
                         &evaluation_function_name,
-                        &config.gateway.global_outbound_http_timeout,
+                        &config.gateway,
                     )
                     .await?;
                 config
@@ -1378,7 +1378,7 @@ impl Config {
                     &self.embedding_models,
                     &self.templates,
                     function_name,
-                    &self.gateway.global_outbound_http_timeout,
+                    &self.gateway,
                 )
                 .await?;
         }
