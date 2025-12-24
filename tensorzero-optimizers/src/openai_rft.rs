@@ -8,7 +8,7 @@ use tokio::try_join;
 use url::Url;
 
 use tensorzero_core::{
-    config::Config,
+    config::{Config, provider_types::ProviderTypesConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -209,6 +209,7 @@ impl JobHandle for OpenAIRFTJobHandle {
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
+        _provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error> {
         let openai_credentials: OpenAICredentials = OpenAIKind
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)

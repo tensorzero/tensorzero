@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{Config, UninitializedVariantConfig},
+    config::{Config, UninitializedVariantConfig, provider_types::ProviderTypesConfig},
     db::{
         clickhouse::{
             ClickHouseConnectionInfo, ExternalDataInfo, clickhouse_client::ClickHouseClientType,
@@ -179,6 +179,7 @@ impl JobHandle for DiclOptimizationJobHandle {
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
         _default_credentials: &ProviderTypeDefaultCredentials,
+        _provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error> {
         // DICL optimization is synchronous, so it's always complete once launched
         let _ = (client, credentials);

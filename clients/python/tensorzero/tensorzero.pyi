@@ -303,20 +303,12 @@ class GCPVertexGeminiSFTConfig:
         self,
         *,
         model: str,
-        bucket_name: str,
-        project_id: str,
-        region: str,
         learning_rate_multiplier: Optional[float] = None,
         adapter_size: Optional[int] = None,
         n_epochs: Optional[int] = None,
         export_last_checkpoint_only: Optional[bool] = None,
-        credentials: Optional[str] = None,
-        api_base: Optional[str] = None,
         seed: Optional[int] = None,
-        service_account: Optional[str] = None,
-        kms_key_name: Optional[str] = None,
         tuned_model_display_name: Optional[str] = None,
-        bucket_path_prefix: Optional[str] = None,
     ) -> None: ...
 
 @final
