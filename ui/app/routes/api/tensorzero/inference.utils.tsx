@@ -11,7 +11,6 @@ import type {
   StoredInference,
 } from "~/types/tensorzero";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
   ClientInferenceParams,
@@ -22,6 +21,7 @@ import type {
   JsonInferenceOutput,
   ChatInferenceDatapoint,
   JsonInferenceDatapoint,
+  InferenceResponse,
 } from "~/types/tensorzero";
 import type {
   ZodInput,

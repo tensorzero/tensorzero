@@ -16,7 +16,8 @@ pub struct GetVariantSamplingProbabilitiesParams {
 }
 
 /// Response containing variant sampling probabilities
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GetVariantSamplingProbabilitiesResponse {
     /// Map of variant names to their sampling probabilities (0.0 to 1.0)
     /// Probabilities sum to 1.0

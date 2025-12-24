@@ -1789,8 +1789,7 @@ pub(crate) fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct StaleDatasetResponse {
     pub num_staled_datapoints: u64,
 }

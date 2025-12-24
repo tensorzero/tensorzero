@@ -25,6 +25,9 @@ export async function fetchClientInference(
   // The API endpoint takes form data so we need to stringify it and send as data
   const formData = new FormData();
   formData.append("data", JSON.stringify(request));
+  // TODO(shuyangli): Change this to use inference through the gateway. The Node inference route
+  // currently contains custom handling for injecting extra inference options that we need to
+  // replicate in the client.
   const response = await fetch("/api/tensorzero/inference", {
     method: "POST",
     body: formData,

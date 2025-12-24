@@ -15,8 +15,8 @@ export const getMetricName = (feedback: FeedbackRow) => {
 };
 
 export const inferenceUsageSchema = z.object({
-  input_tokens: z.number(),
-  output_tokens: z.number(),
+  input_tokens: z.number().nullish(),
+  output_tokens: z.number().nullish(),
 });
 
 export type InferenceUsage = z.infer<typeof inferenceUsageSchema>;

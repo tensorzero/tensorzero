@@ -7,7 +7,6 @@ TODO(shuyangli): Figure out a way to generate the HTTP client, possibly from Sch
 import { z } from "zod";
 import { BaseTensorZeroClient } from "./base-client";
 import {
-  contentBlockChatOutputSchema,
   thoughtContentSchema,
   ZodJsonValueSchema,
   type ZodStoragePath,
@@ -33,6 +32,7 @@ import type {
   MetricsWithFeedbackResponse,
   Datapoint,
   GetDatapointCountResponse,
+  GetVariantSamplingProbabilitiesResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
   GetDemonstrationFeedbackResponse,
@@ -79,6 +79,8 @@ import type {
   GetEvaluationStatisticsResponse,
   VariantPerformancesResponse,
   InferenceCountByVariant,
+  ClientInferenceParams,
+  InferenceResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -224,79 +226,79 @@ export const ToolChoiceSchema = z.union([
 ]);
 export type ToolChoice = z.infer<typeof ToolChoiceSchema>;
 
-/**
- * Inference parameters allow runtime overrides for a given variant.
- */
-export const InferenceParamsSchema = z.record(z.record(ZodJsonValueSchema));
-export type InferenceParams = z.infer<typeof InferenceParamsSchema>;
+// /**
+//  * Inference parameters allow runtime overrides for a given variant.
+//  */
+// export const InferenceParamsSchema = z.record(z.record(ZodJsonValueSchema));
+// export type InferenceParams = z.infer<typeof InferenceParamsSchema>;
 
-/**
- * The request type for inference. These fields correspond roughly
- * to the Rust `Params` struct.
- *
- * Exactly one of `function_name` or `model_name` should be provided.
- */
-export const InferenceRequestSchema = z.object({
-  function_name: z.string().optional(),
-  model_name: z.string().optional(),
-  episode_id: z.string().optional(),
-  input: InputSchema,
-  stream: z.boolean().optional(),
-  params: InferenceParamsSchema.optional(),
-  variant_name: z.string().optional(),
-  dryrun: z.boolean().optional(),
-  tags: z.record(z.string()).optional(),
-  allowed_tools: z.array(z.string()).optional(),
-  additional_tools: z.array(ToolSchema).optional(),
-  tool_choice: ToolChoiceSchema.optional(),
-  parallel_tool_calls: z.boolean().optional(),
-  output_schema: ZodJsonValueSchema.optional(),
-  credentials: z.record(z.string()).optional(),
-});
-export type InferenceRequest = z.infer<typeof InferenceRequestSchema>;
+// /**
+//  * The request type for inference. These fields correspond roughly
+//  * to the Rust `Params` struct.
+//  *
+//  * Exactly one of `function_name` or `model_name` should be provided.
+//  */
+// export const InferenceRequestSchema = z.object({
+//   function_name: z.string().optional(),
+//   model_name: z.string().optional(),
+//   episode_id: z.string().optional(),
+//   input: InputSchema,
+//   stream: z.boolean().optional(),
+//   params: InferenceParamsSchema.optional(),
+//   variant_name: z.string().optional(),
+//   dryrun: z.boolean().optional(),
+//   tags: z.record(z.string()).optional(),
+//   allowed_tools: z.array(z.string()).optional(),
+//   additional_tools: z.array(ToolSchema).optional(),
+//   tool_choice: ToolChoiceSchema.optional(),
+//   parallel_tool_calls: z.boolean().optional(),
+//   output_schema: ZodJsonValueSchema.optional(),
+//   credentials: z.record(z.string()).optional(),
+// });
+// export type InferenceRequest = z.infer<typeof InferenceRequestSchema>;
 
-/**
- * Inference responses vary based on the function type.
- */
-export const ChatInferenceResponseSchema = z.object({
-  inference_id: z.string(),
-  episode_id: z.string(),
-  variant_name: z.string(),
-  content: z.array(contentBlockChatOutputSchema),
-  usage: z
-    .object({
-      input_tokens: z.number(),
-      output_tokens: z.number(),
-    })
-    .optional(),
-});
-export type ChatInferenceResponse = z.infer<typeof ChatInferenceResponseSchema>;
+// /**
+//  * Inference responses vary based on the function type.
+//  */
+// export const ChatInferenceResponseSchema = z.object({
+//   inference_id: z.string(),
+//   episode_id: z.string(),
+//   variant_name: z.string(),
+//   content: z.array(contentBlockChatOutputSchema),
+//   usage: z
+//     .object({
+//       input_tokens: z.number(),
+//       output_tokens: z.number(),
+//     })
+//     .optional(),
+// });
+// export type ChatInferenceResponse = z.infer<typeof ChatInferenceResponseSchema>;
 
-export const JSONInferenceResponseSchema = z.object({
-  inference_id: z.string(),
-  episode_id: z.string(),
-  variant_name: z.string(),
-  output: z.object({
-    raw: z.string(),
-    parsed: ZodJsonValueSchema.nullable(),
-  }),
-  usage: z
-    .object({
-      input_tokens: z.number(),
-      output_tokens: z.number(),
-    })
-    .optional(),
-});
-export type JSONInferenceResponse = z.infer<typeof JSONInferenceResponseSchema>;
+// export const JSONInferenceResponseSchema = z.object({
+//   inference_id: z.string(),
+//   episode_id: z.string(),
+//   variant_name: z.string(),
+//   output: z.object({
+//     raw: z.string(),
+//     parsed: ZodJsonValueSchema.nullable(),
+//   }),
+//   usage: z
+//     .object({
+//       input_tokens: z.number(),
+//       output_tokens: z.number(),
+//     })
+//     .optional(),
+// });
+// export type JSONInferenceResponse = z.infer<typeof JSONInferenceResponseSchema>;
 
-/**
- * The overall inference response is a union of chat and JSON responses.
- */
-export const InferenceResponseSchema = z.union([
-  ChatInferenceResponseSchema,
-  JSONInferenceResponseSchema,
-]);
-export type InferenceResponse = z.infer<typeof InferenceResponseSchema>;
+// /**
+//  * The overall inference response is a union of chat and JSON responses.
+//  */
+// export const InferenceResponseSchema = z.union([
+//   ChatInferenceResponseSchema,
+//   JSONInferenceResponseSchema,
+// ]);
+// export type InferenceResponse = z.infer<typeof InferenceResponseSchema>;
 
 /**
  * Feedback requests attach a metric value to a given inference or episode.
@@ -336,6 +338,29 @@ export interface GetCumulativeFeedbackTimeseriesResponse {
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient extends BaseTensorZeroClient {
+  /**
+   * Performs an inference request.
+   * @param request - The inference request payload.
+   * @returns A promise that resolves with the inference response.
+   * @throws Error if streaming is requested (not supported) or if the request fails.
+   */
+  async inference(request: ClientInferenceParams): Promise<InferenceResponse> {
+    if (request.stream) {
+      // TODO(#5394): support streaming inference.
+      throw new Error("Streaming inference is not supported from the UI");
+    }
+    const response = await this.fetch("/inference", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as InferenceResponse;
+    return body;
+  }
+
   /**
    * Sends feedback for a particular inference or episode.
    * @param request - The feedback request payload.
@@ -670,6 +695,25 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   }
 
   /**
+   * Marks all datapoints in a dataset as deleted in a dataset by setting their `staled_at` timestamp.
+   * @param datasetName - The name of the dataset containing the datapoints
+   * @returns A promise that resolves with the response containing the number of marked datapoints
+   * @throws Error if the dataset name is invalid, the IDs array is empty, or the request fails
+   */
+  async deleteDataset(datasetName: string): Promise<DeleteDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}`;
+    const response = await this.fetch(endpoint, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as DeleteDatapointsResponse;
+    return body;
+  }
+
+  /**
    * Clones datapoints to a target dataset, preserving all fields except id and dataset_name.
    * @param targetDatasetName - The name of the target dataset to clone datapoints to
    * @param datapointIds - Array of datapoint UUIDs to clone
@@ -961,6 +1005,25 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as MetricsWithFeedbackResponse;
+  }
+
+  /**
+   * Fetches variant sampling probabilities for a function from the gateway.
+   * @param functionName - The name of the function to get variant sampling probabilities for
+   * @returns A promise that resolves with variant sampling probabilities
+   * @throws Error if the request fails
+   */
+  async getVariantSamplingProbabilities(
+    functionName: string,
+  ): Promise<GetVariantSamplingProbabilitiesResponse> {
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_sampling_probabilities`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetVariantSamplingProbabilitiesResponse;
   }
 
   /**
