@@ -154,19 +154,19 @@ See [Set up auth for TensorZero](/operations/set-up-auth-for-tensorzero) for det
 
 Add `api_key_location` to your edge gateway's configuration and provide the relevant credentials.
 
-For example, let's configure the gateway to look for the API key in the `TENSORZERO_RELAY_GATEWAY_API_KEY` environment variable:
+For example, let's configure the gateway to look for the API key in the `TENSORZERO_RELAY_API_KEY` environment variable:
 
 ```toml title="edge-config/tensorzero.toml"
 [gateway.relay]
 # ...
-api_key_location = "env::TENSORZERO_RELAY_GATEWAY_API_KEY"
+api_key_location = "env::TENSORZERO_RELAY_API_KEY"
 # ...
 ```
 
 Finally, provide the API key to the edge gateway:
 
 ```bash
-TENSORZERO_RELAY_GATEWAY_API_KEY="sk-t0-..."
+TENSORZERO_RELAY_API_KEY="sk-t0-..."
 ```
 
 See [Configuration Reference](/gateway/configuration-reference) for more details on `api_key_location`.
