@@ -198,6 +198,7 @@ async fn test_relay_mode_allows_invalid_credentials_shorthand() {
         ])
         .env_remove("RUST_LOG")
         .env("OPENAI_API_KEY", &openai_api_key) // Downstream HAS the API key
+        .env("TENSORZERO_E2E_CREDENTIAL_VALIDATION", "1")
         .kill_on_drop(true)
         .spawn()
         .unwrap();
@@ -229,6 +230,7 @@ async fn test_relay_mode_allows_invalid_credentials_shorthand() {
         ])
         .env_remove("RUST_LOG")
         .env_remove("OPENAI_API_KEY") // Edge does NOT have the API key
+        .env("TENSORZERO_E2E_CREDENTIAL_VALIDATION", "1")
         .kill_on_drop(true)
         .spawn()
         .unwrap();
