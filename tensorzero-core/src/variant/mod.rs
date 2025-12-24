@@ -67,6 +67,7 @@ impl VariantInfo {
     }
 }
 
+/// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
 #[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -75,6 +76,7 @@ pub enum VariantConfig {
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
+    /// DEPRECATED (#5298 / 2026.2+): Use `chat_completion` with reasoning instead.
     ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
 }
 

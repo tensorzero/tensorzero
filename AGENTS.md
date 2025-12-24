@@ -12,9 +12,11 @@
 
 ## For APIs
 
+- Use `_` instead of `-` in API routes.
 - Prefer using `#[cfg_attr(test, ts_rs::TS)]` for ts-rs exports.
 - For any Option types visible from the frontend, include `#[cfg_attr(test, ts(export, optional_fields))]` and `#[serde(skip_serializing_if = "Option::is_none")]` so None values are not returned over the wire. In very rare cases we may decide do return `null`s, but in general we want to omit them.
 - Some tests make HTTP requests to the gateway; to start the gateway, you can run `cargo run-e2e`. (This gateway has dependencies on some docker containers, and it's appropriate to ask the user to run `docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up`.)
+- We use RFC 3339 as the standard format for datetime.
 
 ## The responsibility between API handlers and database interfaces
 

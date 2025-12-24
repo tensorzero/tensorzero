@@ -566,7 +566,7 @@ fn apply_inference_params(
     }
 
     if service_tier.is_some() {
-        request.service_tier = service_tier.clone();
+        request.service_tier.clone_from(service_tier);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -578,7 +578,7 @@ fn apply_inference_params(
     }
 
     if verbosity.is_some() {
-        request.text.verbosity = verbosity.clone();
+        request.text.verbosity.clone_from(verbosity);
     }
 }
 

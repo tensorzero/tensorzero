@@ -25,6 +25,7 @@ pub mod providers; // providers for the inference and / or optimization services
 pub mod rate_limiting; // utilities for rate limiting
 pub mod relay;
 pub mod serde_util; // utilities for working with serde
+pub mod statistics_util; // statistical utilities (confidence intervals, etc.)
 pub mod stored_inference; // types and methods for working with stored inferences
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers; // e2e test utilities for external crates

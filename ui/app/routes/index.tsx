@@ -19,7 +19,6 @@ import {
   Playground,
   Model,
 } from "~/components/icons/Icons";
-import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
 import type { Route } from "./+types/index";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
@@ -101,7 +100,7 @@ export async function loader() {
   const httpClient = getTensorZeroClient();
 
   // Create the promises
-  const countsInfoPromise = countInferencesByFunction();
+  const countsInfoPromise = httpClient.listFunctionsWithInferenceCount();
   const episodesPromise = httpClient.queryEpisodeTableBounds();
   const datasetMetadataPromise = httpClient.listDatasets({});
   const numEvaluationRunsPromise = httpClient.countEvaluationRuns();
@@ -117,7 +116,10 @@ export async function loader() {
 
   // Create derived promises - these will be stable references
   const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
-    const total = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+    const total = countsInfo.reduce(
+      (acc, curr) => acc + curr.inference_count,
+      0,
+    );
     return `${total.toLocaleString()} inferences`;
   });
 

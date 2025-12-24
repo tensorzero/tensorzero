@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getStaledWindowQuery, uuidv7ToTimestamp } from "./helpers";
+import { uuidv7ToTimestamp } from "./helpers";
 
 describe("uuidv7ToTimestamp", () => {
   it("converts a valid UUIDv7 to the correct Date", () => {
@@ -30,27 +30,5 @@ describe("uuidv7ToTimestamp", () => {
     expect(() => uuidv7ToTimestamp(uuidNotV7)).toThrow(
       "Invalid UUID version. Expected version 7.",
     );
-  });
-});
-
-describe("getStaledWindowQuery", () => {
-  it("should return an empty string when provided an empty array", () => {
-    const result = getStaledWindowQuery([]);
-    expect(result).toBe("");
-  });
-
-  it("should generate the correct clause for a single timestamp", () => {
-    const testDate = new Date("2022-01-01T00:00:00.000Z");
-    const result = getStaledWindowQuery([testDate]);
-    const expected = `(toUnixTimestamp64Milli(UUIDv7ToDateTime(id)) < 1640995200000 AND (staled_at IS NULL OR toUnixTimestamp64Milli(staled_at) > 1640995200000))`;
-    expect(result).toBe(expected);
-  });
-
-  it("should combine multiple clauses with OR", () => {
-    const date1 = new Date("2022-01-01T00:00:00.000Z");
-    const date2 = new Date("2022-06-01T12:30:00.000Z");
-    const result = getStaledWindowQuery([date1, date2]);
-    const expected = `(toUnixTimestamp64Milli(UUIDv7ToDateTime(id)) < 1640995200000 AND (staled_at IS NULL OR toUnixTimestamp64Milli(staled_at) > 1640995200000)) OR (toUnixTimestamp64Milli(UUIDv7ToDateTime(id)) < 1654086600000 AND (staled_at IS NULL OR toUnixTimestamp64Milli(staled_at) > 1654086600000))`;
-    expect(result).toBe(expected);
   });
 });

@@ -1,7 +1,4 @@
-import {
-  listInferencesWithPagination,
-  countInferencesByFunction,
-} from "~/utils/clickhouse/inference.server";
+import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import InferencesTable, { type InferencesData } from "./InferencesTable";
 import { data, isRouteErrorResponse } from "react-router";
@@ -48,9 +45,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const needsFullInferences = search_query || filters;
 
   // Create promise for total count - will be streamed to the component
-  const totalInferencesPromise = countInferencesByFunction().then(
-    (countsInfo) => countsInfo.reduce((acc, curr) => acc + curr.count, 0),
-  );
+  const client = getTensorZeroClient();
+  const totalInferencesPromise = client
+    .listFunctionsWithInferenceCount()
+    .then((countsInfo) =>
+      countsInfo.reduce((acc, curr) => acc + curr.inference_count, 0),
+    );
 
   // Create promise for inferences data - will be streamed to the component
   const inferencesDataPromise: Promise<InferencesData> = (async () => {

@@ -125,6 +125,7 @@ impl AutopilotClientBuilder {
 // =============================================================================
 
 /// Client for the TensorZero Autopilot API.
+#[derive(Debug)]
 pub struct AutopilotClient {
     http_client: reqwest::Client,
     sse_http_client: reqwest::Client,
@@ -256,7 +257,7 @@ impl AutopilotClient {
         &self,
         session_id: Uuid,
         params: StreamEventsParams,
-    ) -> Result<impl Stream<Item = Result<Event, AutopilotError>>, AutopilotError> {
+    ) -> Result<impl Stream<Item = Result<Event, AutopilotError>> + use<>, AutopilotError> {
         let mut url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events/stream"))?;

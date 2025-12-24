@@ -8,7 +8,10 @@ use std::{
 };
 
 use crate::{
-    config::{provider_types::ProviderTypesConfig, skip_credential_validation},
+    config::{
+        e2e_skip_credential_validation, provider_types::ProviderTypesConfig,
+        skip_credential_validation,
+    },
     error::{Error, ErrorDetails},
     model::{
         Credential, CredentialLocation, CredentialLocationWithFallback, UninitializedProviderConfig,
@@ -561,8 +564,7 @@ fn load_credential(
             Ok(value) => Ok(Credential::Static(SecretString::from(value))),
             Err(_) => {
                 if skip_credential_validation() {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
+                    if e2e_skip_credential_validation() {
                         tracing::warn!(
                             "You are missing the credentials required for a model provider of type {provider_type} (environment variable `{key_name}` is unset), so the associated tests will likely fail.",
                         );
@@ -582,8 +584,7 @@ fn load_credential(
                 Ok(path) => path,
                 Err(_) => {
                     if skip_credential_validation() {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
+                        if e2e_skip_credential_validation() {
                             tracing::warn!(
                                 "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
                                 env_key,
@@ -606,8 +607,7 @@ fn load_credential(
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                 Err(e) => {
                     if skip_credential_validation() {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
+                        if e2e_skip_credential_validation() {
                             tracing::warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                                 provider_type,
@@ -628,8 +628,7 @@ fn load_credential(
             Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
             Err(e) => {
                 if skip_credential_validation() {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
+                    if e2e_skip_credential_validation() {
                         tracing::warn!(
                             "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                             provider_type,

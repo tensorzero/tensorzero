@@ -4,24 +4,11 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-// Re-export types from tensorzero-core that InputMessage depends on
-pub use tensorzero_core::inference::types::{
-    // File types
-    Base64File,
-    File,
-    // Content types for InputMessageContent
-    InputMessage,
-    InputMessageContent,
-    ObjectStoragePointer,
-    RawText,
-    Role,
-    Template,
-    Text,
-    Thought,
-    Unknown,
-    UrlFile,
+// Re-export types from tensorzero-types that InputMessage depends on
+pub use tensorzero_types::{
+    Base64File, File, InputMessage, InputMessageContent, ObjectStoragePointer, RawText, Role,
+    Template, Text, Thought, ToolCall, ToolCallWrapper, ToolResult, Unknown, UrlFile,
 };
-pub use tensorzero_core::tool::{ToolCallWrapper, ToolResult};
 use uuid::Uuid;
 
 // =============================================================================
@@ -29,7 +16,8 @@ use uuid::Uuid;
 // =============================================================================
 
 /// A session representing an autopilot conversation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Session {
     pub id: Uuid,
     pub organization_id: String,
@@ -40,7 +28,8 @@ pub struct Session {
 }
 
 /// An event within a session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Event {
     pub id: Uuid,
     pub payload: EventPayload,
@@ -49,24 +38,78 @@ pub struct Event {
 }
 
 /// The payload of an event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     Message(InputMessage),
-    StatusUpdate { status_update: StatusUpdate },
+    StatusUpdate {
+        status_update: StatusUpdate,
+    },
+    ToolCall(ToolCall),
+    ToolCallAuthorization(ToolCallAuthorization),
+    ToolResult {
+        tool_call_event_id: Uuid,
+        outcome: ToolOutcome,
+    },
+    #[serde(other)]
+    Other,
 }
 
-/// Payload for an assistant message event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AssistantMessagePayload {
-    pub content: Vec<serde_json::Value>,
+impl EventPayload {
+    /// Returns true if this payload type can be written by API clients.
+    /// System-generated types (StatusUpdate, ToolCall) return false.
+    pub fn is_client_writable(&self) -> bool {
+        matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
+            || matches!(
+                self,
+                EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult { .. }
+            )
+    }
 }
 
 /// A status update within a session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum StatusUpdate {
     Text { text: String },
+}
+
+// =============================================================================
+// Tool Call Types
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolCallDecisionSource {
+    Ui,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+pub struct ToolCallAuthorization {
+    pub source: ToolCallDecisionSource,
+    pub tool_call_event_id: Uuid,
+    pub status: ToolCallAuthorizationStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolCallAuthorizationStatus {
+    Approved,
+    Rejected { reason: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolOutcome {
+    Success(ToolResult),
+    Failure {
+        message: String,
+    },
+    Missing,
+    #[serde(other)]
+    Other,
 }
 
 // =============================================================================
@@ -74,7 +117,8 @@ pub enum StatusUpdate {
 // =============================================================================
 
 /// Request body for creating an event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateEventRequest {
     pub deployment_id: Uuid,
     pub tensorzero_version: String,
@@ -83,37 +127,47 @@ pub struct CreateEventRequest {
     ///
     /// When provided (for non-nil `session_id`), the server validates that this ID matches
     /// the most recent `user_message` event in the session. This prevents duplicate events
-    /// from being created if a client retries a request that already succeeded.
+    /// from being created if a client retries a create user request that already succeeded.
+    /// This should only apply to Message events.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_user_message_event_id: Option<Uuid>,
 }
 
 /// Query parameters for listing events.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListEventsParams {
     /// Maximum number of events to return. Defaults to 20.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Cursor for pagination: return events with id < before.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<Uuid>,
 }
 
 /// Query parameters for listing sessions.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListSessionsParams {
     /// Maximum number of sessions to return. Defaults to 20.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Offset for pagination.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
 }
 
 /// Query parameters for streaming events.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StreamEventsParams {
     /// Resume streaming from this event ID (exclusive).
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_event_id: Option<Uuid>,
 }
@@ -123,22 +177,30 @@ pub struct StreamEventsParams {
 // =============================================================================
 
 /// Response from creating an event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateEventResponse {
     pub event_id: Uuid,
     pub session_id: Uuid,
 }
 
 /// Response from listing events.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListEventsResponse {
     pub events: Vec<Event>,
-    /// The most recent `user_message` event in this session.
+    /// The most recent `message` event with role `user` in this session.
     pub previous_user_message_event_id: Uuid,
+    /// All tool calls in Event history that do not have responses.
+    /// These may be duplicates of some of the values in events.
+    /// All EventPayloads in these Events should be of type ToolCall.
+    #[serde(default)]
+    pub pending_tool_calls: Vec<Event>,
 }
 
 /// Response from listing sessions.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListSessionsResponse {
     pub sessions: Vec<Session>,
 }
