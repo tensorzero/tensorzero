@@ -41,7 +41,8 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
     env_file:
       - .env
-      - .env-gateway
+      - path: .env-gateway
+        required: false
     ports:
       - "3000:3000"
     extra_hosts:
