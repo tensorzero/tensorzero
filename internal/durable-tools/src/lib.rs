@@ -67,19 +67,18 @@
 //!     }
 //!
 //!     type LlmParams = SearchParams;
+//!     type SideInfo = ();
+//!     type Output = SearchResult;
 //! }
 //!
 //! #[async_trait]
 //! impl SimpleTool for SearchTool {
-//!     type SideInfo = ();
-//!     type Output = SearchResult;
-//!
 //!     async fn execute(
 //!         llm_params: <Self as ToolMetadata>::LlmParams,
-//!         _side_info: Self::SideInfo,
+//!         _side_info: <Self as ToolMetadata>::SideInfo,
 //!         ctx: SimpleToolContext<'_>,
 //!         idempotency_key: &str,
-//!     ) -> ToolResult<Self::Output> {
+//!     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 //!         // Implementation...
 //!         Ok(SearchResult { results: vec![] })
 //!     }
@@ -112,18 +111,17 @@
 //!     }
 //!
 //!     type LlmParams = ResearchParams;
+//!     type SideInfo = ();
+//!     type Output = ResearchResult;
 //! }
 //!
 //! #[async_trait]
 //! impl TaskTool for ResearchTool {
-//!     type SideInfo = ();
-//!     type Output = ResearchResult;
-//!
 //!     async fn execute(
 //!         llm_params: <Self as ToolMetadata>::LlmParams,
-//!         _side_info: Self::SideInfo,
+//!         _side_info: <Self as ToolMetadata>::SideInfo,
 //!         ctx: &mut ToolContext<'_>,
-//!     ) -> ToolResult<Self::Output> {
+//!     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 //!         // Call the search tool
 //!         let _search = ctx
 //!             .call_tool("search", serde_json::json!({"query": llm_params.topic}))
@@ -194,14 +192,13 @@ pub mod spawn {
 
 // Re-export main types
 pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext};
+pub use durable_tools_spawn::TaskToolParams;
 pub use error::{ToolError, ToolResult};
 pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 pub use simple_tool::SimpleTool;
-// Re-export TaskToolParams from spawn crate for backward compatibility
-pub use durable_tools_spawn::TaskToolParams;
-pub use task_tool::{SideInfo, TaskTool, TaskToolAdapter};
-pub use tool_metadata::ToolMetadata;
+pub use task_tool::{TaskTool, TaskToolAdapter};
+pub use tool_metadata::{SideInfo, ToolMetadata};
 
 // Re-export inference trait and helpers
 pub use inference::{

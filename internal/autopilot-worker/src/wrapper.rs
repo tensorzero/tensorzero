@@ -69,6 +69,8 @@ impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
     }
 
     type LlmParams = T::LlmParams;
+    type SideInfo = AutopilotSideInfo<T::SideInfo>;
+    type Output = T::Output;
 }
 
 #[async_trait]
@@ -77,9 +79,6 @@ where
     T: TaskTool,
     T::SideInfo: Default + PartialEq,
 {
-    type SideInfo = AutopilotSideInfo<T::SideInfo>;
-    type Output = T::Output;
-
     async fn execute(
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
