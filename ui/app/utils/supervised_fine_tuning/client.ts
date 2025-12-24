@@ -75,6 +75,7 @@ export async function launch_sft_job(
       mtp_enabled: null,
       mtp_num_draft_tokens: null,
       mtp_freeze_base_model: null,
+      deploy_after_training: false,
       credentials: null,
       api_base: fireworksNativeSFTBase,
       account_id: accountId,

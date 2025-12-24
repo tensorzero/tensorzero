@@ -132,6 +132,9 @@ train_samples, val_samples = train_val_split(
 optimization_config = FireworksSFTConfig(
     model=MODEL_NAME,
     account_id=account_id,
+    # As of December 16th 2025 Fireworks does not support serverless LoRA; deploy manually after training.
+    # Leave this as False to fine-tune only.
+    deploy_after_training=False,
 )
 
 job_handle = t0.experimental_launch_optimization(
@@ -163,7 +166,9 @@ while True:
     sleep(10)
 
 # %% [markdown]
-# Once the fine-tuning job is complete, you can add the fine-tuned model to your config file.
+# Once the fine-tuning job is complete, deploy the model in Fireworks:
+# https://docs.fireworks.ai/fine-tuning/fine-tuning-models
+# After deployment, you can add the fine-tuned model to your config file.
 
 # %%
 fine_tuned_model = job_info.output["routing"][0]
@@ -179,11 +184,11 @@ model_config = {
 print(toml.dumps(model_config))
 
 # %% [markdown]
-# Finally, add a new variant to your function to use the fine-tuned model.
+# Finally, add a new variant to your function to use the fine-tuned model once it is deployed.
 #
 
 # %% [markdown]
-# You're all set!
+# You're all set once the deployment finishes on Fireworks.
 #
 # You can change the weight to enable a gradual rollout of the new model.
 #

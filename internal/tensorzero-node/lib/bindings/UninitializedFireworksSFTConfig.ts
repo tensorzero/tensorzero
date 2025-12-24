@@ -18,6 +18,7 @@ export type UninitializedFireworksSFTConfig = {
   mtp_enabled: boolean | null;
   mtp_num_draft_tokens: number | null;
   mtp_freeze_base_model: boolean | null;
+  deploy_after_training: boolean | null;
   credentials: CredentialLocationWithFallback | null;
   account_id: string;
   api_base: string | null;

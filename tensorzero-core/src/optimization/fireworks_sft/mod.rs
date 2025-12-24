@@ -13,6 +13,10 @@ use crate::{
     error::Error, model::CredentialLocationWithFallback, providers::fireworks::FireworksCredentials,
 };
 
+fn default_deploy_after_training() -> bool {
+    false
+}
+
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FireworksSFTConfig {
@@ -32,6 +36,8 @@ pub struct FireworksSFTConfig {
     pub mtp_enabled: Option<bool>,
     pub mtp_num_draft_tokens: Option<usize>,
     pub mtp_freeze_base_model: Option<bool>,
+    #[serde(default = "default_deploy_after_training")]
+    pub deploy_after_training: bool,
     #[serde(skip)]
     pub credentials: FireworksCredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
@@ -60,6 +66,8 @@ pub struct UninitializedFireworksSFTConfig {
     pub mtp_enabled: Option<bool>,
     pub mtp_num_draft_tokens: Option<usize>,
     pub mtp_freeze_base_model: Option<bool>,
+    #[serde(default)]
+    pub deploy_after_training: Option<bool>,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocationWithFallback>,
     pub account_id: String,
@@ -78,7 +86,7 @@ impl std::fmt::Display for UninitializedFireworksSFTConfig {
 impl UninitializedFireworksSFTConfig {
     #[expect(clippy::too_many_arguments)]
     #[new]
-    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None, credentials=None, account_id, api_base=None))]
+    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None, deploy_after_training=None, credentials=None, account_id, api_base=None))]
     pub fn new(
         model: String,
         early_stop: Option<bool>,
@@ -96,6 +104,7 @@ impl UninitializedFireworksSFTConfig {
         mtp_enabled: Option<bool>,
         mtp_num_draft_tokens: Option<usize>,
         mtp_freeze_base_model: Option<bool>,
+        deploy_after_training: Option<bool>,
         credentials: Option<String>,
         account_id: String,
         api_base: Option<String>,
@@ -127,6 +136,7 @@ impl UninitializedFireworksSFTConfig {
             mtp_enabled,
             mtp_num_draft_tokens,
             mtp_freeze_base_model,
+            deploy_after_training,
             credentials,
             account_id,
             api_base,
@@ -151,11 +161,12 @@ impl UninitializedFireworksSFTConfig {
     /// :param mtp_enabled: Whether to enable MTP (Multi-Token Prediction).
     /// :param mtp_num_draft_tokens: The number of draft tokens for MTP.
     /// :param mtp_freeze_base_model: Whether to freeze the base model for MTP.
+    /// :param deploy_after_training: Whether to automatically deploy the fine-tuned model after training. Defaults to false.
     /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::FIREWORKS_API_KEY`. See docs for more details.
     /// :param account_id: The account ID to use for the fine-tuning job.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None, credentials=None, account_id, api_base=None))]
+    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None, deploy_after_training=None, credentials=None, account_id, api_base=None))]
     fn __init__(
         this: Py<Self>,
         model: String,
@@ -174,6 +185,7 @@ impl UninitializedFireworksSFTConfig {
         mtp_enabled: Option<bool>,
         mtp_num_draft_tokens: Option<usize>,
         mtp_freeze_base_model: Option<bool>,
+        deploy_after_training: Option<bool>,
         credentials: Option<String>,
         account_id: String,
         api_base: Option<String>,
@@ -204,6 +216,9 @@ impl UninitializedFireworksSFTConfig {
             mtp_enabled: self.mtp_enabled,
             mtp_num_draft_tokens: self.mtp_num_draft_tokens,
             mtp_freeze_base_model: self.mtp_freeze_base_model,
+            deploy_after_training: self
+                .deploy_after_training
+                .unwrap_or_else(default_deploy_after_training),
             api_base: self.api_base.unwrap_or_else(|| FIREWORKS_API_BASE.clone()),
             account_id: self.account_id,
             credentials: FireworksKind
@@ -222,6 +237,8 @@ pub struct FireworksSFTJobHandle {
     pub account_id: String,
     pub job_url: Url,
     pub job_path: String,
+    #[serde(default = "default_deploy_after_training")]
+    pub deploy_after_training: bool,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocationWithFallback>,
 }
