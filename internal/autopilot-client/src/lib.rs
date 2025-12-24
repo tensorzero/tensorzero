@@ -44,7 +44,9 @@ mod client;
 mod error;
 mod types;
 
-pub use client::{AutopilotClient, AutopilotClientBuilder, DEFAULT_BASE_URL};
+pub use client::{
+    AutopilotClient, AutopilotClientBuilder, DEFAULT_BASE_URL, DEFAULT_SPAWN_QUEUE_NAME,
+};
 pub use error::AutopilotError;
 pub use types::{
     Base64File, CreateEventRequest, CreateEventResponse, ErrorDetail, ErrorResponse, Event,

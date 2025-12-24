@@ -24,6 +24,8 @@ use crate::types::{
 
 /// Default base URL for the Autopilot API.
 pub const DEFAULT_BASE_URL: &str = "https://api.autopilot.tensorzero.com";
+/// Default name for the durable queue used by autopilot
+pub const DEFAULT_SPAWN_QUEUE_NAME: &str = "autopilot";
 
 /// Returns the default base URL as a parsed [`Url`].
 ///
@@ -35,7 +37,6 @@ fn default_base_url() -> Url {
     Url::parse(DEFAULT_BASE_URL).expect("DEFAULT_BASE_URL is a valid URL")
 }
 
-const DEFAULT_SPAWN_QUEUE_NAME: &str = "autopilot";
 const DEFAULT_TOOL_CALL_CACHE_CAPACITY: u64 = 256;
 const DEFAULT_TOOL_CALL_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
 
