@@ -71,6 +71,13 @@ services:
       - "host.docker.internal:host-gateway"
 ```
 
+<Warning>
+
+If you're planning to set up ClickHouse or Postgres for both gateways, make sure they use separate logical databases.
+It's fine for them to share the same deployment or cluster.
+
+</Warning>
+
 </Step>
 
 <Step title="Make an inference request to the edge gateway">
@@ -180,7 +187,7 @@ You can circumvent the relay for specific requests by configuring a custom model
 routing = ["openai"]
 skip_relay = true
 
-[models.my_local_model.providers.openai]
+[models.gpt_5_edge.providers.openai]
 type = "openai"
 model_name = "openai::gpt-5"
 ```
