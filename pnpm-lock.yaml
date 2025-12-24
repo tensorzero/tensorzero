@@ -8,7 +8,6 @@ overrides:
   glob: '>=10.5.0'
   js-yaml: '>=4.1.1'
   on-headers: '>=1.1.0'
-  storybook: '>=9.1.17'
   valibot: '>=1.2.0'
 
 importers:
@@ -353,7 +352,7 @@ importers:
         specifier: ^0.6.13
         version: 0.6.13(prettier@3.6.2)
       storybook:
-        specifier: '>=9.1.17'
+        specifier: ^10.1.10
         version: 10.1.10(@testing-library/dom@10.4.0)(prettier@3.6.2)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
       storybook-addon-remix-react-router:
         specifier: ^6.0.0
@@ -570,7 +569,7 @@ packages:
     resolution: {integrity: sha512-hc0HO9GAV9pxqDE6fTVOV5KeLpTiCfV8Jrpk5ogKLiIgeq2C+NPjpt74YnrZTjiK8E19fYcMP+2WY9ZtX7zHmw==}
     engines: {node: '>=20.0.0', yarn: '>=1.22.18'}
     peerDependencies:
-      storybook: '>=9.1.17'
+      storybook: ^0.0.0-0 || ^9.0.0 || ^9.1.0-0 || ^9.2.0-0 || ^10.0.0-0 || ^10.1.0-0 || ^10.2.0-0 || ^10.3.0-0
 
   '@clickhouse/client-common@1.11.2':
     resolution: {integrity: sha512-H4ECHqaipzMgiZKqpb1Z4N3Ofq+lVTCn8I59XsSynqrsfR4jWZD3PipXVvIzMpDmTMvrlJWrOwAdm0DMNiMQbA==}
@@ -2056,12 +2055,12 @@ packages:
   '@storybook/addon-docs@10.1.10':
     resolution: {integrity: sha512-PSJVtawnGNrEkeLJQn9TTdeqrtDij8onvmnFtfkDaFG5IaUdQaLX9ibJ4gfxYakq+BEtlCcYiWErNJcqDrDluQ==}
     peerDependencies:
-      storybook: '>=9.1.17'
+      storybook: ^10.1.10
 
   '@storybook/addon-onboarding@10.1.10':
     resolution: {integrity: sha512-CtfoHqgdm63NsGyYBcr1UhJV6m213ckU3aKTYJRS+3NLkx18BIME9biJwiTiRK4Pm4jbc69V21JzLumFcaiJbw==}
     peerDependencies:
-      storybook: '>=9.1.17'
+      storybook: ^10.1.10
 
   '@storybook/addon-vitest@10.1.10':
     resolution: {integrity: sha512-dh5ZesgvZY619nkweo9fbORQQSU0hIFQnqlcnU1DrGXumt9SzVHF3/2Lxe+HGHLHK6Sk8jZp/16BjZ/zxSG61Q==}
@@ -2069,7 +2068,7 @@ packages:
       '@vitest/browser': ^3.0.0 || ^4.0.0
       '@vitest/browser-playwright': ^4.0.0
       '@vitest/runner': ^3.0.0 || ^4.0.0
-      storybook: '>=9.1.17'
+      storybook: ^10.1.10
       vitest: ^3.0.0 || ^4.0.0
     peerDependenciesMeta:
       '@vitest/browser':
@@ -2084,7 +2083,7 @@ packages:
   '@storybook/builder-vite@10.1.10':
     resolution: {integrity: sha512-6m6zOyDhHLynv3lvkH70s1YoIkIFPhbpGsBKvHchRLrZLe8hCPeafIFLfZRPoD4yIPwBS6rWbjMsSvBMFlR+ag==}
     peerDependencies:
-      storybook: '>=9.1.17'
+      storybook: ^10.1.10
       vite: ^5.0.0 || ^6.0.0 || ^7.0.0
 
   '@storybook/csf-plugin@10.1.10':
@@ -2092,7 +2091,7 @@ packages:
     peerDependencies:
       esbuild: '*'
       rollup: '*'
-      storybook: '>=9.1.17'
+      storybook: ^10.1.10
       vite: '*'
       webpack: '*'
     peerDependenciesMeta:
@@ -2119,14 +2118,14 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: '>=9.1.17'
+      storybook: ^10.1.10
 
   '@storybook/react-vite@10.1.10':
     resolution: {integrity: sha512-6kE4/88YuwO07P0DR6caKNDNvCB/VnpimPmj4Jv6qmqrBgnoOOiXHIKyHJD+EjNyrbbwv4ygG01RVEajpjQaDA==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: '>=9.1.17'
+      storybook: ^10.1.10
       vite: ^5.0.0 || ^6.0.0 || ^7.0.0
 
   '@storybook/react@10.1.10':
@@ -2134,7 +2133,7 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: '>=9.1.17'
+      storybook: ^10.1.10
       typescript: '>= 4.9.x'
     peerDependenciesMeta:
       typescript:
@@ -3208,7 +3207,7 @@ packages:
     resolution: {integrity: sha512-ITr6Aq3buR/DuDATkq1BafUVJLybyo676fY+tj9Zjd1Ak+UXBAMQcQ++tiBVVHm1RqADwM3b1o6bnWHK2fPPKw==}
     peerDependencies:
       eslint: '>=8'
-      storybook: '>=9.1.17'
+      storybook: ^10.1.10
 
   eslint-scope@8.4.0:
     resolution: {integrity: sha512-sNXOfKCn74rt8RICKMvJS7XKV/Xk9kA7DyJr8mJik3S7Cwgy3qlkkmyS2uQB3jiJg6VNdZd/pDBJu0nvG2NlTg==}
@@ -4590,7 +4589,7 @@ packages:
       react: '>=18.0.0'
       react-dom: '>=18.0.0'
       react-router: ^7.0.2
-      storybook: '>=9.1.17'
+      storybook: ^10.0.0
     peerDependenciesMeta:
       react:
         optional: true
