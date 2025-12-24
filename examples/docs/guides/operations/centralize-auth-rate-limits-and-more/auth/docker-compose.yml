@@ -28,6 +28,7 @@ services:
     environment:
       # API key used to authenticate with the relay gateway
       TENSORZERO_RELAY_API_KEY: ${TENSORZERO_RELAY_API_KEY:-}
+      OPENAI_API_KEY: dummy # TODO: DO NOT MERGE
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

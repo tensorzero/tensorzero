@@ -6,4 +6,4 @@ See:
 
 - **`simple/`:** A minimal example with inference
 - **`auth/`:** An example with TensorZero API keys
-- **`dynamic_credentials`:** An example with dynamic provider credentials
+- **`dynamic-credentials/`:** An example with dynamic provider credentials
