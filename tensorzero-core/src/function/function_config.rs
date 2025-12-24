@@ -642,6 +642,7 @@ impl FunctionConfig {
                     function_name,
                     variant_name,
                     global_outbound_http_timeout,
+                    None,
                 )
                 .await?;
         }

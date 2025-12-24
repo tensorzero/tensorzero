@@ -690,7 +690,6 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         Ok(InferenceOutput::Streaming(Box::pin(stream)))
     } else {
         let deferred_tasks = inference_clients.deferred_tasks.clone();
-        println!("Here1");
         let result = variant
             .infer(
                 Arc::clone(&resolved_input),

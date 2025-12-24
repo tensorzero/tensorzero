@@ -39,6 +39,7 @@ use crate::{
         ContentBlockChatOutput, InferenceResult, InferenceResultStream, JsonInferenceOutput,
     },
     minijinja_util::TemplateConfig,
+    relay::TensorzeroRelay,
 };
 
 use super::{
@@ -374,6 +375,7 @@ impl Variant for DiclConfig {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         // TODO (#360): Add the clickhouse connection to this interface
         // Run a count() query on the DynamicInContextLearningExample table
@@ -392,7 +394,7 @@ impl Variant for DiclConfig {
         // Validate that the generation model and embedding model are valid
         models.validate(self.model())?;
         let embedding_model = embedding_models
-            .get(self.embedding_model()).await?
+            .get(self.embedding_model(), relay).await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
