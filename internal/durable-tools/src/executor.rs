@@ -1,4 +1,4 @@
-use durable::{DurableBuilder, SpawnOptions, SpawnResult, Worker, WorkerOptions};
+use durable::{DurableBuilder, DurableError, SpawnOptions, SpawnResult, Worker, WorkerOptions};
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
@@ -236,7 +236,7 @@ impl ToolExecutor {
     }
 
     /// Start a worker that processes tool tasks.
-    pub async fn start_worker(&self, options: WorkerOptions) -> Worker {
+    pub async fn start_worker(&self, options: WorkerOptions) -> Result<Worker, DurableError> {
         self.durable.start_worker(options).await
     }
 

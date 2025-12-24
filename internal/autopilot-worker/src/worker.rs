@@ -88,8 +88,8 @@ impl AutopilotWorker {
     }
 
     /// Start the worker and run until cancellation.
-    pub async fn run(&self, cancel_token: CancellationToken) {
-        let worker = self.executor.start_worker(WorkerOptions::default()).await;
+    pub async fn run(&self, cancel_token: CancellationToken) -> Result<()> {
+        let worker = self.executor.start_worker(WorkerOptions::default()).await?;
 
         tokio::select! {
             () = cancel_token.cancelled() => {
@@ -97,6 +97,7 @@ impl AutopilotWorker {
                 worker.shutdown().await;
             }
         }
+        Ok(())
     }
 }
 
