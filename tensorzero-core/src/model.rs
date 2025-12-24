@@ -3477,7 +3477,7 @@ mod tests {
         // Shorthand models are not added to the model table
         assert_eq!(model_table.static_model_len(), 0);
         let model_config = model_table
-            .get("dummy::gpt-4o")
+            .get("dummy::gpt-4o", None)
             .await
             .unwrap()
             .expect("Missing dummy model");
