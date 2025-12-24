@@ -59,18 +59,17 @@ use crate::tool_metadata::ToolMetadata;
 ///     }
 ///
 ///     type LlmParams = ResearchParams;
+///     type SideInfo = ();
+///     type Output = ResearchResult;
 /// }
 ///
 /// #[async_trait]
 /// impl TaskTool for ResearchTool {
-///     type SideInfo = ();
-///     type Output = ResearchResult;
-///
 ///     async fn execute(
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
-///         _side_info: Self::SideInfo,
+///         _side_info: <Self as ToolMetadata>::SideInfo,
 ///         ctx: &mut ToolContext<'_>,
-///     ) -> ToolResult<Self::Output> {
+///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Call other tools
 ///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic})).await?;
 ///
@@ -123,18 +122,17 @@ use crate::tool_metadata::ToolMetadata;
 ///     }
 ///
 ///     type LlmParams = GitHubSearchParams;
+///     type SideInfo = GitHubCredentials;
+///     type Output = Vec<String>;
 /// }
 ///
 /// #[async_trait]
 /// impl TaskTool for GitHubSearchTool {
-///     type SideInfo = GitHubCredentials;
-///     type Output = Vec<String>;
-///
 ///     async fn execute(
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
-///         side_info: Self::SideInfo,
+///         side_info: <Self as ToolMetadata>::SideInfo,
 ///         ctx: &mut ToolContext<'_>,
-///     ) -> ToolResult<Self::Output> {
+///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Use llm_params.query (from LLM)
 ///         // Use side_info.api_token (hidden from LLM)
 ///         Ok(vec![])

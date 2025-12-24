@@ -61,19 +61,18 @@ use crate::tool_metadata::ToolMetadata;
 ///     }
 ///
 ///     type LlmParams = SearchParams;
+///     type SideInfo = ();
+///     type Output = SearchResult;
 /// }
 ///
 /// #[async_trait]
 /// impl SimpleTool for SearchTool {
-///     type SideInfo = ();
-///     type Output = SearchResult;
-///
 ///     async fn execute(
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
-///         _side_info: Self::SideInfo,
+///         _side_info: <Self as ToolMetadata>::SideInfo,
 ///         ctx: SimpleToolContext<'_>,
 ///         idempotency_key: &str,
-///     ) -> ToolResult<Self::Output> {
+///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Use idempotency_key for external API calls
 ///         let results = external_search_api(&llm_params.query, idempotency_key).await?;
 ///         Ok(SearchResult { results })

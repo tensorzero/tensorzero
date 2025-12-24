@@ -67,19 +67,18 @@
 //!     }
 //!
 //!     type LlmParams = SearchParams;
+//!     type SideInfo = ();
+//!     type Output = SearchResult;
 //! }
 //!
 //! #[async_trait]
 //! impl SimpleTool for SearchTool {
-//!     type SideInfo = ();
-//!     type Output = SearchResult;
-//!
 //!     async fn execute(
 //!         llm_params: <Self as ToolMetadata>::LlmParams,
-//!         _side_info: Self::SideInfo,
+//!         _side_info: <Self as ToolMetadata>::SideInfo,
 //!         ctx: SimpleToolContext<'_>,
 //!         idempotency_key: &str,
-//!     ) -> ToolResult<Self::Output> {
+//!     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 //!         // Implementation...
 //!         Ok(SearchResult { results: vec![] })
 //!     }
@@ -112,18 +111,17 @@
 //!     }
 //!
 //!     type LlmParams = ResearchParams;
+//!     type SideInfo = ();
+//!     type Output = ResearchResult;
 //! }
 //!
 //! #[async_trait]
 //! impl TaskTool for ResearchTool {
-//!     type SideInfo = ();
-//!     type Output = ResearchResult;
-//!
 //!     async fn execute(
 //!         llm_params: <Self as ToolMetadata>::LlmParams,
-//!         _side_info: Self::SideInfo,
+//!         _side_info: <Self as ToolMetadata>::SideInfo,
 //!         ctx: &mut ToolContext<'_>,
-//!     ) -> ToolResult<Self::Output> {
+//!     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 //!         // Call the search tool
 //!         let _search = ctx
 //!             .call_tool("search", serde_json::json!({"query": llm_params.topic}))
