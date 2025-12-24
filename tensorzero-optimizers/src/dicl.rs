@@ -332,7 +332,7 @@ async fn process_embedding_batch(
 
     let embedding_model_config = config
         .embedding_models
-        .get(model_name, None)
+        .get(model_name, config.gateway.relay.as_ref())
         .await?
         .ok_or_else(|| {
             Error::new(ErrorDetails::Config {
