@@ -16,8 +16,8 @@ members = [
     "internal/tensorzero-unsafe-helpers",
     "internal/minijinja-utils",
     "internal/autopilot-client",
-    "internal/durable-tools-spawn",
     "internal/autopilot-tools",
+    "internal/durable-tools-spawn",
     "internal/durable-tools",
     "internal/tensorzero-types",
     "internal/autopilot-worker",
@@ -151,6 +151,7 @@ cloned_instead_of_copied = "deny"
 inefficient_to_string = "deny"
 assigning_clones = "deny"
 stable_sort_primitive = "deny"
+ref_option = "deny"
 
 # The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
 default_trait_access = "allow"

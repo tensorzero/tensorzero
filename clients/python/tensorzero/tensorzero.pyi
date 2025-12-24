@@ -939,6 +939,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         stored_samples: Sequence[Union[StoredInference, Datapoint]],
         variants: Dict[str, str],
+        concurrency: Optional[int] = None,
     ) -> List[RenderedSample]:
         """
         Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
@@ -954,6 +955,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param stored_samples: A list of stored samples (datapoints or inferences) to render.
         :param variants: A mapping from function name to variant name.
+        :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
         :return: A list of rendered samples.
         """
         ...
@@ -1485,6 +1487,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         stored_samples: Sequence[Union[StoredInference, Datapoint]],
         variants: Dict[str, str],
+        concurrency: Optional[int] = None,
     ) -> List[RenderedSample]:
         """
         Render a list of stored samples into a list of rendered stored samples.
@@ -1500,6 +1503,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param stored_samples: A list of stored samples to render.
         :param variants: A mapping from function name to variant name.
+        :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
         :return: A list of rendered samples.
         """
 

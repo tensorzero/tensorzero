@@ -26,6 +26,8 @@ pub trait ToolMetadata: Send + Sync + 'static {
     fn parameters_schema() -> ToolResult<Schema>;
 
     type LlmParams: Serialize + DeserializeOwned + Send + 'static;
+    type SideInfo: SideInfo;
+    type Output: Serialize + DeserializeOwned + Send + 'static;
 }
 ```
 
@@ -36,14 +38,11 @@ For complex, durable operations that may need to call other tools or checkpoint 
 ```rust
 #[async_trait]
 pub trait TaskTool: ToolMetadata {
-    type SideInfo: SideInfo;
-    type Output: Serialize + DeserializeOwned + Send + 'static;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        side_info: Self::SideInfo,
+        side_info: <Self as ToolMetadata>::SideInfo,
         ctx: &mut ToolContext<'_>,
-    ) -> ToolResult<Self::Output>;
+    ) -> ToolResult<<Self as ToolMetadata>::Output>;
 }
 ```
 
@@ -54,15 +53,12 @@ For simple, stateless operations like API calls or database queries:
 ```rust
 #[async_trait]
 pub trait SimpleTool: ToolMetadata {
-    type SideInfo: SideInfo;
-    type Output: Serialize + DeserializeOwned + Send + 'static;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        side_info: Self::SideInfo,
+        side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,
         idempotency_key: &str,
-    ) -> ToolResult<Self::Output>;
+    ) -> ToolResult<<Self as ToolMetadata>::Output>;
 }
 ```
 
@@ -134,19 +130,18 @@ impl ToolMetadata for SearchTool {
     }
 
     type LlmParams = SearchParams;
+    type SideInfo = ();
+    type Output = SearchResult;
 }
 
 #[async_trait]
 impl SimpleTool for SearchTool {
-    type SideInfo = ();
-    type Output = SearchResult;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        _side_info: Self::SideInfo,
+        _side_info: <Self as ToolMetadata>::SideInfo,
         _ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
-    ) -> ToolResult<Self::Output> {
+    ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Implementation...
         Ok(SearchResult { results: vec![] })
     }
@@ -175,18 +170,17 @@ impl ToolMetadata for ResearchTool {
     }
 
     type LlmParams = ResearchParams;
+    type SideInfo = ();
+    type Output = ResearchResult;
 }
 
 #[async_trait]
 impl TaskTool for ResearchTool {
-    type SideInfo = ();
-    type Output = ResearchResult;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        _side_info: Self::SideInfo,
+        _side_info: <Self as ToolMetadata>::SideInfo,
         ctx: &mut ToolContext<'_>,
-    ) -> ToolResult<Self::Output> {
+    ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Call another tool
         let _search = ctx
             .call_tool("search", serde_json::json!({"query": llm_params.topic}))

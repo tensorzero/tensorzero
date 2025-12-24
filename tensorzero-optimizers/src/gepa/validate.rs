@@ -152,7 +152,7 @@ pub fn validate_gepa_config(
 /// Validates the stored_output field of a RenderedSample
 ///
 /// Returns Ok(()) if valid, Err(reason) if invalid
-fn validate_stored_output(stored_output: &Option<StoredOutput>) -> Result<(), String> {
+fn validate_stored_output(stored_output: Option<&StoredOutput>) -> Result<(), String> {
     // Check if stored_output is None
     if stored_output.is_none() {
         return Err("stored_output is None".to_string());
@@ -293,7 +293,7 @@ pub fn validate_examples(examples: Vec<RenderedSample>) -> Result<Vec<RenderedSa
 
     for sample in examples {
         // Validate stored_output and stored_input.messages
-        let validation_result = validate_stored_output(&sample.stored_output)
+        let validation_result = validate_stored_output(sample.stored_output.as_ref())
             .and_then(|()| validate_stored_input_messages(&sample.stored_input.messages));
 
         match validation_result {
@@ -683,7 +683,7 @@ mod tests {
 
     #[test]
     fn test_validate_stored_output_none() {
-        let result = validate_stored_output(&None);
+        let result = validate_stored_output(None);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "stored_output is None");
     }
@@ -697,7 +697,7 @@ mod tests {
             parsed: None,
         }));
 
-        let result = validate_stored_output(&output);
+        let result = validate_stored_output(output.as_ref());
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "JsonInferenceOutput.parsed is None");
     }
@@ -706,7 +706,7 @@ mod tests {
     fn test_validate_stored_output_chat_empty() {
         let output = Some(StoredOutput::Chat(vec![]));
 
-        let result = validate_stored_output(&output);
+        let result = validate_stored_output(output.as_ref());
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
@@ -722,7 +722,7 @@ mod tests {
             },
         )]));
 
-        let result = validate_stored_output(&output);
+        let result = validate_stored_output(output.as_ref());
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Text block has empty text"));
     }
@@ -741,7 +741,7 @@ mod tests {
             },
         )]));
 
-        let result = validate_stored_output(&output);
+        let result = validate_stored_output(output.as_ref());
         assert!(result.is_err());
         assert!(
             result
@@ -763,7 +763,7 @@ mod tests {
             },
         )]));
 
-        let result = validate_stored_output(&output);
+        let result = validate_stored_output(output.as_ref());
         assert!(result.is_err());
         assert!(
             result
@@ -780,7 +780,7 @@ mod tests {
             },
         )]));
 
-        let result = validate_stored_output(&output);
+        let result = validate_stored_output(output.as_ref());
         assert!(result.is_ok());
     }
 
@@ -795,7 +795,7 @@ mod tests {
         )]));
 
         // Unknown blocks should be accepted
-        let result = validate_stored_output(&output);
+        let result = validate_stored_output(output.as_ref());
         assert!(result.is_ok());
     }
 

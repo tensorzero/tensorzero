@@ -227,6 +227,8 @@ services:
       XAI_API_KEY: ${XAI_API_KEY:-}
       # Buildkite analytics
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
+      # Flaky tests to skip (nextest filter expression, e.g. "test(hyperbolic)|test(tgi)")
+      CARGO_NEXTEST_FLAKY_TESTS: ${CARGO_NEXTEST_FLAKY_TESTS:-}
     volumes:
       - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
       - ./config:/app/tensorzero-core/tests/e2e/config:ro

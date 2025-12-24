@@ -330,16 +330,15 @@ async fn process_embedding_batch(
         encoding_format: EmbeddingEncodingFormat::Float,
     };
 
-    let embedding_model_config =
-        config
-            .embedding_models
-            .get(model_name)
-            .await?
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("embedding model '{model_name}' not found in configuration",),
-                })
-            })?;
+    let embedding_model_config = config
+        .embedding_models
+        .get(model_name, config.gateway.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!("embedding model '{model_name}' not found in configuration",),
+            })
+        })?;
 
     let tags = Arc::new(HashMap::default());
 

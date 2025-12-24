@@ -35,6 +35,7 @@ use crate::{
     function::FunctionConfig,
     inference::types::{InferenceResult, InferenceResultStream},
     minijinja_util::TemplateConfig,
+    relay::TensorzeroRelay,
     variant::chat_completion::ChatCompletionConfig,
 };
 
@@ -242,6 +243,7 @@ impl Variant for BestOfNSamplingConfig {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
@@ -258,6 +260,7 @@ impl Variant for BestOfNSamplingConfig {
                 function_name,
                 candidate,
                 global_outbound_http_timeout,
+                relay,
             ))
             .await
             .map_err(|e| {
@@ -278,6 +281,7 @@ impl Variant for BestOfNSamplingConfig {
                 function_name,
                 variant_name,
                 global_outbound_http_timeout,
+                relay,
             )
             .await?;
         Ok(())
@@ -516,11 +520,14 @@ async fn inner_select_best_candidate<'a>(
         // Return the selected index and None for the model inference result
         return Ok((Some(selected_index), None));
     }
-    let model_config = models.get(evaluator.inner.model()).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::UnknownModel {
-            name: evaluator.inner.model().to_string(),
-        })
-    })?;
+    let model_config = models
+        .get(evaluator.inner.model(), clients.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: evaluator.inner.model().to_string(),
+            })
+        })?;
     let model_inference_response = evaluator
         .inner
         .retries()
