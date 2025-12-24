@@ -1,6 +1,9 @@
 //! Autopilot API proxy endpoints.
 //!
 //! These endpoints proxy requests to the TensorZero Autopilot API.
+//!
+//! This module provides both HTTP handlers and core functions that can be called
+//! directly by the embedded client.
 
 use std::sync::Arc;
 
@@ -20,6 +23,12 @@ use autopilot_client::{
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
+// =============================================================================
+// Core Functions
+// =============================================================================
+// These functions contain the core logic and can be called directly by the
+// embedded client without going through HTTP.
+
 /// Helper to get the autopilot client or return an error.
 fn get_autopilot_client(app_state: &AppStateData) -> Result<Arc<AutopilotClient>, Error> {
     app_state
@@ -27,6 +36,51 @@ fn get_autopilot_client(app_state: &AppStateData) -> Result<Arc<AutopilotClient>
         .clone()
         .ok_or_else(|| Error::new(ErrorDetails::AutopilotUnavailable))
 }
+
+/// List sessions from the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn list_sessions(
+    autopilot_client: &AutopilotClient,
+    params: ListSessionsParams,
+) -> Result<ListSessionsResponse, Error> {
+    autopilot_client
+        .list_sessions(params)
+        .await
+        .map_err(Error::from)
+}
+
+/// List events for a session from the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn list_events(
+    autopilot_client: &AutopilotClient,
+    session_id: Uuid,
+    params: ListEventsParams,
+) -> Result<ListEventsResponse, Error> {
+    autopilot_client
+        .list_events(session_id, params)
+        .await
+        .map_err(Error::from)
+}
+
+/// Create an event in a session via the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn create_event(
+    autopilot_client: &AutopilotClient,
+    session_id: Uuid,
+    request: CreateEventRequest,
+) -> Result<CreateEventResponse, Error> {
+    autopilot_client
+        .create_event(session_id, request)
+        .await
+        .map_err(Error::from)
+}
+
+// =============================================================================
+// HTTP Handlers
+// =============================================================================
 
 /// Handler for `GET /internal/autopilot/v1/sessions`
 ///
@@ -38,7 +92,7 @@ pub async fn list_sessions_handler(
     Query(params): Query<ListSessionsParams>,
 ) -> Result<Json<ListSessionsResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
-    let response = client.list_sessions(params).await?;
+    let response = list_sessions(&client, params).await?;
     Ok(Json(response))
 }
 
@@ -53,7 +107,7 @@ pub async fn list_events_handler(
     Query(params): Query<ListEventsParams>,
 ) -> Result<Json<ListEventsResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
-    let response = client.list_events(session_id, params).await?;
+    let response = list_events(&client, session_id, params).await?;
     Ok(Json(response))
 }
 
@@ -68,7 +122,7 @@ pub async fn create_event_handler(
     StructuredJson(request): StructuredJson<CreateEventRequest>,
 ) -> Result<Json<CreateEventResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
-    let response = client.create_event(session_id, request).await?;
+    let response = create_event(&client, session_id, request).await?;
     Ok(Json(response))
 }
 

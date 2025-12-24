@@ -23,7 +23,7 @@ pub struct SearchWorkflowEvaluationRunsParams {
 const DEFAULT_SEARCH_WORKFLOW_EVALUATION_RUNS_LIMIT: u32 = 100;
 const DEFAULT_SEARCH_WORKFLOW_EVALUATION_RUNS_OFFSET: u32 = 0;
 
-/// Handler for `GET /internal/workflow-evaluations/runs/search`
+/// Handler for `GET /internal/workflow_evaluations/runs/search`
 ///
 /// Searches workflow evaluation runs by project_name and/or search_query.
 #[axum::debug_handler(state = AppStateData)]

@@ -3,7 +3,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::SideInfo;
+use crate::error::ToolResult;
 
 /// Common metadata trait for all tools (both `TaskTool` and `SimpleTool`).
 ///
@@ -38,8 +38,8 @@ use crate::SideInfo;
 ///         Cow::Borrowed("A tool that does something")
 ///     }
 ///
-///     fn parameters_schema() -> Schema {
-///         schema_for!(MyToolParams)
+///     fn parameters_schema() -> ToolResult<Schema> {
+///         Ok(schema_for!(MyToolParams))
 ///     }
 ///
 ///     type LlmParams = MyToolParams;
@@ -57,7 +57,7 @@ pub trait ToolMetadata: Send + Sync + 'static {
     fn description() -> Cow<'static, str>;
 
     /// JSON Schema for the tool's LLM-visible parameters.
-    fn parameters_schema() -> Schema;
+    fn parameters_schema() -> ToolResult<Schema>;
 
     /// The LLM-visible parameter type.
     ///
@@ -68,14 +68,6 @@ pub trait ToolMetadata: Send + Sync + 'static {
     /// - `JsonSchema` for schema generation
     /// - `Send + Sync + 'static` for thread-safety
     type LlmParams: Serialize + DeserializeOwned + JsonSchema + Send + Sync + 'static;
-
-    /// The output type for this tool (must be JSON-serializable).
-    type Output: Serialize + DeserializeOwned + Send + 'static;
-
-    /// Side information type provided at spawn time (hidden from LLM).
-    ///
-    /// Use `()` if no side information is needed.
-    type SideInfo: SideInfo;
 
     /// Execution timeout for this tool.
     ///

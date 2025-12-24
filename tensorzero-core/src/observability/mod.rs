@@ -88,6 +88,7 @@ use tracing_subscriber::{EnvFilter, Registry, filter};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
+use crate::config::gateway::MetricsConfig;
 use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
@@ -1197,8 +1198,32 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
 }
 
 /// Set up Prometheus metrics exporter
-pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
-    let metrics_handle = PrometheusBuilder::new().install_recorder().map_err(|e| {
+pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<PrometheusHandle, Error> {
+    let mut builder = PrometheusBuilder::new();
+
+    let buckets = metrics_config.and_then(|config| {
+        config
+            .tensorzero_inference_latency_overhead_seconds_histogram_buckets
+            .as_ref()
+    });
+
+    if let Some(buckets) = buckets {
+        use metrics_exporter_prometheus::Matcher;
+        builder = builder
+            .set_buckets_for_metric(
+                Matcher::Full(
+                    "tensorzero_inference_latency_overhead_seconds_histogram".to_string(),
+                ),
+                buckets,
+            )
+            .map_err(|e| {
+                Error::new(ErrorDetails::Observability {
+                    message: format!("Failed to set histogram buckets: {e}"),
+                })
+            })?;
+    }
+
+    let metrics_handle = builder.install_recorder().map_err(|e| {
         Error::new(ErrorDetails::Observability {
             message: format!("Failed to install Prometheus exporter: {e}"),
         })
@@ -1245,6 +1270,15 @@ pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
         Unit::Seconds,
         "Overhead of TensorZero on HTTP requests"
     );
+
+    if buckets.is_some() {
+        describe_histogram!(
+            "tensorzero_inference_latency_overhead_seconds_histogram",
+            Unit::Seconds,
+            "Overhead of TensorZero on HTTP requests (histogram)"
+        );
+        crate::observability::overhead_timing::enable_histogram_latency_metric();
+    }
 
     Ok(metrics_handle)
 }

@@ -61,6 +61,29 @@ impl InferenceClient for MockInferenceClient {
             .clone()
             .ok_or(InferenceError::StreamingNotSupported)
     }
+
+    async fn create_autopilot_event(
+        &self,
+        _session_id: Uuid,
+        _request: durable_tools::CreateEventRequest,
+    ) -> Result<durable_tools::CreateEventResponse, InferenceError> {
+        Err(InferenceError::AutopilotUnavailable)
+    }
+
+    async fn list_autopilot_events(
+        &self,
+        _session_id: Uuid,
+        _params: durable_tools::ListEventsParams,
+    ) -> Result<durable_tools::ListEventsResponse, InferenceError> {
+        Err(InferenceError::AutopilotUnavailable)
+    }
+
+    async fn list_autopilot_sessions(
+        &self,
+        _params: durable_tools::ListSessionsParams,
+    ) -> Result<durable_tools::ListSessionsResponse, InferenceError> {
+        Err(InferenceError::AutopilotUnavailable)
+    }
 }
 
 /// Create a mock chat inference response with the given text content.
@@ -108,8 +131,8 @@ impl ToolMetadata for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -117,12 +140,13 @@ impl ToolMetadata for EchoSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -147,8 +171,8 @@ impl ToolMetadata for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -156,12 +180,13 @@ impl ToolMetadata for EchoTaskTool {
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -214,8 +239,8 @@ impl ToolMetadata for InferenceSimpleTool {
         Cow::Borrowed("Calls inference and returns the response")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(InferencePromptParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(InferencePromptParams))
     }
 
     type LlmParams = InferencePromptParams;
@@ -223,12 +248,13 @@ impl ToolMetadata for InferenceSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(30)
     }
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
 }
 
 #[async_trait]
 impl SimpleTool for InferenceSimpleTool {
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -273,8 +299,8 @@ impl ToolMetadata for InferenceTaskTool {
         Cow::Borrowed("Calls inference (durable) and returns the response")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(InferencePromptParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(InferencePromptParams))
     }
 
     type LlmParams = InferencePromptParams;
@@ -282,12 +308,13 @@ impl ToolMetadata for InferenceTaskTool {
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
 }
 
 #[async_trait]
 impl TaskTool for InferenceTaskTool {
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -375,11 +402,8 @@ async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<(
     executor
         .register_simple_tool::<EchoSimpleTool>()
         .await
-        .expect("Failed to register EchoSimpleTool");
-    executor
-        .register_task_tool::<EchoTaskTool>()
-        .await
-        .expect("Failed to register EchoTaskTool");
+        .unwrap();
+    executor.register_task_tool::<EchoTaskTool>().await.unwrap();
 
     let definitions = executor.tool_definitions().await.unwrap();
     assert_eq!(definitions.len(), 2);
@@ -417,10 +441,7 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("Failed to create queue");
 
-    executor
-        .register_task_tool::<EchoTaskTool>()
-        .await
-        .expect("Failed to register EchoTaskTool");
+    executor.register_task_tool::<EchoTaskTool>().await.unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -459,10 +480,7 @@ async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("Failed to create queue");
 
-    executor
-        .register_task_tool::<EchoTaskTool>()
-        .await
-        .expect("Failed to register EchoTaskTool");
+    executor.register_task_tool::<EchoTaskTool>().await.unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -504,17 +522,18 @@ impl ToolMetadata for KeyCapturingSimpleTool {
         Cow::Borrowed("Captures idempotency keys for testing")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for KeyCapturingSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -542,17 +561,18 @@ impl ToolMetadata for MultiCallTaskTool {
         Cow::Borrowed("Calls a SimpleTool multiple times")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for MultiCallTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         _llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -611,11 +631,11 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
     executor
         .register_simple_tool::<KeyCapturingSimpleTool>()
         .await
-        .expect("Failed to register KeyCapturingSimpleTool");
+        .unwrap();
     executor
         .register_task_tool::<MultiCallTaskTool>()
         .await
-        .expect("Failed to register MultiCallTaskTool");
+        .unwrap();
 
     // Spawn the task
     let episode_id = Uuid::now_v7();
@@ -724,7 +744,7 @@ async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Resul
     executor
         .register_task_tool::<InferenceTaskTool>()
         .await
-        .expect("Failed to register InferenceTaskTool");
+        .unwrap();
 
     let definitions = executor.tool_definitions().await.unwrap();
     let names: Vec<&str> = definitions
@@ -767,7 +787,7 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
     executor
         .register_task_tool::<InferenceTaskTool>()
         .await
-        .expect("Failed to register InferenceTaskTool");
+        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor

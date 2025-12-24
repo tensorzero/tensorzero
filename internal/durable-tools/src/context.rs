@@ -47,6 +47,13 @@ impl ToolAppState {
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
+
+    /// Get the inference client.
+    ///
+    /// This provides access to inference, autopilot events, and other client operations.
+    pub fn inference_client(&self) -> &Arc<dyn InferenceClient> {
+        &self.inference_client
+    }
 }
 
 /// Context provided to `TaskTool` execution.
@@ -95,6 +102,31 @@ impl<'a> ToolContext<'a> {
     /// Get a reference to the database pool.
     pub fn pool(&self) -> &PgPool {
         &self.app_state.pool
+    }
+
+    /// Get the inference client for direct access to all client operations.
+    ///
+    /// This provides access to inference, autopilot events, and other client operations.
+    /// For durability, wrap client calls in `ctx.step()`.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Send a tool result to autopilot (checkpointed)
+    /// ctx.step("send_result", params, |params, state| async move {
+    ///     state.inference_client()
+    ///         .create_autopilot_event(session_id, request)
+    ///         .await
+    ///         .map_err(|e| anyhow::anyhow!("{e}"))
+    /// }).await?;
+    /// ```
+    pub fn client(&self) -> Arc<dyn InferenceClient> {
+        self.app_state.inference_client.clone()
+    }
+
+    /// Get a reference to the tool registry (requires async lock).
+    pub async fn tool_registry(&self) -> tokio::sync::RwLockReadGuard<'_, ToolRegistry> {
+        self.app_state.tool_registry.read().await
     }
 
     /// Get mutable access to the underlying durable `TaskContext`.
@@ -402,6 +434,15 @@ impl<'a> SimpleToolContext<'a> {
     /// Get a reference to the database pool.
     pub fn pool(&self) -> &PgPool {
         self.pool
+    }
+
+    /// Get the inference client for direct access to all client operations.
+    ///
+    /// This provides access to inference, autopilot events, and other client operations.
+    /// Note: `SimpleTools` run inside a `TaskTool`'s `step()`, so client calls
+    /// are already checkpointed by the outer step.
+    pub fn client(&self) -> &Arc<dyn InferenceClient> {
+        self.inference_client
     }
 
     /// Call TensorZero inference.

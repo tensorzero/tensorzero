@@ -62,8 +62,8 @@
 //!         Cow::Borrowed("Search the web")
 //!     }
 //!
-//!     fn parameters_schema() -> Schema {
-//!         schema_for!(SearchParams)
+//!     fn parameters_schema() -> ToolResult<Schema> {
+//!         Ok(schema_for!(SearchParams))
 //!     }
 //!
 //!     type LlmParams = SearchParams;
@@ -107,8 +107,8 @@
 //!         Cow::Borrowed("Research a topic")
 //!     }
 //!
-//!     fn parameters_schema() -> Schema {
-//!         schema_for!(ResearchParams)
+//!     fn parameters_schema() -> ToolResult<Schema> {
+//!         Ok(schema_for!(ResearchParams))
 //!     }
 //!
 //!     type LlmParams = ResearchParams;
@@ -205,12 +205,19 @@ pub use tool_metadata::ToolMetadata;
 
 // Re-export inference trait and helpers
 pub use inference::{
-    InferenceClient, InferenceError, embedded_gateway_client, http_gateway_client,
+    EmbeddedInferenceClient, InferenceClient, InferenceError, embedded_gateway_client, from_client,
+    http_gateway_client,
+};
+
+// Re-export autopilot types for use by tools
+pub use inference::{
+    CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, ToolOutcome,
 };
 
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
-    ClientInferenceParams, InferenceParams, InferenceResponse, Input, InputMessage,
+    Client, ClientInferenceParams, InferenceParams, InferenceResponse, Input, InputMessage,
     InputMessageContent, Role, TensorZeroError,
 };
 

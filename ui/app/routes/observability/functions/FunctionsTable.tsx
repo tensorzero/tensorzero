@@ -7,8 +7,10 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { FunctionConfig } from "~/types/tensorzero";
-import type { FunctionCountInfo } from "~/utils/clickhouse/inference.server";
+import type {
+  FunctionConfig,
+  FunctionInferenceCount,
+} from "~/types/tensorzero";
 import { TableItemTime, TableItemFunction } from "~/components/ui/TableItems";
 import { toFunctionUrl } from "~/utils/urls";
 import {
@@ -27,8 +29,8 @@ import { Input } from "~/components/ui/input";
 
 interface MergedFunctionData {
   function_name: string;
-  count: number;
-  max_timestamp: string;
+  inference_count: number;
+  last_inference_timestamp: string;
   type: "chat" | "json" | "?";
   variantsCount: number;
 }
@@ -44,7 +46,7 @@ export default function FunctionsTable({
   functions: {
     [x: string]: FunctionConfig | undefined;
   };
-  countsInfo: FunctionCountInfo[];
+  countsInfo: FunctionInferenceCount[];
   showInternalFunctions: boolean;
   onToggleShowInternalFunctions: (value: boolean) => void;
 }) {
@@ -78,8 +80,10 @@ export default function FunctionsTable({
 
       return {
         function_name,
-        count: countInfo ? countInfo.count : 0,
-        max_timestamp: countInfo ? countInfo.max_timestamp : "Never",
+        inference_count: countInfo ? countInfo.inference_count : 0,
+        last_inference_timestamp: countInfo
+          ? countInfo.last_inference_timestamp
+          : "Never",
         type,
         variantsCount,
       };
@@ -102,11 +106,11 @@ export default function FunctionsTable({
         header: "Variants",
         cell: (info) => info.getValue(),
       }),
-      columnHelper.accessor("count", {
+      columnHelper.accessor("inference_count", {
         header: "Inferences",
         cell: (info) => info.getValue(),
       }),
-      columnHelper.accessor("max_timestamp", {
+      columnHelper.accessor("last_inference_timestamp", {
         header: "Last Used",
         cell: (info) => {
           const timestamp = info.getValue();

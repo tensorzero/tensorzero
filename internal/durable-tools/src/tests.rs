@@ -45,8 +45,8 @@ impl ToolMetadata for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -54,12 +54,13 @@ impl ToolMetadata for EchoSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -84,8 +85,8 @@ impl ToolMetadata for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -93,12 +94,13 @@ impl ToolMetadata for EchoTaskTool {
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -122,19 +124,20 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
         Cow::Borrowed("Uses default timeout")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
 
     // Uses default timeout (60 seconds from ToolMetadata)
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for DefaultTimeoutTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -159,19 +162,20 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
         Cow::Borrowed("Uses default timeout")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
 
     // Uses default timeout (60 seconds from ToolMetadata)
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for DefaultTimeoutSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -401,17 +405,18 @@ mod registry_tests {
                 Cow::Borrowed("Conflicting tool")
             }
 
-            fn parameters_schema() -> schemars::Schema {
-                schemars::schema_for!(EchoParams)
+            fn parameters_schema() -> ToolResult<schemars::Schema> {
+                Ok(schemars::schema_for!(EchoParams))
             }
 
             type LlmParams = EchoParams;
-            type SideInfo = ();
-            type Output = EchoOutput;
         }
 
         #[async_trait::async_trait]
         impl SimpleTool for ConflictingSimpleTool {
+            type SideInfo = ();
+            type Output = EchoOutput;
+
             async fn execute(
                 llm_params: <Self as ToolMetadata>::LlmParams,
                 _side_info: Self::SideInfo,
@@ -504,7 +509,7 @@ mod erasure_tests {
     #[test]
     fn erased_task_tool_wrapper_parameters_schema_has_message_field() {
         let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
-        let schema = wrapper.parameters_schema();
+        let schema = wrapper.parameters_schema().unwrap();
 
         // The schema should be an object with a "message" property
         let schema_json = serde_json::to_value(&schema).unwrap();

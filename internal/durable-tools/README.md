@@ -23,7 +23,7 @@ Provides the tool's name, description, parameter schema, and LLM parameter type:
 pub trait ToolMetadata: Send + Sync + 'static {
     fn name() -> Cow<'static, str>;
     fn description() -> Cow<'static, str>;
-    fn parameters_schema() -> Schema;
+    fn parameters_schema() -> ToolResult<Schema>;
 
     type LlmParams: Serialize + DeserializeOwned + Send + 'static;
 }
@@ -105,6 +105,7 @@ use durable_tools::{
     http_gateway_client,
 };
 use schemars::{schema_for, JsonSchema, Schema};
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use uuid::Uuid;
@@ -128,8 +129,8 @@ impl ToolMetadata for SearchTool {
         Cow::Borrowed("Search the web")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(SearchParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(SearchParams))
     }
 
     type LlmParams = SearchParams;
@@ -169,8 +170,8 @@ impl ToolMetadata for ResearchTool {
         Cow::Borrowed("Research a topic")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(ResearchParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(ResearchParams))
     }
 
     type LlmParams = ResearchParams;

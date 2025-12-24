@@ -67,8 +67,8 @@ impl SideInfo for () {}
 ///         Cow::Borrowed("Research a topic")
 ///     }
 ///
-///     fn parameters_schema() -> Schema {
-///         schema_for!(ResearchParams)
+///     fn parameters_schema() -> ToolResult<Schema> {
+///         Ok(schema_for!(ResearchParams))
 ///     }
 ///
 ///     type LlmParams = ResearchParams;
@@ -131,8 +131,8 @@ impl SideInfo for () {}
 ///         Cow::Borrowed("Search GitHub")
 ///     }
 ///
-///     fn parameters_schema() -> Schema {
-///         schema_for!(GitHubSearchParams)  // Only LlmParams in schema
+///     fn parameters_schema() -> ToolResult<Schema> {
+///         Ok(schema_for!(GitHubSearchParams))  // Only LlmParams in schema
 ///     }
 ///
 ///     type LlmParams = GitHubSearchParams;
@@ -156,6 +156,14 @@ impl SideInfo for () {}
 /// ```
 #[async_trait]
 pub trait TaskTool: ToolMetadata {
+    /// Side information type provided at spawn time (hidden from LLM).
+    ///
+    /// Use `()` if no side information is needed.
+    type SideInfo: SideInfo;
+
+    /// The output type for this tool (must be JSON-serializable).
+    type Output: Serialize + DeserializeOwned + Send + 'static;
+
     /// Execute the tool logic.
     ///
     /// This is called by the durable worker when the tool is invoked.
