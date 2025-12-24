@@ -634,7 +634,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    * @throws Error if the request fails
    */
   async getUiConfig(): Promise<UiConfig> {
-    const response = await this.fetch("/internal/ui-config", { method: "GET" });
+    const response = await this.fetch("/internal/ui_config", { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
@@ -663,7 +663,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       searchParams.append("group_by", options.groupBy);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-count${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference_count${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -695,7 +695,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    * @throws Error if the request fails
    */
   async listFunctionsWithInferenceCount(): Promise<FunctionInferenceCount[]> {
-    const endpoint = `/internal/functions/inference-counts`;
+    const endpoint = `/internal/functions/inference_counts`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -725,7 +725,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       searchParams.append("threshold", threshold.toString());
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-count/${encodeURIComponent(metricName)}${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference_count/${encodeURIComponent(metricName)}${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -752,7 +752,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       time_window: timeWindow,
       max_periods: maxPeriods.toString(),
     });
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/throughput-by-variant?${searchParams.toString()}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/throughput_by_variant?${searchParams.toString()}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -810,7 +810,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       searchParams.append("variant_name", variantName);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant-performances?${queryString}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_performances?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -935,7 +935,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     searchParams.append("function_name", functionName);
     searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
     const queryString = searchParams.toString();
-    const endpoint = `/internal/evaluations/datapoint-count?${queryString}`;
+    const endpoint = `/internal/evaluations/datapoint_count?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -962,7 +962,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     searchParams.append("limit", limit.toString());
     searchParams.append("offset", offset.toString());
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/projects${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/workflow_evaluations/projects${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -979,7 +979,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    */
   async countWorkflowEvaluationProjects(): Promise<number> {
     const response = await this.fetch(
-      "/internal/workflow-evaluations/projects/count",
+      "/internal/workflow_evaluations/projects/count",
       { method: "GET" },
     );
     if (!response.ok) {
@@ -1016,7 +1016,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       searchParams.append("q", searchQuery);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/runs/search?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/runs/search?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1051,7 +1051,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       searchParams.append("project_name", projectName);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/list-runs?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/list_runs?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1068,7 +1068,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    */
   async countWorkflowEvaluationRuns(): Promise<number> {
     const response = await this.fetch(
-      "/internal/workflow-evaluations/runs/count",
+      "/internal/workflow_evaluations/runs/count",
       { method: "GET" },
     );
     if (!response.ok) {
@@ -1096,7 +1096,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       searchParams.append("project_name", projectName);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/get-runs?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/get_runs?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1123,7 +1123,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       searchParams.append("metric_name", metricName);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/run-statistics?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/run_statistics?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1157,7 +1157,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     searchParams.append("limit", limit.toString());
     searchParams.append("offset", offset.toString());
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/episodes-by-task-name${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/workflow_evaluations/episodes_by_task_name${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1184,7 +1184,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       searchParams.append("run_ids", runIds.join(","));
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/episodes-by-task-name/count${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/workflow_evaluations/episodes_by_task_name/count${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1214,7 +1214,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     searchParams.append("limit", limit.toString());
     searchParams.append("offset", offset.toString());
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/run-episodes?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/run_episodes?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1234,7 +1234,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     const searchParams = new URLSearchParams();
     searchParams.append("run_id", runId);
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/run-episodes/count?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/run_episodes/count?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1373,7 +1373,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   async getEpisodeInferenceCount(
     episode_id: string,
   ): Promise<GetEpisodeInferenceCountResponse> {
-    const endpoint = `/internal/episodes/${episode_id}/inference-count`;
+    const endpoint = `/internal/episodes/${episode_id}/inference_count`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
@@ -1444,7 +1444,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   async getLatestFeedbackIdByMetric(
     targetId: string,
   ): Promise<Record<string, string>> {
-    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/latest-id-by-metric`;
+    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/latest_id_by_metric`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
@@ -1528,7 +1528,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
     searchParams.append("function_name", functionName);
     const queryString = searchParams.toString();
-    const endpoint = `/internal/evaluations/run-infos?${queryString}`;
+    const endpoint = `/internal/evaluations/run_infos?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1552,7 +1552,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     const searchParams = new URLSearchParams();
     searchParams.append("function_name", functionName);
     const queryString = searchParams.toString();
-    const endpoint = `/internal/evaluations/datapoints/${encodeURIComponent(datapointId)}/run-infos?${queryString}`;
+    const endpoint = `/internal/evaluations/datapoints/${encodeURIComponent(datapointId)}/run_infos?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {

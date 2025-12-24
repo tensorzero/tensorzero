@@ -52,6 +52,61 @@ pub struct AuthConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct MetricsConfig {
+    /// When set, additionally report the 'tensorzero_inference_latency_overhead_seconds_histogram' metric
+    /// using the specified buckets.
+    /// When unset, we'll only report the `tensorzero_inference_latency_overhead_seconds` metric,
+    /// (which is still reported when this field is set)
+    pub tensorzero_inference_latency_overhead_seconds_histogram_buckets: Option<Vec<f64>>,
+}
+
+impl MetricsConfig {
+    pub fn validate(&self) -> Result<(), Error> {
+        if let Some(buckets) = &self.tensorzero_inference_latency_overhead_seconds_histogram_buckets
+        {
+            if buckets.is_empty() {
+                return Err(Error::new(crate::error::ErrorDetails::Config {
+                    message: "gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets must contain at least one value".to_string(),
+                }));
+            }
+
+            for (i, &bucket) in buckets.iter().enumerate() {
+                if !bucket.is_finite() {
+                    return Err(Error::new(crate::error::ErrorDetails::Config {
+                        message: format!(
+                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets[{i}] must be finite (not NaN or infinity), got: {bucket}"
+                        ),
+                    }));
+                }
+                if bucket < 0.0 {
+                    return Err(Error::new(crate::error::ErrorDetails::Config {
+                        message: format!(
+                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets[{i}] must be non-negative, got: {bucket}"
+                        ),
+                    }));
+                }
+            }
+
+            for i in 1..buckets.len() {
+                if buckets[i] <= buckets[i - 1] {
+                    return Err(Error::new(crate::error::ErrorDetails::Config {
+                        message: format!(
+                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets must be in strictly ascending order, but buckets[{}] ({}) <= buckets[{}] ({})",
+                            i,
+                            buckets[i],
+                            i - 1,
+                            buckets[i - 1]
+                        ),
+                    }));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
@@ -84,10 +139,13 @@ pub struct UninitializedGatewayConfig {
     pub global_outbound_http_timeout_ms: Option<u64>,
     #[serde(default)]
     pub relay: Option<UninitializedRelayConfig>,
+    #[serde(default)]
+    pub metrics: MetricsConfig,
 }
 
 impl UninitializedGatewayConfig {
     pub fn load(self, object_store_info: Option<&ObjectStoreInfo>) -> Result<GatewayConfig, Error> {
+        self.metrics.validate()?;
         let fetch_and_encode_input_files_before_inference = if let Some(value) =
             self.fetch_and_encode_input_files_before_inference
         {
@@ -140,6 +198,7 @@ impl UninitializedGatewayConfig {
                 .map(|ms| Duration::milliseconds(ms as i64))
                 .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
             relay,
+            metrics: self.metrics,
         })
     }
 }
@@ -164,6 +223,7 @@ pub struct GatewayConfig {
     pub global_outbound_http_timeout: Duration,
     #[serde(skip)]
     pub relay: Option<TensorzeroRelay>,
+    pub metrics: MetricsConfig,
 }
 
 impl Default for GatewayConfig {
@@ -182,6 +242,7 @@ impl Default for GatewayConfig {
             auth: Default::default(),
             global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
             relay: Default::default(),
+            metrics: Default::default(),
         }
     }
 }

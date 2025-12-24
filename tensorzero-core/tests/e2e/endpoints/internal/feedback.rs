@@ -86,7 +86,7 @@ async fn test_get_latest_feedback_id_by_metric_with_data() {
 
     // Query latest feedback by metric for the inference
     let url = get_gateway_endpoint(&format!(
-        "/internal/feedback/{inference_id}/latest-id-by-metric"
+        "/internal/feedback/{inference_id}/latest_id_by_metric"
     ));
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -130,7 +130,7 @@ async fn test_get_latest_feedback_id_by_metric_multiple_feedback_same_metric() {
 
     // Query latest feedback by metric
     let url = get_gateway_endpoint(&format!(
-        "/internal/feedback/{inference_id}/latest-id-by-metric"
+        "/internal/feedback/{inference_id}/latest_id_by_metric"
     ));
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -152,7 +152,7 @@ async fn test_get_latest_feedback_id_by_metric_nonexistent_target() {
     // Use a UUID that likely doesn't exist
     let nonexistent_id = Uuid::now_v7();
     let url = get_gateway_endpoint(&format!(
-        "/internal/feedback/{nonexistent_id}/latest-id-by-metric"
+        "/internal/feedback/{nonexistent_id}/latest_id_by_metric"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -177,7 +177,7 @@ async fn test_get_latest_feedback_id_by_metric_invalid_uuid() {
     let http_client = Client::new();
 
     // Use an invalid UUID
-    let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/latest-id-by-metric");
+    let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/latest_id_by_metric");
 
     let resp = http_client.get(url).send().await.unwrap();
 

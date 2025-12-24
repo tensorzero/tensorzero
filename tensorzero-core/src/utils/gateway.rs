@@ -655,6 +655,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
 
         let config = Config {
@@ -726,6 +727,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
 
         let config = Config {
@@ -762,6 +764,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
@@ -797,6 +800,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,

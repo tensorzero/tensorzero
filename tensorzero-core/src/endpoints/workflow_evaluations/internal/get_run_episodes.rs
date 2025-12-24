@@ -30,7 +30,7 @@ fn default_limit() -> u32 {
     15
 }
 
-/// Handler for `GET /internal/workflow-evaluations/run-episodes`
+/// Handler for `GET /internal/workflow_evaluations/run_episodes`
 ///
 /// Gets workflow evaluation run episodes with their feedback for a specific run.
 #[axum::debug_handler(state = AppStateData)]
