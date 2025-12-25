@@ -1713,132 +1713,41 @@ func TestToolCallingInference(t *testing.T) {
 
 }
 
-// TestCustomToolsInference tests the new custom tools feature introduced in OpenAI API.
-// Custom tools (different from function tools) allow free-form text input instead of
-// structured JSON schema parameters.
+// TestCustomToolsInference tests custom tools with the TensorZero gateway.
 func TestCustomToolsInference(t *testing.T) {
-	t.Run("it should define custom tools correctly using ChatCompletionCustomTool", func(t *testing.T) {
-		// This test verifies that we can correctly construct custom tool definitions
-		// using the new ChatCompletionCustomTool helper function.
+	t.Run("it should handle custom tools alongside function tools", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
 
-		// Create a custom tool definition
-		customTool := openai.ChatCompletionCustomTool(openai.ChatCompletionCustomToolCustomParam{
-			Name:        "web_search",
-			Description: openai.String("Search the web for information"),
-		})
-
-		// Verify the tool is properly structured
-		require.NotNil(t, customTool.OfCustom, "Custom tool should have OfCustom set")
-		assert.Equal(t, "web_search", customTool.OfCustom.Custom.Name, "Tool name should match")
-
-		// Create another custom tool with different config
-		codeInterpreter := openai.ChatCompletionCustomTool(openai.ChatCompletionCustomToolCustomParam{
-			Name:        "code_interpreter",
-			Description: openai.String("Execute code and return results"),
-		})
-
-		// Verify the second tool
-		require.NotNil(t, codeInterpreter.OfCustom, "Code interpreter tool should have OfCustom set")
-		assert.Equal(t, "code_interpreter", codeInterpreter.OfCustom.Custom.Name, "Tool name should match")
-	})
-
-	t.Run("it should correctly mix custom and function tools", func(t *testing.T) {
-		// This test verifies that we can use both custom tools and function tools
-		// together in the same request.
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
+		}
 
 		tools := []openai.ChatCompletionToolUnionParam{
-			// Function tool (traditional)
-			openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
-				Name:        "get_weather",
-				Description: openai.String("Get current weather for a location"),
-				Parameters: openai.FunctionParameters{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"location": map[string]string{
-							"type":        "string",
-							"description": "The city name",
-						},
-					},
-					"required": []string{"location"},
-				},
-			}),
-			// Custom tool (new)
 			openai.ChatCompletionCustomTool(openai.ChatCompletionCustomToolCustomParam{
 				Name:        "web_search",
-				Description: openai.String("Search the web"),
+				Description: openai.String("Search the web for information"),
 			}),
 		}
 
-		// Verify we have both tool types
-		require.Len(t, tools, 2, "Should have 2 tools")
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::weather_helper",
+			Messages: messages,
+			Tools:    tools,
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
 
-		// First tool should be function
-		require.NotNil(t, tools[0].OfFunction, "First tool should be a function")
-		assert.Equal(t, "get_weather", tools[0].OfFunction.Function.Name)
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
 
-		// Second tool should be custom
-		require.NotNil(t, tools[1].OfCustom, "Second tool should be custom")
-		assert.Equal(t, "web_search", tools[1].OfCustom.Custom.Name)
-	})
+		require.NotEmpty(t, resp.Choices)
+		require.NotNil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should not be nil")
+		toolCalls := resp.Choices[0].Message.ToolCalls
+		require.GreaterOrEqual(t, len(toolCalls), 1, "Should have at least one tool call")
 
-	t.Run("it should serialize custom tools to JSON correctly", func(t *testing.T) {
-		// Verify that custom tools serialize properly for API requests
-
-		customTool := openai.ChatCompletionCustomTool(openai.ChatCompletionCustomToolCustomParam{
-			Name:        "analyze_image",
-			Description: openai.String("Analyze an image and describe its contents"),
-		})
-
-		// Marshal to JSON
-		jsonBytes, err := json.Marshal(customTool)
-		require.NoError(t, err, "Should marshal without error")
-
-		// Parse JSON to verify structure
-		var parsed map[string]interface{}
-		err = json.Unmarshal(jsonBytes, &parsed)
-		require.NoError(t, err, "Should unmarshal without error")
-
-		// Verify the JSON structure
-		assert.Equal(t, "custom", parsed["type"], "Type should be 'custom'")
-		custom, ok := parsed["custom"].(map[string]interface{})
-		require.True(t, ok, "Should have 'custom' object")
-		assert.Equal(t, "analyze_image", custom["name"], "Name should match")
-		assert.Equal(t, "Analyze an image and describe its contents", custom["description"], "Description should match")
-	})
-
-	t.Run("it should parse custom tool call response structure", func(t *testing.T) {
-		// This test verifies that we can parse a custom tool call response from JSON.
-		// Note: Actually invoking custom tools would require future OpenAI models that support them.
-
-		// Simulate a custom tool call response JSON (as would be returned by OpenAI API)
-		customToolCallJSON := `{
-			"id": "call_abc123",
-			"type": "custom",
-			"custom": {
-				"name": "web_search",
-				"input": "What is the weather in Tokyo?"
-			}
-		}`
-
-		// Parse the JSON into the OpenAI SDK struct
-		var toolCall openai.ChatCompletionMessageToolCallUnion
-		err := json.Unmarshal([]byte(customToolCallJSON), &toolCall)
-		require.NoError(t, err, "Should parse custom tool call JSON without error")
-
-		// Verify the parsed structure
-		assert.Equal(t, "call_abc123", toolCall.ID, "Tool call ID should match")
-		assert.Equal(t, "custom", toolCall.Type, "Tool call type should be 'custom'")
-
-		// Verify the custom tool details
-		require.NotNil(t, toolCall.Custom, "Custom tool data should be present for type 'custom'")
-		assert.Equal(t, "web_search", toolCall.Custom.Name, "Custom tool name should match")
-		assert.Equal(t, "What is the weather in Tokyo?", toolCall.Custom.Input, "Custom tool input should match")
-
-		// Verify we can use the AsCustom method to get a typed custom tool call
-		customCall := toolCall.AsCustom()
-		require.NotNil(t, customCall.Custom, "AsCustom should return a struct with non-nil Custom field")
-		assert.Equal(t, "call_abc123", customCall.ID)
-		assert.Equal(t, constant.Custom("custom"), customCall.Type)
+		toolCall := toolCalls[0]
+		assert.Equal(t, "function", toolCall.Type)
+		assert.Equal(t, "get_temperature", toolCall.Function.Name)
 	})
 }
 
