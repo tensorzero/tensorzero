@@ -34,6 +34,7 @@ use crate::{
     function::FunctionConfig,
     inference::types::{InferenceResult, InferenceResultStream},
     minijinja_util::TemplateConfig,
+    relay::TensorzeroRelay,
     variant::chat_completion::ChatCompletionConfig,
 };
 
@@ -237,6 +238,7 @@ impl Variant for MixtureOfNConfig {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
@@ -254,6 +256,7 @@ impl Variant for MixtureOfNConfig {
                 function_name,
                 candidate,
                 global_outbound_http_timeout,
+                relay,
             ))
             .await
             .map_err(|e| {
@@ -274,6 +277,7 @@ impl Variant for MixtureOfNConfig {
                 function_name,
                 variant_name,
                 global_outbound_http_timeout,
+                relay,
             )
             .await?;
         Ok(())
@@ -661,11 +665,14 @@ async fn inner_fuse_candidates<'a>(
         }
         .into());
     }
-    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model().to_string(),
-        })
-    })?;
+    let model_config = models
+        .get(fuser.inner.model(), clients.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: fuser.inner.model().to_string(),
+            })
+        })?;
     let infer_model_request_args = InferModelRequestArgs {
         request: inference_request,
         model_name: fuser.inner.model().clone(),
@@ -714,11 +721,14 @@ async fn inner_fuse_candidates_stream<'a>(
         }
         .into());
     }
-    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model().to_string(),
-        })
-    })?;
+    let model_config = models
+        .get(fuser.inner.model(), clients.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: fuser.inner.model().to_string(),
+            })
+        })?;
     infer_model_request_stream(
         inference_request,
         fuser.inner.model().clone(),

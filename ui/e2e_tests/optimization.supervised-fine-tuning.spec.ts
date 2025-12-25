@@ -222,6 +222,61 @@ model_name = "mock-inference-finetune-1234"
       page.getByRole("combobox").filter({ hasText: "demonstration" }),
     ).toBeVisible();
   });
+
+  test("@slow should fine-tune with a mocked GCP Vertex Gemini server", async ({
+    page,
+  }) => {
+    await page.goto("/optimization/supervised-fine-tuning");
+
+    // Select function
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a function" })
+      .click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
+
+    // Select metric
+    await page.getByRole("combobox", { name: "Metric" }).click();
+    await page.getByText("exact_match", { exact: true }).click();
+
+    // Select variant
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a variant name" })
+      .click();
+    await page
+      .getByLabel("gpt4o_mini_initial_prompt")
+      .getByText("gpt4o_mini_initial_prompt")
+      .click();
+
+    // Select a GCP model from the default list
+    const modelInput = page.getByPlaceholder("Select model...");
+    await modelInput.click();
+    await page.getByRole("option", { name: "gemini-2.5-flash-lite" }).click();
+
+    // Start the fine-tuning job
+    await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
+
+    // Wait for job to start running
+    await page
+      .getByText("running", { exact: true })
+      .waitFor({ timeout: 60000 });
+
+    await expect(page.getByText("gemini-2.5-flash-lite")).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "extract_entities" }),
+    ).toBeVisible();
+    await expect(page.getByText("exact_match")).toBeVisible();
+    await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+
+    // Wait for job to complete
+    await page
+      .getByText("completed", { exact: true })
+      .waitFor({ timeout: 10000 });
+
+    // Verify the result contains GCP Vertex Gemini configuration
+    await expect(page.getByText('type = "gcp_vertex_gemini"')).toBeVisible();
+  });
 });
 
 test.describe("Error handling", () => {

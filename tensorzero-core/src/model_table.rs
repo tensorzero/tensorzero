@@ -10,7 +10,7 @@ use std::{
 use crate::{
     config::{
         e2e_skip_credential_validation, provider_types::ProviderTypesConfig,
-        skip_credential_validation,
+        skip_credential_validation, with_skip_credential_validation,
     },
     error::{Error, ErrorDetails},
     model::{
@@ -35,6 +35,7 @@ use crate::{
         vllm::VLLMCredentials,
         xai::XAICredentials,
     },
+    relay::TensorzeroRelay,
 };
 use lazy_static::lazy_static;
 use secrecy::SecretString;
@@ -231,19 +232,35 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
         })
     }
 
-    pub async fn get(&self, key: &str) -> Result<Option<CowNoClone<'_, T>>, Error> {
+    pub async fn get(
+        &self,
+        key: &str,
+        relay: Option<&TensorzeroRelay>,
+    ) -> Result<Option<CowNoClone<'_, T>>, Error> {
         if let Some(model_config) = self.table.get(key) {
             return Ok(Some(CowNoClone::Borrowed(model_config)));
         }
         if let Some(shorthand) = check_shorthand(T::SHORTHAND_MODEL_PREFIXES, key) {
-            return Ok(Some(CowNoClone::Owned(
+            let model = if relay.is_some() {
+                let default_credentials = self.default_credentials.clone();
+                with_skip_credential_validation(async move {
+                    T::from_shorthand(
+                        shorthand.provider_type,
+                        shorthand.model_name,
+                        &default_credentials,
+                    )
+                    .await
+                })
+                .await?
+            } else {
                 T::from_shorthand(
                     shorthand.provider_type,
                     shorthand.model_name,
                     &self.default_credentials,
                 )
-                .await?,
-            )));
+                .await?
+            };
+            return Ok(Some(CowNoClone::Owned(model)));
         }
         Ok(None)
     }

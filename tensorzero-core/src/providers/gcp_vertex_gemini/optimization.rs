@@ -8,13 +8,10 @@ use super::{
     tensorzero_to_gcp_vertex_gemini_content,
 };
 use crate::{
-    config::TimeoutsConfig,
+    config::{TimeoutsConfig, provider_types::GCPSFTConfig},
     error::{Error, ErrorDetails},
     inference::types::{ContentBlock, FlattenUnknown},
-    model::{
-        CredentialLocationWithFallback, UninitializedModelConfig, UninitializedModelProvider,
-        UninitializedProviderConfig,
-    },
+    model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::gcp_vertex_gemini::{
         GCPVertexGeminiContent, GCPVertexGeminiContentPart, GCPVertexGeminiPartData,
@@ -154,9 +151,7 @@ pub struct GCPVertexGeminiFineTuningJob {
 
 pub fn convert_to_optimizer_status(
     job: GCPVertexGeminiFineTuningJob,
-    location: String,
-    project_id: String,
-    credential_location: Option<CredentialLocationWithFallback>,
+    sft_config: &GCPSFTConfig,
 ) -> Result<OptimizationJobInfo, Error> {
     let estimated_finish: Option<DateTime<Utc>> = None;
 
@@ -216,9 +211,9 @@ pub fn convert_to_optimizer_status(
                 config: UninitializedProviderConfig::GCPVertexGemini {
                     model_id: None,
                     endpoint_id,
-                    location,
-                    project_id,
-                    credential_location,
+                    location: sft_config.region.clone(),
+                    project_id: sft_config.project_id.clone(),
+                    credential_location: None,
                 },
                 extra_headers: None,
                 extra_body: None,
@@ -366,8 +361,15 @@ mod tests {
 
     #[test]
     fn test_convert_to_optimizer_status() {
-        let location = "us-central1".to_string();
-        let project_id = "test-project".to_string();
+        let sft_config = GCPSFTConfig {
+            project_id: "test-project".to_string(),
+            region: "us-central1".to_string(),
+            bucket_name: "test-bucket".to_string(),
+            bucket_path_prefix: None,
+            service_account: None,
+            kms_key_name: None,
+            internal_mock_api_base: None,
+        };
 
         // Test for "succeeded" status with a model output
         let succeeded_model = json!({
@@ -387,8 +389,7 @@ mod tests {
             }
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(succeeded_model).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(
             status,
             OptimizationJobInfo::Completed {
@@ -415,7 +416,7 @@ mod tests {
         });
         let job =
             serde_json::from_value::<GCPVertexGeminiFineTuningJob>(succeeded_no_endpoint).unwrap();
-        let result = convert_to_optimizer_status(job, location.clone(), project_id.clone(), None);
+        let result = convert_to_optimizer_status(job, &sft_config);
 
         // Should error when endpoint is missing
         assert!(result.is_err());
@@ -442,8 +443,7 @@ mod tests {
             }
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(running).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "failed" status
@@ -460,8 +460,7 @@ mod tests {
             }
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(failed).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "queued" status
@@ -478,8 +477,7 @@ mod tests {
             }
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(queued).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "pending" status
@@ -496,8 +494,7 @@ mod tests {
             }
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(pending).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "pending" status with tuned model but no endpoint
@@ -520,8 +517,7 @@ mod tests {
         let job =
             serde_json::from_value::<GCPVertexGeminiFineTuningJob>(pending_with_model_no_endpoint)
                 .unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "cancelled" status
@@ -538,8 +534,7 @@ mod tests {
             }
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(cancelled).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "paused" status
@@ -556,8 +551,7 @@ mod tests {
             }
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(paused).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "expired" status
@@ -574,8 +568,7 @@ mod tests {
             }
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(expired).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "updating" status
@@ -592,8 +585,7 @@ mod tests {
             }
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(updating).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Pending { .. }));
 
         // Test for "partially succeeded" status
@@ -611,8 +603,7 @@ mod tests {
         });
         let job =
             serde_json::from_value::<GCPVertexGeminiFineTuningJob>(partially_succeeded).unwrap();
-        let status =
-            convert_to_optimizer_status(job, location.clone(), project_id.clone(), None).unwrap();
+        let status = convert_to_optimizer_status(job, &sft_config).unwrap();
         assert!(matches!(status, OptimizationJobInfo::Failed { .. }));
 
         // Test for "succeeded" status but missing tuned_model - should error
@@ -630,7 +621,7 @@ mod tests {
         });
         let job = serde_json::from_value::<GCPVertexGeminiFineTuningJob>(succeeded_missing_model)
             .unwrap();
-        let result = convert_to_optimizer_status(job, location.clone(), project_id.clone(), None);
+        let result = convert_to_optimizer_status(job, &sft_config);
         assert!(result.is_err());
 
         // Test for missing status field - this would fail deserialization of GCPVertexGeminiFineTuningJob

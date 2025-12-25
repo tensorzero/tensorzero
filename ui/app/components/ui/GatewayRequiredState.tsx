@@ -13,10 +13,11 @@ export function GatewayRequiredState() {
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-sm">
-            The TensorZero UI could not connect to the gateway. Please ensure:
+            The TensorZero UI could not connect to the TensorZero gateway.
+            Please ensure:
           </p>
           <ul className="text-muted-foreground mt-2 list-disc space-y-1 pl-4 text-sm">
-            <li>The TensorZero gateway is running</li>
+            <li>The TensorZero Gateway is running</li>
             <li>
               <code className="bg-muted rounded px-1 py-0.5 font-mono">
                 TENSORZERO_GATEWAY_URL

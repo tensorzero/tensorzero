@@ -1,6 +1,7 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
+use crate::relay::TensorzeroRelay;
 use crate::utils::deprecation_warning;
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
@@ -762,6 +763,7 @@ impl RuntimeOverlay {
             auth,
             global_outbound_http_timeout,
             relay,
+            metrics,
         } = &config.gateway;
 
         Self {
@@ -784,6 +786,7 @@ impl RuntimeOverlay {
                     global_outbound_http_timeout.num_milliseconds() as u64,
                 ),
                 relay: relay.as_ref().map(|relay| relay.original_config.clone()),
+                metrics: metrics.clone(),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
@@ -1315,7 +1318,7 @@ impl Config {
                         &config.embedding_models,
                         &config.templates,
                         &evaluation_function_name,
-                        &config.gateway.global_outbound_http_timeout,
+                        &config.gateway,
                     )
                     .await?;
                 config
@@ -1375,7 +1378,7 @@ impl Config {
                     &self.embedding_models,
                     &self.templates,
                     function_name,
-                    &self.gateway.global_outbound_http_timeout,
+                    &self.gateway,
                 )
                 .await?;
         }
@@ -1465,8 +1468,9 @@ impl Config {
     pub async fn get_model<'a>(
         &'a self,
         model_name: &Arc<str>,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<CowNoClone<'a, ModelConfig>, Error> {
-        self.models.get(model_name).await?.ok_or_else(|| {
+        self.models.get(model_name, relay).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })

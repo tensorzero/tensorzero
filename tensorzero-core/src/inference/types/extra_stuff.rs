@@ -53,8 +53,13 @@ pub async fn validate_inference_filters(
                 // The extra_body objects will be forwarded to the downstream gateway, which will validate
                 // and apply provider-level filters
                 if relay.is_none() {
-                    validate_model_provider_filter(model_name, provider_name.as_deref(), models)
-                        .await?;
+                    validate_model_provider_filter(
+                        model_name,
+                        provider_name.as_deref(),
+                        models,
+                        relay.as_ref(),
+                    )
+                    .await?;
                 }
             }
             DynamicExtraBody::Always { .. } | DynamicExtraBody::AlwaysDelete { .. } => {
@@ -99,8 +104,13 @@ pub async fn validate_inference_filters(
                 ..
             } => {
                 if relay.is_none() {
-                    validate_model_provider_filter(model_name, provider_name.as_deref(), models)
-                        .await?;
+                    validate_model_provider_filter(
+                        model_name,
+                        provider_name.as_deref(),
+                        models,
+                        relay.as_ref(),
+                    )
+                    .await?;
                 }
             }
             DynamicExtraHeader::Always { .. } | DynamicExtraHeader::AlwaysDelete { .. } => {
@@ -152,9 +162,10 @@ async fn validate_model_provider_filter(
     model_name: &str,
     provider_name: Option<&str>,
     models: &ModelTable,
+    relay: Option<&TensorzeroRelay>,
 ) -> Result<(), Error> {
     // Check if the model exists in the table (supports shorthand notation)
-    if let Some(model_config) = models.get(model_name).await? {
+    if let Some(model_config) = models.get(model_name, relay).await? {
         // Check if the provider exists in that model (if provider_name is specified)
         if let Some(provider_name) = provider_name
             && !model_config.providers.contains_key(provider_name)

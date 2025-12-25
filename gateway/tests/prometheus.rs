@@ -120,6 +120,114 @@ async fn test_prometheus_metrics_inference_helper(stream: bool) {
         pct_50 < 0.2,
         "Unexpectedly high 50th percentile overhead: {pct_50}s"
     );
+
+    // Histogram metric should not be reported
+    assert!(
+        !metrics.keys().any(|k| k.contains("histogram")),
+        "Histogram metric should not be reported, but found: {:#?}",
+        metrics
+            .keys()
+            .filter(|k| k.contains("histogram"))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn test_prometheus_metrics_custom_histogram_buckets() {
+    // Test that custom histogram buckets are properly configured
+    let child_data = start_gateway_on_random_port(
+        r"
+observability.enabled = false
+
+[gateway.metrics]
+tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.0001, 1.0, 10]
+",
+        None,
+    )
+    .await;
+    let client = Client::new();
+
+    // Make an inference request to generate metrics
+    let inference_payload = serde_json::json!({
+        "model_name": "dummy::slow",
+        "input": {
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(format!("http://{}/inference", child_data.addr))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+
+    // Sleep for 1 second to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let metrics = get_metrics(&client, &format!("http://{}/metrics", child_data.addr)).await;
+
+    println!("Metrics: {metrics:#?}");
+
+    // Verify that our custom buckets appear in the histogram
+    let expected_buckets = ["0.0001", "1", "10", "+Inf"];
+
+    for bucket in expected_buckets {
+        let key = format!(
+            r#"tensorzero_inference_latency_overhead_seconds_histogram_bucket{{function_name="tensorzero::default",variant_name="dummy::slow",le="{bucket}"}}"#
+        );
+        assert!(
+            metrics.contains_key(&key),
+            "Expected bucket with le=\"{bucket}\" not found in metrics. Available keys: {:#?}",
+            metrics
+                .keys()
+                .filter(|k| k
+                    .contains("tensorzero_inference_latency_overhead_seconds_histogram_bucket"))
+                .collect::<Vec<_>>()
+        );
+
+        // Parse the value to ensure it's a valid number
+        let value = metrics[&key].parse::<f64>().unwrap();
+        assert!(
+            value >= 0.0,
+            "Bucket count should be non-negative, got {value}"
+        );
+    }
+
+    // Quantile metrics should still be reported
+    let pct_50 = metrics[r#"tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="dummy::slow",quantile="0.5"}"#]
+        .parse::<f64>()
+        .unwrap();
+    assert!(
+        pct_50 > 0.001,
+        "50th percentile overhead should be greater than 1ms"
+    );
+
+    // Verify that the count metric exists
+    let count_key = r#"tensorzero_inference_latency_overhead_seconds_histogram_count{function_name="tensorzero::default",variant_name="dummy::slow"}"#;
+    assert!(
+        metrics.contains_key(count_key),
+        "Expected count metric not found"
+    );
+    assert_eq!(metrics[count_key], "1");
+
+    // Verify that the sum metric exists
+    let sum_key = r#"tensorzero_inference_latency_overhead_seconds_histogram_sum{function_name="tensorzero::default",variant_name="dummy::slow"}"#;
+    assert!(
+        metrics.contains_key(sum_key),
+        "Expected sum metric not found"
+    );
+    let sum = metrics[sum_key].parse::<f64>().unwrap();
+    assert!(sum > 0.0, "Sum should be greater than 0");
+
+    // The latency should be between 0.0001 and 1 second
+    let target_bucket = metrics[r#"tensorzero_inference_latency_overhead_seconds_histogram_bucket{function_name="tensorzero::default",variant_name="dummy::slow",le="1"}"#]
+    .parse::<f64>()
+    .unwrap();
+    assert_eq!(target_bucket, 1.0, "Target bucket should have one entry");
 }
 
 #[tokio::test]

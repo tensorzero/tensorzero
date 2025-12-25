@@ -18,6 +18,7 @@ use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeader
 use crate::inference::types::resolved_input::{
     LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
+use crate::relay::TensorzeroRelay;
 use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
@@ -579,11 +580,15 @@ impl Variant for ChatCompletionConfig {
                 &mut inference_params,
             )
             .await?;
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(&self.model, clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model.to_string(),
+                })
+            })?;
         let args = InferModelRequestArgs {
             request,
             model_name: self.model.clone(),
@@ -616,11 +621,15 @@ impl Variant for ChatCompletionConfig {
                 &mut inference_params,
             )
             .await?;
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(&self.model, clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model.to_string(),
+                })
+            })?;
         infer_model_request_stream(
             request,
             self.model.clone(),
@@ -649,6 +658,7 @@ impl Variant for ChatCompletionConfig {
         function_name: &str,
         variant_name: &str,
         _global_outbound_http_timeout: &Duration,
+        _relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         // Validate that weight is non-negative
         if self.weight.is_some_and(|w| w < 0.0) {
@@ -765,11 +775,15 @@ impl Variant for ChatCompletionConfig {
                 .await?;
             inference_requests.push(request);
         }
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(&self.model, clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model.to_string(),
+                })
+            })?;
         let model_inference_response = model_config
             .start_batch_inference(
                 &inference_requests,
