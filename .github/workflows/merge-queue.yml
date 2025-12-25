@@ -364,8 +364,8 @@ jobs:
           docker run -d --name mock-provider-api -p 3030:3030 tensorzero/mock-provider-api:latest
           # Wait for mock-provider-api to be healthy
           for i in {1..30}; do
-            if curl -s -f http://localhost:3030/health >/dev/null 2>&1; then
-              echo "mock-provider-api is healthy"
+            if curl -s -f http://localhost:3030/status >/dev/null 2>&1; then
+              echo "mock-provider-api is ready"
               break
             fi
             echo "Waiting for mock-provider-api to be healthy..."

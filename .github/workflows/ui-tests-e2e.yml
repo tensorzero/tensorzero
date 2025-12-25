@@ -348,6 +348,7 @@ jobs:
           echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "TOGETHER_API_KEY=not_used" >> fixtures/.env-gateway
 
       - name: Start docker containers
         run: |
