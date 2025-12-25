@@ -66,11 +66,7 @@ func systemMessageWithAssistant(t *testing.T, assistant_name string) *openai.Cha
 		},
 		"role": "system",
 	}
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		t.Fatalf("Failed to marshal system message: %v", err)
-	}
-	sysMsg := param.Override[openai.ChatCompletionSystemMessageParam](json.RawMessage(jsonData))
+	sysMsg := overrideSystemMessage(t, data)
 	return &sysMsg
 }
 
