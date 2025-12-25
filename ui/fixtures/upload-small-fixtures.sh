@@ -18,7 +18,7 @@ JSONL_FILES=(
     "jaro_winkler_similarity_feedback.jsonl"
     "json_inference_datapoint_examples.jsonl"
     "json_inference_examples.jsonl"
-    "model_inference_cache_e2e_v2.jsonl"
+    # "model_inference_cache_e2e.jsonl" -- handled by /regen-fixtures in GitHub
     "model_inference_examples_v2.jsonl"
 )
 
