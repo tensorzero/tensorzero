@@ -1,0 +1,19 @@
+[package]
+name = "durable-tools-spawn"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+durable.workspace = true
+tokio.workspace = true
+async-trait = "0.1"
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror = "2"
+uuid.workspace = true
+secrecy.workspace = true

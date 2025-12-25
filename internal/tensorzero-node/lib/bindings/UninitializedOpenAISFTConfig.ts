@@ -3,11 +3,11 @@ import type { CredentialLocationWithFallback } from "./CredentialLocationWithFal
 
 export type UninitializedOpenAISFTConfig = {
   model: string;
-  batch_size: number | null;
-  learning_rate_multiplier: number | null;
-  n_epochs: number | null;
-  credentials: CredentialLocationWithFallback | null;
-  api_base: string | null;
-  seed: bigint | null;
-  suffix: string | null;
+  batch_size?: number;
+  learning_rate_multiplier?: number;
+  n_epochs?: number;
+  credentials?: CredentialLocationWithFallback;
+  api_base?: string;
+  seed?: bigint;
+  suffix?: string;
 };

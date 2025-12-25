@@ -61,7 +61,7 @@ impl Default for TogetherBatchSize {
 }
 
 #[derive(ts_rs::TS, Debug, Clone, Serialize)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct TogetherSFTConfig {
     pub model: String,
     #[serde(skip)]
@@ -118,7 +118,7 @@ impl std::fmt::Display for TogetherSFTJobHandle {
 }
 
 #[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "TogetherSFTConfig"))]
 pub struct UninitializedTogetherSFTConfig {
     pub model: String,

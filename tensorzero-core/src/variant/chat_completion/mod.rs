@@ -18,6 +18,7 @@ use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeader
 use crate::inference::types::resolved_input::{
     LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
+use crate::relay::TensorzeroRelay;
 use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
@@ -25,6 +26,7 @@ use crate::inference::types::{
     Unknown,
     batch::StartBatchModelInferenceWithMetadata,
     chat_completion_inference_params::{ChatCompletionInferenceParamsV2, ServiceTier},
+    role::{ASSISTANT_TEXT_TEMPLATE_VAR, SYSTEM_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR},
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -578,11 +580,15 @@ impl Variant for ChatCompletionConfig {
                 &mut inference_params,
             )
             .await?;
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(&self.model, clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model.to_string(),
+                })
+            })?;
         let args = InferModelRequestArgs {
             request,
             model_name: self.model.clone(),
@@ -615,11 +621,15 @@ impl Variant for ChatCompletionConfig {
                 &mut inference_params,
             )
             .await?;
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(&self.model, clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model.to_string(),
+                })
+            })?;
         infer_model_request_stream(
             request,
             self.model.clone(),
@@ -648,6 +658,7 @@ impl Variant for ChatCompletionConfig {
         function_name: &str,
         variant_name: &str,
         _global_outbound_http_timeout: &Duration,
+        _relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         // Validate that weight is non-negative
         if self.weight.is_some_and(|w| w < 0.0) {
@@ -764,11 +775,15 @@ impl Variant for ChatCompletionConfig {
                 .await?;
             inference_requests.push(request);
         }
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(&self.model, clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model.to_string(),
+                })
+            })?;
         let model_inference_response = model_config
             .start_batch_inference(
                 &inference_requests,
@@ -784,12 +799,6 @@ impl Variant for ChatCompletionConfig {
         ))
     }
 }
-
-/// The template variable names used when applying a legacy template with no schema
-/// Only one of these variables is used per template, based on the `TemplateKind`
-pub const SYSTEM_TEXT_TEMPLATE_VAR: &str = "system_text";
-pub const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
-pub const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
 
 #[derive(Copy, Clone, Debug)]
 pub enum TemplateKind {

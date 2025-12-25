@@ -40,6 +40,8 @@ pub struct OpenAICompatibleChoiceChunk {
     pub delta: OpenAICompatibleDelta,
 }
 
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
 fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
     // if it's None -> skip, or if the Vec is empty -> skip
     v.as_ref().is_none_or(Vec::is_empty)

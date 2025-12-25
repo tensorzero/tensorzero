@@ -3,6 +3,7 @@
 //! This module builds the final Axum router with all layers (auth, tracing, metrics)
 //! and defines authentication and version header middlewares.
 
+use crate::routes::build_api_routes;
 use axum::{
     Router,
     extract::{DefaultBodyLimit, Request},
@@ -15,9 +16,10 @@ use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
 use tensorzero_core::endpoints::TensorzeroAuthMiddlewareState;
 use tensorzero_core::observability::TracerWrapper;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
-use tower_http::metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter};
-
-use crate::routes::build_api_routes;
+use tower_http::{
+    decompression::RequestDecompressionLayer,
+    metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter},
+};
 
 /// Builds the final Axum router for the gateway,
 /// which can be passed to `axum::serve` to start the server.
@@ -43,7 +45,7 @@ pub fn build_axum_router(
         let state = TensorzeroAuthMiddlewareState::new(TensorzeroAuthMiddlewareStateInner {
             unauthenticated_routes: UNAUTHENTICATED_ROUTES,
             auth_cache: app_state.auth_cache.clone(),
-            pool: app_state.postgres_connection_info.get_alpha_pool().cloned(),
+            pool: app_state.postgres_connection_info.get_pool().cloned(),
             error_json: app_state.config.gateway.unstable_error_json,
         });
         router = router.layer(middleware::from_fn_with_state(
@@ -60,6 +62,9 @@ pub fn build_axum_router(
         .layer(axum::middleware::from_fn(
             tensorzero_core::observability::request_logging::request_logging_middleware,
         ))
+        // Accept encoded requests and transparently decompress them.
+        // Supported encodings: gzip, br, zstd.
+        .layer(RequestDecompressionLayer::new())
         // This should always be the very last layer in the stack, so that we start counting as soon as we begin processing a request
         .layer(in_flight_requests_layer)
         .with_state(app_state.clone());

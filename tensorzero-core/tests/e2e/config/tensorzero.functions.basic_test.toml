@@ -266,6 +266,12 @@ model = "loopback-dummy"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.google-ai-studio-gemini-3-flash]
+type = "chat_completion"
+model = "gemini-3-flash"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 1000
+
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite"
@@ -544,20 +550,20 @@ extra_headers = [{ name = "Authorization", value = "invalid_tgi_auth" }]
 
 [functions.basic_test.variants.together]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-together"
+model = "qwen3-next-80b-a3b-instruct-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.together-extra-body]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-together"
+model = "qwen3-next-80b-a3b-instruct-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.together-extra-headers]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-together"
+model = "qwen3-next-80b-a3b-instruct-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [
@@ -566,13 +572,13 @@ extra_headers = [
 
 [functions.basic_test.variants.together-dynamic]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-together-dynamic"
+model = "qwen3-next-80b-a3b-instruct-together-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.together-shorthand]
 type = "chat_completion"
-model = "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+model = "together::Qwen/Qwen3-Next-80B-A3B-Instruct"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 

@@ -230,6 +230,7 @@ impl InferenceProvider for XAIProvider {
                 status,
                 &response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -281,6 +282,7 @@ impl InferenceProvider for XAIProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            None,
             &raw_request,
         )
         .peekable();
@@ -365,7 +367,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
     }
 
     if service_tier.is_some() {

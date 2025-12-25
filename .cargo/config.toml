@@ -11,6 +11,7 @@ rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"] # for NAPI
 rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"] # for NAPI
 
 [alias]
+check-all = "check --all-targets --all-features"
 test-unit = "nextest run --lib --bins"
 test-unit-fast = "nextest run --lib --bins --retries 0 --no-fail-fast"
 test-all = "nextest run --features e2e_tests"
@@ -104,7 +105,8 @@ test-feedback-load = [
 
 build-e2e = "build --bin gateway --features e2e_tests"
 run-e2e = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/config/tensorzero.*.toml"
-run-e2e-mock-batch = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/config/*.toml"
+run-e2e-mock-batch = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/config/{tensorzero.*.toml,mock_batch.toml}"
+run-e2e-mock-optimization = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/config/{tensorzero.*.toml,mock_optimization.toml}"
 migrate-postgres = "run --bin gateway --features e2e_tests -- --run-postgres-migrations"
 watch-e2e = "watch -x run-e2e"
 
@@ -121,4 +123,8 @@ tsbuild = [
     "tensorzero-auth",
     "-p",
     "tensorzero-optimizers",
+    "-p",
+    "autopilot-client",
+    "-p",
+    "tensorzero-types"
 ] # Export Typescript bindings for TensorZero

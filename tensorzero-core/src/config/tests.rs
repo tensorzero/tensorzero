@@ -112,7 +112,7 @@ async fn test_config_from_toml_table_valid() {
 
     let embedding_model = config
         .embedding_models
-        .get("text-embedding-3-small")
+        .get("text-embedding-3-small", None)
         .await
         .expect("Error getting embedding model")
         .unwrap();
@@ -3222,4 +3222,19 @@ async fn test_deprecated_template_filesystem_access_enabled() {
     assert!(logs_contain(
         "The `gateway.template_filesystem_access.enabled` flag is deprecated"
     ));
+}
+
+#[tokio::test]
+async fn test_nested_skip_credential_validation() {
+    assert!(!skip_credential_validation());
+    with_skip_credential_validation(async move {
+        assert!(skip_credential_validation());
+        with_skip_credential_validation(async move {
+            assert!(skip_credential_validation());
+        })
+        .await;
+        assert!(skip_credential_validation());
+    })
+    .await;
+    assert!(!skip_credential_validation());
 }

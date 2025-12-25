@@ -5,12 +5,14 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::{
-    DatasetMetadata, DatasetQueries, DatasetQueryParams, GetDatapointParams, GetDatapointsParams,
+    DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams, MockDatasetQueries,
 };
-use crate::db::inference_stats::{
+use crate::db::inference_count::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
-    CountInferencesWithFeedbackParams, InferenceStatsQueries, MockInferenceStatsQueries,
+    CountInferencesWithFeedbackParams, FunctionInferenceCount,
+    GetFunctionThroughputByVariantParams, InferenceCountQueries, MockInferenceCountQueries,
+    VariantThroughput,
 };
 use crate::db::inferences::{
     CountInferencesParams as ListInferencesCountParams, InferenceMetadata, InferenceQueries,
@@ -38,7 +40,7 @@ pub(crate) struct MockClickHouseConnectionInfo {
     pub(crate) dataset_queries: MockDatasetQueries,
     pub(crate) config_queries: MockConfigQueries,
     pub(crate) model_inference_queries: MockModelInferenceQueries,
-    pub(crate) inference_stats_queries: MockInferenceStatsQueries,
+    pub(crate) inference_count_queries: MockInferenceCountQueries,
 }
 
 impl MockClickHouseConnectionInfo {
@@ -48,7 +50,7 @@ impl MockClickHouseConnectionInfo {
             dataset_queries: MockDatasetQueries::new(),
             config_queries: MockConfigQueries::new(),
             model_inference_queries: MockModelInferenceQueries::new(),
-            inference_stats_queries: MockInferenceStatsQueries::new(),
+            inference_count_queries: MockInferenceCountQueries::new(),
         }
     }
 }
@@ -83,23 +85,11 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
 
 #[async_trait]
 impl DatasetQueries for MockClickHouseConnectionInfo {
-    async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
-        self.dataset_queries.count_rows_for_dataset(params).await
-    }
-
-    async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
-        self.dataset_queries.insert_rows_for_dataset(params).await
-    }
-
     async fn get_dataset_metadata(
         &self,
         params: &GetDatasetMetadataParams,
     ) -> Result<Vec<DatasetMetadata>, Error> {
         self.dataset_queries.get_dataset_metadata(params).await
-    }
-
-    async fn count_datasets(&self) -> Result<u32, Error> {
-        self.dataset_queries.count_datasets().await
     }
 
     async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error> {
@@ -161,12 +151,12 @@ impl ModelInferenceQueries for MockClickHouseConnectionInfo {
 }
 
 #[async_trait]
-impl InferenceStatsQueries for MockClickHouseConnectionInfo {
+impl InferenceCountQueries for MockClickHouseConnectionInfo {
     async fn count_inferences_for_function(
         &self,
         params: CountInferencesParams<'_>,
     ) -> Result<u64, Error> {
-        self.inference_stats_queries
+        self.inference_count_queries
             .count_inferences_for_function(params)
             .await
     }
@@ -175,7 +165,7 @@ impl InferenceStatsQueries for MockClickHouseConnectionInfo {
         &self,
         params: CountInferencesParams<'_>,
     ) -> Result<Vec<CountByVariant>, Error> {
-        self.inference_stats_queries
+        self.inference_count_queries
             .count_inferences_by_variant(params)
             .await
     }
@@ -184,7 +174,7 @@ impl InferenceStatsQueries for MockClickHouseConnectionInfo {
         &self,
         params: CountInferencesWithFeedbackParams<'_>,
     ) -> Result<u64, Error> {
-        self.inference_stats_queries
+        self.inference_count_queries
             .count_inferences_with_feedback(params)
             .await
     }
@@ -193,14 +183,31 @@ impl InferenceStatsQueries for MockClickHouseConnectionInfo {
         &self,
         params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
     ) -> Result<u64, Error> {
-        self.inference_stats_queries
+        self.inference_count_queries
             .count_inferences_with_demonstration_feedback(params)
             .await
     }
 
     async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error> {
-        self.inference_stats_queries
+        self.inference_count_queries
             .count_inferences_for_episode(episode_id)
+            .await
+    }
+
+    async fn get_function_throughput_by_variant(
+        &self,
+        params: GetFunctionThroughputByVariantParams<'_>,
+    ) -> Result<Vec<VariantThroughput>, Error> {
+        self.inference_count_queries
+            .get_function_throughput_by_variant(params)
+            .await
+    }
+
+    async fn list_functions_with_inference_count(
+        &self,
+    ) -> Result<Vec<FunctionInferenceCount>, Error> {
+        self.inference_count_queries
+            .list_functions_with_inference_count()
             .await
     }
 }

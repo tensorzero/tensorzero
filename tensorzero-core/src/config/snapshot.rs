@@ -179,6 +179,32 @@ impl ConfigSnapshot {
         }
     }
 
+    /// Create a ConfigSnapshot from a `StoredConfig` directly.
+    ///
+    /// This is used when receiving a config via API (e.g., POST /internal/config).
+    /// The hash is computed from the TOML representation of the config.
+    pub fn from_stored_config(
+        config: StoredConfig,
+        extra_templates: HashMap<String, String>,
+        tags: HashMap<String, String>,
+    ) -> Result<Self, Error> {
+        let stored_config_toml =
+            prepare_table_for_snapshot(toml::Table::try_from(&config).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize stored config: {e}"),
+                })
+            })?);
+
+        let hash = ConfigSnapshot::hash(&stored_config_toml, &extra_templates)?;
+        Ok(Self {
+            config,
+            hash,
+            extra_templates,
+            tags,
+            __private: (),
+        })
+    }
+
     /// Create a ConfigSnapshot from data loaded from the database.
     ///
     /// This is used when loading a previously stored config snapshot from ClickHouse.

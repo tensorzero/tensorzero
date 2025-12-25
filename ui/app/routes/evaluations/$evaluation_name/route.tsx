@@ -1,12 +1,11 @@
 import type { Route } from "./+types/route";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
-  getEvaluationStatistics,
   getEvaluationResults,
-  getEvaluationRunInfos,
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
+import type { ParsedEvaluationResult } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable, type SelectedRowData } from "./EvaluationTable";
 import {
   PageHeader,
@@ -76,32 +75,31 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
   );
 
+  const tensorZeroClient = getTensorZeroClient();
+
   // Set up all promises to run concurrently
-  const evaluationRunInfosPromise = getEvaluationRunInfos(
-    selected_evaluation_run_ids_array,
-    function_name,
-  );
+  const evaluationRunInfosPromise = tensorZeroClient
+    .getEvaluationRunInfos(selected_evaluation_run_ids_array, function_name)
+    .then((response) => response.run_infos);
 
   // Create placeholder promises for results and statistics that will be used conditionally
-  let resultsPromise;
+  let resultsPromise: Promise<ParsedEvaluationResult[]>;
   if (selected_evaluation_run_ids_array.length > 0) {
     // If there is a freshly inserted feedback, ClickHouse may take some time to
     // update the evaluation results as it is eventually consistent.
     // In this case, we poll for the evaluation results until the feedback is found.
     resultsPromise = newFeedbackId
       ? pollForEvaluationResults(
+          params.evaluation_name,
           function_name,
-          function_type,
-          metric_names,
           selected_evaluation_run_ids_array,
           newFeedbackId,
           limit,
           offset,
         )
       : getEvaluationResults(
+          params.evaluation_name,
           function_name,
-          function_type,
-          metric_names,
           selected_evaluation_run_ids_array,
           limit,
           offset,
@@ -112,23 +110,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   let statisticsPromise;
   if (selected_evaluation_run_ids_array.length > 0) {
-    statisticsPromise = getEvaluationStatistics(
-      function_name,
-      function_type,
-      metric_names,
-      selected_evaluation_run_ids_array,
-    );
+    statisticsPromise = tensorZeroClient
+      .getEvaluationStatistics(
+        function_name,
+        function_type,
+        metric_names,
+        selected_evaluation_run_ids_array,
+      )
+      .then((response) => response.statistics);
   } else {
     statisticsPromise = Promise.resolve([]);
   }
 
   let total_datapoints_promise;
   if (selected_evaluation_run_ids_array.length > 0) {
-    total_datapoints_promise =
-      getTensorZeroClient().countDatapointsForEvaluation(
-        function_name,
-        selected_evaluation_run_ids_array,
-      );
+    total_datapoints_promise = tensorZeroClient.countDatapointsForEvaluation(
+      function_name,
+      selected_evaluation_run_ids_array,
+    );
   } else {
     total_datapoints_promise = Promise.resolve(0);
   }

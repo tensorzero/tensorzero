@@ -3,18 +3,68 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use serde::Deserialize;
 
 use super::ClickHouseConnectionInfo;
 use super::select_queries::{parse_count, parse_json_rows};
 use crate::db::evaluation_queries::EvaluationQueries;
+use crate::db::evaluation_queries::EvaluationResultRow;
+use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
+use crate::db::evaluation_queries::EvaluationStatisticsRow;
 use crate::error::Error;
+use crate::function::FunctionConfigType;
+use crate::statistics_util::{wald_confint, wilson_confint};
+
+/// Raw statistics row from ClickHouse before CI computation.
+/// This is an intermediate representation used to compute confidence intervals in Rust.
+#[derive(Debug, Deserialize)]
+struct RawEvaluationStatisticsRow {
+    evaluation_run_id: uuid::Uuid,
+    metric_name: String,
+    metric_type: String, // "float" or "boolean"
+    datapoint_count: u32,
+    mean_metric: f64,
+    stdev: Option<f64>, // Only present for float metrics
+}
+
+impl RawEvaluationStatisticsRow {
+    /// Converts the raw row to the final `EvaluationStatisticsRow` by computing
+    /// confidence intervals in Rust.
+    fn into_evaluation_statistics_row(self) -> EvaluationStatisticsRow {
+        let (ci_lower, ci_upper) = if self.metric_type == "float" {
+            // Use Wald confidence interval for continuous (float) metrics
+            if let Some(stdev) = self.stdev {
+                wald_confint(self.mean_metric, stdev, self.datapoint_count)
+                    .map(|(l, u)| (Some(l), Some(u)))
+                    .unwrap_or((None, None))
+            } else {
+                (None, None)
+            }
+        } else {
+            // Use Wilson confidence interval for Bernoulli (boolean) metrics
+            wilson_confint(self.mean_metric, self.datapoint_count)
+                .map(|(l, u)| (Some(l), Some(u)))
+                .unwrap_or((None, None))
+        };
+
+        EvaluationStatisticsRow {
+            evaluation_run_id: self.evaluation_run_id,
+            metric_name: self.metric_name,
+            datapoint_count: self.datapoint_count,
+            mean_metric: self.mean_metric,
+            ci_lower,
+            ci_upper,
+        }
+    }
+}
 
 // Private helper for constructing the subquery for datapoint IDs
 fn get_evaluation_result_datapoint_id_subquery(
     function_name: &str,
     evaluation_run_ids: &[uuid::Uuid],
+    datapoint_id: Option<&uuid::Uuid>,
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> (String, HashMap<String, String>) {
@@ -39,6 +89,14 @@ fn get_evaluation_result_datapoint_id_subquery(
     let eval_run_ids_joined = format!("[{}]", eval_run_ids_str.join(","));
     params.insert("evaluation_run_ids".to_string(), eval_run_ids_joined);
 
+    // Add optional datapoint_id filter
+    let datapoint_filter = if let Some(dp_id) = datapoint_id {
+        params.insert("datapoint_id".to_string(), dp_id.to_string());
+        "AND value = {datapoint_id:String}"
+    } else {
+        ""
+    };
+
     let query = format!(
         "all_inference_ids AS (
             SELECT DISTINCT inference_id
@@ -52,6 +110,7 @@ fn get_evaluation_result_datapoint_id_subquery(
             WHERE key = 'tensorzero::datapoint_id'
             AND function_name = {{function_name:String}}
             AND inference_id IN (SELECT inference_id FROM all_inference_ids)
+            {datapoint_filter}
             ORDER BY toUInt128(toUUID(datapoint_id)) DESC
             {limit_clause}
             {offset_clause}
@@ -126,6 +185,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         let (datapoint_id_subquery, params_owned) = get_evaluation_result_datapoint_id_subquery(
             function_name,
             evaluation_run_ids,
+            None, // datapoint_id filter
             /* limit= */ None,
             /* offset= */ None,
         );
@@ -191,6 +251,310 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous(sql_query, &params).await?;
         parse_json_rows(response.response.as_str())
     }
+
+    async fn get_evaluation_run_infos(
+        &self,
+        evaluation_run_ids: &[uuid::Uuid],
+        function_name: &str,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
+        // Format evaluation_run_ids as array for ClickHouse
+        let eval_run_ids_str: Vec<String> = evaluation_run_ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect();
+        let eval_run_ids_joined = format!("[{}]", eval_run_ids_str.join(","));
+
+        let sql_query = r"
+            SELECT
+                any(run_tag.value) as evaluation_run_id,
+                any(run_tag.variant_name) as variant_name,
+                formatDateTime(
+                    max(UUIDv7ToDateTime(inference_id)),
+                    '%Y-%m-%dT%H:%i:%SZ'
+                ) as most_recent_inference_date
+            FROM
+                TagInference AS run_tag FINAL
+            WHERE
+                run_tag.key = 'tensorzero::evaluation_run_id'
+                AND run_tag.value IN ({evaluation_run_ids:Array(String)})
+                AND run_tag.function_name = {function_name:String}
+            GROUP BY
+                run_tag.value
+            ORDER BY
+                toUInt128(toUUID(evaluation_run_id)) DESC
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let function_name_str = function_name.to_string();
+
+        let mut params = HashMap::new();
+        params.insert("evaluation_run_ids", eval_run_ids_joined.as_str());
+        params.insert("function_name", function_name_str.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_evaluation_run_infos_for_datapoint(
+        &self,
+        datapoint_id: &uuid::Uuid,
+        function_name: &str,
+        function_type: FunctionConfigType,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
+        let inference_table_name = function_type.table_name();
+
+        let sql_query = format!(
+            r"
+            WITH datapoint_inference_ids AS (
+                SELECT inference_id
+                FROM TagInference FINAL
+                WHERE key = 'tensorzero::datapoint_id'
+                AND value = {{datapoint_id:String}}
+            )
+            SELECT
+                any(tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
+                any(variant_name) as variant_name,
+                formatDateTime(
+                    max(UUIDv7ToDateTime(id)),
+                    '%Y-%m-%dT%H:%i:%SZ'
+                ) as most_recent_inference_date
+            FROM {inference_table_name}
+            WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
+            AND function_name = {{function_name:String}}
+            GROUP BY
+                tags['tensorzero::evaluation_run_id']
+            FORMAT JSONEachRow
+        "
+        );
+
+        let datapoint_id_str = datapoint_id.to_string();
+        let function_name_str = function_name.to_string();
+
+        let mut params = HashMap::new();
+        params.insert("datapoint_id", datapoint_id_str.as_str());
+        params.insert("function_name", function_name_str.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_evaluation_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        metric_names: &[String],
+        evaluation_run_ids: &[uuid::Uuid],
+    ) -> Result<Vec<crate::db::evaluation_queries::EvaluationStatisticsRow>, Error> {
+        let inference_table_name = function_type.table_name();
+
+        // Build the datapoint ID subquery
+        let (datapoint_id_subquery, params_owned) = get_evaluation_result_datapoint_id_subquery(
+            function_name,
+            evaluation_run_ids,
+            None, // datapoint_id filter
+            /* limit= */ None,
+            /* offset= */ None,
+        );
+
+        // Build metric names array for ClickHouse
+        let metric_names_str: Vec<String> = metric_names.iter().map(|s| format!("'{s}'")).collect();
+        let metric_names_joined = format!("[{}]", metric_names_str.join(","));
+
+        // Query returns raw statistics (mean, count, stdev) without CI computation.
+        // CI is computed in Rust using wald_confint (float) or wilson_confint (boolean).
+        let sql_query = format!(
+            r"WITH {datapoint_id_subquery},
+            filtered_inference AS (
+                SELECT
+                    id,
+                    tags['tensorzero::evaluation_run_id'] AS evaluation_run_id
+                FROM {inference_table_name}
+                WHERE id IN (SELECT inference_id FROM all_inference_ids)
+                AND function_name = {{function_name:String}}
+            ),
+            float_feedback AS (
+                SELECT metric_name,
+                       argMax(value, timestamp) as value,
+                       target_id
+                FROM FloatMetricFeedback
+                WHERE metric_name IN ({{metric_names:Array(String)}})
+                AND target_id IN (SELECT inference_id FROM all_inference_ids)
+                GROUP BY target_id, metric_name
+            ),
+            boolean_feedback AS (
+                SELECT metric_name,
+                       argMax(value, timestamp) as value,
+                       target_id
+                FROM BooleanMetricFeedback
+                WHERE metric_name IN ({{metric_names:Array(String)}})
+                AND target_id IN (SELECT inference_id FROM all_inference_ids)
+                GROUP BY target_id, metric_name
+            ),
+            float_stats AS (
+                SELECT
+                    filtered_inference.evaluation_run_id,
+                    float_feedback.metric_name AS metric_name,
+                    'float' AS metric_type,
+                    toUInt32(count()) AS datapoint_count,
+                    avg(toFloat64(float_feedback.value)) AS mean_metric,
+                    stddevSamp(toFloat64(float_feedback.value)) AS stdev
+                FROM filtered_inference
+                INNER JOIN float_feedback
+                    ON float_feedback.target_id = filtered_inference.id
+                    AND float_feedback.value IS NOT NULL
+                GROUP BY
+                    filtered_inference.evaluation_run_id,
+                    float_feedback.metric_name
+            ),
+            boolean_stats AS (
+                SELECT
+                    filtered_inference.evaluation_run_id,
+                    boolean_feedback.metric_name AS metric_name,
+                    'boolean' AS metric_type,
+                    toUInt32(count()) AS datapoint_count,
+                    avg(toFloat64(boolean_feedback.value)) AS mean_metric,
+                    NULL AS stdev
+                FROM filtered_inference
+                INNER JOIN boolean_feedback
+                    ON boolean_feedback.target_id = filtered_inference.id
+                    AND boolean_feedback.value IS NOT NULL
+                GROUP BY
+                    filtered_inference.evaluation_run_id,
+                    boolean_feedback.metric_name
+            )
+            SELECT * FROM float_stats
+            UNION ALL
+            SELECT * FROM boolean_stats
+            ORDER BY
+                toUInt128(toUUID(evaluation_run_id)) DESC,
+                metric_name ASC
+            FORMAT JSONEachRow
+            "
+        );
+
+        let function_name_str = function_name.to_string();
+        let mut params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        params.insert("function_name", function_name_str.as_str());
+        params.insert("metric_names", metric_names_joined.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        let raw_rows: Vec<RawEvaluationStatisticsRow> =
+            parse_json_rows(response.response.as_str())?;
+
+        // Compute confidence intervals in Rust
+        Ok(raw_rows
+            .into_iter()
+            .map(|row| row.into_evaluation_statistics_row())
+            .collect())
+    }
+
+    async fn get_evaluation_results(
+        &self,
+        function_name: &str,
+        evaluation_run_ids: &[uuid::Uuid],
+        inference_table_name: &str,
+        datapoint_table_name: &str,
+        metric_names: &[String],
+        datapoint_id: Option<&uuid::Uuid>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationResultRow>, Error> {
+        // Build the datapoint ID subquery with pagination
+        let (datapoint_id_subquery, params_owned) = get_evaluation_result_datapoint_id_subquery(
+            function_name,
+            evaluation_run_ids,
+            datapoint_id,
+            Some(limit),
+            Some(offset),
+        );
+
+        // Format metric_names as array for ClickHouse
+        let metric_names_str: Vec<String> = metric_names.iter().map(|m| format!("'{m}'")).collect();
+        let metric_names_joined = format!("[{}]", metric_names_str.join(","));
+
+        // The query uses CTEs to:
+        // 1. Find all datapoints in the evaluation runs (with pagination)
+        // 2. Filter inferences to those datapoints
+        // 3. Get feedback (both boolean and float metrics) for those inferences
+        // 4. Get the datapoint reference outputs
+        // 5. Join everything together
+        let sql_query = format!(
+            r"
+            WITH {datapoint_id_subquery},
+            filtered_dp AS (
+                SELECT * FROM {datapoint_table_name} FINAL
+                WHERE function_name = {{function_name:String}}
+                AND id IN (SELECT datapoint_id FROM all_datapoint_ids)
+            ),
+            filtered_inference AS (
+                SELECT * FROM {inference_table_name}
+                WHERE id IN (SELECT inference_id FROM all_inference_ids)
+                AND function_name = {{function_name:String}}
+            ),
+            filtered_feedback AS (
+                SELECT metric_name,
+                    argMax(toString(value), timestamp) as value,
+                    argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+                    argMax(id, timestamp) as feedback_id,
+                    argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback,
+                    target_id
+                FROM BooleanMetricFeedback
+                WHERE metric_name IN ({{metric_names:Array(String)}})
+                AND target_id IN (SELECT inference_id FROM all_inference_ids)
+                GROUP BY target_id, metric_name
+                UNION ALL
+                SELECT metric_name,
+                    argMax(toString(value), timestamp) as value,
+                    argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+                    argMax(id, timestamp) as feedback_id,
+                    argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback,
+                    target_id
+                FROM FloatMetricFeedback
+                WHERE metric_name IN ({{metric_names:Array(String)}})
+                AND target_id IN (SELECT inference_id FROM all_inference_ids)
+                GROUP BY target_id, metric_name
+            )
+            SELECT
+                filtered_dp.input as input,
+                filtered_dp.id as datapoint_id,
+                filtered_dp.name as name,
+                filtered_dp.output as reference_output,
+                filtered_inference.output as generated_output,
+                filtered_inference.function_name as function_name,
+                toUUID(filtered_inference.tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
+                filtered_inference.tags['tensorzero::dataset_name'] as dataset_name,
+                if(length(filtered_feedback.evaluator_inference_id) > 0, filtered_feedback.evaluator_inference_id, null) as evaluator_inference_id,
+                filtered_inference.id as inference_id,
+                filtered_inference.episode_id as episode_id,
+                filtered_feedback.metric_name as metric_name,
+                filtered_feedback.value as metric_value,
+                filtered_feedback.feedback_id as feedback_id,
+                toBool(filtered_feedback.is_human_feedback) as is_human_feedback,
+                formatDateTime(filtered_dp.staled_at, '%Y-%m-%dT%H:%i:%SZ') as staled_at,
+                filtered_inference.variant_name as variant_name
+            FROM filtered_dp
+            INNER JOIN filtered_inference
+                ON toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id']) = filtered_dp.id
+            LEFT JOIN filtered_feedback
+                ON filtered_feedback.target_id = filtered_inference.id
+            ORDER BY toUInt128(datapoint_id) DESC, metric_name DESC
+            FORMAT JSONEachRow
+            "
+        );
+
+        let mut params: HashMap<_, _> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        params.insert("metric_names", metric_names_joined.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        parse_json_rows(response.response.as_str())
+    }
 }
 
 #[cfg(test)]
@@ -205,6 +569,7 @@ mod tests {
         },
         evaluation_queries::EvaluationQueries,
     };
+    use crate::function::FunctionConfigType;
 
     use uuid::Uuid;
 
@@ -567,5 +932,1026 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "SELECT
+                    any(run_tag.value) as evaluation_run_id,
+                    any(run_tag.variant_name) as variant_name,
+                    formatDateTime(
+                        max(UUIDv7ToDateTime(inference_id)),
+                        '%Y-%m-%dT%H:%i:%SZ'
+                    ) as most_recent_inference_date
+                FROM
+                    TagInference AS run_tag FINAL
+                WHERE
+                    run_tag.key = 'tensorzero::evaluation_run_id'
+                    AND run_tag.value IN ({evaluation_run_ids:Array(String)})
+                    AND run_tag.function_name = {function_name:String}
+                GROUP BY
+                    run_tag.value
+                ORDER BY
+                    toUInt128(toUUID(evaluation_run_id)) DESC
+                FORMAT JSONEachRow");
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95d']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos(
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+                "test_func",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].variant_name, "test_variant");
+        assert_eq!(
+            result[0].evaluation_run_id,
+            Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_multiple() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|_query, params| {
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95d','0196ee9c-d808-74f3-8000-02ec7409b95e']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","most_recent_inference_date":"2025-05-20T16:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","most_recent_inference_date":"2025-05-20T17:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos(
+                &[
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap(),
+                ],
+                "test_func",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert_eq!(result[1].variant_name, "variant2");
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_empty() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos(
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+                "nonexistent_func",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_for_datapoint_chat() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(
+                    query,
+                    "WITH datapoint_inference_ids AS (
+                        SELECT inference_id
+                        FROM TagInference FINAL
+                        WHERE key = 'tensorzero::datapoint_id'
+                        AND value = {datapoint_id:String}
+                    )
+                    SELECT
+                        any(tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
+                        any(variant_name) as variant_name,
+                        formatDateTime(
+                            max(UUIDv7ToDateTime(id)),
+                            '%Y-%m-%dT%H:%i:%SZ'
+                        ) as most_recent_inference_date
+                    FROM ChatInference
+                    WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
+                    AND function_name = {function_name:String}
+                    GROUP BY
+                        tags['tensorzero::evaluation_run_id']
+                    FORMAT JSONEachRow",
+                );
+                assert_eq!(
+                    params.get("datapoint_id"),
+                    Some(&"0196ee9c-d808-74f3-8000-02ec7409b95d")
+                );
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos_for_datapoint(
+                &Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                "test_func",
+                FunctionConfigType::Chat,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].variant_name, "test_variant");
+        assert_eq!(
+            result[0].evaluation_run_id,
+            Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_for_datapoint_json() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(
+                    query,
+                    "WITH datapoint_inference_ids AS (
+                        SELECT inference_id
+                        FROM TagInference FINAL
+                        WHERE key = 'tensorzero::datapoint_id'
+                        AND value = {datapoint_id:String}
+                    )
+                    SELECT
+                        any(tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
+                        any(variant_name) as variant_name,
+                        formatDateTime(
+                            max(UUIDv7ToDateTime(id)),
+                            '%Y-%m-%dT%H:%i:%SZ'
+                        ) as most_recent_inference_date
+                    FROM JsonInference
+                    WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
+                    AND function_name = {function_name:String}
+                    GROUP BY
+                        tags['tensorzero::evaluation_run_id']
+                    FORMAT JSONEachRow",
+                );
+                assert_eq!(
+                    params.get("datapoint_id"),
+                    Some(&"0196ee9c-d808-74f3-8000-02ec7409b95d")
+                );
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos_for_datapoint(
+                &Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                "test_func",
+                FunctionConfigType::Json,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].variant_name, "test_variant");
+        assert_eq!(
+            result[0].evaluation_run_id,
+            Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_for_datapoint_multiple() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","most_recent_inference_date":"2025-05-20T16:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","most_recent_inference_date":"2025-05-20T17:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos_for_datapoint(
+                &Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                "test_func",
+                FunctionConfigType::Chat,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert_eq!(result[1].variant_name, "variant2");
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_for_datapoint_empty() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos_for_datapoint(
+                &Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                "nonexistent_func",
+                FunctionConfigType::Json,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    // ============================================================================
+    // get_evaluation_statistics tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_chat_function() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "FROM ChatInference");
+                assert_query_contains(query, "float_stats");
+                assert_query_contains(query, "boolean_stats");
+                assert_query_contains(query, "FloatMetricFeedback");
+                assert_query_contains(query, "BooleanMetricFeedback");
+                assert_query_contains(query, "'float' AS metric_type");
+                assert_query_contains(query, "'boolean' AS metric_type");
+                assert_query_contains(query, "stddevSamp");
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                assert_eq!(
+                    params.get("metric_names"),
+                    Some(&"['metric1','metric2']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                // Return raw stats with metric_type and stdev; CI is computed in Rust
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric1","metric_type":"float","datapoint_count":100,"mean_metric":0.75,"stdev":0.1}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric2","metric_type":"boolean","datapoint_count":100,"mean_metric":0.8,"stdev":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string(), "metric2".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        // Float metric uses Wald CI
+        assert_eq!(result[0].metric_name, "metric1");
+        assert_eq!(result[0].datapoint_count, 100);
+        assert!((result[0].mean_metric - 0.75).abs() < 0.001);
+        // Wald CI: 0.75 ± 1.96 * (0.1 / sqrt(100)) = 0.75 ± 0.0196
+        assert!((result[0].ci_lower.unwrap() - 0.7304).abs() < 0.001);
+        assert!((result[0].ci_upper.unwrap() - 0.7696).abs() < 0.001);
+
+        // Boolean metric uses Wilson CI
+        assert_eq!(result[1].metric_name, "metric2");
+        assert_eq!(result[1].datapoint_count, 100);
+        assert!((result[1].mean_metric - 0.8).abs() < 0.001);
+        // Wilson CI for p=0.8, n=100
+        assert!(result[1].ci_lower.is_some());
+        assert!(result[1].ci_upper.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_json_function() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                assert_query_contains(query, "FROM JsonInference");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"accuracy","metric_type":"boolean","datapoint_count":5,"mean_metric":0.9,"stdev":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Json,
+                &["accuracy".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].metric_name, "accuracy");
+        assert_eq!(result[0].datapoint_count, 5);
+        assert!((result[0].mean_metric - 0.9).abs() < 0.001);
+        // Wilson CI is computed in Rust
+        assert!(result[0].ci_lower.is_some());
+        assert!(result[0].ci_upper.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_multiple_runs() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|_query, params| {
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95d','0196ee9c-d808-74f3-8000-02ec7409b95e']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric1","metric_type":"float","datapoint_count":10,"mean_metric":0.75,"stdev":0.1}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","metric_name":"metric1","metric_type":"float","datapoint_count":15,"mean_metric":0.80,"stdev":0.12}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                &[
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap(),
+                ],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        // Both should have CI computed
+        assert!(result[0].ci_lower.is_some());
+        assert!(result[0].ci_upper.is_some());
+        assert!(result[1].ci_lower.is_some());
+        assert!(result[1].ci_upper.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_empty_results() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "nonexistent_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_single_datapoint_float() {
+        // For float metrics with single datapoint, stdev is null so CI cannot be computed
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric1","metric_type":"float","datapoint_count":1,"mean_metric":1.0,"stdev":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        // Float metric with null stdev cannot compute Wald CI
+        assert!(result[0].ci_lower.is_none());
+        assert!(result[0].ci_upper.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_single_datapoint_boolean() {
+        // For boolean metrics with single datapoint, Wilson CI can still be computed
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric1","metric_type":"boolean","datapoint_count":1,"mean_metric":1.0,"stdev":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        // Boolean metric can still compute Wilson CI even with single datapoint
+        assert!(result[0].ci_lower.is_some());
+        assert!(result[0].ci_upper.is_some());
+        // For p=1.0, n=1, Wilson lower is approximately 0.206
+        assert!((result[0].ci_lower.unwrap() - 0.206543).abs() < 0.001);
+        assert!((result[0].ci_upper.unwrap() - 1.0).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                // Verify the query structure
+                assert_query_contains(query, "WITH all_inference_ids AS");
+                assert_query_contains(query, "all_datapoint_ids AS");
+                assert_query_contains(query, "filtered_dp AS");
+                assert_query_contains(query, "filtered_inference AS");
+                assert_query_contains(query, "filtered_feedback AS");
+                assert_query_contains(query, "FROM ChatInference");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint");
+                assert_query_contains(query, "LEFT JOIN filtered_feedback");
+                assert_query_contains(query, "LIMIT 10");
+                assert_query_contains(query, "OFFSET 0");
+                assert_query_contains(query, "ORDER BY toUInt128(datapoint_id) DESC");
+
+                // Verify parameters
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95e']")
+                );
+                assert_eq!(
+                    params.get("metric_names"),
+                    Some(&"['tensorzero::evaluation_name::test::evaluator_name::exact_match']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{\"messages\":[]}","generated_output":"[{\"type\":\"text\",\"text\":\"hello\"}]","reference_output":"[{\"type\":\"text\",\"text\":\"hello\"}]","dataset_name":"test_dataset","metric_name":"tensorzero::evaluation_name::test::evaluator_name::exact_match","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"test_variant","name":"test_datapoint","staled_at":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "test_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
+                "ChatInference",
+                "ChatInferenceDatapoint",
+                &["tensorzero::evaluation_name::test::evaluator_name::exact_match".to_string()],
+                None,
+                10,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].variant_name, "test_variant");
+        assert_eq!(result[0].dataset_name, "test_dataset");
+        assert_eq!(
+            result[0].metric_name,
+            Some("tensorzero::evaluation_name::test::evaluator_name::exact_match".to_string())
+        );
+        assert_eq!(result[0].metric_value, Some("true".to_string()));
+        assert!(!result[0].is_human_feedback);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_multiple_results() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"ds1","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"variant1","name":null,"staled_at":null}
+{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b962","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b963","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b964","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b965","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b966","input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"ds2","metric_name":"metric2","metric_value":"0.95","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b967","is_human_feedback":true,"variant_name":"variant2","name":"named_dp","staled_at":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "test_func",
+                &[
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap(),
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b965").unwrap(),
+                ],
+                "JsonInference",
+                "JsonInferenceDatapoint",
+                &["metric1".to_string(), "metric2".to_string()],
+                None,
+                100,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert!(!result[0].is_human_feedback);
+        assert!(result[0].evaluator_inference_id.is_none());
+
+        assert_eq!(result[1].variant_name, "variant2");
+        assert!(result[1].is_human_feedback);
+        assert!(result[1].evaluator_inference_id.is_some());
+        assert_eq!(result[1].name, Some("named_dp".to_string()));
+        assert!(result[1].staled_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_empty() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "nonexistent_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
+                "ChatInference",
+                "ChatInferenceDatapoint",
+                &["metric".to_string()],
+                None,
+                100,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_with_pagination() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                // Verify pagination is passed through
+                assert_query_contains(query, "LIMIT 50");
+                assert_query_contains(query, "OFFSET 100");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "test_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
+                "JsonInference",
+                "JsonInferenceDatapoint",
+                &["metric".to_string()],
+                None,
+                50,
+                100,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    // ============================================================================
+    // get_evaluation_results with datapoint_id filter tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_with_datapoint_id_filter() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                // Verify the query structure includes datapoint filter
+                assert_query_contains(query, "WITH all_inference_ids AS");
+                assert_query_contains(query, "all_datapoint_ids AS");
+                assert_query_contains(query, "filtered_dp AS");
+                assert_query_contains(query, "filtered_inference AS");
+                assert_query_contains(query, "filtered_feedback AS");
+                assert_query_contains(query, "FROM ChatInference");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint");
+                // Verify the datapoint_id filter is present
+                assert_query_contains(query, "AND value = {datapoint_id:String}");
+                assert_query_contains(query, "LEFT JOIN filtered_feedback");
+
+                // Verify parameters include datapoint_id
+                assert_eq!(
+                    params.get("datapoint_id"),
+                    Some(&"0196ee9c-d808-74f3-8000-02ec7409b95d")
+                );
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95e']")
+                );
+                assert_eq!(
+                    params.get("metric_names"),
+                    Some(&"['tensorzero::evaluation_name::test::evaluator_name::exact_match']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{\"messages\":[]}","generated_output":"[{\"type\":\"text\",\"text\":\"hello\"}]","reference_output":"[{\"type\":\"text\",\"text\":\"hello\"}]","dataset_name":"test_dataset","metric_name":"tensorzero::evaluation_name::test::evaluator_name::exact_match","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"test_variant","name":"test_datapoint","staled_at":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "test_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
+                "ChatInference",
+                "ChatInferenceDatapoint",
+                &["tensorzero::evaluation_name::test::evaluator_name::exact_match".to_string()],
+                Some(&datapoint_id),
+                u32::MAX,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].variant_name, "test_variant");
+        assert_eq!(result[0].dataset_name, "test_dataset");
+        assert_eq!(
+            result[0].metric_name,
+            Some("tensorzero::evaluation_name::test::evaluator_name::exact_match".to_string())
+        );
+        assert_eq!(result[0].metric_value, Some("true".to_string()));
+        assert!(!result[0].is_human_feedback);
+        assert_eq!(result[0].name, Some("test_datapoint".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_with_datapoint_id_json() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                assert_query_contains(query, "FROM JsonInference");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint");
+                assert_query_contains(query, "AND value = {datapoint_id:String}");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"test_dataset","metric_name":"metric1","metric_value":"0.95","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"test_variant","name":null,"staled_at":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "test_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
+                "JsonInference",
+                "JsonInferenceDatapoint",
+                &["metric1".to_string()],
+                Some(&datapoint_id),
+                u32::MAX,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].variant_name, "test_variant");
+        assert_eq!(result[0].metric_value, Some("0.95".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_with_datapoint_id_multiple_run_ids() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                // Should have datapoint_id and multiple run IDs
+                assert_query_contains(query, "AND value = {datapoint_id:String}");
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95e','0196ee9c-d808-74f3-8000-02ec7409b95f']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"ds1","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"variant1","name":null,"staled_at":null}
+{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b962","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b963","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b966","input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"ds1","metric_name":"metric1","metric_value":"0.75","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b967","is_human_feedback":true,"variant_name":"variant2","name":null,"staled_at":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "test_func",
+                &[
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap(),
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95f").unwrap(),
+                ],
+                "ChatInference",
+                "ChatInferenceDatapoint",
+                &["metric1".to_string()],
+                Some(&datapoint_id),
+                u32::MAX,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert!(!result[0].is_human_feedback);
+        assert!(result[0].evaluator_inference_id.is_none());
+
+        assert_eq!(result[1].variant_name, "variant2");
+        assert!(result[1].is_human_feedback);
+        assert!(result[1].evaluator_inference_id.is_some());
+        assert!(result[1].staled_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_with_datapoint_id_empty() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "nonexistent_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
+                "ChatInference",
+                "ChatInferenceDatapoint",
+                &["metric".to_string()],
+                Some(&datapoint_id),
+                u32::MAX,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_with_datapoint_id_multiple_metrics() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                // Should have datapoint_id and multiple metric names
+                assert_query_contains(query, "AND value = {datapoint_id:String}");
+                assert_eq!(
+                    params.get("metric_names"),
+                    Some(&"['metric1','metric2']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                // Return rows for different metrics for the same inference
+                Ok(ClickHouseResponse {
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"test_dataset","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"test_variant","name":null,"staled_at":null}
+{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b968","input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"test_dataset","metric_name":"metric2","metric_value":"0.95","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b969","is_human_feedback":false,"variant_name":"test_variant","name":null,"staled_at":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "test_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
+                "ChatInference",
+                "ChatInferenceDatapoint",
+                &["metric1".to_string(), "metric2".to_string()],
+                Some(&datapoint_id),
+                u32::MAX,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].metric_name, Some("metric1".to_string()));
+        assert_eq!(result[0].metric_value, Some("true".to_string()));
+        assert_eq!(result[1].metric_name, Some("metric2".to_string()));
+        assert_eq!(result[1].metric_value, Some("0.95".to_string()));
     }
 }

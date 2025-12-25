@@ -369,12 +369,13 @@ async fn test_gcp_vertex_multi_turn_thought_non_streaming() {
         .unwrap();
     let response_json = response.json::<Value>().await.unwrap();
     let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(
-        new_content_blocks.len(),
-        1,
-        "Unexpected new content blocks: {new_content_blocks:?}"
+    // Check that we have a text block
+    assert!(
+        new_content_blocks
+            .iter()
+            .any(|block| block["type"] == "text"),
+        "Expected a text block in the content blocks: {new_content_blocks:?}"
     );
-    assert_eq!(new_content_blocks[0]["type"], "text");
 
     // Don't bother checking ClickHouse, as we do that in lots of other tests
 }

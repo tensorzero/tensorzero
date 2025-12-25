@@ -2,29 +2,16 @@ import { createRequire } from "module";
 import type {
   CacheEnabledMode,
   ClientInferenceParams,
-  DatasetQueryParams,
   EvaluationRunEvent,
-  CumulativeFeedbackTimeSeriesPoint,
-  FeedbackByVariant,
-  GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
-  FeedbackRow,
-  FeedbackBounds,
-  QueryFeedbackBoundsByTargetIdParams,
-  QueryFeedbackByTargetIdParams,
-  CountFeedbackByTargetIdParams,
-  QueryDemonstrationFeedbackByInferenceIdParams,
-  DemonstrationFeedbackRow,
-  GetCumulativeFeedbackTimeseriesParams,
   KeyInfo,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
-  DatabaseClient as NativeDatabaseClientType,
   PostgresClient as NativePostgresClientType,
 } from "../index";
 import { logger } from "./utils/logger";
@@ -38,7 +25,6 @@ const require = createRequire(import.meta.url);
 
 const {
   TensorZeroClient: NativeTensorZeroClient,
-  DatabaseClient: NativeDatabaseClient,
   PostgresClient: NativePostgresClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
@@ -195,102 +181,6 @@ function safeStringify(obj: unknown) {
     );
   } catch {
     return "null";
-  }
-}
-
-/// Wrapper class for type safety and convenience
-/// around the native DatabaseClient
-export class DatabaseClient {
-  private nativeDatabaseClient: NativeDatabaseClientType;
-
-  constructor(client: NativeDatabaseClientType) {
-    this.nativeDatabaseClient = client;
-  }
-
-  static async fromClickhouseUrl(url: string): Promise<DatabaseClient> {
-    return new DatabaseClient(
-      await NativeDatabaseClient.fromClickhouseUrl(url),
-    );
-  }
-
-  async queryFeedbackByTargetId(
-    params: QueryFeedbackByTargetIdParams,
-  ): Promise<FeedbackRow[]> {
-    const paramsString = safeStringify(params);
-    const feedbackString =
-      await this.nativeDatabaseClient.queryFeedbackByTargetId(paramsString);
-    return JSON.parse(feedbackString) as FeedbackRow[];
-  }
-
-  async queryDemonstrationFeedbackByInferenceId(
-    params: QueryDemonstrationFeedbackByInferenceIdParams,
-  ): Promise<DemonstrationFeedbackRow[]> {
-    const paramsString = safeStringify(params);
-    const feedbackString =
-      await this.nativeDatabaseClient.queryDemonstrationFeedbackByInferenceId(
-        paramsString,
-      );
-    return JSON.parse(feedbackString) as DemonstrationFeedbackRow[];
-  }
-
-  async queryFeedbackBoundsByTargetId(
-    params: QueryFeedbackBoundsByTargetIdParams,
-  ): Promise<FeedbackBounds> {
-    const paramsString = safeStringify(params);
-    const boundsString =
-      await this.nativeDatabaseClient.queryFeedbackBoundsByTargetId(
-        paramsString,
-      );
-    return JSON.parse(boundsString) as FeedbackBounds;
-  }
-
-  async getCumulativeFeedbackTimeseries(
-    params: GetCumulativeFeedbackTimeseriesParams,
-  ): Promise<CumulativeFeedbackTimeSeriesPoint[]> {
-    const paramsString = safeStringify(params);
-    const feedbackTimeseriesString =
-      await this.nativeDatabaseClient.getCumulativeFeedbackTimeseries(
-        paramsString,
-      );
-    return JSON.parse(
-      feedbackTimeseriesString,
-    ) as CumulativeFeedbackTimeSeriesPoint[];
-  }
-
-  async countFeedbackByTargetId(
-    params: CountFeedbackByTargetIdParams,
-  ): Promise<number> {
-    const paramsString = safeStringify(params);
-    const countString =
-      await this.nativeDatabaseClient.countFeedbackByTargetId(paramsString);
-    return JSON.parse(countString) as number;
-  }
-
-  async countRowsForDataset(params: DatasetQueryParams): Promise<number> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.countRowsForDataset(paramsString);
-    return result;
-  }
-
-  async insertRowsForDataset(params: DatasetQueryParams): Promise<number> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.insertRowsForDataset(paramsString);
-    return result;
-  }
-
-  async countDatasets(): Promise<number> {
-    return this.nativeDatabaseClient.countDatasets();
-  }
-
-  async getFeedbackByVariant(
-    params: GetFeedbackByVariantParams,
-  ): Promise<FeedbackByVariant[]> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.getFeedbackByVariant(paramsString);
-    return JSON.parse(result) as FeedbackByVariant[];
   }
 }
 

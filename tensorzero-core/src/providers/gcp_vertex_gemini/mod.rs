@@ -1596,7 +1596,7 @@ fn stream_gcp_vertex_gemini(
                     if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -3338,7 +3338,7 @@ mod tests {
             .function_calling_config
             .allowed_function_names
             .unwrap();
-        allowed_names.sort();
+        allowed_names.sort_unstable();
         assert_eq!(allowed_names, vec!["tool1", "tool2"]);
 
         // Test Required mode with specific allowed tools (new behavior)

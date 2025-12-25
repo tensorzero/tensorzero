@@ -50,7 +50,9 @@ use tokio_stream::wrappers::IntervalStream;
 use tracing::field::Empty;
 
 use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
+use crate::observability::overhead_timing::OverheadTimingLayer;
 use crate::observability::span_leak_detector::SpanLeakDetector;
+use crate::utils::spawn_ignoring_shutdown;
 use axum::extract::MatchedPath;
 use axum::extract::State;
 use axum::middleware::Next;
@@ -58,7 +60,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{Router, middleware};
 use clap::ValueEnum;
 use http::HeaderMap;
-use metrics::{Unit, describe_counter};
+use metrics::{Unit, describe_counter, describe_histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
 use opentelemetry::trace::Status;
@@ -86,10 +88,13 @@ use tracing_subscriber::{EnvFilter, Registry, filter};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
+use crate::config::gateway::MetricsConfig;
 use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
+mod disjoint_intervals;
 mod exporter_wrapper;
+pub mod overhead_timing;
 pub mod request_logging;
 mod span_leak_detector;
 pub mod tracing_bug;
@@ -1072,15 +1077,23 @@ const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str = "warn,gateway=debug,tensorzero_co
 /// However, the call to `build_opentelemetry_layer` requires a Tokio runtime,
 /// so marking this function as async makes it clear to callers that they need to
 /// be in an async context.
-pub async fn setup_observability(log_format: LogFormat) -> Result<ObservabilityHandle, Error> {
+pub async fn setup_observability(
+    log_format: LogFormat,
+    is_http_gateway: bool,
+) -> Result<ObservabilityHandle, Error> {
     // We need to provide a dummy generic parameter to satisfy the compiler
-    setup_observability_with_exporter_override::<opentelemetry_otlp::SpanExporter>(log_format, None)
-        .await
+    setup_observability_with_exporter_override::<opentelemetry_otlp::SpanExporter>(
+        log_format,
+        None,
+        is_http_gateway,
+    )
+    .await
 }
 
 pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'static>(
     log_format: LogFormat,
     exporter_override: Option<T>,
+    is_http_gateway: bool,
 ) -> Result<ObservabilityHandle, Error> {
     let env_var_name = "RUST_LOG";
     let has_env_var = std::env::var(env_var_name).is_ok();
@@ -1142,6 +1155,9 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
         Err(e) => (Err(e), None, None),
     };
 
+    // This layer only makes sense when we construct top-level HTTP overhead-tracking spans
+    let overhead_timing_layer = is_http_gateway.then(OverheadTimingLayer::new);
+
     // IMPORTANT: If you add any new layers here that have per-layer filtering applied
     // you *MUST* call `apply_filter_fixing_tracing_bug` instead of `layer.with_filter(filter)`
     // See the docs for `apply_filter_fixing_tracing_bug` for more details.
@@ -1149,6 +1165,7 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
         .with(otel_layer)
         .with(apply_filter_fixing_tracing_bug(log_layer, log_level))
         .with(leak_detector.clone())
+        .with(overhead_timing_layer)
         .init();
 
     // If `RUST_LOG` is explicitly set, it takes precedence over `gateway.debug`,
@@ -1181,12 +1198,47 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
 }
 
 /// Set up Prometheus metrics exporter
-pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
-    let metrics_handle = PrometheusBuilder::new().install_recorder().map_err(|e| {
+pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<PrometheusHandle, Error> {
+    let mut builder = PrometheusBuilder::new();
+
+    let buckets = metrics_config.and_then(|config| {
+        config
+            .tensorzero_inference_latency_overhead_seconds_histogram_buckets
+            .as_ref()
+    });
+
+    if let Some(buckets) = buckets {
+        use metrics_exporter_prometheus::Matcher;
+        builder = builder
+            .set_buckets_for_metric(
+                Matcher::Full(
+                    "tensorzero_inference_latency_overhead_seconds_histogram".to_string(),
+                ),
+                buckets,
+            )
+            .map_err(|e| {
+                Error::new(ErrorDetails::Observability {
+                    message: format!("Failed to set histogram buckets: {e}"),
+                })
+            })?;
+    }
+
+    let metrics_handle = builder.install_recorder().map_err(|e| {
         Error::new(ErrorDetails::Observability {
             message: format!("Failed to install Prometheus exporter: {e}"),
         })
     })?;
+    let handle_clone = metrics_handle.clone();
+    // Metrics are pull-based via the `/metrics` endpoint, so we don't
+    // need to do anything on shutdown
+    spawn_ignoring_shutdown(async move {
+        loop {
+            // metrics-exporter-prometheus defaults to 5 seconds for `upkeep_timeout`
+            // when using `install()`
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            handle_clone.run_upkeep();
+        }
+    });
 
     // Register the expected metrics along with their types and docstrings
     describe_counter!(
@@ -1212,6 +1264,21 @@ pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
         Unit::Count,
         "Inferences performed by TensorZero",
     );
+
+    describe_histogram!(
+        "tensorzero_inference_latency_overhead_seconds",
+        Unit::Seconds,
+        "Overhead of TensorZero on HTTP requests"
+    );
+
+    if buckets.is_some() {
+        describe_histogram!(
+            "tensorzero_inference_latency_overhead_seconds_histogram",
+            Unit::Seconds,
+            "Overhead of TensorZero on HTTP requests (histogram)"
+        );
+        crate::observability::overhead_timing::enable_histogram_latency_metric();
+    }
 
     Ok(metrics_handle)
 }

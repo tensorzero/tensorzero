@@ -26,6 +26,7 @@ use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
+use autopilot_client::AutopilotClient;
 
 #[cfg(test)]
 use crate::db::clickhouse::ClickHouseClient;
@@ -136,6 +137,8 @@ pub struct AppStateData {
     pub auth_cache: Option<Cache<String, AuthResult>>,
     /// Optional cache for historical config snapshots loaded from ClickHouse
     pub config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
+    /// Optional Autopilot API client for proxying requests to the Autopilot API
+    pub autopilot_client: Option<Arc<AutopilotClient>>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -220,6 +223,7 @@ impl GatewayHandle {
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache: None,
+                autopilot_client: None,
                 _private: (),
             },
             cancel_token,
@@ -274,6 +278,8 @@ impl GatewayHandle {
                 .build(),
         );
 
+        let autopilot_client = setup_autopilot_client(&postgres_connection_info).await?;
+
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -283,6 +289,7 @@ impl GatewayHandle {
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache,
+                autopilot_client,
                 _private: (),
             },
             cancel_token,
@@ -294,7 +301,7 @@ impl GatewayHandle {
 
 impl AppStateData {
     /// Create an AppStateData for use with a historical config snapshot.
-    /// This version does not include auth_cache or config_snapshot_cache
+    /// This version does not include auth_cache, config_snapshot_cache, or autopilot_client
     /// since those are specific to the live gateway.
     pub fn new_for_snapshot(
         config: Arc<Config>,
@@ -311,6 +318,7 @@ impl AppStateData {
             deferred_tasks,
             auth_cache: None,
             config_snapshot_cache: None,
+            autopilot_client: None,
             _private: (),
         }
     }
@@ -393,8 +401,6 @@ async fn create_postgres_connection(
     postgres_url: &str,
     connection_pool_size: u32,
 ) -> Result<PostgresConnectionInfo, Error> {
-    // TODO - decide how we should handle apply `connection_pool_size` to two pools
-    // Hopefully, sqlx does a stable release before we actually start using `alpha_pool`
     let pool = PgPoolOptions::new()
         .max_connections(connection_pool_size)
         .connect(postgres_url)
@@ -405,17 +411,7 @@ async fn create_postgres_connection(
             })
         })?;
 
-    let alpha_pool = sqlx_alpha::postgres::PgPoolOptions::new()
-        .max_connections(connection_pool_size)
-        .connect(postgres_url)
-        .await
-        .map_err(|err| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: err.to_string(),
-            })
-        })?;
-
-    let connection_info = PostgresConnectionInfo::new_with_pool(pool, Some(alpha_pool));
+    let connection_info = PostgresConnectionInfo::new_with_pool(pool);
     connection_info.check_migrations().await?;
     Ok(connection_info)
 }
@@ -455,6 +451,62 @@ pub async fn setup_postgres(
     };
 
     Ok(postgres_connection_info)
+}
+
+/// Sets up the Autopilot API client from the environment.
+/// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
+/// `Ok(None)` if not set, or an error if client construction fails.
+/// Requires Postgres to be enabled.
+///
+/// Environment variables:
+/// - `TENSORZERO_AUTOPILOT_API_KEY`: Required to enable the client
+/// - `TENSORZERO_AUTOPILOT_BASE_URL`: Optional custom base URL (for testing)
+/// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Optional queue name for tool dispatching
+async fn setup_autopilot_client(
+    postgres_connection_info: &PostgresConnectionInfo,
+) -> Result<Option<Arc<AutopilotClient>>, Error> {
+    match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
+        Ok(api_key) => {
+            let pool = postgres_connection_info.get_pool().ok_or_else(|| {
+                Error::new(ErrorDetails::AppState {
+                    message: "Autopilot client requires Postgres; set `TENSORZERO_POSTGRES_URL`."
+                        .to_string(),
+                })
+            })?;
+            let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
+                .unwrap_or_else(|_| "autopilot".to_string());
+
+            let mut builder = AutopilotClient::builder().api_key(api_key);
+            builder = builder
+                .spawn_pool(pool.clone())
+                .spawn_queue_name(queue_name);
+
+            // Allow custom base URL for testing
+            if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
+                let url = base_url.parse().map_err(|e| {
+                    Error::new(ErrorDetails::AppState {
+                        message: format!("Invalid TENSORZERO_AUTOPILOT_BASE_URL: {e}"),
+                    })
+                })?;
+                builder = builder.base_url(url);
+                tracing::info!("Autopilot client using custom base URL: {}", base_url);
+            }
+
+            let client = builder.build().await.map_err(Error::from)?;
+            // TODO: Handshake with API to validate credentials
+            tracing::info!("Autopilot client initialized");
+            Ok(Some(Arc::new(client)))
+        }
+        Err(std::env::VarError::NotPresent) => {
+            tracing::debug!(
+                "Autopilot client not configured: TENSORZERO_AUTOPILOT_API_KEY not set"
+            );
+            Ok(None)
+        }
+        Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(ErrorDetails::AppState {
+            message: "TENSORZERO_AUTOPILOT_API_KEY contains invalid UTF-8".to_string(),
+        })),
+    }
 }
 
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
@@ -619,6 +671,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
 
         let config = Config {
@@ -690,6 +743,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
 
         let config = Config {
@@ -726,6 +780,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
@@ -761,6 +816,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,

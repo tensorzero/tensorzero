@@ -20,6 +20,8 @@ on:
         required: true
       S3_SECRET_ACCESS_KEY:
         required: true
+      GCP_JWT_KEY:
+        required: true
     inputs:
       is_merge_group:
         required: true
@@ -36,7 +38,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
@@ -54,6 +56,7 @@ jobs:
       - name: Build needed docker images
         working-directory: ui
         run: |
+          touch fixtures/.env-gateway
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml build fixtures
 
       - name: Start docker containers without external network access
@@ -89,7 +92,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Setup `pnpm`
         run: |
@@ -127,6 +130,7 @@ jobs:
       - name: Build needed docker images
         working-directory: ui
         run: |
+          touch fixtures/.env-gateway
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml build fixtures
 
       - name: Start Docker containers and apply fixtures
@@ -199,10 +203,15 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Setup GCP credentials
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Setup `pnpm`
         run: |

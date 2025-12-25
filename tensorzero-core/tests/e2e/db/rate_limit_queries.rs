@@ -1,6 +1,9 @@
 use chrono::Duration;
-use sqlx::PgPool;
-use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use sqlx::ConnectOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use tensorzero_core::db::postgres::{
+    PostgresConnectionInfo, manual_run_postgres_migrations_with_url,
+};
 use tensorzero_core::db::{RateLimitQueries, ReturnTicketsRequest};
 use tensorzero_core::{db::ConsumeTicketsRequest, rate_limiting::ActiveRateLimitKey};
 
@@ -44,9 +47,16 @@ fn create_return_request(
 
 // ===== ATOMIC BEHAVIOR TESTS =====
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_atomic_multi_key_all_or_nothing(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_atomic_multi_key_all_or_nothing(
+    pool_opts: PgPoolOptions,
+    conn_opts: PgConnectOptions,
+) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // First, consume some tokens from key1 to set up a scenario where key1 can succeed but key2 fails
     let setup_request = create_consume_request("key1", 50, 100, 10, Duration::seconds(60));
@@ -85,9 +95,13 @@ async fn test_atomic_multi_key_all_or_nothing(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_atomic_consistency_under_load(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_atomic_consistency_under_load(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // Launch many concurrent multi-key requests where some will fail
     let handles: Vec<_> = (0..20)
@@ -134,9 +148,16 @@ async fn test_atomic_consistency_under_load(pool: PgPool) {
 
 // ===== RACE CONDITION TESTS =====
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_race_condition_no_over_consumption(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_race_condition_no_over_consumption(
+    pool_opts: PgPoolOptions,
+    conn_opts: PgConnectOptions,
+) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
     let key = "race_test";
 
     // Launch 50 concurrent requests for 5 tokens each on a bucket with 100 capacity
@@ -189,9 +210,16 @@ async fn test_race_condition_no_over_consumption(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_race_condition_interleaved_consume_return(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_race_condition_interleaved_consume_return(
+    pool_opts: PgPoolOptions,
+    conn_opts: PgConnectOptions,
+) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
     let key = "interleaved_test";
 
     // Set up initial state
@@ -252,9 +280,13 @@ async fn test_race_condition_interleaved_consume_return(pool: PgPool) {
 
 // ===== CONSOLIDATED FUNCTIONAL TESTS =====
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_rate_limit_lifecycle(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_rate_limit_lifecycle(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
     let key = "lifecycle_test";
 
     // Phase 1: Initial consumption
@@ -296,9 +328,13 @@ async fn test_rate_limit_lifecycle(pool: PgPool) {
     assert_eq!(results[0].tickets_consumed, 0);
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_capacity_boundaries(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_capacity_boundaries(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // Test 1: Zero request (should always succeed)
     let zero_req = create_consume_request("zero_test", 0, 50, 5, Duration::seconds(60));
@@ -326,9 +362,13 @@ async fn test_capacity_boundaries(pool: PgPool) {
     assert_eq!(results[0].balance, 100); // Capped at capacity
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_refill_mechanics(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_refill_mechanics(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
     let key = "refill_test";
 
     // Phase 1: Consume most tokens
@@ -389,9 +429,13 @@ async fn test_refill_mechanics(pool: PgPool) {
 
 // ===== EDGE CASES AND EMPTY OPERATIONS =====
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_empty_operations(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_empty_operations(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // Empty consume requests
     let results = conn.consume_tickets(&[]).await.unwrap();
@@ -402,9 +446,13 @@ async fn test_empty_operations(pool: PgPool) {
     assert_eq!(results.len(), 0);
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_new_bucket_behavior(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_new_bucket_behavior(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // New bucket starts at capacity
     let balance = conn
@@ -428,9 +476,13 @@ async fn test_new_bucket_behavior(pool: PgPool) {
 
 // ===== CONCURRENT STRESS TEST =====
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_concurrent_stress(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_concurrent_stress(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // High concurrency test with multiple keys
     let handles: Vec<_> = (0..100)
@@ -467,9 +519,16 @@ async fn test_concurrent_stress(pool: PgPool) {
 
 // ===== INVALID INPUT TESTS =====
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_zero_refill_interval_exception(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
+#[sqlx::test]
+async fn test_zero_refill_interval_exception(
+    pool_opts: PgPoolOptions,
+    conn_opts: PgConnectOptions,
+) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // Test zero interval throws exception
     let zero_interval_request =

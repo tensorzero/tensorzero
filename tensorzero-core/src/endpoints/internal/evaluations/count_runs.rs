@@ -9,12 +9,12 @@ use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
-/// Handler for `GET /internal/evaluations/run-stats`
+/// Handler for `GET /internal/evaluations/runs/count`
 ///
 /// Returns the total count of unique evaluation runs across all functions.
 #[axum::debug_handler(state = AppStateData)]
-#[instrument(name = "evaluations.get_evaluation_run_stats", skip_all)]
-pub async fn get_evaluation_run_stats_handler(
+#[instrument(name = "evaluations.count_evaluation_runs", skip_all)]
+pub async fn count_evaluation_runs_handler(
     State(app_state): AppState,
 ) -> Result<Json<EvaluationRunStatsResponse>, Error> {
     let count = app_state

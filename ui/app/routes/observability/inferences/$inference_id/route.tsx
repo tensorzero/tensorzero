@@ -1,5 +1,4 @@
 import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   resolveModelInferences,
@@ -19,7 +18,6 @@ import type { ReactNode } from "react";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
 import { logger } from "~/utils/logger";
-import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   InferenceDetailContent,
@@ -44,7 +42,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // --- Define all promises, conditionally choosing the feedback promise ---
 
-  const dbClient = await getNativeDatabaseClient();
   const tensorZeroClient = getTensorZeroClient();
 
   const inferencesPromise = tensorZeroClient.getInferences({
@@ -55,10 +52,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .getModelInferences(inference_id)
     .then((response) => resolveModelInferences(response.model_inferences));
   const demonstrationFeedbackPromise =
-    dbClient.queryDemonstrationFeedbackByInferenceId({
+    tensorZeroClient.getDemonstrationFeedback(
       inference_id,
-      limit: 1, // Only need to know if *any* exist
-    });
+      { limit: 1 }, // Only need to know if *any* exist
+    );
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table and materialized views as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
@@ -66,8 +63,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, limit)
-    : dbClient.queryFeedbackByTargetId({
-        target_id: inference_id,
+    : tensorZeroClient.getFeedbackByTargetId(inference_id, {
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
         limit,
@@ -95,7 +91,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
     // Query these after polling completes to avoid race condition with materialized views
     [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
-      dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+      tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
       tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);
   } else {
@@ -111,7 +107,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       inferencesPromise,
       modelInferencesPromise,
       demonstrationFeedbackPromise,
-      dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+      tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
       feedbackDataPromise,
       tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);
@@ -128,7 +124,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const usedVariants =
     inference.function_name === DEFAULT_FUNCTION
-      ? await getUsedVariants(inference.function_name)
+      ? await tensorZeroClient.getUsedVariants(inference.function_name)
       : [];
   const resolvedInput = await loadFileDataForStoredInput(inference.input);
 

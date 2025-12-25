@@ -256,6 +256,7 @@ impl InferenceProvider for TogetherProvider {
                 status,
                 &raw_response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -392,7 +393,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
     }
 
     if service_tier.is_some() {
@@ -714,8 +715,6 @@ fn stream_together(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

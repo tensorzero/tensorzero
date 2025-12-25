@@ -2,11 +2,11 @@
 
 export type OpenAISFTConfig = {
   model: string;
-  batch_size: number | null;
-  learning_rate_multiplier: number | null;
-  n_epochs: number | null;
+  batch_size?: number;
+  learning_rate_multiplier?: number;
+  n_epochs?: number;
   credential_location: string | null;
-  seed: bigint | null;
-  suffix: string | null;
-  api_base: string | null;
+  seed?: bigint;
+  suffix?: string;
+  api_base?: string;
 };

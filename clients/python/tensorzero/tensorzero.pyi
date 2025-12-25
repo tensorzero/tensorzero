@@ -303,20 +303,12 @@ class GCPVertexGeminiSFTConfig:
         self,
         *,
         model: str,
-        bucket_name: str,
-        project_id: str,
-        region: str,
         learning_rate_multiplier: Optional[float] = None,
         adapter_size: Optional[int] = None,
         n_epochs: Optional[int] = None,
         export_last_checkpoint_only: Optional[bool] = None,
-        credentials: Optional[str] = None,
-        api_base: Optional[str] = None,
         seed: Optional[int] = None,
-        service_account: Optional[str] = None,
-        kms_key_name: Optional[str] = None,
         tuned_model_display_name: Optional[str] = None,
-        bucket_path_prefix: Optional[str] = None,
     ) -> None: ...
 
 @final
@@ -939,6 +931,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         stored_samples: Sequence[Union[StoredInference, Datapoint]],
         variants: Dict[str, str],
+        concurrency: Optional[int] = None,
     ) -> List[RenderedSample]:
         """
         Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
@@ -954,6 +947,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param stored_samples: A list of stored samples (datapoints or inferences) to render.
         :param variants: A mapping from function name to variant name.
+        :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
         :return: A list of rendered samples.
         """
         ...
@@ -1485,6 +1479,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         stored_samples: Sequence[Union[StoredInference, Datapoint]],
         variants: Dict[str, str],
+        concurrency: Optional[int] = None,
     ) -> List[RenderedSample]:
         """
         Render a list of stored samples into a list of rendered stored samples.
@@ -1500,6 +1495,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param stored_samples: A list of stored samples to render.
         :param variants: A mapping from function name to variant name.
+        :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
         :return: A list of rendered samples.
         """
 
