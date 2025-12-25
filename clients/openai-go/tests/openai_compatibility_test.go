@@ -1834,11 +1834,13 @@ func TestCustomToolsInference(t *testing.T) {
 		assert.Equal(t, "custom", toolCall.Type, "Tool call type should be 'custom'")
 
 		// Verify the custom tool details
+		require.NotNil(t, toolCall.Custom, "Custom tool data should be present for type 'custom'")
 		assert.Equal(t, "web_search", toolCall.Custom.Name, "Custom tool name should match")
 		assert.Equal(t, "What is the weather in Tokyo?", toolCall.Custom.Input, "Custom tool input should match")
 
 		// Verify we can use the AsCustom method to get a typed custom tool call
 		customCall := toolCall.AsCustom()
+		require.NotNil(t, customCall.Custom, "AsCustom should return a struct with non-nil Custom field")
 		assert.Equal(t, "call_abc123", customCall.ID)
 		assert.Equal(t, constant.Custom("custom"), customCall.Type)
 	})
