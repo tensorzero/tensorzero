@@ -1754,8 +1754,22 @@ func TestCustomToolsInference(t *testing.T) {
 		resp, err := client.Chat.Completions.New(ctx, *req)
 		require.NoError(t, err, "API request failed")
 
+		if extra, ok := resp.JSON.ExtraFields["episode_id"]; ok {
+			var responseEpisodeID string
+			err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
+			require.NoError(t, err, "Failed to parse episode_id from response extras")
+			assert.Equal(t, episodeID.String(), responseEpisodeID)
+		} else {
+			t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+		}
+
+		assert.Equal(t, "tensorzero::function_name::basic_test::variant_name::test", resp.Model)
 		require.NotEmpty(t, resp.Choices)
 		require.NotEmpty(t, resp.Choices[0].Message.Content)
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
+		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
 	})
 }
 
