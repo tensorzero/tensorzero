@@ -26,6 +26,7 @@ echo $BUILDKITE_ANALYTICS_TOKEN >> ui/fixtures/.env
 {
   echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
   echo "TENSORZERO_COMMIT_TAG=ci-sha-$SHORT_HASH"
+  echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030"
 } >> ui/fixtures/.env
 {
   echo "FIREWORKS_API_KEY=not_used"

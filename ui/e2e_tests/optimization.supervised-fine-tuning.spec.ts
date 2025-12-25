@@ -53,7 +53,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
   ]
     .slice(2)
     .forEach(({ provider, model, results }) => {
-      test(`@slow should fine-tune on filtered metric data with a mocked ${provider} server`, async ({
+      test(`@mock @slow should fine-tune on filtered metric data with a mocked ${provider} server`, async ({
         page,
       }) => {
         await page.goto("/optimization/supervised-fine-tuning");
@@ -98,7 +98,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       });
     });
 
-  test("@slow should fine-tune on demonstration data with a mocked OpenAI server", async ({
+  test("@mock @slow should fine-tune on demonstration data with a mocked OpenAI server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -149,7 +149,7 @@ model_name = "mock-finetune-1234"
     ).toBeVisible();
   });
 
-  test("@slow should fine-tune on image data with a mocked OpenAI server", async ({
+  test("@mock @slow should fine-tune on image data with a mocked OpenAI server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -223,7 +223,7 @@ model_name = "mock-finetune-1234"
     ).toBeVisible();
   });
 
-  test("@slow should fine-tune with a mocked GCP Vertex Gemini server", async ({
+  test("@mock @slow should fine-tune with a mocked GCP Vertex Gemini server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -280,7 +280,7 @@ model_name = "mock-finetune-1234"
 });
 
 test.describe("Error handling", () => {
-  test("should show an error when the model is an error model", async ({
+  test("@mock should show an error when the model is an error model", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
