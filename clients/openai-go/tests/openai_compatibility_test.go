@@ -1810,22 +1810,37 @@ func TestCustomToolsInference(t *testing.T) {
 		assert.Equal(t, "Analyze an image and describe its contents", custom["description"], "Description should match")
 	})
 
-	t.Run("it should verify custom tool call response structure", func(t *testing.T) {
-		// This test documents the expected structure of custom tool calls in responses.
-		// Note: Actually testing this would require GPT-5 models which support custom tools.
+	t.Run("it should parse custom tool call response structure", func(t *testing.T) {
+		// This test verifies that we can parse a custom tool call response from JSON.
+		// Note: Actually invoking custom tools would require GPT-5 models which support them.
 
-		// The expected response structure for a custom tool call is:
-		// {
-		//   "id": "call_abc123",
-		//   "type": "custom",
-		//   "custom": {
-		//     "name": "web_search",
-		//     "input": "What is the weather in Tokyo?"
-		//   }
-		// }
+		// Simulate a custom tool call response JSON (as would be returned by OpenAI API)
+		customToolCallJSON := `{
+			"id": "call_abc123",
+			"type": "custom",
+			"custom": {
+				"name": "web_search",
+				"input": "What is the weather in Tokyo?"
+			}
+		}`
 
-		// The custom tool type constant in the OpenAI Go SDK is represented by constant.Custom("custom").
-		// When parsing responses, tool calls with type "custom" will have their Type field set to this constant.
+		// Parse the JSON into the OpenAI SDK struct
+		var toolCall openai.ChatCompletionMessageToolCallUnion
+		err := json.Unmarshal([]byte(customToolCallJSON), &toolCall)
+		require.NoError(t, err, "Should parse custom tool call JSON without error")
+
+		// Verify the parsed structure
+		assert.Equal(t, "call_abc123", toolCall.ID, "Tool call ID should match")
+		assert.Equal(t, "custom", toolCall.Type, "Tool call type should be 'custom'")
+
+		// Verify the custom tool details
+		assert.Equal(t, "web_search", toolCall.Custom.Name, "Custom tool name should match")
+		assert.Equal(t, "What is the weather in Tokyo?", toolCall.Custom.Input, "Custom tool input should match")
+
+		// Verify we can use the AsCustom method to get a typed custom tool call
+		customCall := toolCall.AsCustom()
+		assert.Equal(t, "call_abc123", customCall.ID)
+		assert.Equal(t, constant.Custom("custom"), customCall.Type)
 	})
 }
 
