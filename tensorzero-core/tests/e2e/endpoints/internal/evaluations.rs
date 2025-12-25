@@ -448,7 +448,10 @@ async fn test_get_evaluation_results_haiku() {
     let expected_run_id = Uuid::parse_str(evaluation_run_id).unwrap();
     for result in &response.results {
         assert_eq!(result.evaluation_run_id, expected_run_id);
-        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+        assert_eq!(
+            result.variant_name,
+            "better_prompt_claude_haiku_4_5_20251001"
+        );
     }
 }
 
