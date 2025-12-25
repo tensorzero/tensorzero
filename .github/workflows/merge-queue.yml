@@ -360,49 +360,12 @@ jobs:
           fi
           exit 1
 
-      - name: Download mock-provider-api-container
-        continue-on-error: true
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-mock-provider-api-container
-          path: .
-
-      - name: Load mock-provider-api-container
-        id: load-mock-provider-api
-        continue-on-error: true
-        run: |
-          docker load < mock-provider-api-container.tar
-
-      - name: Start mock-provider-api for mock tests
-        run: |
-          if [ "${{ steps.load-mock-provider-api.outcome }}" = "success" ]; then
-            # Use the pre-built image from artifact
-            docker run -d --name mock-provider-api -p 3030:3030 tensorzero/mock-provider-api:sha-${{ github.sha }}
-          else
-            # Build locally as fallback for standalone runs
-            docker build -f tensorzero-core/tests/mock-provider-api/Dockerfile -t mock-provider-api:local .
-            docker run -d --name mock-provider-api -p 3030:3030 mock-provider-api:local
-          fi
-          # Wait for mock-provider-api to be healthy
-          for i in {1..30}; do
-            if curl -s -f http://localhost:3030/status >/dev/null 2>&1; then
-              echo "mock-provider-api is ready"
-              break
-            fi
-            echo "Waiting for mock-provider-api to be healthy..."
-            sleep 1
-          done
-
       - name: "Python: PyO3 Client: pytest (mock tests)"
         working-directory: clients/python
         env:
           TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://localhost:3030
         run: |
           bash ./test.sh --verbose -n 8 -m mock
-
-      - name: Stop mock-provider-api
-        if: always()
-        run: docker stop mock-provider-api || true
 
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node
