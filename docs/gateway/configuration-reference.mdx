@@ -1903,6 +1903,20 @@ api_key_location = "dynamic::fireworks_api_key"
 # ...
 ```
 
+#### `sft`
+
+- **Type:** object
+- **Required:** no (default: `null`)
+
+The `sft` object configures supervised fine-tuning for Fireworks models.
+
+##### `account_id`
+
+- **Type:** string
+- **Required:** yes
+
+Your Fireworks account ID, used for fine-tuning job management.
+
 </Accordion>
 
 <Accordion title="[provider_types.gcp_vertex_anthropic]">
@@ -1969,6 +1983,55 @@ Defines the Google Cloud Storage URI prefix where batch input files will be stor
 - **Required:** yes when `storage_type` is `"cloud_storage"`
 
 Defines the Google Cloud Storage URI prefix where batch output files will be stored.
+
+#### `sft`
+
+- **Type:** object
+- **Required:** no (default: `null`)
+
+The `sft` object configures supervised fine-tuning for GCP Vertex Gemini models.
+
+##### `bucket_name`
+
+- **Type:** string
+- **Required:** yes
+
+The Google Cloud Storage bucket name for storing fine-tuning data.
+
+##### `bucket_path_prefix`
+
+- **Type:** string
+- **Required:** no
+
+Optional path prefix within the bucket for organizing fine-tuning data.
+
+##### `kms_key_name`
+
+- **Type:** string
+- **Required:** no
+
+Optional Cloud KMS key name for encrypting fine-tuning data.
+
+##### `project_id`
+
+- **Type:** string
+- **Required:** yes
+
+The GCP project ID where fine-tuning jobs will run.
+
+##### `region`
+
+- **Type:** string
+- **Required:** yes
+
+The GCP region for fine-tuning operations (e.g., `"us-central1"`).
+
+##### `service_account`
+
+- **Type:** string
+- **Required:** no
+
+Optional service account email for fine-tuning operations.
 
 ##### `defaults.credential_location`
 
@@ -2150,6 +2213,41 @@ api_key_location = "dynamic::together_api_key"
 # api_key_location = { default = "dynamic::together_api_key", fallback = "env::TOGETHER_API_KEY" }
 # ...
 ```
+
+#### `sft`
+
+- **Type:** object
+- **Required:** no (default: `null`)
+
+The `sft` object configures supervised fine-tuning for Together models.
+
+##### `hf_api_token`
+
+- **Type:** string
+- **Required:** no
+
+Hugging Face API token for pushing fine-tuned models to the Hugging Face Hub.
+
+##### `wandb_api_key`
+
+- **Type:** string
+- **Required:** no
+
+Weights & Biases API key for experiment tracking during fine-tuning.
+
+##### `wandb_base_url`
+
+- **Type:** string
+- **Required:** no
+
+Custom Weights & Biases API base URL (for self-hosted instances).
+
+##### `wandb_project_name`
+
+- **Type:** string
+- **Required:** no
+
+Weights & Biases project name for organizing fine-tuning experiments.
 
 </Accordion>
 

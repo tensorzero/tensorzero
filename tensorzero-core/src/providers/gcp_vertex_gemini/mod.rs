@@ -32,7 +32,8 @@ use super::helpers::{
 };
 use crate::cache::ModelProviderRequest;
 use crate::config::provider_types::{
-    GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPProviderTypeConfig, ProviderTypesConfig,
+    GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPVertexGeminiProviderTypeConfig,
+    ProviderTypesConfig,
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
@@ -591,7 +592,7 @@ impl GCPVertexGeminiProvider {
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         let batch_config = match &provider_types.gcp_vertex_gemini {
-            GCPProviderTypeConfig {
+            GCPVertexGeminiProviderTypeConfig {
                 batch:
                     Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
                         input_uri_prefix,

@@ -13,9 +13,9 @@ pub struct ProviderTypesConfig {
     #[serde(default)]
     pub fireworks: FireworksProviderTypeConfig,
     #[serde(default)]
-    pub gcp_vertex_gemini: GCPProviderTypeConfig,
+    pub gcp_vertex_gemini: GCPVertexGeminiProviderTypeConfig,
     #[serde(default)]
-    pub gcp_vertex_anthropic: GCPProviderTypeConfig,
+    pub gcp_vertex_anthropic: GCPVertexAnthropicProviderTypeConfig,
     #[serde(default)]
     pub google_ai_studio_gemini: GoogleAIStudioGeminiProviderTypeConfig,
     #[serde(default)]
@@ -141,16 +141,25 @@ impl Default for FireworksDefaults {
     }
 }
 
-// GCP Vertex
+// GCP Vertex Gemini
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-pub struct GCPProviderTypeConfig {
+pub struct GCPVertexGeminiProviderTypeConfig {
     #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
     #[serde(default)]
     pub sft: Option<GCPSFTConfig>,
+    #[serde(default)]
+    pub defaults: GCPDefaults,
+}
+
+// GCP Vertex Anthropic
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GCPVertexAnthropicProviderTypeConfig {
     #[serde(default)]
     pub defaults: GCPDefaults,
 }
@@ -391,6 +400,7 @@ impl Default for TGIDefaults {
 pub struct TogetherProviderTypeConfig {
     #[serde(default)]
     pub sft: Option<TogetherSFTConfig>,
+    #[serde(default)]
     pub defaults: TogetherDefaults,
 }
 
