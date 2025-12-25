@@ -12,7 +12,7 @@ function subscribe() {
  *
  * @example
  * const isHydrated = useHydrated();
- * return <button disabled={!isHydrated} onClick={handler}>Click me</button>;
+ * return <button disabled={!isHydrated} onClick={handler}>Submit</button>;
  */
 export function useHydrated(): boolean {
   return useSyncExternalStore(
