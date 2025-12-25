@@ -62,7 +62,7 @@ impl std::fmt::Display for OpenAIRFTResponseFormat {
 }
 
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct OpenAIRFTConfig {
     pub model: String,
     pub grader: OpenAIGrader,
@@ -84,7 +84,7 @@ pub struct OpenAIRFTConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
 pub struct UninitializedOpenAIRFTConfig {
     pub model: String,

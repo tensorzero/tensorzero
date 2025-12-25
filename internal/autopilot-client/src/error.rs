@@ -25,6 +25,10 @@ pub enum AutopilotError {
     #[error("Invalid URL: {0}")]
     InvalidUrl(#[from] url::ParseError),
 
+    /// Error spawning a tool task.
+    #[error("Spawn error: {0}")]
+    Spawn(#[from] durable_tools_spawn::SpawnError),
+
     /// Missing required configuration.
     #[error("Missing required configuration: {0}")]
     MissingConfig(&'static str),

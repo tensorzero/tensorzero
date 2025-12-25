@@ -30,7 +30,7 @@ pub async fn test_render_samples_empty() {
     // Test with an empty stored inferences array.
     let stored_inferences: Vec<StoredInferenceDatabase> = vec![];
     let rendered_inferences = client
-        .experimental_render_samples(stored_inferences, HashMap::new())
+        .experimental_render_samples(stored_inferences, HashMap::new(), None)
         .await
         .unwrap();
     assert!(rendered_inferences.is_empty());
@@ -69,7 +69,7 @@ pub async fn test_render_samples_no_function() {
     })];
 
     let rendered_inferences = client
-        .experimental_render_samples(stored_inferences, HashMap::new())
+        .experimental_render_samples(stored_inferences, HashMap::new(), None)
         .await
         .unwrap();
     assert!(rendered_inferences.is_empty());
@@ -112,6 +112,7 @@ pub async fn test_render_samples_no_variant() {
         .experimental_render_samples(
             stored_inferences,
             HashMap::from([("basic_test".to_string(), "notavariant".to_string())]),
+            None,
         )
         .await
         .unwrap_err();
@@ -165,6 +166,7 @@ pub async fn test_render_samples_missing_variable() {
         .experimental_render_samples(
             stored_inferences,
             HashMap::from([("basic_test".to_string(), "test".to_string())]),
+            None,
         )
         .await
         .unwrap();
@@ -352,6 +354,7 @@ pub async fn test_render_samples_normal() {
                 ("weather_helper".to_string(), "anthropic".to_string()),
                 ("basic_test".to_string(), "test".to_string()),
             ]),
+            None,
         )
         .await
         .unwrap();
@@ -547,6 +550,7 @@ pub async fn test_render_samples_template_no_schema() {
                 "basic_test_template_no_schema".to_string(),
                 "test".to_string(),
             )]),
+            None,
         )
         .await
         .unwrap();
@@ -607,7 +611,7 @@ pub async fn test_render_datapoints_empty() {
     // Test with an empty datapoints array.
     let datapoints: Vec<StoredDatapoint> = vec![];
     let rendered_samples = client
-        .experimental_render_samples(datapoints, HashMap::new())
+        .experimental_render_samples(datapoints, HashMap::new(), None)
         .await
         .unwrap();
     assert!(rendered_samples.is_empty());
@@ -648,7 +652,7 @@ pub async fn test_render_datapoints_no_function() {
     })];
 
     let rendered_samples = client
-        .experimental_render_samples(datapoints, HashMap::new())
+        .experimental_render_samples(datapoints, HashMap::new(), None)
         .await
         .unwrap();
     assert!(rendered_samples.is_empty());
@@ -693,6 +697,7 @@ pub async fn test_render_datapoints_no_variant() {
         .experimental_render_samples(
             datapoints,
             HashMap::from([("basic_test".to_string(), "notavariant".to_string())]),
+            None,
         )
         .await
         .unwrap_err();
@@ -748,6 +753,7 @@ pub async fn test_render_datapoints_missing_variable() {
         .experimental_render_samples(
             datapoints,
             HashMap::from([("basic_test".to_string(), "test".to_string())]),
+            None,
         )
         .await
         .unwrap();
@@ -938,6 +944,7 @@ pub async fn test_render_datapoints_normal() {
                 ("weather_helper".to_string(), "anthropic".to_string()),
                 ("basic_test".to_string(), "test".to_string()),
             ]),
+            None,
         )
         .await
         .unwrap();
@@ -1121,6 +1128,7 @@ pub async fn test_render_datapoints_template_no_schema() {
                 "basic_test_template_no_schema".to_string(),
                 "test".to_string(),
             )]),
+            None,
         )
         .await
         .unwrap();

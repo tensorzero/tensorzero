@@ -11,7 +11,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tensorzero_core::{
-    config::Config,
+    config::{Config, provider_types::ProviderTypesConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::Error,
@@ -41,41 +41,42 @@ impl JobHandle for OptimizationJobHandle {
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
+        provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error> {
         match self {
             OptimizationJobHandle::Dicl(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials)
+                    .poll(client, credentials, default_credentials, provider_types)
                     .await
             }
             OptimizationJobHandle::OpenAISFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials)
+                    .poll(client, credentials, default_credentials, provider_types)
                     .await
             }
             OptimizationJobHandle::OpenAIRFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials)
+                    .poll(client, credentials, default_credentials, provider_types)
                     .await
             }
             OptimizationJobHandle::FireworksSFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials)
+                    .poll(client, credentials, default_credentials, provider_types)
                     .await
             }
             OptimizationJobHandle::GCPVertexGeminiSFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials)
+                    .poll(client, credentials, default_credentials, provider_types)
                     .await
             }
             OptimizationJobHandle::TogetherSFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials)
+                    .poll(client, credentials, default_credentials, provider_types)
                     .await
             }
             OptimizationJobHandle::GEPA(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials)
+                    .poll(client, credentials, default_credentials, provider_types)
                     .await
             }
         }
@@ -89,6 +90,7 @@ pub trait JobHandle {
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
+        provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error>;
 }
 

@@ -112,7 +112,7 @@ async fn test_config_from_toml_table_valid() {
 
     let embedding_model = config
         .embedding_models
-        .get("text-embedding-3-small")
+        .get("text-embedding-3-small", None)
         .await
         .expect("Error getting embedding model")
         .unwrap();

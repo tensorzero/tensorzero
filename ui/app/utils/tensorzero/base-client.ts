@@ -12,7 +12,7 @@ export class BaseTensorZeroClient {
    * @param baseUrl - The base URL of the TensorZero Gateway (e.g. "http://localhost:3000")
    * @param apiKey - Optional API key for bearer authentication
    */
-  constructor(baseUrl: string, apiKey?: string | null) {
+  constructor(baseUrl: string, apiKey?: string) {
     // Remove any trailing slash for consistency.
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKey = apiKey ?? null;

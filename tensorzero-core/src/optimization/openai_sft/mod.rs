@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct OpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
@@ -28,7 +28,7 @@ pub struct OpenAISFTConfig {
 }
 
 #[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
 pub struct UninitializedOpenAISFTConfig {
     pub model: String,

@@ -296,9 +296,7 @@ impl UninitializedOptimizerConfig {
                 OptimizerConfig::FireworksSFT(config.load(default_credentials).await?)
             }
             UninitializedOptimizerConfig::GCPVertexGeminiSFT(config) => {
-                OptimizerConfig::GCPVertexGeminiSFT(Box::new(
-                    config.load(default_credentials).await?,
-                ))
+                OptimizerConfig::GCPVertexGeminiSFT(Box::new(config.load()))
             }
             UninitializedOptimizerConfig::GEPA(config) => {
                 OptimizerConfig::GEPA(config.load(default_credentials).await?)
