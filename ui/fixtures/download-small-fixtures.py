@@ -34,7 +34,7 @@ FIXTURES = {
     "jaro_winkler_similarity_feedback.jsonl": "jaro_winkler_similarity_feedback.jsonl",
     "json_inference_datapoint_examples.jsonl": "json_inference_datapoint_examples.jsonl",
     "json_inference_examples.jsonl": "json_inference_examples.jsonl",
-    "model_inference_cache_e2e_20251224_211706.jsonl": "model_inference_cache_e2e.jsonl",
+    "model_inference_cache_e2e_20251225_224154.jsonl": "model_inference_cache_e2e.jsonl",
     "model_inference_examples_v2.jsonl": "model_inference_examples.jsonl",
 }
 
