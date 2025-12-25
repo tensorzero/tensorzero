@@ -17,6 +17,7 @@ from tensorzero import (
 from uuid_utils import uuid7
 
 
+@pytest.mark.mock
 def test_sync_openai_rft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
@@ -69,6 +70,7 @@ def test_sync_openai_rft(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_dicl_chat(
     embedded_sync_client: TensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
@@ -92,6 +94,7 @@ def test_sync_dicl_chat(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_dicl_json(
     embedded_sync_client: TensorZeroGateway,
     json_function_rendered_samples: List[RenderedSample],
@@ -118,6 +121,7 @@ def test_sync_dicl_json(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_openai_sft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
@@ -138,6 +142,7 @@ def test_sync_openai_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_fireworks_sft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
@@ -158,6 +163,7 @@ def test_sync_fireworks_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_together_sft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
@@ -181,6 +187,7 @@ def test_sync_together_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_gepa_chat(
     embedded_sync_client: TensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
@@ -205,6 +212,7 @@ def test_sync_gepa_chat(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_openai_rft(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -259,6 +267,7 @@ async def test_async_openai_rft(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_dicl_chat(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -287,6 +296,7 @@ async def test_async_dicl_chat(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_dicl_json(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -310,6 +320,7 @@ async def test_async_dicl_json(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_openai_sft(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -327,6 +338,7 @@ async def test_async_openai_sft(
             break
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_fireworks_sft(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -349,6 +361,7 @@ async def test_async_fireworks_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_together_sft(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -372,6 +385,7 @@ async def test_async_together_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_gepa_json(
     embedded_async_client: AsyncTensorZeroGateway,
