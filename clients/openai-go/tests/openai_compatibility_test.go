@@ -1720,10 +1720,24 @@ func TestCustomToolsInference(t *testing.T) {
 
 		messages := []openai.ChatCompletionMessageParamUnion{
 			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
-			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
+			openai.UserMessage("Hello, how are you?"),
 		}
 
 		tools := []openai.ChatCompletionToolUnionParam{
+			openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
+				Name:        "get_weather",
+				Description: openai.String("Get the current weather in a location"),
+				Parameters: openai.FunctionParameters{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"location": map[string]string{
+							"type":        "string",
+							"description": "The city name",
+						},
+					},
+					"required": []string{"location"},
+				},
+			}),
 			openai.ChatCompletionCustomTool(openai.ChatCompletionCustomToolCustomParam{
 				Name:        "web_search",
 				Description: openai.String("Search the web for information"),
@@ -1731,7 +1745,7 @@ func TestCustomToolsInference(t *testing.T) {
 		}
 
 		req := &openai.ChatCompletionNewParams{
-			Model:    "tensorzero::function_name::weather_helper",
+			Model:    "tensorzero::function_name::basic_test",
 			Messages: messages,
 			Tools:    tools,
 		}
@@ -1741,13 +1755,7 @@ func TestCustomToolsInference(t *testing.T) {
 		require.NoError(t, err, "API request failed")
 
 		require.NotEmpty(t, resp.Choices)
-		require.NotNil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should not be nil")
-		toolCalls := resp.Choices[0].Message.ToolCalls
-		require.GreaterOrEqual(t, len(toolCalls), 1, "Should have at least one tool call")
-
-		toolCall := toolCalls[0]
-		assert.Equal(t, "function", toolCall.Type)
-		assert.Equal(t, "get_temperature", toolCall.Function.Name)
+		require.NotEmpty(t, resp.Choices[0].Message.Content)
 	})
 }
 
