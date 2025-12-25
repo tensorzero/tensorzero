@@ -331,6 +331,7 @@ impl Default for OpenAIDefaults {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct OpenRouterProviderTypeConfig {
+    #[serde(default)]
     pub defaults: OpenRouterDefaults,
 }
 
@@ -376,6 +377,7 @@ impl Default for SGLangDefaults {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TGIProviderTypeConfig {
+    #[serde(default)]
     pub defaults: TGIDefaults,
 }
 
