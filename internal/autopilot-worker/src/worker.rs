@@ -9,8 +9,6 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 #[cfg(feature = "e2e_tests")]
-use crate::tools::EchoTool;
-#[cfg(feature = "e2e_tests")]
 use crate::wrapper::ClientToolWrapper;
 
 /// Configuration for the autopilot worker.
@@ -78,6 +76,8 @@ impl AutopilotWorker {
         #[cfg(feature = "e2e_tests")]
         {
             // Register test tools
+
+            use autopilot_tools::tools::EchoTool;
             self.executor
                 .register_task_tool::<ClientToolWrapper<EchoTool>>()
                 .await?;
