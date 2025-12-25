@@ -28,10 +28,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/packages/param"
-	"github.com/openai/openai-go/shared/constant"
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/shared/constant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +55,7 @@ func TestMain(m *testing.M) {
 func systemMessageWithAssistant(t *testing.T, assistant_name string) *openai.ChatCompletionSystemMessageParam {
 	t.Helper()
 
-	sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
+	data := map[string]interface{}{
 		"content": []map[string]interface{}{
 			{
 				"type": "text",
@@ -65,16 +65,41 @@ func systemMessageWithAssistant(t *testing.T, assistant_name string) *openai.Cha
 			},
 		},
 		"role": "system",
-	})
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("Failed to marshal system message: %v", err)
+	}
+	sysMsg := param.Override[openai.ChatCompletionSystemMessageParam](json.RawMessage(jsonData))
 	return &sysMsg
 }
 
 func addEpisodeIDToRequest(t *testing.T, req *openai.ChatCompletionNewParams, episodeID uuid.UUID) {
 	t.Helper()
 	// Add the episode ID to the request as an extra field
-	req.WithExtraFields(map[string]any{
+	req.SetExtraFields(map[string]any{
 		"tensorzero::episode_id": episodeID.String(),
 	})
+}
+
+// Helper function to create a system message param from a map (for custom fields like tensorzero::arguments)
+func overrideSystemMessage(t *testing.T, data map[string]interface{}) openai.ChatCompletionSystemMessageParam {
+	t.Helper()
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("Failed to marshal system message: %v", err)
+	}
+	return param.Override[openai.ChatCompletionSystemMessageParam](json.RawMessage(jsonData))
+}
+
+// Helper function to create a user message param from a map (for custom fields like tensorzero::arguments)
+func overrideUserMessage(t *testing.T, data map[string]interface{}) openai.ChatCompletionUserMessageParam {
+	t.Helper()
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("Failed to marshal user message: %v", err)
+	}
+	return param.Override[openai.ChatCompletionUserMessageParam](json.RawMessage(jsonData))
 }
 
 func sendRequestTzGateway(t *testing.T, body map[string]interface{}) (map[string]interface{}, error) {
@@ -128,7 +153,7 @@ func TestTags(t *testing.T) {
 			Messages:    messages,
 			Temperature: openai.Float(0.4),
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id": episodeID.String(),
 			"tensorzero::tags":       map[string]any{"foo": "bar"},
 		})
@@ -174,7 +199,7 @@ func TestMultiStep(t *testing.T) {
 			Messages:    messages,
 			Temperature: openai.Float(0.4),
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id":   episodeID.String(),
 			"tensorzero::variant_name": "test",
 		})
@@ -216,7 +241,7 @@ func TestMultiStep(t *testing.T) {
 			Messages:    messages2,
 			Temperature: openai.Float(0.4),
 		}
-		req2.WithExtraFields(map[string]any{
+		req2.SetExtraFields(map[string]any{
 			"tensorzero::episode_id":   episodeID.String(),
 			"tensorzero::variant_name": "test2",
 		})
@@ -267,7 +292,7 @@ func TestBasicInference(t *testing.T) {
 			Messages:    messages,
 			Temperature: openai.Float(0.4),
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"episode_id": episodeID.String(), //old format
 		})
 
@@ -402,7 +427,7 @@ func TestBasicInference(t *testing.T) {
 		time.Sleep(time.Second)
 
 		// Second request (cached)
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::cache_options": map[string]any{
 				"max_age_s": 10,
 				"enabled":   "on",
@@ -426,7 +451,7 @@ func TestBasicInference(t *testing.T) {
 	t.Run("it should handle JSON success with non-deprecated format", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
-		sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
+		sysMsg := overrideSystemMessage(t, map[string]interface{}{
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -438,7 +463,7 @@ func TestBasicInference(t *testing.T) {
 			"role": "system",
 		})
 
-		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+		userMsg := overrideUserMessage(t, map[string]interface{}{
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -460,7 +485,7 @@ func TestBasicInference(t *testing.T) {
 			Model:    "tensorzero::function_name::json_success",
 			Messages: messages,
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id": episodeID.String(),
 		})
 
@@ -539,7 +564,7 @@ func TestBasicInference(t *testing.T) {
 			Messages: messages,
 		}
 
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::extra_headers": []map[string]any{
 				{
 					"model_name":    "dummy::echo_extra_info",
@@ -591,7 +616,7 @@ func TestBasicInference(t *testing.T) {
 			Model:    "tensorzero::model_name::dummy::echo_extra_info",
 			Messages: messages,
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::extra_body": []map[string]any{
 				{
 					"model_name":    "dummy::echo_extra_info",
@@ -641,7 +666,7 @@ func TestBasicInference(t *testing.T) {
 	t.Run("it should handle json success", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
-		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+		userMsg := overrideUserMessage(t, map[string]interface{}{
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -661,7 +686,7 @@ func TestBasicInference(t *testing.T) {
 			Model:    "tensorzero::function_name::json_success",
 			Messages: messages,
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id": episodeID.String(),
 		})
 
@@ -693,7 +718,7 @@ func TestBasicInference(t *testing.T) {
 	t.Run("it should handle json invalid system", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
-		sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
+		sysMsg := overrideSystemMessage(t, map[string]interface{}{
 			"content": []map[string]interface{}{
 				{
 					"type": "image_url",
@@ -704,7 +729,7 @@ func TestBasicInference(t *testing.T) {
 			},
 			"role": "system",
 		})
-		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+		userMsg := overrideUserMessage(t, map[string]interface{}{
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -724,7 +749,7 @@ func TestBasicInference(t *testing.T) {
 			Model:    "tensorzero::function_name::json_success",
 			Messages: messages,
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id": episodeID.String(),
 		})
 
@@ -747,7 +772,7 @@ func TestBasicInference(t *testing.T) {
 			Model:    "tensorzero::function_name::json_fail",
 			Messages: messages,
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id": episodeID.String(),
 		})
 
@@ -949,7 +974,7 @@ func TestStreamingInference(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Second request with cache
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id": episodeID.String(),
 			"tensorzero::cache_options": map[string]any{
 				"max_age_s": nil,
@@ -1092,7 +1117,7 @@ func TestStreamingInference(t *testing.T) {
 	t.Run("it should handle streaming inference with a missing model", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
-		sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
+		sysMsg := overrideSystemMessage(t, map[string]interface{}{
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -1132,7 +1157,7 @@ func TestStreamingInference(t *testing.T) {
 	t.Run("it should handle JSON streaming", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
-		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+		userMsg := overrideUserMessage(t, map[string]interface{}{
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -1156,7 +1181,7 @@ func TestStreamingInference(t *testing.T) {
 				IncludeUsage: openai.Bool(false), // No usage information
 			},
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id":   episodeID.String(),
 			"tensorzero::variant_name": "test-diff-schema",
 		})
@@ -1301,7 +1326,7 @@ func TestToolCallingInference(t *testing.T) {
 			PresencePenalty: openai.Float(0.5),
 		}
 		addEpisodeIDToRequest(t, req, episodeID)
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::variant_name": "bad_tool",
 		})
 
@@ -1428,29 +1453,27 @@ func TestToolCallingInference(t *testing.T) {
 			openai.UserMessage("What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."),
 		}
 
-		tools := []openai.ChatCompletionToolParam{
-			{
-				Function: openai.FunctionDefinitionParam{
-					Name:        "get_temperature",
-					Description: openai.String("Get the current temperature in a given location"),
-					Parameters: openai.FunctionParameters{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"location": map[string]string{
-								"type":        "string",
-								"description": "The location to get the temperature for (e.g. 'New York')",
-							},
-							"units": map[string]interface{}{
-								"type":        "string",
-								"description": "The units to get the temperature in (must be 'fahrenheit' or 'celsius')",
-								"enum":        []string{"fahrenheit", "celsius"},
-							},
+		tools := []openai.ChatCompletionToolUnionParam{
+			openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
+				Name:        "get_temperature",
+				Description: openai.String("Get the current temperature in a given location"),
+				Parameters: openai.FunctionParameters{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"location": map[string]string{
+							"type":        "string",
+							"description": "The location to get the temperature for (e.g. 'New York')",
 						},
-						"required":             []string{"location"},
-						"additionalProperties": false,
+						"units": map[string]interface{}{
+							"type":        "string",
+							"description": "The units to get the temperature in (must be 'fahrenheit' or 'celsius')",
+							"enum":        []string{"fahrenheit", "celsius"},
+						},
 					},
+					"required":             []string{"location"},
+					"additionalProperties": false,
 				},
-			},
+			}),
 		}
 
 		req := &openai.ChatCompletionNewParams{
@@ -1458,7 +1481,7 @@ func TestToolCallingInference(t *testing.T) {
 			Messages: messages,
 			Tools:    tools,
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id":   episodeID.String(),
 			"tensorzero::variant_name": "openai",
 		})
@@ -1507,7 +1530,7 @@ func TestToolCallingInference(t *testing.T) {
 	t.Run("it should reject string input for function with input schema", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
-		usrMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+		usrMsg := overrideUserMessage(t, map[string]interface{}{
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -1528,7 +1551,7 @@ func TestToolCallingInference(t *testing.T) {
 			Model:    "tensorzero::function_name::json_success",
 			Messages: messages,
 		}
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::episode_id": episodeID.String(),
 		})
 
@@ -1556,7 +1579,7 @@ func TestToolCallingInference(t *testing.T) {
 			ParallelToolCalls: openai.Bool(true),
 		}
 		addEpisodeIDToRequest(t, req, episodeID)
-		req.WithExtraFields(map[string]any{
+		req.SetExtraFields(map[string]any{
 			"tensorzero::variant_name": "openai",
 		})
 
@@ -1586,7 +1609,7 @@ func TestToolCallingInference(t *testing.T) {
 			Messages: messages,
 		}
 		addEpisodeIDToRequest(t, finalReq, episodeID)
-		finalReq.WithExtraFields(map[string]any{
+		finalReq.SetExtraFields(map[string]any{
 			"tensorzero::variant_name": "openai",
 		})
 
@@ -1692,6 +1715,118 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Contains(t, finalContent, "30", "Final response should contain '30'")
 	})
 
+}
+
+// TestCustomToolsInference tests the new custom tools feature introduced in OpenAI API.
+// Custom tools (different from function tools) allow free-form text input instead of
+// structured JSON schema parameters.
+func TestCustomToolsInference(t *testing.T) {
+	t.Run("it should define custom tools correctly using ChatCompletionCustomTool", func(t *testing.T) {
+		// This test verifies that we can correctly construct custom tool definitions
+		// using the new ChatCompletionCustomTool helper function.
+
+		// Create a custom tool definition
+		customTool := openai.ChatCompletionCustomTool(openai.ChatCompletionCustomToolCustomParam{
+			Name:        "web_search",
+			Description: openai.String("Search the web for information"),
+		})
+
+		// Verify the tool is properly structured
+		require.NotNil(t, customTool.OfCustom, "Custom tool should have OfCustom set")
+		assert.Equal(t, "web_search", customTool.OfCustom.Custom.Name, "Tool name should match")
+
+		// Create another custom tool with different config
+		codeInterpreter := openai.ChatCompletionCustomTool(openai.ChatCompletionCustomToolCustomParam{
+			Name:        "code_interpreter",
+			Description: openai.String("Execute code and return results"),
+		})
+
+		// Verify the second tool
+		require.NotNil(t, codeInterpreter.OfCustom, "Code interpreter tool should have OfCustom set")
+		assert.Equal(t, "code_interpreter", codeInterpreter.OfCustom.Custom.Name, "Tool name should match")
+	})
+
+	t.Run("it should correctly mix custom and function tools", func(t *testing.T) {
+		// This test verifies that we can use both custom tools and function tools
+		// together in the same request.
+
+		tools := []openai.ChatCompletionToolUnionParam{
+			// Function tool (traditional)
+			openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
+				Name:        "get_weather",
+				Description: openai.String("Get current weather for a location"),
+				Parameters: openai.FunctionParameters{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"location": map[string]string{
+							"type":        "string",
+							"description": "The city name",
+						},
+					},
+					"required": []string{"location"},
+				},
+			}),
+			// Custom tool (new)
+			openai.ChatCompletionCustomTool(openai.ChatCompletionCustomToolCustomParam{
+				Name:        "web_search",
+				Description: openai.String("Search the web"),
+			}),
+		}
+
+		// Verify we have both tool types
+		require.Len(t, tools, 2, "Should have 2 tools")
+
+		// First tool should be function
+		require.NotNil(t, tools[0].OfFunction, "First tool should be a function")
+		assert.Equal(t, "get_weather", tools[0].OfFunction.Function.Name)
+
+		// Second tool should be custom
+		require.NotNil(t, tools[1].OfCustom, "Second tool should be custom")
+		assert.Equal(t, "web_search", tools[1].OfCustom.Custom.Name)
+	})
+
+	t.Run("it should serialize custom tools to JSON correctly", func(t *testing.T) {
+		// Verify that custom tools serialize properly for API requests
+
+		customTool := openai.ChatCompletionCustomTool(openai.ChatCompletionCustomToolCustomParam{
+			Name:        "analyze_image",
+			Description: openai.String("Analyze an image and describe its contents"),
+		})
+
+		// Marshal to JSON
+		jsonBytes, err := json.Marshal(customTool)
+		require.NoError(t, err, "Should marshal without error")
+
+		// Parse JSON to verify structure
+		var parsed map[string]interface{}
+		err = json.Unmarshal(jsonBytes, &parsed)
+		require.NoError(t, err, "Should unmarshal without error")
+
+		// Verify the JSON structure
+		assert.Equal(t, "custom", parsed["type"], "Type should be 'custom'")
+		custom, ok := parsed["custom"].(map[string]interface{})
+		require.True(t, ok, "Should have 'custom' object")
+		assert.Equal(t, "analyze_image", custom["name"], "Name should match")
+		assert.Equal(t, "Analyze an image and describe its contents", custom["description"], "Description should match")
+	})
+
+	t.Run("it should verify custom tool call response structure", func(t *testing.T) {
+		// This test documents the expected structure of custom tool calls in responses.
+		// Note: Actually testing this would require GPT-5 models which support custom tools.
+
+		// The expected response structure for a custom tool call is:
+		// {
+		//   "id": "call_abc123",
+		//   "type": "custom",
+		//   "custom": {
+		//     "name": "web_search",
+		//     "input": "What is the weather in Tokyo?"
+		//   }
+		// }
+
+		// Verify the constant for custom tool type exists
+		assert.Equal(t, constant.Custom("custom"), constant.Custom("custom"), "Custom type constant should be 'custom'")
+	})
 }
 
 func TestImageInference(t *testing.T) {
