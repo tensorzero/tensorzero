@@ -342,9 +342,11 @@ jobs:
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
           # Dummy values - not used since mock server handles requests
+          echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
-          echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "S3_ACCESS_KEY_ID=not_used" >> fixtures/.env-gateway
+          echo "S3_SECRET_ACCESS_KEY=not_used" >> fixtures/.env-gateway
 
       - name: Start docker containers
         run: |
