@@ -39,6 +39,7 @@ use crate::{
         ContentBlockChatOutput, InferenceResult, InferenceResultStream, JsonInferenceOutput,
     },
     minijinja_util::TemplateConfig,
+    relay::TensorzeroRelay,
 };
 
 use super::{
@@ -267,11 +268,15 @@ impl Variant for DiclConfig {
             )
             .await?;
 
-        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model().to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(self.model(), clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model().to_string(),
+                })
+            })?;
 
         // Instantiate the InferModelRequestArgs struct
         let args = InferModelRequestArgs {
@@ -332,11 +337,15 @@ impl Variant for DiclConfig {
             )
             .await?;
 
-        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model().to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(self.model(), clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model().to_string(),
+                })
+            })?;
 
         // Actually run the inference
         let (inference_result_stream, mut model_used_info) = infer_model_request_stream(
@@ -366,6 +375,7 @@ impl Variant for DiclConfig {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         // TODO (#360): Add the clickhouse connection to this interface
         // Run a count() query on the DynamicInContextLearningExample table
@@ -384,7 +394,7 @@ impl Variant for DiclConfig {
         // Validate that the generation model and embedding model are valid
         models.validate(self.model())?;
         let embedding_model = embedding_models
-            .get(self.embedding_model()).await?
+            .get(self.embedding_model(), relay).await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
@@ -558,7 +568,7 @@ impl DiclConfig {
         })?;
 
         let embedding_model = embedding_models
-            .get(self.embedding_model())
+            .get(self.embedding_model(), clients.relay.as_ref())
             .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {

@@ -1,24 +1,11 @@
 use async_trait::async_trait;
 use durable::{Task, TaskContext, TaskResult};
-use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use crate::context::{ToolAppState, ToolContext};
 use crate::error::ToolResult as ToolExecResult;
 use crate::tool_metadata::ToolMetadata;
-
-/// Marker trait for side information types.
-///
-/// Types implementing this can be used as side information for tools.
-/// Side information is provided at spawn time and is hidden from the LLM
-/// (not included in the tool's JSON schema).
-///
-/// The unit type `()` implements this trait for tools that don't need side info.
-pub trait SideInfo: Serialize + DeserializeOwned + Send + 'static {}
-
-/// Unit type implements `SideInfo` for tools without side information.
-impl SideInfo for () {}
 
 /// A durable tool that runs as a full durable Task.
 ///
@@ -72,18 +59,17 @@ impl SideInfo for () {}
 ///     }
 ///
 ///     type LlmParams = ResearchParams;
+///     type SideInfo = ();
+///     type Output = ResearchResult;
 /// }
 ///
 /// #[async_trait]
 /// impl TaskTool for ResearchTool {
-///     type SideInfo = ();
-///     type Output = ResearchResult;
-///
 ///     async fn execute(
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
-///         _side_info: Self::SideInfo,
+///         _side_info: <Self as ToolMetadata>::SideInfo,
 ///         ctx: &mut ToolContext<'_>,
-///     ) -> ToolResult<Self::Output> {
+///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Call other tools
 ///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic})).await?;
 ///
@@ -136,18 +122,17 @@ impl SideInfo for () {}
 ///     }
 ///
 ///     type LlmParams = GitHubSearchParams;
+///     type SideInfo = GitHubCredentials;
+///     type Output = Vec<String>;
 /// }
 ///
 /// #[async_trait]
 /// impl TaskTool for GitHubSearchTool {
-///     type SideInfo = GitHubCredentials;
-///     type Output = Vec<String>;
-///
 ///     async fn execute(
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
-///         side_info: Self::SideInfo,
+///         side_info: <Self as ToolMetadata>::SideInfo,
 ///         ctx: &mut ToolContext<'_>,
-///     ) -> ToolResult<Self::Output> {
+///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Use llm_params.query (from LLM)
 ///         // Use side_info.api_token (hidden from LLM)
 ///         Ok(vec![])
@@ -156,14 +141,6 @@ impl SideInfo for () {}
 /// ```
 #[async_trait]
 pub trait TaskTool: ToolMetadata {
-    /// Side information type provided at spawn time (hidden from LLM).
-    ///
-    /// Use `()` if no side information is needed.
-    type SideInfo: SideInfo;
-
-    /// The output type for this tool (must be JSON-serializable).
-    type Output: Serialize + DeserializeOwned + Send + 'static;
-
     /// Execute the tool logic.
     ///
     /// This is called by the durable worker when the tool is invoked.
@@ -177,9 +154,9 @@ pub trait TaskTool: ToolMetadata {
     /// * `ctx` - The tool execution context
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        side_info: Self::SideInfo,
+        side_info: <Self as ToolMetadata>::SideInfo,
         ctx: &mut ToolContext<'_>,
-    ) -> ToolExecResult<Self::Output>;
+    ) -> ToolExecResult<<Self as ToolMetadata>::Output>;
 }
 
 // Re-export TaskToolParams from spawn crate

@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct FireworksSFTConfig {
     pub model: String,
     pub early_stop: Option<bool>,
@@ -41,7 +41,7 @@ pub struct FireworksSFTConfig {
 }
 
 #[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
 pub struct UninitializedFireworksSFTConfig {
     pub model: String,

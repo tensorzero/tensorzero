@@ -1012,14 +1012,23 @@ jobs:
 
       - name: Launch the gateway for E2E tests
         run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
-          while ! curl http://localhost:3000/health; do
+          cargo run-e2e-mock-optimization > e2e_logs.txt 2>&1 &
+          GATEWAY_PID=$!
+          while ! curl -s http://localhost:3000/health; do
+            if ! kill -0 $GATEWAY_PID 2>/dev/null; then
+              echo "Gateway process died!"
+              exit 1
+            fi
             echo "Waiting for gateway to be healthy..."
             sleep 1
           done
 
       - name: Test (Rust)
         run: cargo test-optimization-mock
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
 
   build-gateway-e2e-container:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
@@ -1087,6 +1096,7 @@ jobs:
       FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
       S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
 
   check-production-docker-container:
     permissions:

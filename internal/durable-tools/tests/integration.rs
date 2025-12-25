@@ -140,13 +140,12 @@ impl ToolMetadata for EchoSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -180,13 +179,12 @@ impl ToolMetadata for EchoTaskTool {
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -248,13 +246,12 @@ impl ToolMetadata for InferenceSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(30)
     }
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
 }
 
 #[async_trait]
 impl SimpleTool for InferenceSimpleTool {
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -308,13 +305,12 @@ impl ToolMetadata for InferenceTaskTool {
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
 }
 
 #[async_trait]
 impl TaskTool for InferenceTaskTool {
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -527,13 +523,12 @@ impl ToolMetadata for KeyCapturingSimpleTool {
     }
 
     type LlmParams = EchoParams;
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for KeyCapturingSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -566,13 +561,12 @@ impl ToolMetadata for MultiCallTaskTool {
     }
 
     type LlmParams = EchoParams;
+    type SideInfo = ();
+    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for MultiCallTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         _llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,

@@ -2,21 +2,21 @@
 
 export type FireworksSFTConfig = {
   model: string;
-  early_stop: boolean | null;
-  epochs: number | null;
-  learning_rate: number | null;
-  max_context_length: number | null;
-  lora_rank: number | null;
-  batch_size: number | null;
-  display_name: string | null;
-  output_model: string | null;
-  warm_start_from: string | null;
-  is_turbo: boolean | null;
-  eval_auto_carveout: boolean | null;
-  nodes: number | null;
-  mtp_enabled: boolean | null;
-  mtp_num_draft_tokens: number | null;
-  mtp_freeze_base_model: boolean | null;
+  early_stop?: boolean;
+  epochs?: number;
+  learning_rate?: number;
+  max_context_length?: number;
+  lora_rank?: number;
+  batch_size?: number;
+  display_name?: string;
+  output_model?: string;
+  warm_start_from?: string;
+  is_turbo?: boolean;
+  eval_auto_carveout?: boolean;
+  nodes?: number;
+  mtp_enabled?: boolean;
+  mtp_num_draft_tokens?: number;
+  mtp_freeze_base_model?: boolean;
   credential_location: string | null;
   account_id: string;
   api_base: string;
