@@ -66,6 +66,7 @@ use crate::tool::{AllowedTools, AllowedToolsChoice};
 use crate::tool::{
     FunctionTool, FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice,
 };
+use crate::utils::mock::get_mock_provider_api_base;
 
 use super::helpers::{JsonlBatchFileInfo, convert_stream_error, parse_jsonl_batch_file};
 
@@ -538,14 +539,12 @@ impl GCPVertexGeminiProvider {
 
         let location_prefix = location_subdomain_prefix(&location);
 
-        #[cfg(feature = "e2e_tests")]
-        let api_v1_base_url = if let Some(api_base) =
-            &provider_types.gcp_vertex_gemini.batch_inference_api_base
-        {
+        // Use mock API base for testing if set, otherwise default API base
+        let api_v1_base_url = if let Some(api_base) = get_mock_provider_api_base("") {
             Url::parse(&format!("{}/v1/", api_base.as_str().trim_end_matches('/'))).map_err(
                 |e| {
                     Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to parse batch_inference_api_base URL: {e}"),
+                        message: format!("Failed to parse mock API base URL: {e}"),
                     })
                 },
             )?
@@ -559,16 +558,6 @@ impl GCPVertexGeminiProvider {
                 })
             })?
         };
-
-        #[cfg(not(feature = "e2e_tests"))]
-        let api_v1_base_url = Url::parse(&format!(
-            "https://{location_prefix}aiplatform.googleapis.com/v1/"
-        ))
-        .map_err(|e| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!("Failed to parse base URL - this should never happen: {e}"),
-            })
-        })?;
         let (model_or_endpoint_id, request_url, streaming_request_url) = match (
             &model_id,
             &endpoint_id,
@@ -610,10 +599,8 @@ impl GCPVertexGeminiProvider {
                     })),
                 ..
             } => {
-                #[cfg(feature = "e2e_tests")]
-                let batch_request_url = if let Some(api_base) =
-                    &provider_types.gcp_vertex_gemini.batch_inference_api_base
-                {
+                // Use mock API base for testing if set, otherwise default API base
+                let batch_request_url = if let Some(api_base) = get_mock_provider_api_base("") {
                     format!(
                         "{}/v1/projects/{project_id}/locations/{location}/batchPredictionJobs",
                         api_base.as_str().trim_end_matches('/')
@@ -623,11 +610,6 @@ impl GCPVertexGeminiProvider {
                         "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"
                     )
                 };
-
-                #[cfg(not(feature = "e2e_tests"))]
-                let batch_request_url = format!(
-                    "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"
-                );
 
                 Some(BatchConfig {
                     input_uri_prefix: input_uri_prefix.clone(),

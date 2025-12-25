@@ -18,10 +18,9 @@ use tensorzero_core::{
         OptimizationJobInfo,
         openai_sft::{OpenAISFTConfig, OpenAISFTJobHandle},
     },
-    providers::openai::{
-        OPENAI_DEFAULT_BASE_URL, OpenAICredentials, PROVIDER_TYPE, upload_openai_file,
-    },
+    providers::openai::{OPENAI_DEFAULT_BASE_URL, PROVIDER_TYPE, upload_openai_file},
     stored_inference::RenderedSample,
+    utils::mock::get_mock_provider_api_base,
 };
 
 use crate::{
@@ -45,8 +44,20 @@ impl Optimizer for OpenAISFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: Arc<Config>,
+        config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
+        // Get credentials from provider defaults
+        let openai_credentials = OpenAIKind
+            .get_defaulted_credential(None, &config.models.default_credentials)
+            .await?;
+        let api_key = openai_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
+
+        // Use mock API base for testing if set, otherwise default API base
+        let api_base = get_mock_provider_api_base("openai/")
+            .unwrap_or_else(|| OPENAI_DEFAULT_BASE_URL.clone());
+
         let train_examples = train_examples
             .into_iter()
             .map(RenderedSample::into_lazy_rendered_sample)
@@ -78,19 +89,11 @@ impl Optimizer for OpenAISFTConfig {
             None
         };
 
-        let api_key = self
-            .credentials
-            .get_api_key(credentials)
-            .map_err(|e| e.log())?;
-
-        // Run these concurrently
-        let api_base = self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL);
-
         let train_fut = upload_openai_file(
             &train_rows,
             client,
             api_key,
-            api_base,
+            &api_base,
             OPENAI_FINE_TUNE_PURPOSE.to_string(),
         );
 
@@ -99,7 +102,7 @@ impl Optimizer for OpenAISFTConfig {
                 val_rows,
                 client,
                 api_key,
-                api_base,
+                &api_base,
                 OPENAI_FINE_TUNE_PURPOSE.to_string(),
             );
 
@@ -130,10 +133,7 @@ impl Optimizer for OpenAISFTConfig {
             metadata: None,
         };
 
-        let url = get_fine_tuning_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
-            None,
-        )?;
+        let url = get_fine_tuning_url(&api_base, None)?;
         let mut request = client.post(url);
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
@@ -174,10 +174,7 @@ impl Optimizer for OpenAISFTConfig {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let job_api_url = get_fine_tuning_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
-            Some(&job.id),
-        )?;
+        let job_api_url = get_fine_tuning_url(&api_base, Some(&job.id))?;
         Ok(OpenAISFTJobHandle {
             job_id: job.id.clone(),
             job_url: format!("https://platform.openai.com/finetune/{}", job.id)
@@ -190,7 +187,6 @@ impl Optimizer for OpenAISFTConfig {
                     })
                 })?,
             job_api_url,
-            credential_location: self.credential_location.clone(),
         })
     }
 }
@@ -204,13 +200,16 @@ impl JobHandle for OpenAISFTJobHandle {
         default_credentials: &ProviderTypeDefaultCredentials,
         _provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error> {
-        let openai_credentials: OpenAICredentials = OpenAIKind
-            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+        // Get credentials from provider defaults
+        let openai_credentials = OpenAIKind
+            .get_defaulted_credential(None, default_credentials)
             .await?;
-        let mut request = client.get(self.job_api_url.clone());
         let api_key = openai_credentials
             .get_api_key(credentials)
             .map_err(|e| e.log())?;
+
+        // Note: job_api_url was constructed at launch time and stored in handle
+        let mut request = client.get(self.job_api_url.clone());
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
         }

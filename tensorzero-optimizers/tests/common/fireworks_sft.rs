@@ -4,8 +4,6 @@ use tensorzero_core::optimization::{
     fireworks_sft::UninitializedFireworksSFTConfig,
 };
 
-use super::mock_inference_provider_base;
-
 pub struct FireworksSFTTestCase();
 
 impl OptimizationTestCase for FireworksSFTTestCase {
@@ -17,11 +15,11 @@ impl OptimizationTestCase for FireworksSFTTestCase {
         true
     }
 
-    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
+    fn get_optimizer_info(&self) -> UninitializedOptimizerInfo {
+        // Note: mock mode is configured via provider_types.fireworks.sft in the test config file
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::FireworksSFT(UninitializedFireworksSFTConfig {
                 model: "accounts/fireworks/models/llama-v3p3-70b-instruct".to_string(),
-                account_id: "viraj-ebfe5a".to_string(),
                 early_stop: None,
                 epochs: Some(1),
                 learning_rate: None,
@@ -37,12 +35,6 @@ impl OptimizationTestCase for FireworksSFTTestCase {
                 mtp_enabled: None,
                 mtp_num_draft_tokens: None,
                 mtp_freeze_base_model: None,
-                credentials: None,
-                api_base: if use_mock_inference_provider {
-                    Some(mock_inference_provider_base().join("fireworks/").unwrap())
-                } else {
-                    None
-                },
             }),
         }
     }

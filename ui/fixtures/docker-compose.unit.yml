@@ -112,9 +112,8 @@ services:
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
-      # For mock server during SFT jobs
-      OPENAI_BASE_URL: http://mock-inference-provider:3030/openai
-      TOGETHER_BASE_URL: http://mock-inference-provider:3030/together
+      # For mock server during SFT jobs and batch inference
+      TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://mock-provider-api:3030
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro
@@ -131,5 +130,5 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-      mock-inference-provider:
+      mock-provider-api:
         condition: service_healthy

@@ -6,7 +6,7 @@ use tokio::time::{Duration, sleep};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use super::use_mock_inference_provider;
+use super::use_mock_provider_api;
 use tensorzero::{
     ClientExt, ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceOutputSource,
     Input, InputMessage, InputMessageContent, LaunchOptimizationWorkflowParams, RenderedSample,
@@ -67,7 +67,7 @@ pub async fn test_dicl_optimization_chat() {
         .try_init();
 
     let embedding_provider = "openai";
-    let embedding_model = if use_mock_inference_provider() {
+    let embedding_model = if use_mock_provider_api() {
         "dummy-embedding-model".to_string()
     } else {
         "text-embedding-3-small".to_string()
@@ -88,10 +88,7 @@ pub async fn test_dicl_optimization_chat() {
         }),
     };
 
-    let optimizer_info = uninitialized_optimizer_info
-        .load(&ProviderTypeDefaultCredentials::default())
-        .await
-        .unwrap();
+    let optimizer_info = uninitialized_optimizer_info.load();
     let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_pinocchio_examples(false);
     let val_examples = None; // No validation examples needed for this test
@@ -150,7 +147,7 @@ pub async fn test_dicl_optimization_chat() {
         if matches!(status, OptimizationJobInfo::Failed { .. }) {
             panic!("Optimization failed: {status:?}");
         }
-        sleep(if use_mock_inference_provider() {
+        sleep(if use_mock_provider_api() {
             Duration::from_secs(1)
         } else {
             Duration::from_secs(60)
@@ -354,7 +351,7 @@ pub async fn test_dicl_optimization_json() {
         .try_init();
 
     let embedding_provider = "openai";
-    let embedding_model = if use_mock_inference_provider() {
+    let embedding_model = if use_mock_provider_api() {
         "dummy-embedding-model".to_string()
     } else {
         "text-embedding-3-small".to_string()
@@ -375,10 +372,7 @@ pub async fn test_dicl_optimization_json() {
         }),
     };
 
-    let optimizer_info = uninitialized_optimizer_info
-        .load(&ProviderTypeDefaultCredentials::default())
-        .await
-        .unwrap();
+    let optimizer_info = uninitialized_optimizer_info.load();
 
     let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_pinocchio_examples(true);
@@ -438,7 +432,7 @@ pub async fn test_dicl_optimization_json() {
         if matches!(status, OptimizationJobInfo::Failed { .. }) {
             panic!("Optimization failed: {status:?}");
         }
-        sleep(if use_mock_inference_provider() {
+        sleep(if use_mock_provider_api() {
             Duration::from_secs(1)
         } else {
             Duration::from_secs(60)

@@ -7,11 +7,11 @@ volumes:
   shared-tmpdir:
 
 services:
-  mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG}
+  mock-provider-api:
+    image: tensorzero/mock-provider-api:${TENSORZERO_COMMIT_TAG}
     build:
       context: ../../../
-      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
+      dockerfile: tensorzero-core/tests/mock-provider-api/Dockerfile
     environment:
       RUST_LOG: debug
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
@@ -66,7 +66,7 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       TENSORZERO_MINIO_URL: http://minio:9000/
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
-      TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
+      TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://mock-provider-api:3030
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
@@ -185,7 +185,7 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
       TENSORZERO_MINIO_URL: http://minio:9000
-      TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
+      TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://mock-provider-api:3030
       TENSORZERO_TEMPO_URL: http://tempo:3200
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
@@ -246,7 +246,7 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-      mock-inference-provider:
+      mock-provider-api:
         condition: service_healthy
       provider-proxy:
         condition: service_healthy

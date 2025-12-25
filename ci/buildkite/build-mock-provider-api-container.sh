@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Get the short hash from the buildkite environment variable
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
-TAG=tensorzero/mock-inference-provider:ci-sha-$SHORT_HASH
-LATEST_TAG=tensorzero/mock-inference-provider:latest
+TAG=tensorzero/mock-provider-api:ci-sha-$SHORT_HASH
+LATEST_TAG=tensorzero/mock-provider-api:latest
 
 source ci/buildkite/utils/docker-hub-credentials.sh
 
@@ -17,7 +17,7 @@ docker pull $LATEST_TAG || true
 # Build the container with cache
 docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
   --cache-from $LATEST_TAG \
-  -f tensorzero-core/tests/mock-inference-provider/Dockerfile . -t $TAG
+  -f tensorzero-core/tests/mock-provider-api/Dockerfile . -t $TAG
 
 # Tag with latest and push both tags
 docker tag $TAG $LATEST_TAG

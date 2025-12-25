@@ -232,7 +232,6 @@ class DICLOptimizationConfig:
         k: Optional[int] = None,
         model: Optional[str] = None,
         append_to_existing_variants: Optional[bool] = None,
-        credentials: Optional[str] = None,
     ) -> None: ...
 
 @final
@@ -244,8 +243,6 @@ class OpenAISFTConfig:
         batch_size: Optional[int] = None,
         learning_rate_multiplier: Optional[float] = None,
         n_epochs: Optional[int] = None,
-        credentials: Optional[str] = None,
-        api_base: Optional[str] = None,
         seed: Optional[int] = None,
         suffix: Optional[str] = None,
     ) -> None: ...
@@ -265,8 +262,6 @@ class OpenAIRFTConfig:
         learning_rate_multiplier: Optional[float] = None,
         n_epochs: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
-        credentials: Optional[str] = None,
-        api_base: Optional[str] = None,
         seed: Optional[int] = None,
         suffix: Optional[str] = None,
     ) -> None: ...
@@ -292,9 +287,6 @@ class FireworksSFTConfig:
         mtp_enabled: Optional[bool] = None,
         mtp_num_draft_tokens: Optional[int] = None,
         mtp_freeze_base_model: Optional[bool] = None,
-        credentials: Optional[str] = None,
-        account_id: str,
-        api_base: Optional[str] = None,
     ) -> None: ...
 
 @final
@@ -343,8 +335,6 @@ class TogetherSFTConfig:
         self,
         *,
         model: str,
-        credentials: Optional[str] = None,
-        api_base: Optional[str] = None,
         n_epochs: Optional[int] = None,
         n_checkpoints: Optional[int] = None,
         n_evals: Optional[int] = None,
@@ -355,16 +345,12 @@ class TogetherSFTConfig:
         weight_decay: Optional[float] = None,
         suffix: Optional[str] = None,
         lr_scheduler: Optional[Dict[str, Any]] = None,
-        wandb_api_key: Optional[str] = None,
-        wandb_base_url: Optional[str] = None,
-        wandb_project_name: Optional[str] = None,
         wandb_name: Optional[str] = None,
         training_method: Optional[Dict[str, Any]] = None,
         training_type: Optional[Dict[str, Any]] = None,
         from_checkpoint: Optional[str] = None,
         from_hf_model: Optional[str] = None,
         hf_model_revision: Optional[str] = None,
-        hf_api_token: Optional[str] = None,
         hf_output_repo_name: Optional[str] = None,
     ) -> None: ...
 

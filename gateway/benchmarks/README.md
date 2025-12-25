@@ -29,7 +29,7 @@
 - Launch the mock inference provider in performance mode:
 
   ```bash
-  cargo run --profile performance --bin mock-inference-provider
+  cargo run --profile performance --bin mock-provider-api
   ```
 
 #### TensorZero Gateway

@@ -190,7 +190,7 @@ impl GatewayHandle {
         postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let config = Arc::new(config.into_config(&clickhouse_connection_info).await?);
+        let config = Arc::new(Box::pin(config.into_config(&clickhouse_connection_info)).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(

@@ -24,7 +24,6 @@ echo "Logged in to Docker Hub"
 
 echo $BUILDKITE_ANALYTICS_TOKEN >> ui/fixtures/.env
 {
-  echo "FIREWORKS_ACCOUNT_ID=not_used"
   echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
   echo "TENSORZERO_COMMIT_TAG=ci-sha-$SHORT_HASH"
 } >> ui/fixtures/.env

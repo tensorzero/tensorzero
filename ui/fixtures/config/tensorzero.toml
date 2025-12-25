@@ -503,6 +503,9 @@ retries = { num_retries = 4, max_delay_s = 10 }
 # │                               PROVIDER TYPES                               │
 # └────────────────────────────────────────────────────────────────────────────┘
 
+[provider_types.fireworks.sft]
+account_id = "viraj-ebfe5a"
+
 [provider_types.gcp_vertex_gemini.sft]
 project_id = "tensorzero-public"
 region = "us-central1"
