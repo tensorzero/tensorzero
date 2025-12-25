@@ -1808,7 +1808,7 @@ func TestCustomToolsInference(t *testing.T) {
 
 	t.Run("it should parse custom tool call response structure", func(t *testing.T) {
 		// This test verifies that we can parse a custom tool call response from JSON.
-		// Note: Actually invoking custom tools would require GPT-5 models which support them.
+		// Note: Actually invoking custom tools would require future OpenAI models that support them.
 
 		// Simulate a custom tool call response JSON (as would be returned by OpenAI API)
 		customToolCallJSON := `{
