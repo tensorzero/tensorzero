@@ -4,9 +4,6 @@ use std::path::PathBuf;
 
 use crate::config::{Config, ConfigFileGlob};
 
-// Re-export mock helpers for backwards compatibility
-pub use crate::utils::mock::{get_mock_provider_api_base, is_mock_mode};
-
 /// Returns the path to the E2E test configuration file.
 /// The path is relative to the tensorzero-core crate root.
 pub fn get_e2e_config_path() -> PathBuf {

@@ -156,6 +156,8 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+      # Permission to download artifacts
+      actions: read
     timeout-minutes: 45
     strategy:
       matrix:
@@ -358,10 +360,29 @@ jobs:
           fi
           exit 1
 
+      - name: Download mock-provider-api-container
+        continue-on-error: true
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-mock-provider-api-container
+          path: .
+
+      - name: Load mock-provider-api-container
+        id: load-mock-provider-api
+        continue-on-error: true
+        run: |
+          docker load < mock-provider-api-container.tar
+
       - name: Start mock-provider-api for mock tests
         run: |
-          docker run -d --name mock-provider-api -p 3030:3030 tensorzero/mock-provider-api:sha-${{ github.sha }} || \
-          docker run -d --name mock-provider-api -p 3030:3030 tensorzero/mock-provider-api:latest
+          if [ "${{ steps.load-mock-provider-api.outcome }}" = "success" ]; then
+            # Use the pre-built image from artifact
+            docker run -d --name mock-provider-api -p 3030:3030 tensorzero/mock-provider-api:sha-${{ github.sha }}
+          else
+            # Build locally as fallback for standalone runs
+            docker build -f tensorzero-core/tests/mock-provider-api/Dockerfile -t mock-provider-api:local .
+            docker run -d --name mock-provider-api -p 3030:3030 mock-provider-api:local
+          fi
           # Wait for mock-provider-api to be healthy
           for i in {1..30}; do
             if curl -s -f http://localhost:3030/status >/dev/null 2>&1; then
