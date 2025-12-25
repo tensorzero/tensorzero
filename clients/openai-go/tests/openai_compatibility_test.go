@@ -1824,8 +1824,8 @@ func TestCustomToolsInference(t *testing.T) {
 		//   }
 		// }
 
-		// Verify the constant for custom tool type exists
-		assert.Equal(t, constant.Custom("custom"), constant.Custom("custom"), "Custom type constant should be 'custom'")
+		// The custom tool type constant in the OpenAI Go SDK is represented by constant.Custom("custom").
+		// When parsing responses, tool calls with type "custom" will have their Type field set to this constant.
 	})
 }
 
