@@ -9,6 +9,7 @@ mod worker;
 mod wrapper;
 
 pub use side_info::AutopilotSideInfo;
+#[cfg(feature = "e2e_tests")]
 pub use tools::EchoTool;
 pub use worker::{
     AutopilotWorker, AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker,

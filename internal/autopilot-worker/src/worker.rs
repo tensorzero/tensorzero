@@ -8,7 +8,9 @@ use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
+#[cfg(feature = "e2e_tests")]
 use crate::tools::EchoTool;
+#[cfg(feature = "e2e_tests")]
 use crate::wrapper::ClientToolWrapper;
 
 /// Configuration for the autopilot worker.
@@ -73,12 +75,16 @@ impl AutopilotWorker {
 
     /// Register all autopilot tools with the executor.
     pub async fn register_tools(&self) -> Result<()> {
-        // Register the echo tool for testing
-        self.executor
-            .register_task_tool::<ClientToolWrapper<EchoTool>>()
-            .await?;
+        #[cfg(feature = "e2e_tests")]
+        {
+            // Register test tools
+            self.executor
+                .register_task_tool::<ClientToolWrapper<EchoTool>>()
+                .await?;
+            // Additional test tools can be registered here
+        }
 
-        // Additional tools will be registered here as they are implemented
+        // Production tools will be registered here when implemented
         Ok(())
     }
 

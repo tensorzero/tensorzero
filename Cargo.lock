@@ -327,7 +327,11 @@ dependencies = [
 name = "autopilot-tools"
 version = "2025.12.5"
 dependencies = [
+ "async-trait",
  "durable-tools",
+ "schemars 1.1.0",
+ "serde",
+ "tokio",
 ]
 
 [[package]]
@@ -337,6 +341,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "autopilot-client",
+ "autopilot-tools",
  "durable-tools",
  "schemars 1.1.0",
  "serde",

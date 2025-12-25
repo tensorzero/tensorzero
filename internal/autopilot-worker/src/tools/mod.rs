@@ -1,5 +1,5 @@
 //! Autopilot tool implementations.
 
-mod echo;
-
-pub use echo::EchoTool;
+// Re-export test tools from autopilot-tools when e2e_tests enabled
+#[cfg(feature = "e2e_tests")]
+pub use autopilot_tools::tools::EchoTool;
