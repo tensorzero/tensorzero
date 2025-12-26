@@ -201,7 +201,7 @@ skip_relay = true
 
 [models.gpt_5_edge.providers.openai]
 type = "openai"
-model_name = "openai::gpt-5"
+model_name = "gpt-5"
 ```
 
 When you make an inference call to the `gpt_5_edge` model, the edge gateway will bypass the relay and call OpenAI directly using credentials available on the edge gateway.
