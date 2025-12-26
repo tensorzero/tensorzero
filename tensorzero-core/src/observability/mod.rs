@@ -1265,7 +1265,7 @@ pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<Prometheu
         describe_histogram!(
             "tensorzero_inference_latency_overhead_seconds",
             Unit::Seconds,
-            "Overhead of TensorZero on HTTP requests"
+            "Overhead of TensorZero on HTTP requests. You can customize buckets using `gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets` in the configuration."
         );
     }
 

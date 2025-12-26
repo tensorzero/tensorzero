@@ -57,9 +57,8 @@ fn default_tensorzero_inference_latency_overhead_seconds_buckets() -> Vec<f64> {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricsConfig {
-    /// When non-empty, report the `tensorzero_inference_latency_overhead_seconds` metric
-    /// using the specified buckets.
-    /// When empty, the metric is not reported.
+    /// Histogram buckets for the `tensorzero_inference_latency_overhead_seconds` metric.
+    /// Defaults to `[0.001, 0.01, 0.1]`. Set to empty to disable the metric.
     #[serde(default = "default_tensorzero_inference_latency_overhead_seconds_buckets")]
     pub tensorzero_inference_latency_overhead_seconds_buckets: Vec<f64>,
 }
