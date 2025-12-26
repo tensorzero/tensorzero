@@ -1242,21 +1242,9 @@ pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<Prometheu
 
     // Register the expected metrics along with their types and docstrings
     describe_counter!(
-        "request_count",
-        Unit::Count,
-        "Requests handled by TensorZero (deprecated: use `tensorzero_requests_total` instead)",
-    );
-
-    describe_counter!(
         "tensorzero_requests_total",
         Unit::Count,
         "Requests handled by TensorZero",
-    );
-
-    describe_counter!(
-        "inference_count",
-        Unit::Count,
-        "Inferences performed by TensorZero (deprecated: use `tensorzero_inferences_total` instead)",
     );
 
     describe_counter!(
