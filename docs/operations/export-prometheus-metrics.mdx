@@ -21,9 +21,15 @@ This metric is reported as a summary with quantiles (e.g. p50, p90, p99).
 ```txt title="GET /metrics"
 # HELP tensorzero_inference_latency_overhead_seconds Overhead of TensorZero on HTTP requests
 # TYPE tensorzero_inference_latency_overhead_seconds summary
-tensorzero_inference_latency_overhead_seconds{function_name="my_function",variant_name="my_variant",quantile="0.5"} 0.002
-tensorzero_inference_latency_overhead_seconds{function_name="my_function",variant_name="my_variant",quantile="0.9"} 0.005
-tensorzero_inference_latency_overhead_seconds{function_name="my_function",variant_name="my_variant",quantile="0.99"} 0.01
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0"} 0.087712334
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.5"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.9"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.95"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.99"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.999"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="1"} 0.087712334
+tensorzero_inference_latency_overhead_seconds_sum{function_name="tensorzero::default",variant_name="openai::gpt-5-mini"} 0.087712334
+tensorzero_inference_latency_overhead_seconds_count{function_name="tensorzero::default",variant_name="openai::gpt-5-mini"} 1
 ```
 
 ## `tensorzero_inference_latency_overhead_seconds_histogram`
