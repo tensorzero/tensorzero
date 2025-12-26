@@ -15,6 +15,12 @@ services:
 
   gateway-postgres-migrations:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    build:
+      context: ../../
+      dockerfile: gateway/Dockerfile
+      target: gateway
+      args:
+        PROFILE: dev
     environment:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
     depends_on:
