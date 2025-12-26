@@ -12,7 +12,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tensorzero::{
     Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, ClientInferenceParams,
-    InferenceResponse, TensorZeroError,
+    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
+    DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse, ListDatapointsRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use url::Url;
@@ -102,6 +104,50 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         snapshot_hash: SnapshotHash,
         params: ClientInferenceParams,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+    // ========== Datapoint CRUD Operations ==========
+
+    /// Create datapoints in a dataset.
+    async fn create_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<CreateDatapointRequest>,
+    ) -> Result<CreateDatapointsResponse, TensorZeroClientError>;
+
+    /// Create datapoints from existing inferences.
+    async fn create_datapoints_from_inferences(
+        &self,
+        dataset_name: String,
+        params: CreateDatapointsFromInferenceRequestParams,
+    ) -> Result<CreateDatapointsResponse, TensorZeroClientError>;
+
+    /// List datapoints in a dataset with filtering and pagination.
+    async fn list_datapoints(
+        &self,
+        dataset_name: String,
+        request: ListDatapointsRequest,
+    ) -> Result<GetDatapointsResponse, TensorZeroClientError>;
+
+    /// Get specific datapoints by their IDs.
+    async fn get_datapoints(
+        &self,
+        dataset_name: Option<String>,
+        ids: Vec<Uuid>,
+    ) -> Result<GetDatapointsResponse, TensorZeroClientError>;
+
+    /// Update existing datapoints.
+    async fn update_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<UpdateDatapointRequest>,
+    ) -> Result<UpdateDatapointsResponse, TensorZeroClientError>;
+
+    /// Delete datapoints by ID.
+    async fn delete_datapoints(
+        &self,
+        dataset_name: String,
+        ids: Vec<Uuid>,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.

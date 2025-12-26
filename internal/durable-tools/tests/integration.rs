@@ -96,6 +96,54 @@ impl TensorZeroClient for MockTensorZeroClient {
             .clone()
             .ok_or(TensorZeroClientError::StreamingNotSupported)
     }
+
+    async fn create_datapoints(
+        &self,
+        _dataset_name: String,
+        _datapoints: Vec<tensorzero::CreateDatapointRequest>,
+    ) -> Result<tensorzero::CreateDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn create_datapoints_from_inferences(
+        &self,
+        _dataset_name: String,
+        _params: tensorzero::CreateDatapointsFromInferenceRequestParams,
+    ) -> Result<tensorzero::CreateDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn list_datapoints(
+        &self,
+        _dataset_name: String,
+        _request: tensorzero::ListDatapointsRequest,
+    ) -> Result<tensorzero::GetDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn get_datapoints(
+        &self,
+        _dataset_name: Option<String>,
+        _ids: Vec<Uuid>,
+    ) -> Result<tensorzero::GetDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn update_datapoints(
+        &self,
+        _dataset_name: String,
+        _datapoints: Vec<tensorzero::UpdateDatapointRequest>,
+    ) -> Result<tensorzero::UpdateDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn delete_datapoints(
+        &self,
+        _dataset_name: String,
+        _ids: Vec<Uuid>,
+    ) -> Result<tensorzero::DeleteDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
 }
 
 /// Create a mock chat inference response with the given text content.

@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use durable_tools::{SideInfo, SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
 use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -12,7 +12,8 @@ use tensorzero::{
     ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse, Input,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
-use uuid::Uuid;
+
+use crate::types::AutopilotToolSideInfo;
 
 /// Parameters for the inference tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -42,21 +43,6 @@ pub struct InferenceToolParams {
     pub config_snapshot_hash: Option<String>,
 }
 
-/// Side information for the inference tool (hidden from LLM).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InferenceToolSideInfo {
-    /// Episode ID to use for the inference (links to autopilot session).
-    pub episode_id: Uuid,
-    /// Session ID for tagging.
-    pub session_id: Uuid,
-    /// Tool call ID for tagging.
-    pub tool_call_id: Uuid,
-    /// Tool call event ID for tagging.
-    pub tool_call_event_id: Uuid,
-}
-
-impl SideInfo for InferenceToolSideInfo {}
-
 /// Tool for calling TensorZero inference endpoint.
 ///
 /// This tool allows autopilot to make inference calls, optionally using
@@ -65,7 +51,7 @@ impl SideInfo for InferenceToolSideInfo {}
 pub struct InferenceTool;
 
 impl ToolMetadata for InferenceTool {
-    type SideInfo = InferenceToolSideInfo;
+    type SideInfo = AutopilotToolSideInfo;
     type Output = InferenceResponse;
     type LlmParams = InferenceToolParams;
 

@@ -11,7 +11,8 @@ use tensorzero::{Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
-use autopilot_tools::tools::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
+use autopilot_tools::AutopilotToolSideInfo;
+use autopilot_tools::tools::{InferenceTool, InferenceToolParams};
 use common::{MockTensorZeroClient, create_mock_chat_response};
 
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -47,7 +48,7 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
         config_snapshot_hash: None, // Testing the non-hash path
     };
 
-    let side_info = InferenceToolSideInfo {
+    let side_info = AutopilotToolSideInfo {
         episode_id,
         session_id,
         tool_call_id,
@@ -139,7 +140,7 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
         config_snapshot_hash: Some(test_snapshot_hash.to_string()), // Testing the action path
     };
 
-    let side_info = InferenceToolSideInfo {
+    let side_info = AutopilotToolSideInfo {
         episode_id,
         session_id,
         tool_call_id,
