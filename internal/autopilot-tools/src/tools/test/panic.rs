@@ -20,6 +20,9 @@ pub struct PanicToolParams {
 pub struct PanicTool;
 
 impl ToolMetadata for PanicTool {
+    type SideInfo = ();
+    type Output = ();
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("panic")
     }
@@ -37,8 +40,6 @@ impl ToolMetadata for PanicTool {
 
 #[async_trait]
 impl TaskTool for PanicTool {
-    type SideInfo = ();
-    type Output = ();
 
     #[expect(
         clippy::panic,

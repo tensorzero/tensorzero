@@ -20,6 +20,9 @@ pub struct ErrorSimpleParams {
 pub struct ErrorSimpleTool;
 
 impl ToolMetadata for ErrorSimpleTool {
+    type SideInfo = ();
+    type Output = ();
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("error_simple")
     }
@@ -39,8 +42,6 @@ impl ToolMetadata for ErrorSimpleTool {
 
 #[async_trait]
 impl SimpleTool for ErrorSimpleTool {
-    type SideInfo = ();
-    type Output = ();
 
     async fn execute(
         llm_params: Self::LlmParams,

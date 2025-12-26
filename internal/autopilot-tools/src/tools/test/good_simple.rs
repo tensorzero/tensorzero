@@ -27,6 +27,9 @@ pub struct GoodSimpleOutput {
 pub struct GoodSimpleTool;
 
 impl ToolMetadata for GoodSimpleTool {
+    type SideInfo = ();
+    type Output = GoodSimpleOutput;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("good_simple")
     }
@@ -46,8 +49,6 @@ impl ToolMetadata for GoodSimpleTool {
 
 #[async_trait]
 impl SimpleTool for GoodSimpleTool {
-    type SideInfo = ();
-    type Output = GoodSimpleOutput;
 
     async fn execute(
         llm_params: Self::LlmParams,
