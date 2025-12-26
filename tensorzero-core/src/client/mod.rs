@@ -9,6 +9,10 @@ use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingRespo
 use crate::http::TensorzeroResponseWrapper;
 use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
+use crate::observability::{
+    TENSORZERO_OTLP_ATTRIBUTE_PREFIX, TENSORZERO_OTLP_HEADERS_PREFIX,
+    TENSORZERO_OTLP_RESOURCE_PREFIX,
+};
 use crate::utils::gateway::DropWrapper;
 use crate::{
     config::Config,
@@ -1042,7 +1046,17 @@ impl Client {
 
                 // Add OTLP trace headers with the required prefix
                 for (key, value) in &params.otlp_traces_extra_headers {
-                    let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
+                    let header_name = format!("{TENSORZERO_OTLP_HEADERS_PREFIX}{key}");
+                    builder = builder.header(header_name, value);
+                }
+
+                for (key, value) in &params.otlp_traces_extra_attributes {
+                    let header_name = format!("{TENSORZERO_OTLP_ATTRIBUTE_PREFIX}{key}");
+                    builder = builder.header(header_name, value);
+                }
+
+                for (key, value) in &params.otlp_traces_extra_resources {
+                    let header_name = format!("{TENSORZERO_OTLP_RESOURCE_PREFIX}{key}");
                     builder = builder.header(header_name, value);
                 }
 

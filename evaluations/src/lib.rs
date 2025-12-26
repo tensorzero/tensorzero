@@ -674,6 +674,8 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         extra_headers: Default::default(),
         internal_dynamic_variant_config: internal_dynamic_variant_config.clone(),
         otlp_traces_extra_headers: HashMap::new(),
+        otlp_traces_extra_attributes: HashMap::new(),
+        otlp_traces_extra_resources: HashMap::new(),
         api_key: None,
     };
     debug!("Making inference request");
