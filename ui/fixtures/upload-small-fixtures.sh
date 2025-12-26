@@ -3,9 +3,12 @@ set -euxo pipefail
 
 cd "$(dirname "$0")"
 
+# Generate timestamp for this upload
+TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
+echo "Using version: $TIMESTAMP"
+
 # List of JSONL files to upload
-# When updating a file, rename it with a version suffix (e.g., model_inference_examples_v2.jsonl)
-# and update download-small-fixtures.py to use the new filename
+# These are uploaded with path-based versioning: {timestamp}/{filename}
 JSONL_FILES=(
     "boolean_metric_feedback_examples.jsonl"
     "chat_inference_datapoint_examples.jsonl"
@@ -22,15 +25,20 @@ JSONL_FILES=(
     "model_inference_examples.jsonl"
 )
 
-# Upload each file
+# Upload each file to versioned path
 for file in "${JSONL_FILES[@]}"; do
     if [ -f "$file" ]; then
-        echo "Uploading $file..."
+        echo "Uploading $file to ${TIMESTAMP}/${file}..."
         aws s3 --endpoint-url https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/ \
-            cp "$file" "s3://tensorzero-fixtures/${file}"
+            cp "$file" "s3://tensorzero-fixtures/${TIMESTAMP}/${file}"
     else
         echo "Warning: $file not found, skipping"
     fi
 done
 
+# Update the version manifest
+echo "$TIMESTAMP" > fixtures-version.txt
+echo "Updated fixtures-version.txt with version: $TIMESTAMP"
+
 echo "Done uploading JSONL fixtures"
+echo "Don't forget to commit fixtures-version.txt!"

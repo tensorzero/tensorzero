@@ -69,22 +69,21 @@ jobs:
           echo "TOGETHER_BASE_URL=http://mock-inference-provider:3030/together/" >> ui/fixtures/.env
           ./ui/fixtures/regenerate-model-inference-cache.sh
 
-      - name: Upload to R2 and update download script
+      - name: Upload to R2 and update version manifest
         run: |
           cd ui/fixtures
           TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
-          REMOTE_FILE="model_inference_cache_e2e_${TIMESTAMP}.jsonl"
 
-          # Upload with timestamped name to R2
+          # Upload with path-based versioning to R2
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY \
             aws s3 --endpoint-url https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/ \
-            cp model_inference_cache_e2e.jsonl "s3://tensorzero-fixtures/${REMOTE_FILE}"
+            cp model_inference_cache_e2e.jsonl "s3://tensorzero-fixtures/${TIMESTAMP}/model_inference_cache_e2e.jsonl"
 
-          # Update download-small-fixtures.py to point to new remote filename
-          sed -i "s|\"model_inference_cache_e2e[^\"]*\.jsonl\": \"model_inference_cache_e2e\.jsonl\"|\"${REMOTE_FILE}\": \"model_inference_cache_e2e.jsonl\"|" download-small-fixtures.py
+          # Update the version manifest
+          echo "$TIMESTAMP" > model-inference-cache-version.txt
 
-          echo "Uploaded to R2 as ${REMOTE_FILE}"
-          echo "Updated download-small-fixtures.py to reference ${REMOTE_FILE}"
+          echo "Uploaded to R2 as ${TIMESTAMP}/model_inference_cache_e2e.jsonl"
+          echo "Updated model-inference-cache-version.txt to ${TIMESTAMP}"
 
       - name: Push to PR
         run: |
