@@ -13,14 +13,14 @@ import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 export interface TryWithButtonProps {
   options: string[];
-  onOptionSelect: (variant: string) => void;
+  onSelect: (option: string) => void;
   isLoading: boolean;
   isDefaultFunction?: boolean;
 }
 
 export function TryWithButton({
-  options: variants,
-  onOptionSelect: onVariantSelect,
+  options,
+  onSelect,
   isLoading,
   isDefaultFunction,
 }: TryWithButtonProps) {
@@ -39,16 +39,16 @@ export function TryWithButton({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
-          {variants.map((variant) => (
+          {options.map((option) => (
             <DropdownMenuItem
-              key={variant}
+              key={option}
               onSelect={() => {
-                onVariantSelect(variant);
+                onSelect(option);
                 setIsOpen(false);
               }}
               className="font-mono text-sm"
             >
-              {variant}
+              {option}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

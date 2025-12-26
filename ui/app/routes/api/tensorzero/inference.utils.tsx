@@ -277,6 +277,7 @@ interface T0DatapointActionArgs {
   source: "t0_datapoint";
   resource: ChatInferenceDatapoint | JsonInferenceDatapoint;
   variant?: string;
+  model_name?: string;
   editedVariantInfo?: VariantInfo;
 }
 
@@ -346,6 +347,17 @@ export function prepareInferenceActionRequest(
     const dynamicVariantInfo = args.editedVariantInfo
       ? variantInfoToUninitializedVariantInfo(args.editedVariantInfo)
       : null;
+
+    // Handle default function: use model_name instead of variant_name
+    if (args.resource.function_name === DEFAULT_FUNCTION) {
+      return {
+        ...baseParams,
+        model_name: args.model_name || null,
+        input: args.resource.input,
+        internal_dynamic_variant_config: dynamicVariantInfo,
+      };
+    }
+
     return {
       ...baseParams,
       function_name: args.resource.function_name,
