@@ -17,6 +17,7 @@ from tensorzero import (
 from uuid_utils import uuid7
 
 
+@pytest.mark.mock
 def test_sync_openai_rft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
@@ -56,7 +57,6 @@ def test_sync_openai_rft(
         grader=grader,
         n_epochs=1,
         reasoning_effort="low",
-        api_base="http://localhost:3030/openai/",
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
@@ -70,6 +70,7 @@ def test_sync_openai_rft(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_dicl_chat(
     embedded_sync_client: TensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
@@ -93,6 +94,7 @@ def test_sync_dicl_chat(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_dicl_json(
     embedded_sync_client: TensorZeroGateway,
     json_function_rendered_samples: List[RenderedSample],
@@ -106,7 +108,6 @@ def test_sync_dicl_json(
         max_concurrency=None,
         k=None,
         model=None,
-        credentials=None,
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=json_function_rendered_samples,
@@ -120,6 +121,7 @@ def test_sync_dicl_json(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_openai_sft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
@@ -127,7 +129,6 @@ def test_sync_openai_sft(
     optimization_config = {
         "type": "openai_sft",
         "model": "gpt-4o-mini",
-        "api_base": "http://localhost:3030/openai/",
     }
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
@@ -141,14 +142,13 @@ def test_sync_openai_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_fireworks_sft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
 ):
     optimization_config = FireworksSFTConfig(
         model="gpt-4o-mini",
-        api_base="http://localhost:3030/fireworks/",
-        account_id="test",
         epochs=1,
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
@@ -163,6 +163,7 @@ def test_sync_fireworks_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_together_sft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
@@ -170,7 +171,6 @@ def test_sync_together_sft(
     optimization_config = {
         "type": "together_sft",
         "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Reference",
-        "api_base": "http://localhost:3030/together/",
         "n_epochs": 1,
         "training_type": {"type": "Lora", "lora_r": 8, "lora_alpha": 16},
         "batch_size": "max",
@@ -187,6 +187,7 @@ def test_sync_together_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 def test_sync_gepa_chat(
     embedded_sync_client: TensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
@@ -211,6 +212,7 @@ def test_sync_gepa_chat(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_openai_rft(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -252,7 +254,6 @@ async def test_async_openai_rft(
         "grader": grader,
         "n_epochs": 1,
         "reasoning_effort": "low",
-        "api_base": "http://localhost:3030/openai/",
     }
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
@@ -266,6 +267,7 @@ async def test_async_openai_rft(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_dicl_chat(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -281,7 +283,6 @@ async def test_async_dicl_chat(
         k=None,
         model=None,
         append_to_existing_variants=True,
-        credentials=None,
     )
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
         train_samples=chat_function_rendered_samples,
@@ -295,6 +296,7 @@ async def test_async_dicl_chat(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_dicl_json(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -318,12 +320,13 @@ async def test_async_dicl_json(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_openai_sft(
     embedded_async_client: AsyncTensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = OpenAISFTConfig(model="gpt-4o-mini", api_base="http://localhost:3030/openai/")
+    optimization_config = OpenAISFTConfig(model="gpt-4o-mini")
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
         val_samples=None,
@@ -335,6 +338,7 @@ async def test_async_openai_sft(
             break
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_fireworks_sft(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -343,8 +347,6 @@ async def test_async_fireworks_sft(
     optimization_config = {
         "type": "fireworks_sft",
         "model": "gpt-4o-mini",
-        "api_base": "http://localhost:3030/fireworks/",
-        "account_id": "test",
         "epochs": 1,
     }
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
@@ -359,6 +361,7 @@ async def test_async_fireworks_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_together_sft(
     embedded_async_client: AsyncTensorZeroGateway,
@@ -366,7 +369,6 @@ async def test_async_together_sft(
 ):
     optimization_config = TogetherSFTConfig(
         model="meta-llama/Meta-Llama-3.1-8B-Instruct-Reference",
-        api_base="http://localhost:3030/together/",
         n_epochs=1,
         training_type={"type": "Lora", "lora_r": 8, "lora_alpha": 16},
         batch_size="max",
@@ -383,6 +385,7 @@ async def test_async_together_sft(
         sleep(1)
 
 
+@pytest.mark.mock
 @pytest.mark.asyncio
 async def test_async_gepa_json(
     embedded_async_client: AsyncTensorZeroGateway,

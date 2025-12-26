@@ -446,7 +446,9 @@ pub fn deserialize_optimization_config(
     if obj.is_instance_of::<UninitializedOpenAISFTConfig>() {
         Ok(UninitializedOptimizerConfig::OpenAISFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedOpenAIRFTConfig>() {
-        Ok(UninitializedOptimizerConfig::OpenAIRFT(obj.extract()?))
+        Ok(UninitializedOptimizerConfig::OpenAIRFT(Box::new(
+            obj.extract()?,
+        )))
     } else if obj.is_instance_of::<UninitializedFireworksSFTConfig>() {
         Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedTogetherSFTConfig>() {

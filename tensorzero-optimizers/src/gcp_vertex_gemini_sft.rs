@@ -26,6 +26,7 @@ use tensorzero_core::{
         upload_rows_to_gcp_object_store,
     },
     stored_inference::RenderedSample,
+    utils::mock::{get_mock_provider_api_base, is_mock_mode},
 };
 
 use crate::{JobHandle, Optimizer};
@@ -65,11 +66,11 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         // Get provider-level config
         let sft_config = get_sft_config(&config.provider_types)?;
 
-        // Check if we're in mock mode (internal_mock_api_base is set)
-        let is_mock_mode = sft_config.internal_mock_api_base.is_some();
+        // Check if we're in mock mode (TENSORZERO_INTERNAL_MOCK_PROVIDER_API is set)
+        let mock_mode = is_mock_mode();
 
         // Get credentials from provider defaults (only needed in real mode)
-        let gcp_credentials = if is_mock_mode {
+        let gcp_credentials = if mock_mode {
             None
         } else {
             Some(
@@ -179,8 +180,8 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             encryption_spec,
         };
 
-        // Build URL - use internal_mock_api_base override for testing if available
-        let url = if let Some(api_base) = &sft_config.internal_mock_api_base {
+        // Build URL - use mock API base override for testing if available
+        let url = if let Some(api_base) = get_mock_provider_api_base("gcp_vertex_gemini/") {
             api_base
                 .join(&format!(
                     "v1/projects/{}/locations/{}/tuningJobs",
@@ -289,11 +290,11 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
         // Get provider-level config
         let sft_config = get_sft_config(provider_types)?;
 
-        // Check if we're in mock mode
-        let is_mock_mode = sft_config.internal_mock_api_base.is_some();
+        // Check if we're in mock mode (TENSORZERO_INTERNAL_MOCK_PROVIDER_API is set)
+        let mock_mode = is_mock_mode();
 
         // Construct the API URL from job_name
-        let api_url = if let Some(api_base) = &sft_config.internal_mock_api_base {
+        let api_url = if let Some(api_base) = get_mock_provider_api_base("gcp_vertex_gemini/") {
             api_base
                 .join(&format!("v1/{}", self.job_name))
                 .map_err(|e| {
@@ -314,7 +315,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
             })?
         };
 
-        let request = if is_mock_mode {
+        let request = if mock_mode {
             // Mock mode: no auth headers needed
             client.get(api_url)
         } else {

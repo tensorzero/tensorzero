@@ -4,10 +4,13 @@ import type { TogetherLRScheduler } from "./TogetherLRScheduler";
 import type { TogetherTrainingMethod } from "./TogetherTrainingMethod";
 import type { TogetherTrainingType } from "./TogetherTrainingType";
 
+/**
+ * Initialized Together SFT Config (per-job settings only).
+ * Provider-level settings (credentials, wandb, hf_api_token) come from
+ * `provider_types.together` in the gateway config.
+ */
 export type TogetherSFTConfig = {
   model: string;
-  credential_location: string | null;
-  api_base: string;
   n_epochs: number;
   n_checkpoints: number;
   n_evals?: number;
@@ -18,15 +21,11 @@ export type TogetherSFTConfig = {
   weight_decay: number;
   suffix?: string;
   lr_scheduler: TogetherLRScheduler;
-  wandb_api_key?: string;
-  wandb_base_url?: string;
-  wandb_project_name?: string;
   wandb_name?: string;
   training_method: TogetherTrainingMethod;
   training_type: TogetherTrainingType;
   from_checkpoint?: string;
   from_hf_model?: string;
   hf_model_revision?: string;
-  hf_api_token?: string;
   hf_output_repo_name?: string;
 };

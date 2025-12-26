@@ -1,10 +1,10 @@
-name: Build Mock Inference Container
+name: Build Mock Provider API Container
 
 on:
   workflow_call:
 
 jobs:
-  build-mock-inference-container:
+  build-mock-provider-api-container:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
@@ -30,18 +30,18 @@ jobs:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Build `mock-inference-provider` container
+      - name: Build `mock-provider-api` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f tensorzero-core/tests/mock-inference-provider/Dockerfile . -t tensorzero/mock-inference-provider:sha-${{ github.sha }} -t nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f tensorzero-core/tests/mock-provider-api/Dockerfile . -t tensorzero/mock-provider-api:sha-${{ github.sha }} -t nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
 
-      - name: Save `mock-inference-provider` container
-        run: docker save tensorzero/mock-inference-provider:sha-${{ github.sha }} > mock-inference-container.tar
+      - name: Save `mock-provider-api` container
+        run: docker save tensorzero/mock-provider-api:sha-${{ github.sha }} > mock-provider-api-container.tar
 
-      - name: Upload `mock-inference-provider` container as an artifact
+      - name: Upload `mock-provider-api` container as an artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: build-mock-inference-container
-          path: mock-inference-container.tar
+          name: build-mock-provider-api-container
+          path: mock-provider-api-container.tar
           retention-days: 1
           if-no-files-found: error
           overwrite: false
@@ -50,6 +50,6 @@ jobs:
         run: nsc docker login
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Push `mock-inference` container to Namespace registry
-        run: docker push nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}
+      - name: Push `mock-provider-api` container to Namespace registry
+        run: docker push nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}

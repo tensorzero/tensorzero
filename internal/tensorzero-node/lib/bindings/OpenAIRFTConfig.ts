@@ -2,6 +2,11 @@
 import type { OpenAIGrader } from "./OpenAIGrader";
 import type { OpenAIRFTResponseFormat } from "./OpenAIRFTResponseFormat";
 
+/**
+ * Initialized OpenAI RFT Config (per-job settings only).
+ * Provider-level settings (credentials) come from
+ * `provider_types.openai` defaults in the gateway config.
+ */
 export type OpenAIRFTConfig = {
   model: string;
   grader: OpenAIGrader;
@@ -13,8 +18,6 @@ export type OpenAIRFTConfig = {
   learning_rate_multiplier?: number;
   n_epochs?: number;
   reasoning_effort?: string;
-  credential_location: string | null;
-  api_base?: string;
   seed?: bigint;
   suffix?: string;
 };

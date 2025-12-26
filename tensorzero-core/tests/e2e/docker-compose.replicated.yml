@@ -82,11 +82,11 @@ services:
       timeout: 5s
       retries: 3
 
-  mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
+  mock-provider-api:
+    image: tensorzero/mock-provider-api:${TENSORZERO_MOCK_PROVIDER_API_TAG:-latest}
     build:
       context: ../../../
-      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
+      dockerfile: tensorzero-core/tests/mock-provider-api/Dockerfile
     environment:
       RUST_LOG: debug
     ports:

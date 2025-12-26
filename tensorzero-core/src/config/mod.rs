@@ -1062,12 +1062,10 @@ impl Config {
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Error> {
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            Box::pin(with_skip_credential_validation(Self::load_from_toml(
-                ConfigInput::Snapshot {
-                    snapshot: Box::new(snapshot),
-                    runtime_overlay: Box::new(runtime_overlay),
-                },
-            )))
+            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
+                snapshot: Box::new(snapshot),
+                runtime_overlay: Box::new(runtime_overlay),
+            })))
             .await?
         } else {
             Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
@@ -1091,9 +1089,9 @@ impl Config {
     ) -> Result<UnwrittenConfig, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            Box::pin(with_skip_credential_validation(Self::load_from_toml(
-                ConfigInput::Fresh(globbed_config.table),
-            )))
+            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Fresh(
+                globbed_config.table,
+            ))))
             .await?
         } else {
             Box::pin(Self::load_from_toml(ConfigInput::Fresh(
@@ -1222,17 +1220,10 @@ impl Config {
             .into_iter()
             .collect::<HashMap<_, _>>();
 
-        let optimizers = try_join_all(uninitialized_optimizers.into_iter().map(
-            |(name, config)| async {
-                config
-                    .load(&provider_type_default_credentials)
-                    .await
-                    .map(|c| (name, c))
-            },
-        ))
-        .await?
-        .into_iter()
-        .collect::<HashMap<_, _>>();
+        let optimizers = uninitialized_optimizers
+            .into_iter()
+            .map(|(name, config)| (name, config.load()))
+            .collect::<HashMap<_, _>>();
         let models = ModelTable::new(
             loaded_models,
             provider_type_default_credentials.clone(),

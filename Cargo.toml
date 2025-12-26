@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "tensorzero-core",
-    "tensorzero-core/tests/mock-inference-provider",
+    "tensorzero-core/tests/mock-provider-api",
     "tensorzero-core/tests/load/rate-limit-load-test",
     "tensorzero-core/tests/load/feedback",
     "gateway",

@@ -39,6 +39,8 @@ services:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+      # For mock server during SFT jobs and batch inference (optional, set via host env or .env)
+      TENSORZERO_INTERNAL_MOCK_PROVIDER_API: ${TENSORZERO_INTERNAL_MOCK_PROVIDER_API:-}
     env_file:
       - .env
       - path: .env-gateway
@@ -109,11 +111,6 @@ services:
       TENSORZERO_GATEWAY_URL: ${TENSORZERO_GATEWAY_URL:-http://gateway:3000}
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
-      # For mock server during SFT jobs
-      OPENAI_BASE_URL: http://mock-inference-provider:3030/openai/
-      FIREWORKS_BASE_URL: http://mock-inference-provider:3030/fireworks/
-      FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
-      TOGETHER_BASE_URL: http://mock-inference-provider:3030/together/
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
     env_file:
       - .env
@@ -129,7 +126,7 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
-      mock-inference-provider:
+      mock-provider-api:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "--tries=1", "http://localhost:4000"]
@@ -156,10 +153,6 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       TENSORZERO_GATEWAY_URL: http://gateway:3000
-      # Mock server endpoints for SFT
-      OPENAI_BASE_URL: http://mock-inference-provider:3030/openai
-      FIREWORKS_BASE_URL: http://mock-inference-provider:3030/fireworks
-      FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
       # Force cache on for tests
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
     volumes:
@@ -182,5 +175,5 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-      mock-inference-provider:
+      mock-provider-api:
         condition: service_healthy
