@@ -24,6 +24,12 @@ This guide shows you how to set up a two-tier TensorZero Gateway deployment that
 
 # Configure
 
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/operations/centralize-auth-rate-limits-and-more/simple) of this guide on GitHub.
+
+</Tip>
+
 <Steps>
 
 <Step title="Configure your relay gateway">
@@ -137,6 +143,12 @@ You can set up auth for the relay gateway to control which edge gateways are all
 This ensures that only authorized teams can access the relay gateway and helps you enforce security policies across your organization.
 When auth is enabled on the relay gateway, edge gateways must provide valid credentials (API keys) to authenticate their requests.
 
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/operations/centralize-auth-rate-limits-and-more/auth) of this guide on GitHub.
+
+</Tip>
+
 <Steps>
 
 <Step title="Configure auth for the relay gateway">
@@ -200,6 +212,12 @@ Models that skip the relay won't benefit from centralized rate limits, auth poli
 ### Set up dynamic credentials for the relay gateway
 
 You can pass provider credentials dynamically at inference time, and the edge gateway will forward them to the relay gateway.
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/operations/centralize-auth-rate-limits-and-more/dynamic-credentials) of this guide on GitHub.
+
+</Tip>
 
 <Steps>
 

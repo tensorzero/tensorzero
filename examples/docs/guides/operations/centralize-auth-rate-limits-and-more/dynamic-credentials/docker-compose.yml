@@ -11,8 +11,6 @@ services:
       - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    environment:
-      OPENAI_API_KEY: dummy # TODO: DO NOT MERGE
     depends_on:
       relay-gateway:
         condition: service_healthy
