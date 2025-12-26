@@ -86,6 +86,12 @@ services:
   # bump this to a locally-built image (or published 'sha' tag)
   gateway-clickhouse-migrations:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    build:
+      context: ../../..
+      dockerfile: gateway/Dockerfile
+      target: gateway
+      args:
+        PROFILE: dev
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests}
     depends_on:
@@ -110,6 +116,12 @@ services:
   # bump this to a locally-built image (or published 'sha' tag)
   gateway-postgres-migrations:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    build:
+      context: ../../..
+      dockerfile: gateway/Dockerfile
+      target: gateway
+      args:
+        PROFILE: dev
     environment:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
     depends_on:
