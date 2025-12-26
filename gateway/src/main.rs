@@ -500,15 +500,7 @@ async fn spawn_autopilot_worker_if_configured(
     };
 
     // Create an embedded TensorZero client using the gateway's state
-    let t0_client = std::sync::Arc::new(EmbeddedClient::new(
-        gateway_handle.app_state.config.clone(),
-        gateway_handle.app_state.http_client.clone(),
-        gateway_handle.app_state.clickhouse_connection_info.clone(),
-        gateway_handle.app_state.postgres_connection_info.clone(),
-        gateway_handle.app_state.deferred_tasks.clone(),
-        gateway_handle.app_state.autopilot_client.clone(),
-        gateway_handle.app_state.config_snapshot_cache.clone(),
-    ));
+    let t0_client = std::sync::Arc::new(EmbeddedClient::new(gateway_handle.app_state.clone()));
 
     let config = AutopilotWorkerConfig::new(pool, t0_client);
 
