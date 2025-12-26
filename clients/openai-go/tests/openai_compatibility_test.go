@@ -31,7 +31,6 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
-	"github.com/openai/openai-go/v3/shared/constant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1298,7 +1297,7 @@ func TestToolCallingInference(t *testing.T) {
 		toolCalls := resp.Choices[0].Message.ToolCalls
 		require.Len(t, toolCalls, 1, "There should be exactly one tool call")
 		toolCall := toolCalls[0]
-		assert.Equal(t, constant.Function("function"), toolCall.Type, "Tool call type should be 'function'")
+		assert.Equal(t, "function", toolCall.Type, "Tool call type should be 'function'")
 		assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
 		assert.Equal(t, `{"location":"Brooklyn","units":"celsius"}`, toolCall.Function.Arguments, "Function arguments do not match")
 		// Validate the Usage
@@ -1338,7 +1337,7 @@ func TestToolCallingInference(t *testing.T) {
 		toolCalls := resp.Choices[0].Message.ToolCalls
 		require.Equal(t, 1, len(toolCalls), "There should be exactly one tool call")
 		toolCall := toolCalls[0]
-		assert.Equal(t, constant.Function("function"), toolCall.Type, "Tool call type should be 'function'")
+		assert.Equal(t, "function", toolCall.Type, "Tool call type should be 'function'")
 		assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
 		assert.Equal(t, `{"location":"Brooklyn","units":"Celsius"}`, toolCall.Function.Arguments, "Function arguments do not match")
 		// Validate usage
