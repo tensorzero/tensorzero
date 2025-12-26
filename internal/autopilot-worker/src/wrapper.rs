@@ -74,11 +74,7 @@ impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
 }
 
 #[async_trait]
-impl<T> TaskTool for ClientToolWrapper<T>
-where
-    T: TaskTool,
-    T::SideInfo: Default + PartialEq,
-{
+impl<T: TaskTool> TaskTool for ClientToolWrapper<T> {
     async fn execute(
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
