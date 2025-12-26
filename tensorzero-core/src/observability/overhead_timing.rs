@@ -155,11 +155,20 @@ impl OverheadSpanExt for Span {
                 if let Some(extra_labels) = extra_labels {
                     metrics::histogram!(
                         "tensorzero_inference_latency_overhead_seconds",
+                        extra_labels.clone()
+                    )
+                    .record(overhead.as_secs_f64());
+                    // DEPRECATED (2026.2+): Also emit under the old name for backward compatibility
+                    metrics::histogram!(
+                        "tensorzero_inference_latency_overhead_seconds_histogram",
                         extra_labels
                     )
                     .record(overhead.as_secs_f64());
                 } else {
                     metrics::histogram!("tensorzero_inference_latency_overhead_seconds")
+                        .record(overhead.as_secs_f64());
+                    // DEPRECATED (2026.2+): Also emit under the old name for backward compatibility
+                    metrics::histogram!("tensorzero_inference_latency_overhead_seconds_histogram")
                         .record(overhead.as_secs_f64());
                 }
             } else {

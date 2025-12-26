@@ -59,13 +59,46 @@ fn default_tensorzero_inference_latency_overhead_seconds_buckets() -> Vec<f64> {
 pub struct MetricsConfig {
     /// Histogram buckets for the `tensorzero_inference_latency_overhead_seconds` metric.
     /// Defaults to `[0.001, 0.01, 0.1]`. Set to empty to disable the metric.
-    #[serde(default = "default_tensorzero_inference_latency_overhead_seconds_buckets")]
-    pub tensorzero_inference_latency_overhead_seconds_buckets: Vec<f64>,
+    #[serde(default)]
+    pub tensorzero_inference_latency_overhead_seconds_buckets: Option<Vec<f64>>,
+
+    /// DEPRECATED (2026.2+): use `tensorzero_inference_latency_overhead_seconds_buckets` instead.
+    #[serde(default, skip_serializing)]
+    pub tensorzero_inference_latency_overhead_seconds_histogram_buckets: Option<Vec<f64>>,
 }
 
 impl MetricsConfig {
+    /// Returns the histogram buckets, handling the deprecated field (2026.2+).
+    pub fn get_buckets(&self) -> Vec<f64> {
+        self.tensorzero_inference_latency_overhead_seconds_buckets
+            .clone()
+            .or_else(|| {
+                self.tensorzero_inference_latency_overhead_seconds_histogram_buckets
+                    .clone()
+            })
+            .unwrap_or_else(default_tensorzero_inference_latency_overhead_seconds_buckets)
+    }
+
     pub fn validate(&self) -> Result<(), Error> {
-        let buckets = &self.tensorzero_inference_latency_overhead_seconds_buckets;
+        // Handle deprecated field (2026.2+)
+        if self
+            .tensorzero_inference_latency_overhead_seconds_histogram_buckets
+            .is_some()
+        {
+            if self
+                .tensorzero_inference_latency_overhead_seconds_buckets
+                .is_some()
+            {
+                return Err(Error::new(crate::error::ErrorDetails::Config {
+                    message: "Cannot set both `gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets` and deprecated `gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`. Use only the former.".to_string(),
+                }));
+            }
+            crate::utils::deprecation_warning(
+                "`gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets` is deprecated and will be removed in a future release (2026.2+). Use `gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets` instead.",
+            );
+        }
+
+        let buckets = self.get_buckets();
 
         if !buckets.is_empty() {
             for (i, &bucket) in buckets.iter().enumerate() {
