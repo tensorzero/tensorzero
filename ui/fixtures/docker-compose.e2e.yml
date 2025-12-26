@@ -41,6 +41,8 @@ services:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+      # For mock server during SFT jobs and batch inference (optional, set via host env or .env)
+      TENSORZERO_INTERNAL_MOCK_PROVIDER_API: ${TENSORZERO_INTERNAL_MOCK_PROVIDER_API:-}
     env_file:
       - .env
       - path: .env-gateway

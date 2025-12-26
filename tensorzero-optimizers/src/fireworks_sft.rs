@@ -25,7 +25,10 @@ use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    config::{Config, TimeoutsConfig, provider_types::ProviderTypesConfig},
+    config::{
+        Config, TimeoutsConfig,
+        provider_types::{FireworksSFTConfig as FireworksProviderSFTConfig, ProviderTypesConfig},
+    },
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -38,18 +41,29 @@ use tensorzero_core::{
         fireworks_sft::{FireworksSFTConfig, FireworksSFTJobHandle},
     },
     providers::{
-        fireworks::{
-            FireworksCredentials, FireworksTool, PROVIDER_TYPE, prepare_fireworks_messages,
-        },
+        fireworks::{FIREWORKS_API_BASE, FireworksTool, PROVIDER_TYPE, prepare_fireworks_messages},
         helpers::UrlParseErrExt,
         openai::{
             OpenAIMessagesConfig, OpenAIRequestMessage, tensorzero_to_openai_assistant_message,
         },
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
+    utils::mock::get_mock_provider_api_base,
 };
 
 use crate::{JobHandle, Optimizer};
+
+fn get_sft_config(
+    provider_types: &ProviderTypesConfig,
+) -> Result<&FireworksProviderSFTConfig, Error> {
+    provider_types.fireworks.sft.as_ref().ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message:
+                "Fireworks SFT requires `[provider_types.fireworks.sft]` configuration section"
+                    .to_string(),
+        })
+    })
+}
 
 #[async_trait]
 impl Optimizer for FireworksSFTConfig {
@@ -62,8 +76,23 @@ impl Optimizer for FireworksSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: Arc<Config>,
+        config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
+        // Get provider-level configuration
+        let sft_config = get_sft_config(&config.provider_types)?;
+
+        // Get credentials from provider defaults
+        let fireworks_credentials = FireworksKind
+            .get_defaulted_credential(None, &config.models.default_credentials)
+            .await?;
+        let api_key = fireworks_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
+
+        // Use mock API base for testing if set, otherwise default API base
+        let api_base =
+            get_mock_provider_api_base("fireworks/").unwrap_or_else(|| FIREWORKS_API_BASE.clone());
+
         let train_examples = train_examples
             .into_iter()
             .map(RenderedSample::into_lazy_rendered_sample)
@@ -94,18 +123,12 @@ impl Optimizer for FireworksSFTConfig {
             None
         };
 
-        let api_key = self
-            .credentials
-            .get_api_key(credentials)
-            .map_err(|e| e.log())?;
-
         // Run these concurrently
-
         let train_fut = create_and_upload_dataset(
             client,
             api_key,
-            &self.api_base,
-            &self.account_id,
+            &api_base,
+            &sft_config.account_id,
             &train_rows,
         );
 
@@ -113,8 +136,8 @@ impl Optimizer for FireworksSFTConfig {
             let val_fut = create_and_upload_dataset(
                 client,
                 api_key,
-                &self.api_base,
-                &self.account_id,
+                &api_base,
+                &sft_config.account_id,
                 val_rows,
             );
 
@@ -150,10 +173,10 @@ impl Optimizer for FireworksSFTConfig {
 
         let request = client
             .post(
-                self.api_base
+                api_base
                     .join(&format!(
                         "v1/accounts/{}/supervisedFineTuningJobs",
-                        self.account_id
+                        sft_config.account_id
                     ))
                     .convert_parse_error()?,
             )
@@ -209,13 +232,10 @@ impl Optimizer for FireworksSFTConfig {
         })?;
 
         Ok(FireworksSFTJobHandle {
-            api_base: self.api_base.clone(),
-            account_id: self.account_id.clone(),
             job_url: format!("https://app.fireworks.ai/dashboard/fine-tuning/supervised/{job_id}")
                 .parse()
                 .convert_parse_error()?,
             job_path: job.name,
-            credential_location: self.credential_location.clone(),
         })
     }
 }
@@ -227,15 +247,24 @@ impl JobHandle for FireworksSFTJobHandle {
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
-        _provider_types: &ProviderTypesConfig,
+        provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error> {
-        let fireworks_credentials: FireworksCredentials = FireworksKind
-            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+        // Get provider-level configuration
+        let sft_config = get_sft_config(provider_types)?;
+
+        // Get credentials from provider defaults
+        let fireworks_credentials = FireworksKind
+            .get_defaulted_credential(None, default_credentials)
             .await?;
         let api_key = fireworks_credentials
             .get_api_key(credentials)
             .map_err(|e| e.log())?;
-        let job_status = poll_job(client, api_key, &self.api_base, &self.job_path).await?;
+
+        // Use mock API base for testing if set, otherwise default API base
+        let api_base =
+            get_mock_provider_api_base("fireworks/").unwrap_or_else(|| FIREWORKS_API_BASE.clone());
+
+        let job_status = poll_job(client, api_key, &api_base, &self.job_path).await?;
         if let FireworksFineTuningJobState::JobStateCompleted = job_status.state {
             // Once the job has completed, start polling the model deployment.
             let model_path = job_status.output_model.ok_or_else(|| {
@@ -259,8 +288,8 @@ impl JobHandle for FireworksSFTJobHandle {
             let deployment_state = deploy_or_poll_model(
                 client,
                 api_key,
-                &self.api_base,
-                &self.account_id,
+                &api_base,
+                &sft_config.account_id,
                 &model_path,
             )
             .await?;

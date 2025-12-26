@@ -3626,7 +3626,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mock-inference-provider"
+name = "mock-provider-api"
 version = "0.1.0"
 dependencies = [
  "anyhow",

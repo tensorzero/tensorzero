@@ -263,7 +263,7 @@ async fn get_openai_fine_tuning_job(
             }
             if chrono::Utc::now() >= finish_at {
                 job.val["status"] = "succeeded".into();
-                job.val["fine_tuned_model"] = "mock-inference-finetune-1234".into();
+                job.val["fine_tuned_model"] = "mock-finetune-1234".into();
             }
         }
         Json(serde_json::to_value(&job.val).unwrap())
@@ -288,8 +288,7 @@ async fn create_openai_fine_tuning_job(
         .lock()
         .unwrap();
 
-    let job_id =
-        "mock-inference-finetune-".to_string() + &Alphanumeric.sample_string(&mut rand::rng(), 10);
+    let job_id = "mock-finetune-".to_string() + &Alphanumeric.sample_string(&mut rand::rng(), 10);
 
     let job = FineTuningJob {
         num_polls: 0,

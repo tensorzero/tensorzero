@@ -1,7 +1,6 @@
 use crate::config::UninitializedVariantConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
-use crate::model_table::ProviderTypeDefaultCredentials;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
@@ -247,13 +246,10 @@ pub struct UninitializedOptimizerInfo {
 }
 
 impl UninitializedOptimizerInfo {
-    pub async fn load(
-        self,
-        default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<OptimizerInfo, Error> {
-        Ok(OptimizerInfo {
-            inner: self.inner.load(default_credentials).await?,
-        })
+    pub fn load(self) -> OptimizerInfo {
+        OptimizerInfo {
+            inner: self.inner.load(),
+        }
     }
 }
 
@@ -266,7 +262,7 @@ pub enum UninitializedOptimizerConfig {
     #[serde(rename = "openai_sft")]
     OpenAISFT(UninitializedOpenAISFTConfig),
     #[serde(rename = "openai_rft")]
-    OpenAIRFT(UninitializedOpenAIRFTConfig),
+    OpenAIRFT(Box<UninitializedOpenAIRFTConfig>),
     #[serde(rename = "fireworks_sft")]
     FireworksSFT(UninitializedFireworksSFTConfig),
     #[serde(rename = "gcp_vertex_gemini_sft")]
@@ -278,32 +274,25 @@ pub enum UninitializedOptimizerConfig {
 }
 
 impl UninitializedOptimizerConfig {
-    async fn load(
-        self,
-        default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<OptimizerConfig, Error> {
-        Ok(match self {
-            UninitializedOptimizerConfig::Dicl(config) => {
-                OptimizerConfig::Dicl(config.load(default_credentials).await?)
-            }
+    fn load(self) -> OptimizerConfig {
+        match self {
+            UninitializedOptimizerConfig::Dicl(config) => OptimizerConfig::Dicl(config.load()),
             UninitializedOptimizerConfig::OpenAISFT(config) => {
-                OptimizerConfig::OpenAISFT(config.load(default_credentials).await?)
+                OptimizerConfig::OpenAISFT(config.load())
             }
             UninitializedOptimizerConfig::OpenAIRFT(config) => {
-                OptimizerConfig::OpenAIRFT(Box::new(config.load(default_credentials).await?))
+                OptimizerConfig::OpenAIRFT(Box::new(config.load()))
             }
             UninitializedOptimizerConfig::FireworksSFT(config) => {
-                OptimizerConfig::FireworksSFT(config.load(default_credentials).await?)
+                OptimizerConfig::FireworksSFT(config.load())
             }
             UninitializedOptimizerConfig::GCPVertexGeminiSFT(config) => {
                 OptimizerConfig::GCPVertexGeminiSFT(Box::new(config.load()))
             }
-            UninitializedOptimizerConfig::GEPA(config) => {
-                OptimizerConfig::GEPA(config.load(default_credentials).await?)
-            }
+            UninitializedOptimizerConfig::GEPA(config) => OptimizerConfig::GEPA(config.load()),
             UninitializedOptimizerConfig::TogetherSFT(config) => {
-                OptimizerConfig::TogetherSFT(Box::new(config.load(default_credentials).await?))
+                OptimizerConfig::TogetherSFT(Box::new(config.load()))
             }
-        })
+        }
     }
 }

@@ -13,7 +13,7 @@ test("should show the supervised fine-tuning page", async ({ page }) => {
 test.describe("Custom user agent", () => {
   // We look for this user agent in the fine-tuning code, and configure a
   // shorter polling interval. This avoids the need to wait 10 seconds in
-  // between polling mock-inference-provider
+  // between polling mock-provider-api
   test.use({ userAgent: "TensorZeroE2E" });
 
   [
@@ -21,12 +21,12 @@ test.describe("Custom user agent", () => {
       provider: "OpenAI",
       model: "gpt-4o-2024-08-06",
       results: `
-    [models.mock-inference-finetune-1234]
-    routing = [ "mock-inference-finetune-1234" ]
+    [models.mock-finetune-1234]
+    routing = [ "mock-finetune-1234" ]
 
-    [models.mock-inference-finetune-1234.providers.mock-inference-finetune-1234]
+    [models.mock-finetune-1234.providers.mock-finetune-1234]
     type = "openai"
-    model_name = "mock-inference-finetune-1234"
+    model_name = "mock-finetune-1234"
     `,
     },
     {
@@ -53,7 +53,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
   ]
     .slice(2)
     .forEach(({ provider, model, results }) => {
-      test(`@slow should fine-tune on filtered metric data with a mocked ${provider} server`, async ({
+      test(`@mock @slow should fine-tune on filtered metric data with a mocked ${provider} server`, async ({
         page,
       }) => {
         await page.goto("/optimization/supervised-fine-tuning");
@@ -98,7 +98,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       });
     });
 
-  test("@slow should fine-tune on demonstration data with a mocked OpenAI server", async ({
+  test("@mock @slow should fine-tune on demonstration data with a mocked OpenAI server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -139,17 +139,17 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
 
     await expect(
       page.getByText(`
-[models.mock-inference-finetune-1234]
-routing = [ "mock-inference-finetune-1234" ]
+[models.mock-finetune-1234]
+routing = [ "mock-finetune-1234" ]
 
-[models.mock-inference-finetune-1234.providers.mock-inference-finetune-1234]
+[models.mock-finetune-1234.providers.mock-finetune-1234]
 type = "openai"
-model_name = "mock-inference-finetune-1234"
+model_name = "mock-finetune-1234"
 `),
     ).toBeVisible();
   });
 
-  test("@slow should fine-tune on image data with a mocked OpenAI server", async ({
+  test("@mock @slow should fine-tune on image data with a mocked OpenAI server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -186,12 +186,12 @@ model_name = "mock-inference-finetune-1234"
       .waitFor({ timeout: 3000 });
     await expect(
       page.getByText(`
-[models.mock-inference-finetune-1234]
-routing = [ "mock-inference-finetune-1234" ]
+[models.mock-finetune-1234]
+routing = [ "mock-finetune-1234" ]
 
-[models.mock-inference-finetune-1234.providers.mock-inference-finetune-1234]
+[models.mock-finetune-1234.providers.mock-finetune-1234]
 type = "openai"
-model_name = "mock-inference-finetune-1234"
+model_name = "mock-finetune-1234"
 `),
     ).toBeVisible();
   });
@@ -223,7 +223,7 @@ model_name = "mock-inference-finetune-1234"
     ).toBeVisible();
   });
 
-  test("@slow should fine-tune with a mocked GCP Vertex Gemini server", async ({
+  test("@mock @slow should fine-tune with a mocked GCP Vertex Gemini server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -280,7 +280,7 @@ model_name = "mock-inference-finetune-1234"
 });
 
 test.describe("Error handling", () => {
-  test("should show an error when the model is an error model", async ({
+  test("@mock should show an error when the model is an error model", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");

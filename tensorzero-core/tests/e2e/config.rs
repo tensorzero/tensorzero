@@ -821,7 +821,7 @@ async fn test_config_snapshot_includes_built_in_functions() {
     .unwrap();
 
     // Write snapshot to ClickHouse and get the config with its hash
-    let config = loaded.into_config(&clickhouse).await.unwrap();
+    let config = Box::pin(loaded.into_config(&clickhouse)).await.unwrap();
 
     // Wait for data to be committed
     tokio::time::sleep(Duration::from_millis(500)).await;

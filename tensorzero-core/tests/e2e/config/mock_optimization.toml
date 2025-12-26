@@ -1,5 +1,0 @@
-# Mock optimization config for optimizer tests with mock server.
-# This file is loaded via cargo run-e2e-mock-optimization and sets
-# internal_mock_api_base for GCP SFT to point to the mock inference provider.
-[provider_types.gcp_vertex_gemini.sft]
-internal_mock_api_base = "http://localhost:3030/gcp_vertex_gemini/"

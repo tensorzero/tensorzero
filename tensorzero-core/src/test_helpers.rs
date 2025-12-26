@@ -6,17 +6,9 @@ use crate::config::{Config, ConfigFileGlob};
 
 /// Returns the path to the E2E test configuration file.
 /// The path is relative to the tensorzero-core crate root.
-/// In mock mode (TENSORZERO_USE_MOCK_INFERENCE_PROVIDER is set), includes
-/// the mock_optimization.toml config which sets internal_mock_api_base for GCP SFT.
 pub fn get_e2e_config_path() -> PathBuf {
     let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    // In mock mode, include the mock_optimization.toml config
-    let glob_pattern = if std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok() {
-        "{tensorzero.*.toml,mock_optimization.toml}"
-    } else {
-        "tensorzero.*.toml"
-    };
-    config_path.push(format!("tests/e2e/config/{glob_pattern}"));
+    config_path.push("tests/e2e/config/tensorzero.*.toml");
     config_path
 }
 
