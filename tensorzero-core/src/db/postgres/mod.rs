@@ -3,6 +3,7 @@ use futures::TryStreamExt;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
+use durable;
 use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
 
 use crate::error::{Error, ErrorDetails};
@@ -182,12 +183,7 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
                 message: err.to_string(),
             })
         })?;
-    make_migrator().run(&pool).await.map_err(|e| {
-        Error::new(ErrorDetails::PostgresMigration {
-            message: e.to_string(),
-        })
-    })?;
-
+    // Run tensorzero-auth migrations
     tensorzero_auth::postgres::make_migrator()
         .run(&pool)
         .await
@@ -196,6 +192,20 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
                 message: format!("Failed to run tensorzero-auth migrations: {e}"),
             })
         })?;
+
+    // Run durable migrations to create the durable schema,
+    // which is required by some tensorzero-core migrations.
+    durable::MIGRATOR.run(&pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresMigration {
+            message: format!("Failed to run durable migrations: {e}"),
+        })
+    })?;
+    make_migrator().run(&pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresMigration {
+            message: e.to_string(),
+        })
+    })?;
+
     Ok(())
 }
 

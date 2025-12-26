@@ -1032,7 +1032,7 @@ jobs:
 
   build-gateway-e2e-container:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
-    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
+    if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository
       contents: read

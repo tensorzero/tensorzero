@@ -647,11 +647,12 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
     // Start a worker to execute the task
     let worker = executor
         .start_worker(WorkerOptions {
-            poll_interval: 0.05,
-            claim_timeout: 30,
+            poll_interval: Duration::from_millis(50),
+            claim_timeout: Duration::from_secs(30),
             ..Default::default()
         })
-        .await;
+        .await
+        .unwrap();
 
     // Wait for task to complete
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
