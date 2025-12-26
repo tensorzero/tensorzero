@@ -1750,6 +1750,20 @@ func TestCustomToolsInference(t *testing.T) {
 		}
 		addEpisodeIDToRequest(t, req, episodeID)
 
+		// Validate tools are correctly constructed
+		require.Len(t, tools, 2)
+		require.NotNil(t, tools[0].OfFunction)
+		assert.Equal(t, "get_weather", tools[0].OfFunction.Function.Name)
+		require.NotNil(t, tools[1].OfCustom)
+		assert.Equal(t, "web_search", tools[1].OfCustom.Custom.Name)
+
+		toolsJSON, err := json.Marshal(tools)
+		require.NoError(t, err)
+		require.Contains(t, string(toolsJSON), `"type":"function"`)
+		require.Contains(t, string(toolsJSON), `"type":"custom"`)
+		require.Contains(t, string(toolsJSON), `"name":"get_weather"`)
+		require.Contains(t, string(toolsJSON), `"name":"web_search"`)
+
 		resp, err := client.Chat.Completions.New(ctx, *req)
 		require.NoError(t, err, "API request failed")
 
