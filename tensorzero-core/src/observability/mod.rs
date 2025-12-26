@@ -61,7 +61,7 @@ use axum::{Router, middleware};
 use clap::ValueEnum;
 use http::HeaderMap;
 use metrics::{Unit, describe_counter, describe_histogram};
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
 use opentelemetry::trace::Status;
 use opentelemetry::trace::{Tracer, TracerProvider as _};
@@ -1201,14 +1201,12 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
 pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<PrometheusHandle, Error> {
     let mut builder = PrometheusBuilder::new();
 
-    let buckets = metrics_config.and_then(|config| {
-        config
-            .tensorzero_inference_latency_overhead_seconds_histogram_buckets
-            .as_ref()
-    });
+    let buckets = metrics_config
+        .map(|config| &config.tensorzero_inference_latency_overhead_seconds_histogram_buckets);
 
-    if let Some(buckets) = buckets {
-        use metrics_exporter_prometheus::Matcher;
+    if let Some(buckets) = buckets
+        && !buckets.is_empty()
+    {
         builder = builder
             .set_buckets_for_metric(
                 Matcher::Full(
@@ -1265,19 +1263,12 @@ pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<Prometheu
         "Inferences performed by TensorZero",
     );
 
-    describe_histogram!(
-        "tensorzero_inference_latency_overhead_seconds",
-        Unit::Seconds,
-        "Overhead of TensorZero on HTTP requests"
-    );
-
-    if buckets.is_some() {
+    if buckets.is_some_and(|b| !b.is_empty()) {
         describe_histogram!(
             "tensorzero_inference_latency_overhead_seconds_histogram",
             Unit::Seconds,
-            "Overhead of TensorZero on HTTP requests (histogram)"
+            "Overhead of TensorZero on HTTP requests"
         );
-        crate::observability::overhead_timing::enable_histogram_latency_metric();
     }
 
     Ok(metrics_handle)

@@ -50,26 +50,25 @@ pub struct AuthConfig {
     pub cache: Option<GatewayAuthCacheConfig>,
 }
 
+fn default_tensorzero_inference_latency_overhead_seconds_histogram_buckets() -> Vec<f64> {
+    vec![0.001, 0.01, 0.1]
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricsConfig {
-    /// When set, additionally report the 'tensorzero_inference_latency_overhead_seconds_histogram' metric
+    /// When non-empty, report the `tensorzero_inference_latency_overhead_seconds_histogram` metric
     /// using the specified buckets.
-    /// When unset, we'll only report the `tensorzero_inference_latency_overhead_seconds` metric,
-    /// (which is still reported when this field is set)
-    pub tensorzero_inference_latency_overhead_seconds_histogram_buckets: Option<Vec<f64>>,
+    /// When empty, the metric is not reported.
+    #[serde(default = "default_tensorzero_inference_latency_overhead_seconds_histogram_buckets")]
+    pub tensorzero_inference_latency_overhead_seconds_histogram_buckets: Vec<f64>,
 }
 
 impl MetricsConfig {
     pub fn validate(&self) -> Result<(), Error> {
-        if let Some(buckets) = &self.tensorzero_inference_latency_overhead_seconds_histogram_buckets
-        {
-            if buckets.is_empty() {
-                return Err(Error::new(crate::error::ErrorDetails::Config {
-                    message: "gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets must contain at least one value".to_string(),
-                }));
-            }
+        let buckets = &self.tensorzero_inference_latency_overhead_seconds_histogram_buckets;
 
+        if !buckets.is_empty() {
             for (i, &bucket) in buckets.iter().enumerate() {
                 if !bucket.is_finite() {
                     return Err(Error::new(crate::error::ErrorDetails::Config {
