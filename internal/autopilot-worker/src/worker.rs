@@ -12,7 +12,7 @@ use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-use crate::wrapper::ClientToolWrapper;
+use crate::wrapper::{ClientSimpleToolWrapper, ClientToolWrapper};
 
 /// Configuration for the autopilot worker.
 pub struct AutopilotWorkerConfig {
@@ -104,9 +104,12 @@ impl AutopilotWorker {
 
 /// Visitor that registers tools for local execution on the autopilot worker.
 ///
-/// - TaskTools are wrapped in [`ClientToolWrapper`] which publishes results
-///   to the autopilot API after execution.
-/// - SimpleTools are registered directly for use by TaskTools.
+/// All tools are wrapped to:
+/// 1. Inject [`AutopilotSideInfo`] around the tool's native `SideInfo`
+/// 2. Publish results to the autopilot API after execution
+///
+/// - TaskTools are wrapped in [`ClientToolWrapper`]
+/// - SimpleTools are wrapped in [`ClientSimpleToolWrapper`] which promotes them to TaskTools
 struct LocalToolVisitor<'a> {
     executor: &'a ToolExecutor,
 }
@@ -123,7 +126,10 @@ impl ToolVisitor for LocalToolVisitor<'_> {
     }
 
     async fn visit_simple_tool<T: SimpleTool + Default>(&self) -> Result<(), ToolError> {
-        self.executor.register_simple_tool::<T>().await?;
+        // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
+        self.executor
+            .register_task_tool::<ClientSimpleToolWrapper<T>>()
+            .await?;
         Ok(())
     }
 }
