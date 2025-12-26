@@ -54,7 +54,6 @@ impl ToolMetadata for SlowTool {
 
 #[async_trait]
 impl TaskTool for SlowTool {
-
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,

@@ -42,7 +42,6 @@ impl ToolMetadata for FailingTool {
 
 #[async_trait]
 impl TaskTool for FailingTool {
-
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,

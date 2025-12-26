@@ -40,7 +40,6 @@ impl ToolMetadata for PanicTool {
 
 #[async_trait]
 impl TaskTool for PanicTool {
-
     #[expect(
         clippy::panic,
         reason = "This tool is specifically for testing panic handling"

@@ -42,7 +42,6 @@ impl ToolMetadata for ErrorSimpleTool {
 
 #[async_trait]
 impl SimpleTool for ErrorSimpleTool {
-
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,

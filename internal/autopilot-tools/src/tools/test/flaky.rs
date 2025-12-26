@@ -55,7 +55,6 @@ impl ToolMetadata for FlakyTool {
 
 #[async_trait]
 impl TaskTool for FlakyTool {
-
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
