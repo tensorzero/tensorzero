@@ -214,6 +214,7 @@ export function SFTForm({
                 <p className="text-xs text-red-500">{errors.model.message}</p>
               )}
             </div>
+
             <AdvancedParametersAccordion
               control={form.control}
               maxSamplesLimit={counts.inferenceCount ?? undefined}
@@ -225,7 +226,8 @@ export function SFTForm({
             disabled={
               submissionPhase !== "idle" ||
               isCuratedInferenceCountLow ||
-              isReadOnly
+              isReadOnly ||
+              !form.formState.isValid
             }
           >
             {getButtonText()}

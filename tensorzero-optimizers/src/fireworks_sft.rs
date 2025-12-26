@@ -25,7 +25,7 @@ use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    config::{Config, TimeoutsConfig},
+    config::{Config, TimeoutsConfig, provider_types::ProviderTypesConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -227,6 +227,7 @@ impl JobHandle for FireworksSFTJobHandle {
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
+        _provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error> {
         let fireworks_credentials: FireworksCredentials = FireworksKind
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)

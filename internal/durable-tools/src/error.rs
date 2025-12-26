@@ -96,6 +96,9 @@ impl From<DurableError> for ToolError {
             DurableError::Database(e) => ToolError::Database(e),
             DurableError::Serialization(e) => ToolError::Serialization(e),
             DurableError::TaskNotRegistered { task_name } => ToolError::ToolNotFound(task_name),
+            DurableError::InvalidConfiguration { reason } => ToolError::Validation {
+                message: format!("Durable configuration invalid: {reason}"),
+            },
             DurableError::TaskAlreadyRegistered { task_name } => {
                 ToolError::DuplicateToolName(task_name)
             }

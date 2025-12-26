@@ -10,6 +10,7 @@ mod batch_response_generator;
 mod error;
 mod fireworks;
 mod gcp_batch;
+mod gcp_sft;
 mod openai_batch;
 mod together;
 
@@ -216,6 +217,14 @@ fn make_router() -> axum::Router {
         .route(
             "/v1/projects/{project}/locations/{location}/batchPredictionJobs/{job_id}",
             axum::routing::get(gcp_batch::get_batch_prediction_job),
+        )
+        .route(
+            "/gcp_vertex_gemini/v1/projects/{project}/locations/{location}/tuningJobs",
+            axum::routing::post(gcp_sft::create_tuning_job),
+        )
+        .route(
+            "/gcp_vertex_gemini/v1/projects/{project}/locations/{location}/tuningJobs/{job_id}",
+            axum::routing::get(gcp_sft::get_tuning_job),
         )
         .route("/status", axum::routing::get(status_handler))
         .layer(TraceLayer::new_for_http())

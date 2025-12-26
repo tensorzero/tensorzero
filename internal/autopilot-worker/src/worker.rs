@@ -32,7 +32,7 @@ impl AutopilotWorkerConfig {
     /// Environment variables:
     /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Queue name (default: "autopilot")
     pub fn new(pool: PgPool, inference_client: Arc<dyn InferenceClient>) -> Self {
-        let mut queue_name = "autopilot".to_string();
+        let mut queue_name = autopilot_client::DEFAULT_SPAWN_QUEUE_NAME.to_string();
         if cfg!(feature = "e2e_tests")
             && let Some(name) = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME").ok()
         {
@@ -94,8 +94,8 @@ impl AutopilotWorker {
     }
 
     /// Start the worker and run until cancellation.
-    pub async fn run(&self, cancel_token: CancellationToken) {
-        let worker = self.executor.start_worker(WorkerOptions::default()).await;
+    pub async fn run(&self, cancel_token: CancellationToken) -> Result<()> {
+        let worker = self.executor.start_worker(WorkerOptions::default()).await?;
 
         tokio::select! {
             () = cancel_token.cancelled() => {
@@ -103,6 +103,7 @@ impl AutopilotWorker {
                 worker.shutdown().await;
             }
         }
+        Ok(())
     }
 }
 

@@ -41,6 +41,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
+use crate::relay::TensorzeroRelay;
 use crate::tool::{ToolCallConfig, create_dynamic_implicit_tool_config};
 use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
@@ -235,6 +236,7 @@ pub trait Variant {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error>;
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
@@ -515,6 +517,7 @@ impl Variant for VariantInfo {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         self.timeouts.validate(global_outbound_http_timeout)?;
         match &self.inner {
@@ -528,6 +531,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -541,6 +545,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -554,6 +559,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -567,6 +573,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -580,6 +587,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }

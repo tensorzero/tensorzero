@@ -171,7 +171,7 @@ impl Error {
 }
 
 // Expect for derive Serialize
-#[expect(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref, clippy::ref_option)]
 fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -1712,6 +1712,10 @@ impl From<autopilot_client::AutopilotError> for Error {
             }),
             autopilot_client::AutopilotError::InvalidUrl(e) => Self::new(ErrorDetails::Autopilot {
                 message: format!("Invalid URL: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Spawn(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Spawn error: {e}"),
                 status_code: None,
             }),
             autopilot_client::AutopilotError::MissingConfig(field) => {

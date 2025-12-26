@@ -5,6 +5,18 @@ use std::time::Duration;
 
 use crate::error::ToolResult;
 
+/// Marker trait for side information types.
+///
+/// Types implementing this can be used as side information for tools.
+/// Side information is provided at spawn time and is hidden from the LLM
+/// (not included in the tool's JSON schema).
+///
+/// The unit type `()` implements this trait for tools that don't need side info.
+pub trait SideInfo: Serialize + DeserializeOwned + Send + 'static {}
+
+/// Unit type implements `SideInfo` for tools without side information.
+impl SideInfo for () {}
+
 /// Common metadata trait for all tools (both `TaskTool` and `SimpleTool`).
 ///
 /// This trait defines the metadata required to expose a tool to an LLM,
@@ -46,6 +58,13 @@ use crate::error::ToolResult;
 /// }
 /// ```
 pub trait ToolMetadata: Send + Sync + 'static {
+    /// Side information type provided at spawn time (hidden from LLM).
+    ///
+    /// Use `()` if no side information is needed.
+    type SideInfo: SideInfo;
+
+    /// The output type for this tool (must be JSON-serializable).
+    type Output: Serialize + DeserializeOwned + Send + 'static;
     /// Unique name for this tool.
     ///
     /// This is used for registration, invocation, and as an identifier in the LLM.

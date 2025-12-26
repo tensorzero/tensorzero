@@ -247,6 +247,8 @@ impl Default for GatewayConfig {
     }
 }
 
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
 fn serialize_optional_socket_addr<S>(
     addr: &Option<std::net::SocketAddr>,
     serializer: S,
