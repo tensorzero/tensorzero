@@ -20,6 +20,10 @@ pub struct FailingToolParams {
 pub struct FailingTool;
 
 impl ToolMetadata for FailingTool {
+    type SideInfo = ();
+    type Output = ();
+    type LlmParams = FailingToolParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("failing")
     }
@@ -33,15 +37,10 @@ impl ToolMetadata for FailingTool {
     fn parameters_schema() -> ToolResult<Schema> {
         Ok(schema_for!(FailingToolParams))
     }
-
-    type LlmParams = FailingToolParams;
 }
 
 #[async_trait]
 impl TaskTool for FailingTool {
-    type SideInfo = ();
-    type Output = ();
-
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,

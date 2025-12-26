@@ -5,6 +5,7 @@
 //! concrete client type.
 
 use async_trait::async_trait;
+use moka::sync::Cache;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tensorzero::{
@@ -12,6 +13,7 @@ use tensorzero::{
     ClientMode, InferenceOutput, InferenceResponse, TensorZeroError,
 };
 use tensorzero_core::config::Config;
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::http::TensorzeroHttpClient;
@@ -86,6 +88,20 @@ pub trait InferenceClient: Send + Sync + 'static {
         &self,
         params: ListSessionsParams,
     ) -> Result<ListSessionsResponse, InferenceError>;
+
+    /// Run inference with a historical config snapshot.
+    ///
+    /// This uses the action endpoint to run inference with a specific config version,
+    /// enabling reproducibility by using the exact configuration that was active
+    /// at a previous point in time.
+    ///
+    /// Returns the inference response on success. Streaming inference
+    /// is not supported and will return an error.
+    async fn action(
+        &self,
+        snapshot_hash: SnapshotHash,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceResponse, InferenceError>;
 }
 
 /// Implementation of `InferenceClient` for the real TensorZero client.
@@ -301,6 +317,90 @@ impl InferenceClient for Client {
             }
         }
     }
+
+    async fn action(
+        &self,
+        snapshot_hash: SnapshotHash,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceResponse, InferenceError> {
+        use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
+
+        match self.mode() {
+            ClientMode::HTTPGateway(http) => {
+                let url = http
+                    .base_url
+                    .join("internal/action")
+                    .map_err(|e: url::ParseError| {
+                        InferenceError::Autopilot(autopilot_client::AutopilotError::InvalidUrl(e))
+                    })?;
+
+                let action_input = ActionInputInfo {
+                    snapshot_hash,
+                    input: ActionInput::Inference(Box::new(params)),
+                };
+
+                let response = http
+                    .http_client
+                    .post(url)
+                    .json(&action_input)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        InferenceError::Autopilot(autopilot_client::AutopilotError::Request(e))
+                    })?;
+
+                if !response.status().is_success() {
+                    let status = response.status().as_u16();
+                    let text = response.text().await.unwrap_or_default();
+                    return Err(InferenceError::Autopilot(
+                        autopilot_client::AutopilotError::Http {
+                            status_code: status,
+                            message: text,
+                        },
+                    ));
+                }
+
+                response.json().await.map_err(|e| {
+                    InferenceError::Autopilot(autopilot_client::AutopilotError::Request(e))
+                })
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => {
+                let action_input = ActionInputInfo {
+                    snapshot_hash,
+                    input: ActionInput::Inference(Box::new(params)),
+                };
+
+                let result = tensorzero_core::endpoints::internal::action::action(
+                    &gateway.handle.app_state,
+                    action_input,
+                )
+                .await
+                .map_err(|e| {
+                    InferenceError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })?;
+
+                match result {
+                    tensorzero_core::endpoints::internal::action::ActionResponse::Inference(
+                        response,
+                    ) => Ok(response),
+                    tensorzero_core::endpoints::internal::action::ActionResponse::Feedback(_) => {
+                        Err(InferenceError::TensorZero(TensorZeroError::Other {
+                            source: tensorzero_core::error::Error::new(
+                                tensorzero_core::error::ErrorDetails::InternalError {
+                                    message: "Unexpected feedback response from action endpoint"
+                                        .to_string(),
+                                },
+                            )
+                            .into(),
+                        }))
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Create an inference client from an existing TensorZero `Client`.
@@ -400,6 +500,8 @@ pub struct EmbeddedInferenceClient {
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
     autopilot_client: Option<Arc<autopilot_client::AutopilotClient>>,
+    /// Cache for historical config snapshots, used by the action endpoint.
+    config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
 }
 
 impl EmbeddedInferenceClient {
@@ -411,6 +513,7 @@ impl EmbeddedInferenceClient {
         postgres_connection_info: PostgresConnectionInfo,
         deferred_tasks: TaskTracker,
         autopilot_client: Option<Arc<autopilot_client::AutopilotClient>>,
+        config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
     ) -> Self {
         Self {
             config,
@@ -419,6 +522,7 @@ impl EmbeddedInferenceClient {
             postgres_connection_info,
             deferred_tasks,
             autopilot_client,
+            config_snapshot_cache,
         }
     }
 }
@@ -503,5 +607,80 @@ impl InferenceClient for EmbeddedInferenceClient {
         tensorzero_core::endpoints::internal::autopilot::list_sessions(autopilot_client, params)
             .await
             .map_err(|e| InferenceError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn action(
+        &self,
+        snapshot_hash: SnapshotHash,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceResponse, InferenceError> {
+        use tensorzero_core::config::RuntimeOverlay;
+        use tensorzero_core::db::ConfigQueries;
+
+        // Get the config snapshot cache, or return an error if not available
+        let cache = self.config_snapshot_cache.as_ref().ok_or_else(|| {
+            InferenceError::TensorZero(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(
+                    tensorzero_core::error::ErrorDetails::InternalError {
+                        message: "Config snapshot cache is not enabled".to_string(),
+                    },
+                )
+                .into(),
+            })
+        })?;
+
+        // Check cache first
+        let config = if let Some(config) = cache.get(&snapshot_hash) {
+            config
+        } else {
+            // Cache miss: load from ClickHouse
+            let snapshot = self
+                .clickhouse_connection_info
+                .get_config_snapshot(snapshot_hash.clone())
+                .await
+                .map_err(|e| {
+                    InferenceError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })?;
+
+            let runtime_overlay = RuntimeOverlay::from_config(&self.config);
+
+            let unwritten_config = Config::load_from_snapshot(
+                snapshot,
+                runtime_overlay,
+                false, // Don't validate credentials for historical configs
+            )
+            .await
+            .map_err(|e| InferenceError::TensorZero(TensorZeroError::Other { source: e.into() }))?;
+
+            let config = Arc::new(unwritten_config.dangerous_into_config_without_writing());
+
+            cache.insert(snapshot_hash, config.clone());
+
+            config
+        };
+
+        // Convert params and call inference with the snapshot config
+        let internal_params = params
+            .try_into()
+            .map_err(|e: tensorzero_core::error::Error| {
+                InferenceError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        let result = Box::pin(tensorzero_core::endpoints::inference::inference(
+            config,
+            &self.http_client,
+            self.clickhouse_connection_info.clone(),
+            self.postgres_connection_info.clone(),
+            self.deferred_tasks.clone(),
+            internal_params,
+            None, // No API key in embedded mode
+        ))
+        .await
+        .map_err(|e| InferenceError::TensorZero(TensorZeroError::Other { source: e.into() }))?;
+
+        match result.output {
+            InferenceOutput::NonStreaming(response) => Ok(response),
+            InferenceOutput::Streaming(_) => Err(InferenceError::StreamingNotSupported),
+        }
     }
 }

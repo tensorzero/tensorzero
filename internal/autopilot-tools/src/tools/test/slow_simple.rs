@@ -32,6 +32,10 @@ pub struct SlowSimpleOutput {
 pub struct SlowSimpleTool;
 
 impl ToolMetadata for SlowSimpleTool {
+    type SideInfo = ();
+    type Output = SlowSimpleOutput;
+    type LlmParams = SlowSimpleParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("slow_simple")
     }
@@ -45,15 +49,10 @@ impl ToolMetadata for SlowSimpleTool {
     fn parameters_schema() -> ToolResult<Schema> {
         Ok(schema_for!(SlowSimpleParams))
     }
-
-    type LlmParams = SlowSimpleParams;
 }
 
 #[async_trait]
 impl SimpleTool for SlowSimpleTool {
-    type SideInfo = ();
-    type Output = SlowSimpleOutput;
-
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,

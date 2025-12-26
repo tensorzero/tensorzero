@@ -33,6 +33,10 @@ pub struct FlakyToolOutput {
 pub struct FlakyTool;
 
 impl ToolMetadata for FlakyTool {
+    type SideInfo = ();
+    type Output = FlakyToolOutput;
+    type LlmParams = FlakyToolParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("flaky")
     }
@@ -46,15 +50,10 @@ impl ToolMetadata for FlakyTool {
     fn parameters_schema() -> ToolResult<Schema> {
         Ok(schema_for!(FlakyToolParams))
     }
-
-    type LlmParams = FlakyToolParams;
 }
 
 #[async_trait]
 impl TaskTool for FlakyTool {
-    type SideInfo = ();
-    type Output = FlakyToolOutput;
-
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,

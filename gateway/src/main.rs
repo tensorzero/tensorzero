@@ -507,6 +507,7 @@ async fn spawn_autopilot_worker_if_configured(
         gateway_handle.app_state.postgres_connection_info.clone(),
         gateway_handle.app_state.deferred_tasks.clone(),
         gateway_handle.app_state.autopilot_client.clone(),
+        gateway_handle.app_state.config_snapshot_cache.clone(),
     ));
 
     let config = AutopilotWorkerConfig::new(pool, inference_client);

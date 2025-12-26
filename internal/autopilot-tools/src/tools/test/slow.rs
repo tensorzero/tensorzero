@@ -32,6 +32,10 @@ pub struct SlowToolOutput {
 pub struct SlowTool;
 
 impl ToolMetadata for SlowTool {
+    type SideInfo = ();
+    type Output = SlowToolOutput;
+    type LlmParams = SlowToolParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("slow")
     }
@@ -45,15 +49,10 @@ impl ToolMetadata for SlowTool {
     fn parameters_schema() -> ToolResult<Schema> {
         Ok(schema_for!(SlowToolParams))
     }
-
-    type LlmParams = SlowToolParams;
 }
 
 #[async_trait]
 impl TaskTool for SlowTool {
-    type SideInfo = ();
-    type Output = SlowToolOutput;
-
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,

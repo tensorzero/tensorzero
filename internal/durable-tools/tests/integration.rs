@@ -23,6 +23,7 @@ use tensorzero::{
     ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
     Usage,
 };
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
 use tokio::sync::Mutex;
@@ -83,6 +84,17 @@ impl InferenceClient for MockInferenceClient {
         _params: durable_tools::ListSessionsParams,
     ) -> Result<durable_tools::ListSessionsResponse, InferenceError> {
         Err(InferenceError::AutopilotUnavailable)
+    }
+
+    async fn action(
+        &self,
+        _snapshot_hash: SnapshotHash,
+        _params: ClientInferenceParams,
+    ) -> Result<InferenceResponse, InferenceError> {
+        // Mock just returns the same response as inference() for simplicity
+        self.response
+            .clone()
+            .ok_or(InferenceError::StreamingNotSupported)
     }
 }
 

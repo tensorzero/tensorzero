@@ -335,10 +335,16 @@ name = "autopilot-tools"
 version = "2025.12.6"
 dependencies = [
  "async-trait",
+ "durable",
  "durable-tools",
  "schemars 1.1.0",
  "serde",
+ "serde_json",
+ "sqlx",
+ "tensorzero",
+ "tensorzero-core",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -1842,6 +1848,7 @@ dependencies = [
  "durable",
  "durable-tools-spawn",
  "mockall",
+ "moka",
  "schemars 1.1.0",
  "secrecy",
  "serde",
