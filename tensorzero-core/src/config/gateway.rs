@@ -50,37 +50,37 @@ pub struct AuthConfig {
     pub cache: Option<GatewayAuthCacheConfig>,
 }
 
-fn default_tensorzero_inference_latency_overhead_seconds_histogram_buckets() -> Vec<f64> {
+fn default_tensorzero_inference_latency_overhead_seconds_buckets() -> Vec<f64> {
     vec![0.001, 0.01, 0.1]
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricsConfig {
-    /// When non-empty, report the `tensorzero_inference_latency_overhead_seconds_histogram` metric
+    /// When non-empty, report the `tensorzero_inference_latency_overhead_seconds` metric
     /// using the specified buckets.
     /// When empty, the metric is not reported.
-    #[serde(default = "default_tensorzero_inference_latency_overhead_seconds_histogram_buckets")]
-    pub tensorzero_inference_latency_overhead_seconds_histogram_buckets: Vec<f64>,
+    #[serde(default = "default_tensorzero_inference_latency_overhead_seconds_buckets")]
+    pub tensorzero_inference_latency_overhead_seconds_buckets: Vec<f64>,
 }
 
 impl MetricsConfig {
     pub fn validate(&self) -> Result<(), Error> {
-        let buckets = &self.tensorzero_inference_latency_overhead_seconds_histogram_buckets;
+        let buckets = &self.tensorzero_inference_latency_overhead_seconds_buckets;
 
         if !buckets.is_empty() {
             for (i, &bucket) in buckets.iter().enumerate() {
                 if !bucket.is_finite() {
                     return Err(Error::new(crate::error::ErrorDetails::Config {
                         message: format!(
-                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets[{i}] must be finite (not NaN or infinity), got: {bucket}"
+                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets[{i}] must be finite (not NaN or infinity), got: {bucket}"
                         ),
                     }));
                 }
                 if bucket < 0.0 {
                     return Err(Error::new(crate::error::ErrorDetails::Config {
                         message: format!(
-                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets[{i}] must be non-negative, got: {bucket}"
+                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets[{i}] must be non-negative, got: {bucket}"
                         ),
                     }));
                 }
@@ -90,7 +90,7 @@ impl MetricsConfig {
                 if buckets[i] <= buckets[i - 1] {
                     return Err(Error::new(crate::error::ErrorDetails::Config {
                         message: format!(
-                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets must be in strictly ascending order, but buckets[{}] ({}) <= buckets[{}] ({})",
+                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets must be in strictly ascending order, but buckets[{}] ({}) <= buckets[{}] ({})",
                             i,
                             buckets[i],
                             i - 1,

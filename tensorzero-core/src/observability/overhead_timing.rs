@@ -154,12 +154,12 @@ impl OverheadSpanExt for Span {
 
                 if let Some(extra_labels) = extra_labels {
                     metrics::histogram!(
-                        "tensorzero_inference_latency_overhead_seconds_histogram",
+                        "tensorzero_inference_latency_overhead_seconds",
                         extra_labels
                     )
                     .record(overhead.as_secs_f64());
                 } else {
-                    metrics::histogram!("tensorzero_inference_latency_overhead_seconds_histogram")
+                    metrics::histogram!("tensorzero_inference_latency_overhead_seconds")
                         .record(overhead.as_secs_f64());
                 }
             } else {
