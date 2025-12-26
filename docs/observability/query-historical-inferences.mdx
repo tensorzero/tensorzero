@@ -1,0 +1,368 @@
+---
+title: How to query historical inferences
+sidebarTitle: Query historical inferences
+description: Learn how to retrieve and filter historical inferences from the TensorZero Gateway.
+---
+
+You can query historical inferences to analyze model behavior, debug issues, export data for fine-tuning, and more.
+The [TensorZero UI](/deployment/tensorzero-ui) provides an interface to browse and filter historical inferences.
+You can also query historical inferences programmatically using the TensorZero Gateway.
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/observability/query-historical-inferences) of this guide on GitHub.
+
+</Tip>
+
+## Query historical inferences by ID
+
+<span style={{ display: "block" }}>
+  <Badge color="blue">HTTP</Badge> `POST /v1/inferences/get_inferences`
+</span>
+<span style={{ display: "block" }}>
+  <Badge color="orange">TensorZero SDK</Badge> `client.get_inferences(...)`
+</span>
+
+Retrieve specific inferences when you know their IDs.
+
+### Request
+
+<ParamField body="ids" type="string[]" required>
+  List of inference IDs (UUIDs) to retrieve.
+</ParamField>
+
+<ParamField body="function_name" type="string">
+  Filter by function name. Including this improves query performance since
+  `function_name` is the first column in the ClickHouse primary key.
+</ParamField>
+
+<ParamField body="output_source" type="string" default="inference">
+  Source of the output to return: - `"inference"`: Returns the original model
+  output - `"demonstration"`: Returns human-curated feedback output if available
+  - `"none"`: Returns the inference without output
+</ParamField>
+
+<Accordion title="Example">
+<Tabs>
+<Tab title="TensorZero Python SDK">
+
+You can retrieve inferences by ID using the TensorZero Python SDK.
+
+```python
+from tensorzero import TensorZeroGateway
+
+t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
+
+t0.get_inferences(ids=["00000000-0000-0000-0000-000000000000"])
+```
+
+</Tab>
+<Tab title="HTTP">
+
+You can retrieve inferences by ID using the HTTP API.
+
+```bash
+curl -X POST http://localhost:3000/v1/inferences/get_inferences \
+  -H "Content-Type: application/json" \
+  -d '{"ids": ["00000000-0000-0000-0000-000000000000"]}'
+```
+
+</Tab>
+</Tabs>
+</Accordion>
+
+### Response
+
+<ResponseField name="inferences" type="StoredInference[]">
+  <Expandable title="StoredInference properties" defaultOpen="true">
+    <ResponseField name="dispreferred_outputs" type="array">
+      Outputs marked as dispreferred via feedback.
+    </ResponseField>
+    <ResponseField name="episode_id" type="string">
+      Episode (UUID) this inference belongs to.
+    </ResponseField>
+    <ResponseField name="function_name" type="string">
+      Name of the function called.
+    </ResponseField>
+    <ResponseField name="inference_id" type="string">
+      Unique identifier (UUID) for the inference.
+    </ResponseField>
+    <ResponseField name="inference_params" type="InferenceParams">
+      Parameters like temperature, max_tokens, etc.
+    </ResponseField>
+    <ResponseField name="input" type="StoredInput">
+      The input provided (system prompt, messages).
+    </ResponseField>
+    <ResponseField name="output" type="array">
+      The inference output (content blocks for chat, JSON for json).
+    </ResponseField>
+    <ResponseField name="processing_time_ms" type="integer" post={["optional"]}>
+      Total processing time in milliseconds.
+    </ResponseField>
+    <ResponseField name="tags" type="object">
+      Key-value tags associated with the inference.
+    </ResponseField>
+    <ResponseField name="timestamp" type="string">
+      When the inference was made (RFC 3339 format).
+    </ResponseField>
+    <ResponseField name="ttft_ms" type="integer" post={["optional"]}>
+      Time to first token in milliseconds.
+    </ResponseField>
+    <ResponseField name="variant_name" type="string">
+      Name of the variant used.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Query historical inferences with filters
+
+List inferences with filtering, pagination, and sorting.
+
+<span style={{ display: "block" }}>
+  <Badge color="blue">HTTP</Badge> `POST /v1/inferences/list_inferences`
+</span>
+<span style={{ display: "block" }}>
+  <Badge color="orange">TensorZero SDK</Badge>{" "}
+  `client.list_inferences(request=ListInferencesRequest(...))`
+</span>
+
+### Request
+
+<ParamField body="after" type="string">
+  Cursor pagination: get inferences after this ID (exclusive). Cannot be used
+  with `before` or `offset`.
+</ParamField>
+
+<ParamField body="before" type="string">
+  Cursor pagination: get inferences before this ID (exclusive). Cannot be used
+  with `after` or `offset`.
+</ParamField>
+
+<ParamField body="episode_id" type="string">
+  Filter by episode ID (UUID).
+</ParamField>
+
+<ParamField body="filters" type="InferenceFilter">
+  Advanced filtering by metrics, tags, time, and demonstration feedback. Filters can be combined using logical operators (`and`, `or`, `not`).
+  <Expandable title="filter types">
+    <ResponseField name="and" type="object">
+      Logical AND of multiple filters.
+      <Expandable title="properties">
+        <ResponseField name="children" type="InferenceFilter[]" required>Array of filters to AND together.</ResponseField>
+        <ResponseField name="type" type="string" required>Must be `"and"`.</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="boolean_metric" type="object">
+      Filter by boolean metrics.
+      <Expandable title="properties">
+        <ResponseField name="metric_name" type="string" required>Name of the metric.</ResponseField>
+        <ResponseField name="type" type="string" required>Must be `"boolean_metric"`.</ResponseField>
+        <ResponseField name="value" type="boolean" required>Value to match (`true` or `false`).</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="demonstration_feedback" type="object">
+      Filter by whether demonstration feedback exists.
+      <Expandable title="properties">
+        <ResponseField name="has_demonstration" type="boolean" required>Whether the inference has demonstration feedback.</ResponseField>
+        <ResponseField name="type" type="string" required>Must be `"demonstration_feedback"`.</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="float_metric" type="object">
+      Filter by numeric metric values.
+      <Expandable title="properties">
+        <ResponseField name="comparison_operator" type="string" required>One of `<`, `<=`, `=`, `>`, `>=`, `!=`.</ResponseField>
+        <ResponseField name="metric_name" type="string" required>Name of the metric.</ResponseField>
+        <ResponseField name="type" type="string" required>Must be `"float_metric"`.</ResponseField>
+        <ResponseField name="value" type="number" required>Value to compare against.</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="not" type="object">
+      Logical NOT of a filter.
+      <Expandable title="properties">
+        <ResponseField name="child" type="InferenceFilter" required>Filter to negate.</ResponseField>
+        <ResponseField name="type" type="string" required>Must be `"not"`.</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="or" type="object">
+      Logical OR of multiple filters.
+      <Expandable title="properties">
+        <ResponseField name="children" type="InferenceFilter[]" required>Array of filters to OR together.</ResponseField>
+        <ResponseField name="type" type="string" required>Must be `"or"`.</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="tag" type="object">
+      Filter by tags.
+      <Expandable title="properties">
+        <ResponseField name="comparison_operator" type="string" required>One of `=`, `!=`.</ResponseField>
+        <ResponseField name="key" type="string" required>Tag key.</ResponseField>
+        <ResponseField name="type" type="string" required>Must be `"tag"`.</ResponseField>
+        <ResponseField name="value" type="string" required>Tag value.</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="time" type="object">
+      Filter by timestamp.
+      <Expandable title="properties">
+        <ResponseField name="comparison_operator" type="string" required>One of `<`, `<=`, `=`, `>`, `>=`, `!=`.</ResponseField>
+        <ResponseField name="time" type="string" required>Timestamp in RFC 3339 format.</ResponseField>
+        <ResponseField name="type" type="string" required>Must be `"time"`.</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="function_name" type="string">
+  Filter by function name.
+</ParamField>
+
+<ParamField body="limit" type="integer" default={20}>
+  Maximum number of results to return.
+</ParamField>
+
+<ParamField body="offset" type="integer" default={0}>
+  Pagination offset.
+</ParamField>
+
+<ParamField body="order_by" type="OrderBy[]">
+  Sort criteria. You can specify multiple sort criteria.
+  <Expandable title="sort options">
+    <ResponseField name="metric" type="object">
+      Sort by a metric value.
+      <Expandable title="properties">
+        <ResponseField name="by" type="string" required>
+          Must be `"metric"`.
+        </ResponseField>
+        <ResponseField name="name" type="string" required>
+          Name of the metric to sort by.
+        </ResponseField>
+        <ResponseField name="direction" type="string" default="descending">
+          `"ascending"` or `"descending"`.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="search_relevance" type="object">
+      Sort by search relevance (requires `search_query_experimental`).
+      <Expandable title="properties">
+        <ResponseField name="by" type="string" required>
+          Must be `"search_relevance"`.
+        </ResponseField>
+        <ResponseField name="direction" type="string" default="descending">
+          `"ascending"` or `"descending"`.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="timestamp" type="object">
+      Sort by creation timestamp.
+      <Expandable title="properties">
+        <ResponseField name="by" type="string" required>
+          Must be `"timestamp"`.
+        </ResponseField>
+        <ResponseField name="direction" type="string" default="descending">
+          `"ascending"` or `"descending"`.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="output_source" type="string" default="inference">
+  Source of the output to return: - `"inference"`: Returns the original model
+  output - `"demonstration"`: Returns human-curated feedback output if available
+  - `"none"`: Returns the inference without output
+</ParamField>
+
+<ParamField body="search_query_experimental" type="string">
+  Full-text search query (experimental, may cause full table scans).
+</ParamField>
+
+<ParamField body="variant_name" type="string">
+  Filter by variant name.
+</ParamField>
+
+<Accordion title="Example">
+<Tabs>
+<Tab title="TensorZero Python SDK">
+
+You can list inferences with filters using the TensorZero Python SDK.
+
+```python
+from tensorzero import TensorZeroGateway, ListInferencesRequest, InferenceFilterTag
+
+t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
+
+t0.list_inferences(
+    request=ListInferencesRequest(
+        filters=InferenceFilterTag(
+            key="my_tag",
+            value="my_value",
+            comparison_operator="=",
+        ),
+        limit=10,
+    )
+)
+```
+
+</Tab>
+<Tab title="HTTP">
+
+You can list inferences with filters using the HTTP API.
+
+```bash
+curl -X POST http://localhost:3000/v1/inferences/list_inferences \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filters": {
+      "type": "tag",
+      "key": "my_tag",
+      "value": "my_value",
+      "comparison_operator": "="
+    },
+    "limit": 10
+  }'
+```
+
+</Tab>
+</Tabs>
+</Accordion>
+
+### Response
+
+<ResponseField name="inferences" type="StoredInference[]">
+  <Expandable title="StoredInference properties" defaultOpen="true">
+    <ResponseField name="dispreferred_outputs" type="array">
+      Outputs marked as dispreferred via feedback.
+    </ResponseField>
+    <ResponseField name="episode_id" type="string">
+      Episode (UUID) this inference belongs to.
+    </ResponseField>
+    <ResponseField name="function_name" type="string">
+      Name of the function called.
+    </ResponseField>
+    <ResponseField name="inference_id" type="string">
+      Unique identifier (UUID) for the inference.
+    </ResponseField>
+    <ResponseField name="inference_params" type="InferenceParams">
+      Parameters like temperature, max_tokens, etc.
+    </ResponseField>
+    <ResponseField name="input" type="StoredInput">
+      The input provided (system prompt, messages).
+    </ResponseField>
+    <ResponseField name="output" type="array">
+      The inference output (content blocks for chat, JSON for json).
+    </ResponseField>
+    <ResponseField name="processing_time_ms" type="integer" post={["optional"]}>
+      Total processing time in milliseconds.
+    </ResponseField>
+    <ResponseField name="tags" type="object">
+      Key-value tags associated with the inference.
+    </ResponseField>
+    <ResponseField name="timestamp" type="string">
+      When the inference was made (RFC 3339 format).
+    </ResponseField>
+    <ResponseField name="ttft_ms" type="integer" post={["optional"]}>
+      Time to first token in milliseconds.
+    </ResponseField>
+    <ResponseField name="variant_name" type="string">
+      Name of the variant used.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
