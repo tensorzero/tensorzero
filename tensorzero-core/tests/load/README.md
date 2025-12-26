@@ -10,7 +10,7 @@
 - Launch the mock inference provider:
 
   ```
-  cargo run --profile performance --bin mock-inference-provider
+  cargo run --profile performance --bin mock-provider-api
   ```
 
 - Launch the gateway.

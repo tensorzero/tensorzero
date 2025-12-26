@@ -448,17 +448,6 @@ model_name = "grok-4-1-fast-non-reasoning"
 [models."grok_4_1_fast_non_reasoning-dynamic"]
 routing = ["xai"]
 
-[provider_types.gcp_vertex_gemini.batch]
-storage_type = "cloud_storage"
-input_uri_prefix = "gs://tensorzero-batch-tests-input/input-prefix/"
-output_uri_prefix = "gs://tensorzero-batch-tests-output/output-prefix/"
-
-# GCP Vertex Gemini SFT config for optimization tests
-[provider_types.gcp_vertex_gemini.sft]
-project_id = "tensorzero-public"
-region = "us-central1"
-bucket_name = "tensorzero-sft-training-data"
-
 [models."grok_4_1_fast_non_reasoning-dynamic".providers.xai]
 type = "xai"
 model_name = "grok-4-1-fast-non-reasoning"

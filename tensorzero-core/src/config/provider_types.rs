@@ -1,6 +1,5 @@
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -14,9 +13,9 @@ pub struct ProviderTypesConfig {
     #[serde(default)]
     pub fireworks: FireworksProviderTypeConfig,
     #[serde(default)]
-    pub gcp_vertex_gemini: GCPProviderTypeConfig,
+    pub gcp_vertex_gemini: GCPVertexGeminiProviderTypeConfig,
     #[serde(default)]
-    pub gcp_vertex_anthropic: GCPProviderTypeConfig,
+    pub gcp_vertex_anthropic: GCPVertexAnthropicProviderTypeConfig,
     #[serde(default)]
     pub google_ai_studio_gemini: GoogleAIStudioGeminiProviderTypeConfig,
     #[serde(default)]
@@ -115,7 +114,16 @@ impl Default for DeepSeekDefaults {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FireworksProviderTypeConfig {
     #[serde(default)]
+    pub sft: Option<FireworksSFTConfig>,
+    #[serde(default)]
     pub defaults: FireworksDefaults,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub struct FireworksSFTConfig {
+    pub account_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -133,18 +141,25 @@ impl Default for FireworksDefaults {
     }
 }
 
-// GCP Vertex
+// GCP Vertex Gemini
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-pub struct GCPProviderTypeConfig {
+pub struct GCPVertexGeminiProviderTypeConfig {
     #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
-    #[cfg(feature = "e2e_tests")]
-    pub batch_inference_api_base: Option<Url>,
     #[serde(default)]
     pub sft: Option<GCPSFTConfig>,
+    #[serde(default)]
+    pub defaults: GCPDefaults,
+}
+
+// GCP Vertex Anthropic
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GCPVertexAnthropicProviderTypeConfig {
     #[serde(default)]
     pub defaults: GCPDefaults,
 }
@@ -180,9 +195,6 @@ pub struct GCPSFTConfig {
     pub service_account: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kms_key_name: Option<String>,
-    /// INTERNAL ONLY: Overrides API base for testing. Skips GCS upload and credential checks if set.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub internal_mock_api_base: Option<Url>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -298,8 +310,6 @@ impl Default for MistralDefaults {
 pub struct OpenAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: OpenAIDefaults,
-    #[cfg(feature = "e2e_tests")]
-    pub batch_inference_api_base: Option<Url>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -321,6 +331,7 @@ impl Default for OpenAIDefaults {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct OpenRouterProviderTypeConfig {
+    #[serde(default)]
     pub defaults: OpenRouterDefaults,
 }
 
@@ -366,6 +377,7 @@ impl Default for SGLangDefaults {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TGIProviderTypeConfig {
+    #[serde(default)]
     pub defaults: TGIDefaults,
 }
 
@@ -388,7 +400,24 @@ impl Default for TGIDefaults {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TogetherProviderTypeConfig {
+    #[serde(default)]
+    pub sft: Option<TogetherSFTConfig>,
+    #[serde(default)]
     pub defaults: TogetherDefaults,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub struct TogetherSFTConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wandb_api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wandb_base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wandb_project_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hf_api_token: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

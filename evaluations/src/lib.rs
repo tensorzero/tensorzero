@@ -148,7 +148,7 @@ pub async fn run_evaluation(
         unwritten_config.gateway.observability.batch_writes.clone(),
     )
     .await?;
-    let config = unwritten_config.into_config(&clickhouse_client).await?;
+    let config = Box::pin(unwritten_config.into_config(&clickhouse_client)).await?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
 

@@ -38,6 +38,8 @@ services:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+      # For mock server during SFT jobs and batch inference (optional, set via host env or .env)
+      TENSORZERO_INTERNAL_MOCK_PROVIDER_API: ${TENSORZERO_INTERNAL_MOCK_PROVIDER_API:-}
     env_file:
       - .env
       - path: .env-gateway
@@ -112,9 +114,6 @@ services:
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
-      # For mock server during SFT jobs
-      OPENAI_BASE_URL: http://mock-inference-provider:3030/openai
-      TOGETHER_BASE_URL: http://mock-inference-provider:3030/together
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro
@@ -131,5 +130,5 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-      mock-inference-provider:
+      mock-provider-api:
         condition: service_healthy

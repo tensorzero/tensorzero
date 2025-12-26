@@ -12,7 +12,10 @@ use tokio::try_join;
 use url::Url;
 
 use tensorzero_core::{
-    config::{Config, TimeoutsConfig, provider_types::ProviderTypesConfig},
+    config::{
+        Config, TimeoutsConfig,
+        provider_types::{ProviderTypesConfig, TogetherSFTConfig as TogetherProviderSFTConfig},
+    },
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -32,12 +35,17 @@ use tensorzero_core::{
         openai::tensorzero_to_openai_assistant_message,
         openai::{OpenAIMessagesConfig, OpenAIRequestMessage, OpenAITool},
         together::prepare_together_messages,
-        together::{PROVIDER_TYPE, TogetherCredentials},
+        together::{PROVIDER_TYPE, TOGETHER_API_BASE},
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
+    utils::mock::get_mock_provider_api_base,
 };
 
 use crate::{JobHandle, Optimizer};
+
+fn get_sft_config(provider_types: &ProviderTypesConfig) -> Option<&TogetherProviderSFTConfig> {
+    provider_types.together.sft.as_ref()
+}
 
 #[derive(Debug, Deserialize)]
 pub struct TogetherCreateJobResponse {
@@ -131,8 +139,23 @@ impl Optimizer for TogetherSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: Arc<Config>,
+        config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
+        // Get optional provider-level configuration
+        let sft_config = get_sft_config(&config.provider_types);
+
+        // Get credentials from provider defaults
+        let together_credentials = TogetherKind
+            .get_defaulted_credential(None, &config.models.default_credentials)
+            .await?;
+        let api_key = together_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
+
+        // Use mock API base for testing if set, otherwise default API base
+        let api_base =
+            get_mock_provider_api_base("together/").unwrap_or_else(|| TOGETHER_API_BASE.clone());
+
         let train_examples = train_examples
             .into_iter()
             .map(RenderedSample::into_lazy_rendered_sample)
@@ -164,15 +187,10 @@ impl Optimizer for TogetherSFTConfig {
             None
         };
         // Upload the training and validation rows to Together files
-        let api_key = self
-            .credentials
-            .get_api_key(credentials)
-            .map_err(|e| e.log())?;
-        let train_file_fut =
-            upload_file(client, &api_key, &self.api_base, &train_rows, "fine-tune");
+        let train_file_fut = upload_file(client, &api_key, &api_base, &train_rows, "fine-tune");
         let (train_file_id, val_file_id) = if let Some(val_rows) = val_rows.as_ref() {
             // Upload the files in parallel
-            let val_fut = upload_file(client, &api_key, &self.api_base, val_rows, "eval");
+            let val_fut = upload_file(client, &api_key, &api_base, val_rows, "eval");
             let (train_file_id, val_file_id) = try_join!(train_file_fut, val_fut)?;
             (train_file_id, Some(val_file_id))
         } else {
@@ -216,7 +234,7 @@ impl Optimizer for TogetherSFTConfig {
         };
 
         let res: TogetherCreateJobResponse = client
-            .post(self.api_base.join("fine-tunes").convert_parse_error()?)
+            .post(api_base.join("fine-tunes").convert_parse_error()?)
             .bearer_auth(api_key.expose_secret())
             .json(&TogetherCreateJobRequest {
                 training_file: train_file_id,
@@ -234,24 +252,22 @@ impl Optimizer for TogetherSFTConfig {
                 max_grad_norm: Some(self.max_grad_norm),
                 weight_decay: Some(self.weight_decay),
                 suffix: self.suffix.clone(),
-                // Weights & Biases integration
-                wandb_api_key: self.wandb_api_key.clone(),
-                wandb_base_url: self.wandb_base_url.clone(),
-                wandb_project_name: self.wandb_project_name.clone(),
+                // Weights & Biases integration - get from provider config if available
+                wandb_api_key: sft_config.and_then(|c| c.wandb_api_key.clone()),
+                wandb_base_url: sft_config.and_then(|c| c.wandb_base_url.clone()),
+                wandb_project_name: sft_config.and_then(|c| c.wandb_project_name.clone()),
                 wandb_name: self.wandb_name.clone(),
                 // Advanced options
                 from_checkpoint: self.from_checkpoint.clone(),
                 from_hf_model: self.from_hf_model.clone(),
                 hf_model_revision: self.hf_model_revision.clone(),
-                hf_api_token: self.hf_api_token.clone(),
+                hf_api_token: sft_config.and_then(|c| c.hf_api_token.clone()),
                 hf_output_repo_name: self.hf_output_repo_name.clone(),
             })
             .send_and_parse_json(PROVIDER_TYPE)
             .await?;
         Ok(TogetherSFTJobHandle {
-            api_base: self.api_base.clone(),
             job_id: res.id.clone(),
-            credential_location: self.credential_location.clone(),
             job_url: format!("https://api.together.ai/fine-tuning/{}", res.id)
                 .parse()
                 .map_err(|e| {
@@ -274,16 +290,21 @@ impl JobHandle for TogetherSFTJobHandle {
         default_credentials: &ProviderTypeDefaultCredentials,
         _provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error> {
-        let together_credentials: TogetherCredentials = TogetherKind
-            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+        // Get credentials from provider defaults
+        let together_credentials = TogetherKind
+            .get_defaulted_credential(None, default_credentials)
             .await?;
-
         let api_key = together_credentials
             .get_api_key(credentials)
             .map_err(|e| e.log())?;
+
+        // Use mock API base for testing if set, otherwise default API base
+        let api_base =
+            get_mock_provider_api_base("together/").unwrap_or_else(|| TOGETHER_API_BASE.clone());
+
         let res: TogetherJobResponse = client
             .get(
-                self.api_base
+                api_base
                     .join(&format!("fine-tunes/{}", self.job_id))
                     .convert_parse_error()?,
             )

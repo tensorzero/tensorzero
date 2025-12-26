@@ -566,8 +566,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                let config = unwritten_config
-                    .into_config(&clickhouse_connection_info)
+                let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
                     .await
                     .map_err(|e| {
                         ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
@@ -724,8 +723,7 @@ impl ClientBuilder {
             })?;
 
         // Convert config_load_info into Config with hash
-        let config = unwritten_config
-            .into_config(&clickhouse_connection_info)
+        let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })

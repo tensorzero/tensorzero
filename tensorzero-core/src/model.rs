@@ -57,6 +57,7 @@ use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
 use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
+use crate::utils::mock::get_mock_provider_api_base;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -1405,13 +1406,8 @@ impl UninitializedProviderConfig {
                 include_encrypted_reasoning,
                 provider_tools,
             } => {
-                // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
-                #[cfg(feature = "e2e_tests")]
-                let api_base = provider_types
-                    .openai
-                    .batch_inference_api_base
-                    .clone()
-                    .or(api_base);
+                // Use mock API base for testing if set, otherwise defer to the API base set
+                let api_base = get_mock_provider_api_base("openai").or(api_base);
 
                 ProviderConfig::OpenAI(OpenAIProvider::new(
                     model_name,

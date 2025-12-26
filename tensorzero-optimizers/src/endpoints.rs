@@ -120,12 +120,10 @@ pub async fn launch_optimization_workflow(
 
     // Split the inferences into train and val sets
     let (train_examples, val_examples) = split_examples(rendered_inferences, val_fraction)?;
-    let default_credentials = &config.models.default_credentials;
 
     // Launch the optimization job
     optimizer_config
-        .load(default_credentials)
-        .await?
+        .load()
         .launch(
             http_client,
             train_examples,
@@ -162,9 +160,7 @@ pub async fn launch_optimization(
         val_samples: val_examples,
         optimization_config: optimizer_config,
     } = params;
-    let optimizer = optimizer_config
-        .load(&config.models.default_credentials)
-        .await?;
+    let optimizer = optimizer_config.load();
     optimizer
         .launch(
             http_client,

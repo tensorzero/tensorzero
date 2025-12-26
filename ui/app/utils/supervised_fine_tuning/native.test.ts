@@ -29,7 +29,6 @@ describe("native sft", () => {
         batch_size: 1,
         learning_rate_multiplier: 1,
         n_epochs: 1,
-        api_base: process.env.OPENAI_BASE_URL || "http://localhost:3030/openai",
       },
       order_by: null,
     });
