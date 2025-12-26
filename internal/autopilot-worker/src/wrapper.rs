@@ -197,6 +197,7 @@ struct SimpleToolStepParams<L, S> {
     llm_params: L,
     side_info: S,
     tool_name: String,
+    tool_call_event_id: Uuid,
 }
 
 #[async_trait]
@@ -216,6 +217,7 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
                     llm_params,
                     side_info: side_info.inner,
                     tool_name: tool_name.clone(),
+                    tool_call_event_id: side_info.tool_call_event_id,
                 },
                 execute_simple_tool_step::<T>,
             )
@@ -254,7 +256,7 @@ async fn execute_simple_tool_step<T: SimpleTool>(
     state: ToolAppState,
 ) -> anyhow::Result<T::Output> {
     let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client());
-    let idempotency_key = format!("simple_tool:{}", params.tool_name);
+    let idempotency_key = format!("simple_tool:{}:{}", params.tool_name, params.tool_call_event_id);
 
     T::execute(
         params.llm_params,
