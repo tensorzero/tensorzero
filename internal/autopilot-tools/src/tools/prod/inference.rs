@@ -51,6 +51,8 @@ pub struct InferenceToolSideInfo {
     pub session_id: Uuid,
     /// Tool call ID for tagging.
     pub tool_call_id: Uuid,
+    /// Tool call event ID for tagging.
+    pub tool_call_event_id: Uuid,
 }
 
 impl SideInfo for InferenceToolSideInfo {}
@@ -99,6 +101,10 @@ impl SimpleTool for InferenceTool {
         tags.insert(
             "autopilot_tool_call_id".to_string(),
             side_info.tool_call_id.to_string(),
+        );
+        tags.insert(
+            "autopilot_tool_call_event_id".to_string(),
+            side_info.tool_call_event_id.to_string(),
         );
 
         let client_params = ClientInferenceParams {

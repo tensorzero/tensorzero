@@ -24,6 +24,7 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
     let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
     let tool_call_id = Uuid::now_v7();
+    let tool_call_event_id = Uuid::now_v7();
 
     let input = Input {
         system: None,
@@ -50,6 +51,7 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
         episode_id,
         session_id,
         tool_call_id,
+        tool_call_event_id,
     };
 
     // Create the tool and context
@@ -94,5 +96,9 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
     assert_eq!(
         captured.tags.get("autopilot_tool_call_id"),
         Some(&tool_call_id.to_string())
+    );
+    assert_eq!(
+        captured.tags.get("autopilot_tool_call_event_id"),
+        Some(&tool_call_event_id.to_string())
     );
 }
