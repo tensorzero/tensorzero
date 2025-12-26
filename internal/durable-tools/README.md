@@ -75,8 +75,8 @@ pub trait SimpleTool: ToolMetadata {
 | `DurableClient`            | Type alias for `Durable<ToolAppState>`                                                   |
 | `ToolError` / `ToolResult` | Error types for tool execution                                                           |
 | `SideInfo`                 | Marker trait for side information types (hidden from LLM)                                |
-| `InferenceClient`          | Trait for TensorZero inference backends                                                  |
-| `InferenceError`           | Error type for inference operations                                                      |
+| `TensorZeroClient`         | Trait for TensorZero inference backends                                                  |
+| `TensorZeroClientError`    | Error type for TensorZero client operations                                              |
 
 ### Context Management
 
@@ -200,11 +200,11 @@ impl TaskTool for ResearchTool {
 // Setup and run
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let inference_client = http_gateway_client(url::Url::parse("http://localhost:3000")?)?;
+    let t0_client = http_gateway_client(url::Url::parse("http://localhost:3000")?)?;
     let executor = ToolExecutor::builder()
         .database_url(std::env::var("DATABASE_URL")?.into())
         .queue_name("tools")
-        .inference_client(inference_client)
+        .t0_client(t0_client)
         .build()
         .await?;
 

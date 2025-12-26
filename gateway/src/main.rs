@@ -13,7 +13,7 @@ use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
-use durable_tools::EmbeddedInferenceClient;
+use durable_tools::EmbeddedClient;
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
@@ -499,8 +499,8 @@ async fn spawn_autopilot_worker_if_configured(
         _ => return Ok(None),
     };
 
-    // Create an embedded inference client using the gateway's state
-    let inference_client = std::sync::Arc::new(EmbeddedInferenceClient::new(
+    // Create an embedded TensorZero client using the gateway's state
+    let t0_client = std::sync::Arc::new(EmbeddedClient::new(
         gateway_handle.app_state.config.clone(),
         gateway_handle.app_state.http_client.clone(),
         gateway_handle.app_state.clickhouse_connection_info.clone(),
@@ -510,7 +510,7 @@ async fn spawn_autopilot_worker_if_configured(
         gateway_handle.app_state.config_snapshot_cache.clone(),
     ));
 
-    let config = AutopilotWorkerConfig::new(pool, inference_client);
+    let config = AutopilotWorkerConfig::new(pool, t0_client);
 
     Ok(Some(
         spawn_autopilot_worker(

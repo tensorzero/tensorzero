@@ -128,7 +128,7 @@ async fn publish_result_step(
     let tensorzero_version = TENSORZERO_VERSION.to_string();
 
     state
-        .inference_client()
+        .t0_client()
         .create_autopilot_event(
             params.session_id,
             CreateEventRequest {

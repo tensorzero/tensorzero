@@ -12,13 +12,13 @@ use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 use autopilot_tools::tools::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
-use common::{MockInferenceClient, create_mock_chat_response};
+use common::{MockTensorZeroClient, create_mock_chat_response};
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
     // Create mock response
     let mock_response = create_mock_chat_response("Hello from mock!");
-    let mock_client = Arc::new(MockInferenceClient::new(mock_response));
+    let mock_client = Arc::new(MockTensorZeroClient::new(mock_response));
 
     // Prepare test data
     let episode_id = Uuid::now_v7();
@@ -54,8 +54,8 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
 
     // Create the tool and context
     let tool = InferenceTool;
-    let inference_client: Arc<dyn durable_tools::InferenceClient> = mock_client.clone();
-    let ctx = SimpleToolContext::new(&pool, &inference_client);
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = mock_client.clone();
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
 
     // Execute the tool
     let result = tool

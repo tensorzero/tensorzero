@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use durable_tools::{InferenceClient, InferenceError};
+use durable_tools::{TensorZeroClient, TensorZeroClientError};
 use tensorzero::{ClientInferenceParams, InferenceResponse, Usage};
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
@@ -11,14 +11,14 @@ use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-/// Mock InferenceClient that captures inference calls for verification.
-pub struct MockInferenceClient {
+/// Mock TensorZeroClient that captures inference calls for verification.
+pub struct MockTensorZeroClient {
     captured_inference_params: Arc<Mutex<Option<ClientInferenceParams>>>,
     captured_action_params: Arc<Mutex<Option<(SnapshotHash, ClientInferenceParams)>>>,
     response: InferenceResponse,
 }
 
-impl MockInferenceClient {
+impl MockTensorZeroClient {
     pub fn new(response: InferenceResponse) -> Self {
         Self {
             captured_inference_params: Arc::new(Mutex::new(None)),
@@ -39,11 +39,11 @@ impl MockInferenceClient {
 }
 
 #[async_trait]
-impl InferenceClient for MockInferenceClient {
+impl TensorZeroClient for MockTensorZeroClient {
     async fn inference(
         &self,
         params: ClientInferenceParams,
-    ) -> Result<InferenceResponse, InferenceError> {
+    ) -> Result<InferenceResponse, TensorZeroClientError> {
         *self.captured_inference_params.lock().await = Some(params);
         Ok(self.response.clone())
     }
@@ -52,7 +52,7 @@ impl InferenceClient for MockInferenceClient {
         &self,
         snapshot_hash: SnapshotHash,
         params: ClientInferenceParams,
-    ) -> Result<InferenceResponse, InferenceError> {
+    ) -> Result<InferenceResponse, TensorZeroClientError> {
         *self.captured_action_params.lock().await = Some((snapshot_hash, params));
         Ok(self.response.clone())
     }
@@ -61,23 +61,23 @@ impl InferenceClient for MockInferenceClient {
         &self,
         _session_id: Uuid,
         _request: durable_tools::CreateEventRequest,
-    ) -> Result<durable_tools::CreateEventResponse, InferenceError> {
-        Err(InferenceError::AutopilotUnavailable)
+    ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn list_autopilot_events(
         &self,
         _session_id: Uuid,
         _params: durable_tools::ListEventsParams,
-    ) -> Result<durable_tools::ListEventsResponse, InferenceError> {
-        Err(InferenceError::AutopilotUnavailable)
+    ) -> Result<durable_tools::ListEventsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn list_autopilot_sessions(
         &self,
         _params: durable_tools::ListSessionsParams,
-    ) -> Result<durable_tools::ListSessionsResponse, InferenceError> {
-        Err(InferenceError::AutopilotUnavailable)
+    ) -> Result<durable_tools::ListSessionsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 }
 

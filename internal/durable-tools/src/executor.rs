@@ -9,10 +9,10 @@ use uuid::Uuid;
 
 use crate::context::{DurableClient, ToolAppState};
 use crate::error::ToolError;
-use crate::inference::InferenceClient;
 use crate::registry::ToolRegistry;
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::{TaskTool, TaskToolAdapter};
+use crate::tensorzero_client::TensorZeroClient;
 use durable_tools_spawn::TaskToolParams;
 
 /// High-level orchestrator for tool execution.
@@ -31,15 +31,15 @@ use durable_tools_spawn::TaskToolParams;
 /// use secrecy::SecretString;
 /// use url::Url;
 ///
-/// // Create inference client
-/// let inference_client = http_gateway_client(Url::parse("http://localhost:3000")?)?;
+/// // Create TensorZero client
+/// let t0_client = http_gateway_client(Url::parse("http://localhost:3000")?)?;
 ///
 /// // Create executor
 /// let database_url: SecretString = std::env::var("DATABASE_URL")?.into();
 /// let executor = ToolExecutor::builder()
 ///     .database_url(database_url)
 ///     .queue_name("tools")
-///     .inference_client(inference_client)
+///     .t0_client(t0_client)
 ///     .build()
 ///     .await?;
 ///
@@ -71,7 +71,7 @@ impl ToolExecutor {
     ///
     /// * `database_url` - Database connection URL (as a `SecretString` for security)
     /// * `queue_name` - Name of the durable queue for tool tasks
-    /// * `inference_client` - The inference client for TensorZero calls
+    /// * `t0_client` - The TensorZero client for inference and autopilot calls
     ///
     /// # Errors
     ///
@@ -79,12 +79,12 @@ impl ToolExecutor {
     pub async fn new(
         database_url: SecretString,
         queue_name: &str,
-        inference_client: Arc<dyn InferenceClient>,
+        t0_client: Arc<dyn TensorZeroClient>,
     ) -> anyhow::Result<Self> {
         Self::builder()
             .database_url(database_url)
             .queue_name(queue_name)
-            .inference_client(inference_client)
+            .t0_client(t0_client)
             .build()
             .await
     }
@@ -281,7 +281,7 @@ pub struct ToolExecutorBuilder {
     pool: Option<PgPool>,
     queue_name: String,
     default_max_attempts: u32,
-    inference_client: Option<Arc<dyn InferenceClient>>,
+    t0_client: Option<Arc<dyn TensorZeroClient>>,
 }
 
 impl ToolExecutorBuilder {
@@ -292,7 +292,7 @@ impl ToolExecutorBuilder {
             pool: None,
             queue_name: "tools".to_string(),
             default_max_attempts: 5,
-            inference_client: None,
+            t0_client: None,
         }
     }
 
@@ -324,10 +324,10 @@ impl ToolExecutorBuilder {
         self
     }
 
-    /// Set the inference client for TensorZero calls (required).
+    /// Set the TensorZero client (required).
     #[must_use]
-    pub fn inference_client(mut self, client: Arc<dyn InferenceClient>) -> Self {
-        self.inference_client = Some(client);
+    pub fn t0_client(mut self, client: Arc<dyn TensorZeroClient>) -> Self {
+        self.t0_client = Some(client);
         self
     }
 
@@ -335,13 +335,13 @@ impl ToolExecutorBuilder {
     ///
     /// # Errors
     ///
-    /// Returns an error if the database connection fails or if the inference
+    /// Returns an error if the database connection fails or if the TensorZero
     /// client was not provided.
     pub async fn build(self) -> anyhow::Result<ToolExecutor> {
-        // Inference client is required
-        let inference_client = self
-            .inference_client
-            .ok_or_else(|| anyhow::anyhow!("inference_client is required"))?;
+        // TensorZero client is required
+        let t0_client = self
+            .t0_client
+            .ok_or_else(|| anyhow::anyhow!("t0_client is required"))?;
 
         // Create the tool registry
         let registry = Arc::new(RwLock::new(ToolRegistry::new()));
@@ -356,8 +356,8 @@ impl ToolExecutorBuilder {
             PgPool::connect(url.expose_secret()).await?
         };
 
-        // Create the app context with the pool and inference client
-        let app_ctx = ToolAppState::new(pool.clone(), registry.clone(), inference_client);
+        // Create the app context with the pool and TensorZero client
+        let app_ctx = ToolAppState::new(pool.clone(), registry.clone(), t0_client);
 
         // Build the durable client with the app context
         let durable = DurableBuilder::new()
