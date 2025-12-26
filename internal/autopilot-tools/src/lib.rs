@@ -1,11 +1,16 @@
 //! Tool definitions for TensorZero Autopilot.
 //!
-//! This crate provides tool traits and test tool implementations for the autopilot system.
+//! This crate provides tool traits and implementations for the autopilot system.
 //!
 //! # Overview
 //!
 //! - Re-exports tool traits from `durable-tools` for defining custom tools
+//! - Provides production tools for autopilot operations
 //! - Provides test tools (when `e2e_tests` feature is enabled) for testing the autopilot infrastructure
+//!
+//! # Production Tools
+//!
+//! - `InferenceTool` - Calls TensorZero inference endpoint, optionally with a historical config snapshot
 //!
 //! # Test Tools (e2e_tests feature)
 //!
@@ -23,7 +28,6 @@
 //! - `ErrorSimpleTool` - Always returns an error
 //! - `SlowSimpleTool` - Sleeps for configurable duration
 
-#[cfg(feature = "e2e_tests")]
 pub mod tools;
 
 // Re-export from durable-tools
@@ -34,9 +38,13 @@ pub use durable_tools::{
 
 /// Register production tools with the given registry.
 ///
-/// Currently this registers no tools, as there are no production tools yet.
-pub fn register_production_tools(_registry: &mut ToolRegistry) -> ToolResult<()> {
-    // No production tools yet
+/// This registers the `InferenceTool` for calling TensorZero inference.
+///
+/// # Errors
+///
+/// Returns an error if any tool registration fails.
+pub fn register_production_tools(registry: &mut ToolRegistry) -> ToolResult<()> {
+    registry.register_simple_tool::<tools::InferenceTool>()?;
     Ok(())
 }
 

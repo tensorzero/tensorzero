@@ -22,6 +22,7 @@ pub struct FailingTool;
 impl ToolMetadata for FailingTool {
     type SideInfo = ();
     type Output = ();
+    type LlmParams = FailingToolParams;
 
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("failing")
@@ -36,8 +37,6 @@ impl ToolMetadata for FailingTool {
     fn parameters_schema() -> ToolResult<Schema> {
         Ok(schema_for!(FailingToolParams))
     }
-
-    type LlmParams = FailingToolParams;
 }
 
 #[async_trait]

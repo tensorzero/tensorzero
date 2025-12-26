@@ -22,6 +22,7 @@ pub struct PanicTool;
 impl ToolMetadata for PanicTool {
     type SideInfo = ();
     type Output = ();
+    type LlmParams = PanicToolParams;
 
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("panic")
@@ -34,8 +35,6 @@ impl ToolMetadata for PanicTool {
     fn parameters_schema() -> ToolResult<Schema> {
         Ok(schema_for!(PanicToolParams))
     }
-
-    type LlmParams = PanicToolParams;
 }
 
 #[async_trait]
