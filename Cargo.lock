@@ -337,6 +337,7 @@ dependencies = [
  "async-trait",
  "durable",
  "durable-tools",
+ "mockall",
  "schemars 1.1.0",
  "serde",
  "serde_json",
