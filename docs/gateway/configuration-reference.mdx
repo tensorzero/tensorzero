@@ -256,6 +256,23 @@ If `true`, then the migrations are not applied upon launch and must instead be a
 by running `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations` or `docker compose run --rm gateway --run-clickhouse-migrations`.
 If `false`, then the migrations are run automatically upon launch.
 
+### `metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`
+
+- **Type:** array of floats
+- **Required:** no (default: disabled)
+
+Enable the `tensorzero_inference_latency_overhead_seconds_histogram` Prometheus metric with the specified histogram buckets.
+This metric tracks the latency overhead introduced by TensorZero on HTTP requests.
+
+The buckets must be in strictly ascending order and contain at least one value.
+
+```toml title="tensorzero.toml"
+[gateway.metrics]
+tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
+```
+
+See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
+
 ### `template_filesystem_access.base_path`
 
 - **Type:** string
