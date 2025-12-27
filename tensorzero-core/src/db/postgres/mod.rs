@@ -13,12 +13,7 @@ use super::HealthCheckable;
 pub mod experimentation;
 pub mod rate_limiting;
 
-fn get_run_migrations_command() -> String {
-    let version = env!("CARGO_PKG_VERSION");
-    format!(
-        "docker run --rm -e TENSORZERO_POSTGRES_URL=$TENSORZERO_POSTGRES_URL tensorzero/gateway:{version} --run-postgres-migrations"
-    )
-}
+const RUN_MIGRATIONS_COMMAND: &str = "Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres";
 
 #[derive(Debug, Clone)]
 pub enum PostgresConnectionInfo {
@@ -77,7 +72,9 @@ impl PostgresConnectionInfo {
             // Query the database for all successfully applied migration versions.
             let applied_migrations = get_applied_migrations(pool).await.map_err(|e| {
                 Error::new(ErrorDetails::PostgresConnectionInitialization {
-                    message: format!("Failed to retrieve applied `tensorzero-core` migrations: {e}. You may need to run the migrations with `{}`", get_run_migrations_command()),
+                    message: format!(
+                        "Failed to retrieve applied `tensorzero-core` migrations: {e}. {RUN_MIGRATIONS_COMMAND}"
+                    ),
                 })
             })?;
 
@@ -88,11 +85,15 @@ impl PostgresConnectionInfo {
             )?;
 
             let tensorzero_auth_migrations_data =
-                tensorzero_auth::postgres::get_migrations_data(pool).await.map_err(|e| {
-                    Error::new(ErrorDetails::PostgresConnectionInitialization {
-                        message: format!("Failed to retrieve applied `tensorzero-auth` migrations: {e}. You may need to run the migrations with `{}`", get_run_migrations_command()),
-                    })
-                })?;
+                tensorzero_auth::postgres::get_migrations_data(pool)
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::PostgresConnectionInitialization {
+                            message: format!(
+                                "Failed to retrieve applied `tensorzero-auth` migrations: {e}. {RUN_MIGRATIONS_COMMAND}"
+                            ),
+                        })
+                    })?;
             Self::check_applied_expected(
                 "tensorzero-auth",
                 &tensorzero_auth_migrations_data.applied,
@@ -113,8 +114,7 @@ impl PostgresConnectionInfo {
         if applied_migrations != expected_migrations {
             return Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: format!(
-                    "Applied `{name}` migrations do not match expected migrations. Applied: {applied_migrations:?}, Expected: {expected_migrations:?}. Please run the migrations with `{}`",
-                    get_run_migrations_command()
+                    "Applied `{name}` migrations do not match expected migrations. Applied: {applied_migrations:?}, Expected: {expected_migrations:?}. {RUN_MIGRATIONS_COMMAND}"
                 ),
             }));
         }

@@ -17,7 +17,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
-use crate::db::clickhouse::migration_manager::get_run_migrations_command;
+use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
@@ -1082,10 +1082,9 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error running ClickHouse migration {id}: {message}")
             }
             ErrorDetails::ClickHouseMigrationsDisabled => {
-                let run_migrations_command: String = get_run_migrations_command();
                 write!(
                     f,
-                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`"
+                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. {RUN_MIGRATIONS_COMMAND}"
                 )
             }
             ErrorDetails::ClickHouseQuery { message } => {
