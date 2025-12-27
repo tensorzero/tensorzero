@@ -270,3 +270,358 @@ async fn execute_simple_tool_step<T: SimpleTool>(
     .await
     .map_err(|e| anyhow::anyhow!("{e}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use durable_tools::{CreateEventResponse, TensorZeroClientError};
+    use mockall::mock;
+    use schemars::JsonSchema;
+    use schemars::schema_for;
+    use tensorzero::{
+        ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
+        CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse,
+        InferenceResponse, ListDatapointsRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
+    };
+    use tensorzero_core::config::snapshot::SnapshotHash;
+
+    // Mock TensorZeroClient using mockall::mock! macro
+    // (same pattern as autopilot-tools/tests/common/mod.rs)
+    mock! {
+        pub TensorZeroClient {}
+
+        #[async_trait]
+        impl TensorZeroClient for TensorZeroClient {
+            async fn inference(
+                &self,
+                params: ClientInferenceParams,
+            ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+            async fn create_autopilot_event(
+                &self,
+                session_id: Uuid,
+                request: CreateEventRequest,
+            ) -> Result<CreateEventResponse, TensorZeroClientError>;
+
+            async fn list_autopilot_events(
+                &self,
+                session_id: Uuid,
+                params: durable_tools::ListEventsParams,
+            ) -> Result<durable_tools::ListEventsResponse, TensorZeroClientError>;
+
+            async fn list_autopilot_sessions(
+                &self,
+                params: durable_tools::ListSessionsParams,
+            ) -> Result<durable_tools::ListSessionsResponse, TensorZeroClientError>;
+
+            async fn action(
+                &self,
+                snapshot_hash: SnapshotHash,
+                params: ClientInferenceParams,
+            ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+            async fn create_datapoints(
+                &self,
+                dataset_name: String,
+                datapoints: Vec<CreateDatapointRequest>,
+            ) -> Result<CreateDatapointsResponse, TensorZeroClientError>;
+
+            async fn create_datapoints_from_inferences(
+                &self,
+                dataset_name: String,
+                params: CreateDatapointsFromInferenceRequestParams,
+            ) -> Result<CreateDatapointsResponse, TensorZeroClientError>;
+
+            async fn list_datapoints(
+                &self,
+                dataset_name: String,
+                request: ListDatapointsRequest,
+            ) -> Result<GetDatapointsResponse, TensorZeroClientError>;
+
+            async fn get_datapoints(
+                &self,
+                dataset_name: Option<String>,
+                ids: Vec<Uuid>,
+            ) -> Result<GetDatapointsResponse, TensorZeroClientError>;
+
+            async fn update_datapoints(
+                &self,
+                dataset_name: String,
+                datapoints: Vec<UpdateDatapointRequest>,
+            ) -> Result<UpdateDatapointsResponse, TensorZeroClientError>;
+
+            async fn delete_datapoints(
+                &self,
+                dataset_name: String,
+                ids: Vec<Uuid>,
+            ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+        }
+    }
+
+    // ===== Test TaskTool for wrapper testing =====
+
+    #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+    struct TestTaskToolParams {
+        message: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct TestTaskToolOutput {
+        result: String,
+    }
+
+    #[derive(Default)]
+    struct TestTaskTool;
+
+    impl ToolMetadata for TestTaskTool {
+        fn name() -> Cow<'static, str> {
+            Cow::Borrowed("test_task_tool")
+        }
+
+        fn description() -> Cow<'static, str> {
+            Cow::Borrowed("A test task tool for unit testing")
+        }
+
+        fn parameters_schema() -> DurableToolResult<Schema> {
+            Ok(schema_for!(TestTaskToolParams))
+        }
+
+        type LlmParams = TestTaskToolParams;
+        type SideInfo = ();
+        type Output = TestTaskToolOutput;
+    }
+
+    #[async_trait]
+    impl TaskTool for TestTaskTool {
+        async fn execute(
+            llm_params: Self::LlmParams,
+            _side_info: Self::SideInfo,
+            _ctx: &mut ToolContext<'_>,
+        ) -> DurableToolResult<Self::Output> {
+            Ok(TestTaskToolOutput {
+                result: format!("Processed: {}", llm_params.message),
+            })
+        }
+    }
+
+    // ===== Test SimpleTool for wrapper testing =====
+
+    #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+    struct TestSimpleToolParams {
+        query: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct TestSimpleToolOutput {
+        answer: String,
+    }
+
+    #[derive(Default)]
+    struct TestSimpleTool;
+
+    impl ToolMetadata for TestSimpleTool {
+        fn name() -> Cow<'static, str> {
+            Cow::Borrowed("test_simple_tool")
+        }
+
+        fn description() -> Cow<'static, str> {
+            Cow::Borrowed("A test simple tool for unit testing")
+        }
+
+        fn parameters_schema() -> DurableToolResult<Schema> {
+            Ok(schema_for!(TestSimpleToolParams))
+        }
+
+        type LlmParams = TestSimpleToolParams;
+        type SideInfo = ();
+        type Output = TestSimpleToolOutput;
+    }
+
+    #[async_trait]
+    impl SimpleTool for TestSimpleTool {
+        async fn execute(
+            llm_params: Self::LlmParams,
+            _side_info: Self::SideInfo,
+            _ctx: SimpleToolContext<'_>,
+            _idempotency_key: &str,
+        ) -> DurableToolResult<Self::Output> {
+            Ok(TestSimpleToolOutput {
+                answer: format!("Answer to: {}", llm_params.query),
+            })
+        }
+    }
+
+    // ===== Tests for publish_result =====
+
+    #[tokio::test]
+    async fn test_publish_result_success_outcome() {
+        let session_id = Uuid::now_v7();
+        let deployment_id = Uuid::now_v7();
+        let tool_call_event_id = Uuid::now_v7();
+        let tool_call_id = "call_123".to_string();
+        let tool_name = "test_tool".to_string();
+
+        let mut mock_client = MockTensorZeroClient::new();
+
+        // Capture the values we need to verify
+        let expected_session_id = session_id;
+        let expected_deployment_id = deployment_id;
+        let expected_tool_call_event_id = tool_call_event_id;
+
+        mock_client
+            .expect_create_autopilot_event()
+            .withf(move |sid, request| {
+                *sid == expected_session_id
+                    && request.deployment_id == expected_deployment_id
+                    && matches!(
+                        &request.payload,
+                        EventPayload::ToolResult {
+                            tool_call_event_id: tceid,
+                            outcome: ToolOutcome::Success(_),
+                        } if *tceid == expected_tool_call_event_id
+                    )
+            })
+            .returning(|sid, _| {
+                Ok(CreateEventResponse {
+                    event_id: Uuid::now_v7(),
+                    session_id: sid,
+                })
+            });
+
+        let params = PublishResultParams {
+            session_id,
+            deployment_id,
+            tool_call_event_id,
+            tool_call_id,
+            tool_name,
+            outcome: ToolOutcome::Success(AutopilotToolResult {
+                name: "test_tool".to_string(),
+                result: r#"{"result":"success"}"#.to_string(),
+                id: "call_123".to_string(),
+            }),
+        };
+
+        let result = publish_result(params, &mock_client).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_publish_result_failure_outcome() {
+        let session_id = Uuid::now_v7();
+        let deployment_id = Uuid::now_v7();
+        let tool_call_event_id = Uuid::now_v7();
+
+        let mut mock_client = MockTensorZeroClient::new();
+
+        let expected_tool_call_event_id = tool_call_event_id;
+
+        mock_client
+            .expect_create_autopilot_event()
+            .withf(move |_sid, request| {
+                matches!(
+                    &request.payload,
+                    EventPayload::ToolResult {
+                        tool_call_event_id: tceid,
+                        outcome: ToolOutcome::Failure { message },
+                    } if *tceid == expected_tool_call_event_id && message == "Tool execution failed"
+                )
+            })
+            .returning(|sid, _| {
+                Ok(CreateEventResponse {
+                    event_id: Uuid::now_v7(),
+                    session_id: sid,
+                })
+            });
+
+        let params = PublishResultParams {
+            session_id,
+            deployment_id,
+            tool_call_event_id,
+            tool_call_id: "call_456".to_string(),
+            tool_name: "failing_tool".to_string(),
+            outcome: ToolOutcome::Failure {
+                message: "Tool execution failed".to_string(),
+            },
+        };
+
+        let result = publish_result(params, &mock_client).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_publish_result_client_error() {
+        let mut mock_client = MockTensorZeroClient::new();
+
+        mock_client
+            .expect_create_autopilot_event()
+            .returning(|_, _| Err(TensorZeroClientError::AutopilotUnavailable));
+
+        let params = PublishResultParams {
+            session_id: Uuid::now_v7(),
+            deployment_id: Uuid::now_v7(),
+            tool_call_event_id: Uuid::now_v7(),
+            tool_call_id: "call_789".to_string(),
+            tool_name: "some_tool".to_string(),
+            outcome: ToolOutcome::Success(AutopilotToolResult {
+                name: "some_tool".to_string(),
+                result: "{}".to_string(),
+                id: "call_789".to_string(),
+            }),
+        };
+
+        let result = publish_result(params, &mock_client).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to publish tool result")
+        );
+    }
+
+    // ===== Tests for metadata delegation =====
+
+    #[test]
+    fn test_client_tool_wrapper_metadata_delegation() {
+        assert_eq!(ClientToolWrapper::<TestTaskTool>::name(), "test_task_tool");
+        assert_eq!(
+            ClientToolWrapper::<TestTaskTool>::description(),
+            "A test task tool for unit testing"
+        );
+
+        // Verify schema can be generated
+        let schema = ClientToolWrapper::<TestTaskTool>::parameters_schema();
+        assert!(schema.is_ok());
+    }
+
+    #[test]
+    fn test_client_simple_tool_wrapper_metadata_delegation() {
+        assert_eq!(
+            ClientSimpleToolWrapper::<TestSimpleTool>::name(),
+            "test_simple_tool"
+        );
+        assert_eq!(
+            ClientSimpleToolWrapper::<TestSimpleTool>::description(),
+            "A test simple tool for unit testing"
+        );
+
+        // Verify schema can be generated
+        let schema = ClientSimpleToolWrapper::<TestSimpleTool>::parameters_schema();
+        assert!(schema.is_ok());
+    }
+
+    #[test]
+    fn test_client_tool_wrapper_side_info_type() {
+        // Verify that the wrapper wraps the SideInfo with AutopilotSideInfo
+        // This is a compile-time check - if it compiles, the types are correct
+        fn assert_side_info_type<T: ToolMetadata<SideInfo = AutopilotSideInfo<()>>>() {}
+        assert_side_info_type::<ClientToolWrapper<TestTaskTool>>();
+    }
+
+    #[test]
+    fn test_client_simple_tool_wrapper_side_info_type() {
+        // Verify that the wrapper wraps the SideInfo with AutopilotSideInfo
+        fn assert_side_info_type<T: ToolMetadata<SideInfo = AutopilotSideInfo<()>>>() {}
+        assert_side_info_type::<ClientSimpleToolWrapper<TestSimpleTool>>();
+    }
+}
