@@ -625,9 +625,7 @@ async fn write_production<T: Serialize + Send + Sync>(
     let rows_json = rows.as_json();
 
     if let Some(batch_sender) = batch {
-        batch_sender
-            .add_to_batch(table, rows_json?.into_owned())
-            .await?;
+        batch_sender.add_to_batch(table, rows_json?.into_owned())?;
         return Ok(());
     }
 
