@@ -293,6 +293,9 @@ pub enum ErrorDetails {
     DynamicJsonSchema {
         message: String,
     },
+    EvaluationRun {
+        message: String,
+    },
     DynamicTemplateLoad {
         internal: AnalysisError,
     },
@@ -646,6 +649,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::EvaluationRun { .. } => tracing::Level::ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => tracing::Level::ERROR,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
@@ -791,6 +795,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::EvaluationRun { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1132,6 +1137,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Error in compiling client-provided JSON schema: {message}"
                 )
+            }
+            ErrorDetails::EvaluationRun { message } => {
+                write!(f, "Evaluation run error: {message}")
             }
             ErrorDetails::DynamicEndpointNotFound { key_name } => {
                 write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
