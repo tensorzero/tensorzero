@@ -132,6 +132,7 @@
               "operations/manage-credentials",
               "operations/set-up-auth-for-tensorzero",
               "operations/enforce-custom-rate-limits",
+              "operations/centralize-auth-rate-limits-and-more",
               "operations/organize-your-configuration",
               "operations/export-opentelemetry-traces",
               "operations/export-prometheus-metrics",

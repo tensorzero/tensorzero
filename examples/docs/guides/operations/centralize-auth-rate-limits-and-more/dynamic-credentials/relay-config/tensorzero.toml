@@ -1,0 +1,3 @@
+# Require dynamic OpenAI credentials (forwarded from edge gateway)
+[provider_types.openai.defaults]
+api_key_location = "dynamic::openai_api_key"

@@ -1,0 +1,29 @@
+# This is a simplified example for learning purposes. Do not use this in production.
+# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+
+services:
+  edge-gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./edge-config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      relay-gateway:
+        condition: service_healthy
+
+  relay-gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./relay-config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3000/status
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s

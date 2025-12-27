@@ -6,7 +6,7 @@ with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )

@@ -2858,7 +2858,7 @@ def test_patch_sync_openai_client_sync_setup():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2880,7 +2880,7 @@ async def test_patch_sync_openai_client_async_setup():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2896,7 +2896,7 @@ def test_patch_openai_client_no_config():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2950,7 +2950,7 @@ async def test_patch_async_openai_client_sync_setup():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2972,7 +2972,7 @@ async def test_patch_async_openai_client_async_setup():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2995,7 +2995,7 @@ async def test_patch_openai_missing_await():
             messages=[
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "Write a haiku about TensorZero.",
                 }
             ],
         )
@@ -3023,7 +3023,7 @@ async def test_patch_async_openai_missing_await():
             messages=[
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "Write a haiku about TensorZero.",
                 }
             ],
         )

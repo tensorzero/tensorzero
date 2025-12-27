@@ -104,7 +104,7 @@ with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") a
             "messages": [
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "Write a haiku about TensorZero.",
                 }
             ]
         },
@@ -143,7 +143,7 @@ response = client.chat.completions.create(
     messages=[
         {
             "role": "user",
-            "content": "Write a haiku about artificial intelligence.",
+            "content": "Write a haiku about TensorZero.",
         }
     ],
 )
@@ -176,7 +176,7 @@ const response = await client.chat.completions.create({
   messages: [
     {
       role: "user",
-      content: "Write a haiku about artificial intelligence.",
+      content: "Write a haiku about TensorZero.",
     },
   ],
 });
@@ -205,7 +205,7 @@ curl -X POST "http://localhost:3000/inference" \
       "messages": [
         {
           "role": "user",
-          "content": "Write a haiku about artificial intelligence."
+          "content": "Write a haiku about TensorZero."
         }
       ]
     }

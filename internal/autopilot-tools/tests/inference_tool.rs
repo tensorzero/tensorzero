@@ -11,14 +11,14 @@ use tensorzero::{Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
-use autopilot_tools::tools::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
+use autopilot_tools::AutopilotToolSideInfo;
+use autopilot_tools::tools::{InferenceTool, InferenceToolParams};
 use common::{MockTensorZeroClient, create_mock_chat_response};
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
     // Create mock response
     let mock_response = create_mock_chat_response("Hello from mock!");
-    let mock_client = Arc::new(MockTensorZeroClient::new(mock_response));
 
     // Prepare test data
     let episode_id = Uuid::now_v7();
@@ -47,16 +47,33 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
         config_snapshot_hash: None, // Testing the non-hash path
     };
 
-    let side_info = InferenceToolSideInfo {
+    let side_info = AutopilotToolSideInfo {
         episode_id,
         session_id,
         tool_call_id,
         tool_call_event_id,
     };
 
+    // Create mock client with expectations
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_inference()
+        .withf(move |params| {
+            params.function_name == Some("test_function".to_string())
+                && params.episode_id == Some(episode_id)
+                && params.dryrun == Some(false)
+                && params.stream == Some(false)
+                && params.internal
+                && params.tags.get("autopilot_session_id") == Some(&session_id.to_string())
+                && params.tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
+                && params.tags.get("autopilot_tool_call_event_id")
+                    == Some(&tool_call_event_id.to_string())
+        })
+        .returning(move |_| Ok(mock_response.clone()));
+
     // Create the tool and context
     let tool = InferenceTool;
-    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = mock_client.clone();
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let ctx = SimpleToolContext::new(&pool, &t0_client);
 
     // Execute the tool
@@ -72,42 +89,12 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
 
     // The result should be an InferenceResponse (serialized as JSON)
     assert!(result.is_object(), "Result should be a JSON object");
-
-    // Verify inference() was called (not action())
-    let captured = mock_client
-        .get_captured_inference_params()
-        .await
-        .expect("inference should have been called");
-    assert!(
-        mock_client.get_captured_action_params().await.is_none(),
-        "action() should not have been called"
-    );
-
-    // Verify params
-    assert_eq!(captured.function_name, Some("test_function".to_string()));
-    assert_eq!(captured.episode_id, Some(episode_id));
-    assert_eq!(captured.dryrun, Some(false));
-    assert_eq!(captured.stream, Some(false));
-    assert!(captured.internal);
-    assert_eq!(
-        captured.tags.get("autopilot_session_id"),
-        Some(&session_id.to_string())
-    );
-    assert_eq!(
-        captured.tags.get("autopilot_tool_call_id"),
-        Some(&tool_call_id.to_string())
-    );
-    assert_eq!(
-        captured.tags.get("autopilot_tool_call_event_id"),
-        Some(&tool_call_event_id.to_string())
-    );
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
     // Create mock response
     let mock_response = create_mock_chat_response("Hello from action!");
-    let mock_client = Arc::new(MockTensorZeroClient::new(mock_response));
 
     // Prepare test data
     let episode_id = Uuid::now_v7();
@@ -139,16 +126,34 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
         config_snapshot_hash: Some(test_snapshot_hash.to_string()), // Testing the action path
     };
 
-    let side_info = InferenceToolSideInfo {
+    let side_info = AutopilotToolSideInfo {
         episode_id,
         session_id,
         tool_call_id,
         tool_call_event_id,
     };
 
+    // Create mock client with expectations for action()
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_action()
+        .withf(move |snapshot_hash, params| {
+            snapshot_hash.to_string() == test_snapshot_hash
+                && params.function_name == Some("test_function".to_string())
+                && params.episode_id == Some(episode_id)
+                && params.dryrun == Some(false)
+                && params.stream == Some(false)
+                && params.internal
+                && params.tags.get("autopilot_session_id") == Some(&session_id.to_string())
+                && params.tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
+                && params.tags.get("autopilot_tool_call_event_id")
+                    == Some(&tool_call_event_id.to_string())
+        })
+        .returning(move |_, _| Ok(mock_response.clone()));
+
     // Create the tool and context
     let tool = InferenceTool;
-    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = mock_client.clone();
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let ctx = SimpleToolContext::new(&pool, &t0_client);
 
     // Execute the tool
@@ -164,37 +169,4 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
 
     // The result should be an InferenceResponse (serialized as JSON)
     assert!(result.is_object(), "Result should be a JSON object");
-
-    // Verify action() was called (not inference())
-    let captured = mock_client
-        .get_captured_action_params()
-        .await
-        .expect("action should have been called");
-    assert!(
-        mock_client.get_captured_inference_params().await.is_none(),
-        "inference() should not have been called"
-    );
-
-    // Verify snapshot hash
-    let (snapshot_hash, params) = captured;
-    assert_eq!(snapshot_hash.to_string(), test_snapshot_hash);
-
-    // Verify params
-    assert_eq!(params.function_name, Some("test_function".to_string()));
-    assert_eq!(params.episode_id, Some(episode_id));
-    assert_eq!(params.dryrun, Some(false));
-    assert_eq!(params.stream, Some(false));
-    assert!(params.internal);
-    assert_eq!(
-        params.tags.get("autopilot_session_id"),
-        Some(&session_id.to_string())
-    );
-    assert_eq!(
-        params.tags.get("autopilot_tool_call_id"),
-        Some(&tool_call_id.to_string())
-    );
-    assert_eq!(
-        params.tags.get("autopilot_tool_call_event_id"),
-        Some(&tool_call_event_id.to_string())
-    );
 }

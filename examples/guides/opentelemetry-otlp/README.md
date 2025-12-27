@@ -26,7 +26,7 @@ curl -X POST "http://localhost:3000/inference" \
       "messages": [
         {
           "role": "user",
-          "content": "Write a haiku about artificial intelligence."
+          "content": "Write a haiku about TensorZero."
         }
       ]
     }

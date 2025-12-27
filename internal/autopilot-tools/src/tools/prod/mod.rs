@@ -3,6 +3,20 @@
 //! This module contains production-ready tools that can be used by autopilot
 //! to perform actions like inference, feedback, and other operations.
 
+mod create_datapoints;
+mod create_datapoints_from_inferences;
+mod delete_datapoints;
+mod get_datapoints;
 mod inference;
+mod list_datapoints;
+mod update_datapoints;
 
-pub use inference::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
+pub use create_datapoints::{CreateDatapointsTool, CreateDatapointsToolParams};
+pub use create_datapoints_from_inferences::{
+    CreateDatapointsFromInferencesTool, CreateDatapointsFromInferencesToolParams,
+};
+pub use delete_datapoints::{DeleteDatapointsTool, DeleteDatapointsToolParams};
+pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
+pub use inference::{InferenceTool, InferenceToolParams};
+pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
+pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};
