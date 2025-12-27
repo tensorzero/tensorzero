@@ -96,7 +96,7 @@ function DirectoryCardDescriptionError() {
       </TooltipTrigger>
       <TooltipContent>
         {message}
-        {status && ` (${status}`}
+        {status && ` (${status})`}
       </TooltipContent>
     </Tooltip>
   );
