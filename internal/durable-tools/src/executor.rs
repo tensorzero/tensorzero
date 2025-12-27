@@ -185,34 +185,18 @@ impl ToolExecutor {
     /// Spawn a tool by name with JSON parameters.
     ///
     /// This allows dynamic tool invocation without knowing the concrete type.
-    /// Side info defaults to `null` (compatible with `SideInfo = ()`).
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    /// * `episode_id` - The episode ID for this execution
     ///
     /// # Errors
     ///
     /// Returns an error if spawning the tool fails.
     pub async fn spawn_tool_by_name(
-        &self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        episode_id: Uuid,
-    ) -> anyhow::Result<SpawnResult> {
-        self.spawn_tool_by_name_with_side_info(
-            tool_name,
-            llm_params,
-            serde_json::json!(null),
-            episode_id,
-        )
-        .await
-    }
-
-    /// Spawn a tool by name with JSON parameters and explicit side info.
-    ///
-    /// This allows dynamic tool invocation without knowing the concrete type.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool_by_name_with_side_info(
         &self,
         tool_name: &str,
         llm_params: JsonValue,
@@ -315,37 +299,19 @@ impl ToolExecutor {
     ///
     /// This allows dynamic tool invocation without knowing the concrete type,
     /// while atomically enqueuing as part of a larger transaction.
-    /// Side info defaults to `null` (compatible with `SideInfo = ()`).
+    ///
+    /// # Arguments
+    ///
+    /// * `executor` - The executor to use (e.g., `&mut *tx` for a transaction)
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    /// * `episode_id` - The episode ID for this execution
     ///
     /// # Errors
     ///
     /// Returns an error if spawning the tool fails.
     pub async fn spawn_tool_by_name_with<'e, E>(
-        &self,
-        executor: E,
-        tool_name: &str,
-        llm_params: JsonValue,
-        episode_id: Uuid,
-    ) -> anyhow::Result<SpawnResult>
-    where
-        E: Executor<'e, Database = Postgres>,
-    {
-        self.spawn_tool_by_name_with_side_info_with(
-            executor,
-            tool_name,
-            llm_params,
-            serde_json::json!(null),
-            episode_id,
-        )
-        .await
-    }
-
-    /// Spawn a tool by name with explicit side info using a custom executor.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool_by_name_with_side_info_with<'e, E>(
         &self,
         executor: E,
         tool_name: &str,

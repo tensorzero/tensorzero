@@ -543,6 +543,7 @@ async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
         .spawn_tool_by_name(
             "echo_task",
             serde_json::json!({"message": "dynamic call"}),
+            serde_json::json!(null),
             episode_id,
         )
         .await;
@@ -636,18 +637,21 @@ impl TaskTool for MultiCallTaskTool {
         ctx.call_tool(
             "key_capturing_tool",
             serde_json::json!({"message": "first"}),
+            serde_json::json!(null),
         )
         .await?;
 
         ctx.call_tool(
             "key_capturing_tool",
             serde_json::json!({"message": "second"}),
+            serde_json::json!(null),
         )
         .await?;
 
         ctx.call_tool(
             "key_capturing_tool",
             serde_json::json!({"message": "third"}),
+            serde_json::json!(null),
         )
         .await?;
 
