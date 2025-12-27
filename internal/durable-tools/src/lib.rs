@@ -124,7 +124,7 @@
 //!     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 //!         // Call the search tool
 //!         let _search = ctx
-//!             .call_tool("search", serde_json::json!({"query": llm_params.topic}))
+//!             .call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null))
 //!             .await?;
 //!
 //!         // Use a checkpointed step
@@ -192,7 +192,7 @@ pub mod spawn {
 }
 
 // Re-export main types
-pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext};
+pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext, ToolHandle};
 pub use durable_tools_spawn::TaskToolParams;
 pub use error::{ToolError, ToolResult};
 pub use executor::{ToolExecutor, ToolExecutorBuilder};
