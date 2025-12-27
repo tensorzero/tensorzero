@@ -182,7 +182,7 @@ impl SpawnClient {
         };
 
         self.durable
-            .spawn_by_name_with(
+            .spawn_by_name_unchecked_with(
                 executor,
                 tool_name,
                 serde_json::to_value(wrapped_params)?,
