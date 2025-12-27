@@ -17,6 +17,7 @@
 //! - `GetDatapointsTool` - Gets specific datapoints by ID
 //! - `UpdateDatapointsTool` - Updates existing datapoints
 //! - `DeleteDatapointsTool` - Deletes datapoints by ID
+//! - `ListInferencesTool` - Lists inferences with filtering and pagination
 //!
 //! # Test Tools (e2e_tests feature)
 //!
@@ -128,6 +129,11 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .await?;
     visitor
         .visit_simple_tool::<tools::DeleteDatapointsTool>()
+        .await?;
+
+    // Inference query tools
+    visitor
+        .visit_simple_tool::<tools::ListInferencesTool>()
         .await?;
 
     // Test tools (e2e_tests feature)

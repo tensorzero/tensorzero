@@ -144,6 +144,13 @@ impl TensorZeroClient for MockTensorZeroClient {
     ) -> Result<tensorzero::DeleteDatapointsResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
+
+    async fn list_inferences(
+        &self,
+        _request: tensorzero::ListInferencesRequest,
+    ) -> Result<tensorzero::GetInferencesResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
 }
 
 /// Create a mock chat inference response with the given text content.
