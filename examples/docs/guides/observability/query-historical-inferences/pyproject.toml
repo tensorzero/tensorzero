@@ -1,0 +1,8 @@
+[project]
+name = "tensorzero-examples-docs-guides-observability-query-historical-inferences"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "tensorzero>=2025.8.3",
+]
