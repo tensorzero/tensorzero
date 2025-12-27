@@ -6,7 +6,7 @@ with OpenAI() as client:
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
