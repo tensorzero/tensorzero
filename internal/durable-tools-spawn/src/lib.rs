@@ -23,6 +23,7 @@
 //! client.spawn_tool_by_name(
 //!     "research",
 //!     serde_json::json!({"topic": "rust"}),
+//!     serde_json::json!(null),  // side_info (use json!(null) if not needed)
 //!     episode_id,
 //! ).await?;
 //! ```

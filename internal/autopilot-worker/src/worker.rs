@@ -3,13 +3,16 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use durable_tools::{TensorZeroClient, ToolExecutor, WorkerOptions};
+use async_trait::async_trait;
+use autopilot_tools::ToolVisitor;
+use durable_tools::{
+    SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, WorkerOptions,
+};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-#[cfg(feature = "e2e_tests")]
-use crate::wrapper::ClientToolWrapper;
+use crate::wrapper::{ClientSimpleToolWrapper, ClientToolWrapper};
 
 /// Configuration for the autopilot worker.
 pub struct AutopilotWorkerConfig {
@@ -73,18 +76,10 @@ impl AutopilotWorker {
 
     /// Register all autopilot tools with the executor.
     pub async fn register_tools(&self) -> Result<()> {
-        #[cfg(feature = "e2e_tests")]
-        {
-            // Register test tools
-
-            use autopilot_tools::tools::EchoTool;
-            self.executor
-                .register_task_tool::<ClientToolWrapper<EchoTool>>()
-                .await?;
-            // Additional test tools can be registered here
-        }
-
-        // Production tools will be registered here when implemented
+        let visitor = LocalToolVisitor {
+            executor: &self.executor,
+        };
+        autopilot_tools::for_each_tool(&visitor).await?;
         Ok(())
     }
 
@@ -103,6 +98,38 @@ impl AutopilotWorker {
                 worker.shutdown().await;
             }
         }
+        Ok(())
+    }
+}
+
+/// Visitor that registers tools for local execution on the autopilot worker.
+///
+/// All tools are wrapped to:
+/// 1. Inject [`AutopilotSideInfo`] around the tool's native `SideInfo`
+/// 2. Publish results to the autopilot API after execution
+///
+/// - TaskTools are wrapped in [`ClientToolWrapper`]
+/// - SimpleTools are wrapped in [`ClientSimpleToolWrapper`] which promotes them to TaskTools
+struct LocalToolVisitor<'a> {
+    executor: &'a ToolExecutor,
+}
+
+#[async_trait]
+impl ToolVisitor for LocalToolVisitor<'_> {
+    type Error = ToolError;
+
+    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError> {
+        self.executor
+            .register_task_tool::<ClientToolWrapper<T>>()
+            .await?;
+        Ok(())
+    }
+
+    async fn visit_simple_tool<T: SimpleTool + Default>(&self) -> Result<(), ToolError> {
+        // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
+        self.executor
+            .register_task_tool::<ClientSimpleToolWrapper<T>>()
+            .await?;
         Ok(())
     }
 }
