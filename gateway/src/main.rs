@@ -96,6 +96,7 @@ async fn main() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_clickhouse_migrations {
+        tracing::info!("Applying ClickHouse migrations...");
         manual_run_clickhouse_migrations()
             .await
             .log_err_pretty("Failed to run ClickHouse migrations")?;
@@ -104,6 +105,7 @@ async fn main() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_postgres_migrations {
+        tracing::info!("Applying PostgreSQL migrations...");
         manual_run_postgres_migrations()
             .await
             .log_err_pretty("Failed to run PostgreSQL migrations")?;

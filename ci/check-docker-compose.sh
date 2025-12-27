@@ -22,6 +22,23 @@ if [[ "$1" == *ui/fixtures/docker-compose.yml || \
 fi
 
 cd "$dir_path"
+
+# Check if docker-compose.yml has both postgres and gateway services, and apply migrations if so
+if docker compose -f "$1" config --services 2>/dev/null | grep -q "^postgres$" && \
+   docker compose -f "$1" config --services 2>/dev/null | grep -q "^gateway$"; then
+  echo "Postgres and gateway services detected in $1, applying migrations..."
+  docker compose -f "$1" run --rm gateway --run-postgres-migrations
+  migration_status=$?
+  if [ $migration_status -ne 0 ]; then
+    echo "Postgres migrations failed for $1 with status $migration_status"
+    docker compose -f "$1" down --timeout 0
+    exit $migration_status
+  fi
+  # Tear down the containers before running the full docker-compose up
+  # This is needed because we use ci/internal-network.yml later
+  docker compose -f "$1" down --timeout 0
+fi
+
 docker compose -f "$1" -f $script_path/internal-network.yml up --wait --wait-timeout 360
 status=$?
 if [ $status -ne 0 ]; then
