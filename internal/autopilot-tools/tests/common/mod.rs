@@ -7,15 +7,21 @@ use std::collections::HashMap;
 
 use durable_tools::{TensorZeroClient, TensorZeroClientError};
 use mockall::mock;
+use sqlx::types::chrono::Utc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
-    ListDatapointsRequest, Role, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
+    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListInferencesRequest, Role,
+    UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
-use tensorzero_core::inference::types::{ContentBlockChatOutput, Input, InputMessage, Text};
+use tensorzero_core::inference::types::{
+    ContentBlockChatOutput, Input, InputMessage, StoredInput, StoredInputMessage,
+    StoredInputMessageContent, Text,
+};
+use tensorzero_core::stored_inference::{StoredChatInference, StoredInference};
 use tensorzero_core::tool::DynamicToolParams;
 use uuid::Uuid;
 
@@ -88,6 +94,11 @@ mock! {
             dataset_name: String,
             ids: Vec<Uuid>,
         ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+        async fn list_inferences(
+            &self,
+            request: ListInferencesRequest,
+        ) -> Result<GetInferencesResponse, TensorZeroClientError>;
     }
 }
 
@@ -179,4 +190,47 @@ pub fn create_test_input(text: &str) -> Input {
             ],
         }],
     }
+}
+
+// ===== Inference Mock Response Factories =====
+
+/// Create a mock GetInferencesResponse with the given inferences.
+pub fn create_mock_get_inferences_response(
+    inferences: Vec<StoredInference>,
+) -> GetInferencesResponse {
+    GetInferencesResponse { inferences }
+}
+
+/// Create a mock stored chat inference for testing.
+pub fn create_mock_stored_chat_inference(
+    inference_id: Uuid,
+    function_name: &str,
+    variant_name: &str,
+) -> StoredInference {
+    StoredInference::Chat(StoredChatInference {
+        function_name: function_name.to_string(),
+        variant_name: variant_name.to_string(),
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "test input".to_string(),
+                })],
+            }],
+        },
+        output: vec![ContentBlockChatOutput::Text(Text {
+            text: "test output".to_string(),
+        })],
+        dispreferred_outputs: vec![],
+        timestamp: Utc::now(),
+        episode_id: Uuid::now_v7(),
+        inference_id,
+        tool_params: DynamicToolParams::default(),
+        tags: HashMap::new(),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: Some(100),
+        ttft_ms: Some(50),
+    })
 }

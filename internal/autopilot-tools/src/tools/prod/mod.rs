@@ -9,6 +9,7 @@ mod delete_datapoints;
 mod get_datapoints;
 mod inference;
 mod list_datapoints;
+mod list_inferences;
 mod update_datapoints;
 
 pub use create_datapoints::{CreateDatapointsTool, CreateDatapointsToolParams};
@@ -19,4 +20,5 @@ pub use delete_datapoints::{DeleteDatapointsTool, DeleteDatapointsToolParams};
 pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
 pub use inference::{InferenceTool, InferenceToolParams};
 pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
+pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};

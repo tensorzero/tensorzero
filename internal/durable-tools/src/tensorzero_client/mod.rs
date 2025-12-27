@@ -15,8 +15,16 @@ use tensorzero::{Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, T
 // Re-export datapoint and inference types needed for TensorZeroClient trait methods
 pub use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
-    ListDatapointsRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
+    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListInferencesRequest,
+    UpdateDatapointRequest, UpdateDatapointsResponse,
+};
+
+// Re-export inference query filter and ordering types
+pub use tensorzero::{
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+    InferenceOutputSource, OrderBy, OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter,
+    TimeComparisonOperator, TimeFilter,
 };
 
 // Re-export config snapshot types for historical inference
@@ -152,6 +160,14 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         dataset_name: String,
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+    // ========== Inference Query Operations ==========
+
+    /// List inferences with filtering and pagination.
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.

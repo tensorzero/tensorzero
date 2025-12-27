@@ -355,6 +355,11 @@ mod tests {
                 dataset_name: String,
                 ids: Vec<Uuid>,
             ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+            async fn list_inferences(
+                &self,
+                request: tensorzero::ListInferencesRequest,
+            ) -> Result<tensorzero::GetInferencesResponse, TensorZeroClientError>;
         }
     }
 

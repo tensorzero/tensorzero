@@ -221,6 +221,16 @@ pub use tensorzero_client::{
     UpdateDatapointsResponse,
 };
 
+// Re-export inference query types
+pub use tensorzero_client::{GetInferencesResponse, ListInferencesRequest};
+
+// Re-export inference query filter and ordering types
+pub use tensorzero_client::{
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+    InferenceOutputSource, OrderBy, OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter,
+    TimeComparisonOperator, TimeFilter,
+};
+
 // Re-export config snapshot types for historical inference
 pub use tensorzero_client::SnapshotHash;
 

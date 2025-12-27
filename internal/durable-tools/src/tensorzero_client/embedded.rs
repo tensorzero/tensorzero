@@ -6,9 +6,9 @@
 use async_trait::async_trait;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceOutput,
-    InferenceResponse, ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest,
-    UpdateDatapointsResponse,
+    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::datasets::v1::types::{
@@ -255,6 +255,21 @@ impl TensorZeroClient for EmbeddedClient {
         tensorzero_core::endpoints::datasets::v1::delete_datapoints(
             &self.app_state.clickhouse_connection_info,
             &dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    // ========== Inference Query Operations ==========
+
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
+            &self.app_state.config,
+            &self.app_state.clickhouse_connection_info,
             request,
         )
         .await
