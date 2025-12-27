@@ -4,11 +4,11 @@ test("playground should work for a chat function that sets 2 variants", async ({
   page,
 }) => {
   await page.goto("/playground?limit=2");
-  await expect(page.getByText("Select a function")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toBeVisible();
 
   // Select function 'write_haiku' by typing in the combobox
-  await page.getByText("Select a function").click();
-  await page.getByPlaceholder("Find a function...").fill("write_haiku");
+  await page.getByPlaceholder("Select function").click();
+  await page.getByPlaceholder("Select function").fill("write_haiku");
   await page.getByRole("option", { name: "write_haiku" }).click();
 
   // Select dataset 'foo'
@@ -24,7 +24,9 @@ test("playground should work for a chat function that sets 2 variants", async ({
   await page.getByRole("option", { name: "initial_prompt_haiku_3_5" }).click();
 
   // Verify the selections are visible
-  await expect(page.getByText("write_haiku")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toHaveValue(
+    "write_haiku",
+  );
   await expect(
     page.getByRole("combobox").filter({ hasText: "foo" }),
   ).toBeVisible();
@@ -56,11 +58,11 @@ test("playground should work for extract_entities JSON function with 2 variants"
   page,
 }) => {
   await page.goto("/playground?limit=2");
-  await expect(page.getByText("Select a function")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toBeVisible();
 
   // Select function 'extract_entities' by typing in the combobox
-  await page.getByText("Select a function").click();
-  await page.getByPlaceholder("Find a function...").fill("extract_entities");
+  await page.getByPlaceholder("Select function").click();
+  await page.getByPlaceholder("Select function").fill("extract_entities");
   await page.getByRole("option", { name: "extract_entities" }).click();
 
   // Select dataset 'foo'
@@ -78,7 +80,9 @@ test("playground should work for extract_entities JSON function with 2 variants"
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
 
   // Verify the selections are visible
-  await expect(page.getByText("extract_entities")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toHaveValue(
+    "extract_entities",
+  );
   await expect(
     page.getByRole("combobox").filter({ hasText: "foo" }),
   ).toBeVisible();
@@ -114,11 +118,11 @@ test("playground should work for image_judger function with images in input", as
   // (two of the datapoints have the same input, and could trample on each other's
   // cache entries)
   await page.goto("/playground?limit=1");
-  await expect(page.getByText("Select a function")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toBeVisible();
 
   // Select function 'image_judger' by typing in the combobox
-  await page.getByText("Select a function").click();
-  await page.getByPlaceholder("Find a function...").fill("image_judger");
+  await page.getByPlaceholder("Select function").click();
+  await page.getByPlaceholder("Select function").fill("image_judger");
   await page.getByRole("option", { name: "image_judger" }).click();
 
   // Select dataset 'baz'
@@ -131,7 +135,9 @@ test("playground should work for image_judger function with images in input", as
   await page.getByRole("option", { name: "honest_answer" }).click();
 
   // Verify the selections are visible
-  await expect(page.getByText("image_judger")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toHaveValue(
+    "image_judger",
+  );
   await expect(
     page.getByRole("combobox").filter({ hasText: "baz" }),
   ).toBeVisible();
@@ -163,7 +169,9 @@ test("playground should work for data with tools", async ({ page }) => {
   );
 
   // Verify the selections are visible
-  await expect(page.getByText("multi_hop_rag_agent")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toHaveValue(
+    "multi_hop_rag_agent",
+  );
   await expect(
     page.getByRole("combobox").filter({ hasText: "tool_call_examples" }),
   ).toBeVisible();
@@ -251,7 +259,9 @@ test("editing variants works @credentials", async ({ page }) => {
   );
 
   // Verify the selections are visible
-  await expect(page.getByText("write_haiku")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toHaveValue(
+    "write_haiku",
+  );
   await expect(
     page.getByRole("combobox").filter({ hasText: "foo" }),
   ).toBeVisible();
@@ -308,11 +318,11 @@ test("playground should work with tool config ID different from display name @cr
   // Before the fix, the tool filtering logic would incorrectly compare these values
   // directly, causing tools not to be filtered properly.
   await page.goto("/playground?limit=1");
-  await expect(page.getByText("Select a function")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toBeVisible();
 
   // Select function 'multi_hop_rag_agent'
-  await page.getByText("Select a function").click();
-  await page.getByPlaceholder("Find a function...").fill("multi_hop_rag_agent");
+  await page.getByPlaceholder("Select function").click();
+  await page.getByPlaceholder("Select function").fill("multi_hop_rag_agent");
   await page.getByRole("option", { name: "multi_hop_rag_agent" }).click();
 
   // Select dataset 'tool_call_examples'
@@ -325,7 +335,9 @@ test("playground should work with tool config ID different from display name @cr
   await page.getByRole("option", { name: "baseline" }).click();
 
   // Verify the selections are visible
-  await expect(page.getByText("multi_hop_rag_agent")).toBeVisible();
+  await expect(page.getByPlaceholder("Select function")).toHaveValue(
+    "multi_hop_rag_agent",
+  );
   await expect(
     page.getByRole("combobox").filter({ hasText: "tool_call_examples" }),
   ).toBeVisible();

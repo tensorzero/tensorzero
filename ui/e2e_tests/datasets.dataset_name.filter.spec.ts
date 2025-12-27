@@ -29,7 +29,7 @@ test.describe("Dataset Filtering", () => {
     await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
 
     // Select function using FunctionSelector (combobox pattern)
-    await page.getByRole("combobox").click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "extract_entities" }).click();
 
     // Apply filters
@@ -53,7 +53,7 @@ test.describe("Dataset Filtering", () => {
     await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
 
     // Select write_haiku function
-    await page.getByRole("combobox").click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Apply filters
