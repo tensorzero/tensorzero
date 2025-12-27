@@ -7,6 +7,8 @@ use clap::{Args, Parser};
 use std::path::PathBuf;
 use tensorzero_core::observability::LogFormat;
 
+use crate::ApiKeyExpirySetting;
+
 #[derive(Parser, Debug)]
 #[command(version, about)]
 pub struct GatewayArgs {
@@ -40,9 +42,14 @@ pub struct EarlyExitCommands {
     #[arg(long)]
     pub run_postgres_migrations: bool,
 
-    /// Create an API key then exit.
-    #[arg(long)]
-    pub create_api_key: bool,
+    /// Create an API key with an optional expiration time, then exit.
+    #[arg(
+        long,
+        num_args = 0..=1,
+        default_missing_value = "infinite",
+        value_name = "EXPIRATION_DATETIME"
+    )]
+    pub create_api_key: Option<ApiKeyExpirySetting>,
 
     /// Disable an API key using its public ID then exit.
     #[arg(long, value_name = "PUBLIC_ID")]

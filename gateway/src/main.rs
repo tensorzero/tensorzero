@@ -2,6 +2,7 @@ use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
 use secrecy::ExposeSecret;
+use sqlx::types::chrono::{DateTime, Utc};
 use std::fmt::Display;
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
@@ -37,7 +38,42 @@ fn print_key(key: &secrecy::SecretString) {
     println!("{}", key.expose_secret());
 }
 
-async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
+/// Specify the expiration policy for newly-created API keys.
+#[derive(Debug, Clone)]
+enum ApiKeyExpirySetting {
+    /// Denotes an API key that has no expiration datetime.
+    Infinite,
+    /// Denotes an API key that is set to expire at the corresponding datetime.
+    Finite(DateTime<Utc>),
+}
+
+impl From<&str> for ApiKeyExpirySetting {
+    fn from(v: &str) -> Self {
+        if v == "infinite" {
+            Self::Infinite
+        } else {
+            v.parse::<DateTime<Utc>>()
+                .map_or(Self::Infinite, Self::Finite)
+        }
+    }
+}
+
+impl std::fmt::Display for ApiKeyExpirySetting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ApiKeyExpirySetting::Infinite => "infinite".to_string(),
+                ApiKeyExpirySetting::Finite(dt) => dt.to_string(),
+            }
+        )
+    }
+}
+
+async fn handle_create_api_key(
+    expiration: ApiKeyExpirySetting,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Read the Postgres URL from the environment
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
@@ -46,9 +82,19 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
     let pool = sqlx::PgPool::connect(&postgres_url).await?;
 
     // Create the key with default organization and workspace
-    let key =
-        tensorzero_auth::postgres::create_key(DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE, None, &pool)
-            .await?;
+    let key = tensorzero_auth::postgres::create_key(
+        DEFAULT_ORGANIZATION,
+        DEFAULT_WORKSPACE,
+        None,
+        match expiration {
+            ApiKeyExpirySetting::Infinite => None,
+            ApiKeyExpirySetting::Finite(datetime) => Some(datetime),
+        },
+        &pool,
+    )
+    .await?;
+
+    tracing::debug!("Created API key with expiration: {expiration}");
 
     // Print only the API key to stdout for easy machine parsing
     print_key(&key);
@@ -80,8 +126,8 @@ async fn main() -> Result<(), ExitCode> {
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
-    if args.early_exit_commands.create_api_key {
-        handle_create_api_key()
+    if let Some(expiration) = args.early_exit_commands.create_api_key {
+        handle_create_api_key(expiration)
             .await
             .log_err_pretty("Failed to create API key")?;
         return Ok(());
