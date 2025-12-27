@@ -8,7 +8,10 @@ use std::{
 };
 
 use crate::{
-    config::{provider_types::ProviderTypesConfig, skip_credential_validation},
+    config::{
+        provider_types::{AzureDefaults, ProviderTypesConfig},
+        skip_credential_validation,
+    },
     error::{Error, ErrorDetails},
     model::{
         Credential, CredentialLocation, CredentialLocationWithFallback, UninitializedProviderConfig,
@@ -663,22 +666,25 @@ fn load_credential_with_fallback(
     location_with_fallback: &crate::model::CredentialLocationWithFallback,
     provider_type: impl Display + Copy,
 ) -> Result<Credential, Error> {
-    if provider_type.to_string().to_lowercase().contains("azure") {
-        if let CredentialLocation::Env(default_key) = location_with_fallback.default_location(){
-            if default_key == "AZURE_OPENAI_API_KEY" {
-                tracing::warn!(
-                    "Deprecation Warning: The default credential for Azure will be `AZURE_API_KEY` \
-                    instead of `AZURE_OPENAI_API_KEY` in the future. Using `AZURE_OPENAI_API_KEY` for now."
-                );
-            }
-        }
-    }
     let default_credential =
         load_credential(location_with_fallback.default_location(), provider_type)?;
 
     // If fallback location is specified, construct a WithFallback credential
     if let Some(fallback_location) = location_with_fallback.fallback_location() {
         let fallback_credential = load_credential(fallback_location, provider_type)?;
+
+        // Warn if using the default Azure config and AZURE_OPENAI_API_KEY is set
+        if provider_type.to_string().to_lowercase() == "azure" {
+            let azure_default = AzureDefaults::default().api_key_location;
+            if *location_with_fallback == azure_default && env::var("AZURE_OPENAI_API_KEY").is_ok()
+            {
+                tracing::warn!(
+                    "Deprecation Warning: The environment variable `AZURE_OPENAI_API_KEY` is deprecated \
+                    and will be removed in a future release. Please set `AZURE_API_KEY` instead."
+                );
+            }
+        }
+
         Ok(Credential::WithFallback {
             default: Box::new(default_credential),
             fallback: Box::new(fallback_credential),
