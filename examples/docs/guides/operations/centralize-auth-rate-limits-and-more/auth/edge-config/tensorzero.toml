@@ -1,0 +1,3 @@
+[gateway.relay]
+gateway_url = "http://relay-gateway:3000"  # base URL configured in Docker Compose
+api_key_location = "env::TENSORZERO_RELAY_API_KEY"
