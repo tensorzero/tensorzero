@@ -214,6 +214,16 @@ pub use tensorzero_client::{
     ListSessionsParams, ListSessionsResponse, ToolOutcome,
 };
 
+// Re-export datapoint types for CRUD operations
+pub use tensorzero_client::{
+    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
+    DeleteDatapointsResponse, GetDatapointsResponse, ListDatapointsRequest, UpdateDatapointRequest,
+    UpdateDatapointsResponse,
+};
+
+// Re-export config snapshot types for historical inference
+pub use tensorzero_client::SnapshotHash;
+
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
     Client, ClientInferenceParams, InferenceParams, InferenceResponse, Input, InputMessage,

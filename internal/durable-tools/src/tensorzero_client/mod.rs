@@ -10,13 +10,17 @@ mod embedded;
 use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tensorzero::{
-    Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, ClientInferenceParams,
-    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
-    DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse, ListDatapointsRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+use tensorzero::{Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, TensorZeroError};
+
+// Re-export datapoint and inference types needed for TensorZeroClient trait methods
+pub use tensorzero::{
+    ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
+    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
+    ListDatapointsRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
-use tensorzero_core::config::snapshot::SnapshotHash;
+
+// Re-export config snapshot types for historical inference
+pub use tensorzero_core::config::snapshot::SnapshotHash;
 use url::Url;
 use uuid::Uuid;
 
