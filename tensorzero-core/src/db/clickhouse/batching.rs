@@ -89,11 +89,7 @@ impl BatchSender {
         })
     }
 
-    pub async fn add_to_batch(
-        &self,
-        table_name: TableName,
-        rows: Vec<String>,
-    ) -> Result<(), Error> {
+    pub fn add_to_batch(&self, table_name: TableName, rows: Vec<String>) -> Result<(), Error> {
         let Some(channels) = &self.channels else {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: format!("Batch sender dropped. {IMPOSSIBLE_ERROR_MESSAGE}"),

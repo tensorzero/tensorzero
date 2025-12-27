@@ -45,7 +45,7 @@ impl FakeClickHouseClient {
     }
 }
 
-async fn write_fake<T: serde::Serialize + Send + Sync>(
+fn write_fake<T: serde::Serialize + Send + Sync>(
     rows: Rows<'_, T>,
     table: TableName,
     tables: &mut RwLockWriteGuard<'_, HashMap<String, Vec<serde_json::Value>>>,
@@ -95,7 +95,6 @@ impl ClickHouseClient for FakeClickHouseClient {
             table,
             &mut self.data.write().await,
         )
-        .await
     }
 
     async fn write_non_batched_internal(
@@ -108,7 +107,6 @@ impl ClickHouseClient for FakeClickHouseClient {
             table,
             &mut self.data.write().await,
         )
-        .await
     }
 
     async fn run_query_synchronous(
