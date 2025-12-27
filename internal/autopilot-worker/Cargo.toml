@@ -6,13 +6,14 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-e2e_tests = []
+e2e_tests = ["autopilot-tools/e2e_tests"]
 
 [dependencies]
 # Internal crates
 durable-tools = { path = "../durable-tools" }
 tensorzero-core = { path = "../../tensorzero-core" }
 autopilot-client = { path = "../autopilot-client" }
+autopilot-tools = { path = "../autopilot-tools" }
 
 # Async runtime
 tokio.workspace = true

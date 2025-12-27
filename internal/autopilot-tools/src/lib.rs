@@ -1,50 +1,65 @@
-//! Client-side tool definitions for TensorZero Autopilot.
+//! Tool definitions for TensorZero Autopilot.
 //!
-//! This crate re-exports tool traits from `durable-tools` for defining tools
-//! that are executed client-side (outside of the autopilot server).
+//! This crate provides tool traits and test tool implementations for the autopilot system.
 //!
 //! # Overview
 //!
-//! Client tools differ from server-side tools in that:
-//! - The tool metadata (name, description, schema) is defined here
-//! - The actual execution happens on the client
-//! - The server writes a `ToolCall` event and waits for a `ToolResult` event
+//! - Re-exports tool traits from `durable-tools` for defining custom tools
+//! - Provides test tools (when `e2e_tests` feature is enabled) for testing the autopilot infrastructure
 //!
-//! # Example
+//! # Test Tools (e2e_tests feature)
 //!
-//! ```ignore
-//! use autopilot_tools::ToolMetadata;
-//! use schemars::{Schema, schema_for};
-//! use serde::{Deserialize, Serialize};
-//! use std::borrow::Cow;
+//! When the `e2e_tests` feature is enabled, this crate provides several test tools:
 //!
-//! #[derive(Serialize, Deserialize, schemars::JsonSchema)]
-//! struct ReadFileParams {
-//!     path: String,
-//! }
+//! ## TaskTools
+//! - `EchoTool` - Echoes back input message
+//! - `SlowTool` - Sleeps for configurable duration
+//! - `FailingTool` - Always returns an error
+//! - `FlakyTool` - Fails deterministically based on attempt number
+//! - `PanicTool` - Panics with the given message
 //!
-//! #[derive(Default)]
-//! struct ReadFileTool;
-//!
-//! impl ToolMetadata for ReadFileTool {
-//!     fn name() -> Cow<'static, str> {
-//!         Cow::Borrowed("read_file")
-//!     }
-//!
-//!     fn description() -> Cow<'static, str> {
-//!         Cow::Borrowed("Read the contents of a file at the given path")
-//!     }
-//!
-//!     fn parameters_schema() -> ToolResult<Schema> {
-//!         Ok(schema_for!(ReadFileParams))
-//!     }
-//!
-//!     type LlmParams = ReadFileParams;
-//! }
-//!
-//! // Use durable_tools::ToolRegistry for registration
-//! ```
-//! TODO: implement client-side tools in this crate, export as a registry.
+//! ## SimpleTools
+//! - `GoodSimpleTool` - Echoes back input message
+//! - `ErrorSimpleTool` - Always returns an error
+//! - `SlowSimpleTool` - Sleeps for configurable duration
+
+#[cfg(feature = "e2e_tests")]
+pub mod tools;
 
 // Re-export from durable-tools
-pub use durable_tools::{ErasedTool, ToolMetadata, ToolRegistry};
+pub use durable_tools::{
+    ErasedTool, SimpleTool, SimpleToolContext, TaskTool, ToolContext, ToolError, ToolMetadata,
+    ToolRegistry, ToolResult,
+};
+
+/// Register production tools with the given registry.
+///
+/// Currently this registers no tools, as there are no production tools yet.
+pub fn register_production_tools(_registry: &mut ToolRegistry) -> ToolResult<()> {
+    // No production tools yet
+    Ok(())
+}
+
+/// Register all test tools with the given registry.
+///
+/// This registers both TaskTools and SimpleTools used for e2e testing.
+///
+/// # Errors
+///
+/// Returns an error if any tool registration fails.
+#[cfg(feature = "e2e_tests")]
+pub fn register_test_tools(registry: &mut ToolRegistry) -> ToolResult<()> {
+    // TaskTools
+    registry.register_task_tool::<tools::EchoTool>()?;
+    registry.register_task_tool::<tools::SlowTool>()?;
+    registry.register_task_tool::<tools::FailingTool>()?;
+    registry.register_task_tool::<tools::FlakyTool>()?;
+    registry.register_task_tool::<tools::PanicTool>()?;
+
+    // SimpleTools
+    registry.register_simple_tool::<tools::GoodSimpleTool>()?;
+    registry.register_simple_tool::<tools::ErrorSimpleTool>()?;
+    registry.register_simple_tool::<tools::SlowSimpleTool>()?;
+
+    Ok(())
+}
