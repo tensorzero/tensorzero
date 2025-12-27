@@ -18,11 +18,12 @@ pub mod clickhouse;
 pub mod datasets;
 pub mod evaluation_queries;
 pub mod feedback;
-pub mod inference_stats;
+pub mod inference_count;
 pub mod inferences;
 pub mod model_inferences;
 pub mod postgres;
 pub mod stored_datapoint;
+pub mod workflow_evaluation_queries;
 
 #[async_trait]
 pub trait ClickHouseConnection:
@@ -64,7 +65,7 @@ pub trait SelectQueries {
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimeWindow {
@@ -74,6 +75,21 @@ pub enum TimeWindow {
     Week,
     Month,
     Cumulative,
+}
+
+impl TimeWindow {
+    /// Converts the time window to the ClickHouse interval function string.
+    /// Returns the string used in dateTrunc and other time functions.
+    pub fn to_clickhouse_string(&self) -> &'static str {
+        match self {
+            TimeWindow::Minute => "minute",
+            TimeWindow::Hour => "hour",
+            TimeWindow::Day => "day",
+            TimeWindow::Week => "week",
+            TimeWindow::Month => "month",
+            TimeWindow::Cumulative => "year", // Cumulative uses a full year as fallback
+        }
+    }
 }
 
 #[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
@@ -177,12 +193,12 @@ pub struct ReturnTicketsReceipt {
     pub balance: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct TableBounds {
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_id: Option<Uuid>,
 }
 

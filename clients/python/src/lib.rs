@@ -95,7 +95,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // the only place where we actually try to enable OTEL.
     let _delayed_enable = tokio_block_on_without_gil(
         m.py(),
-        tensorzero_rust::observability::setup_observability(LogFormat::Pretty),
+        tensorzero_rust::observability::setup_observability(LogFormat::Pretty, false),
     )
     .map_err(|e| convert_error(m.py(), TensorZeroError::Other { source: e.into() }))?;
     m.add_class::<BaseTensorZeroGateway>()?;
@@ -305,7 +305,7 @@ const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -331,6 +331,8 @@ impl BaseTensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
+        otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
@@ -357,6 +359,8 @@ impl BaseTensorZeroGateway {
             extra_headers,
             include_original_response.unwrap_or(false),
             otlp_traces_extra_headers,
+            otlp_traces_extra_attributes,
+            otlp_traces_extra_resources,
             internal_dynamic_variant_config,
         )?;
         serialize_to_dict(this.py(), params)
@@ -430,6 +434,8 @@ impl BaseTensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: bool,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
+        otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
@@ -540,6 +546,8 @@ impl BaseTensorZeroGateway {
             extra_headers,
             internal_dynamic_variant_config,
             otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
+            otlp_traces_extra_attributes: otlp_traces_extra_attributes.unwrap_or_default(),
+            otlp_traces_extra_resources: otlp_traces_extra_resources.unwrap_or_default(),
             api_key: None,
         })
     }
@@ -737,7 +745,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -773,6 +781,12 @@ impl TensorZeroGateway {
     /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
+    /// :param otlp_traces_extra_attributes: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+    ///                                      Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-attributes-".
+    ///                                      Example: {"My-Attribute": "My-Value"} becomes header "tensorzero-otlp-traces-extra-attribute-My-Attribute: My-Value"
+    /// :param otlp_traces_extra_resources: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+    ///                                     Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-resources-".
+    ///                                     Example: {"My-Resource": "My-Value"} becomes header "tensorzero-otlp-traces-extra-resource-My-Resource: My-Value"
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns a generator that yields InferenceChunks as they come in.
     fn inference(
@@ -800,6 +814,8 @@ impl TensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
+        otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
@@ -827,6 +843,8 @@ impl TensorZeroGateway {
             extra_headers,
             include_original_response.unwrap_or(false),
             otlp_traces_extra_headers,
+            otlp_traces_extra_attributes,
+            otlp_traces_extra_resources,
             internal_dynamic_variant_config,
         )?);
 
@@ -1274,9 +1292,10 @@ impl TensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to create datapoints in.
     /// :param params: The parameters specifying which inferences to convert to datapoints.
-    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
-    ///                         If not provided, by default we will use the original inference output as the datapoint's output
-    ///                         (equivalent to `inference`).
+    ///                 For InferenceIds: pass `{"type": "inference_ids", "inference_ids": [...], "output_source": "inference"}`
+    ///                 For InferenceQuery: pass `{"type": "inference_query", "function_name": "...", "output_source": "inference", ...}`
+    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+    ///                       Can also be specified inside `params.output_source`. If both are provided, an error is raised.
     /// :return: A list of UUIDs of the created datapoints.
     #[pyo3(signature = (*, dataset_name, params, output_source=None))]
     fn create_datapoints_from_inferences(
@@ -1286,18 +1305,23 @@ impl TensorZeroGateway {
         output_source: Option<String>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
+
+        // Handle output_source: can be passed as parameter or inside params, but not both
+        if let Some(source) = &output_source {
+            let existing = params.getattr("output_source").ok();
+            if let Some(existing) = existing
+                && !existing.is_none()
+            {
+                return Err(PyValueError::new_err(
+                    "You must specify `output_source` either at the root or inside the `params` parameter but not both.",
+                ));
+            }
+            params.setattr("output_source", source)?;
+        }
+
         let params = deserialize_from_pyobj(this.py(), &params)?;
 
-        let output_source_enum = output_source
-            .map(|s| {
-                serde_json::from_value(serde_json::Value::String(s)).map_err(|e| {
-                    PyValueError::new_err(format!("Failed to parse output source: {e:?}"))
-                })
-            })
-            .transpose()?;
-
-        let fut =
-            client.create_datapoints_from_inferences(dataset_name, params, output_source_enum);
+        let fut = client.create_datapoints_from_inferences(dataset_name, params);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
@@ -1643,12 +1667,14 @@ impl TensorZeroGateway {
     ///
     /// :param stored_samples: A list of stored samples to render.
     /// :param variants: A map from function name to variant name.
+    /// :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
     /// :return: A list of rendered samples.
-    #[pyo3(signature = (*, stored_samples, variants))]
+    #[pyo3(signature = (*, stored_samples, variants, concurrency=None))]
     fn experimental_render_samples(
         this: PyRef<'_, Self>,
         stored_samples: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
+        concurrency: Option<usize>,
     ) -> PyResult<Vec<RenderedSample>> {
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
@@ -1670,7 +1696,7 @@ impl TensorZeroGateway {
                 deserialize_from_stored_sample(this.py(), x, config)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.experimental_render_samples(stored_samples, variants);
+        let fut = client.experimental_render_samples(stored_samples, variants, concurrency);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
@@ -1887,7 +1913,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1950,6 +1976,8 @@ impl AsyncTensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
+        otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
@@ -1976,6 +2004,8 @@ impl AsyncTensorZeroGateway {
             extra_headers,
             include_original_response.unwrap_or(false),
             otlp_traces_extra_headers,
+            otlp_traces_extra_attributes,
+            otlp_traces_extra_resources,
             internal_dynamic_variant_config,
         )?;
         let client = this.as_super().client.clone();
@@ -2504,9 +2534,10 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to create the datapoints from.
     /// :param params: The parameters specifying which inferences to convert to datapoints.
-    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
-    ///                         If not provided, by default we will use the original inference output as the datapoint's output
-    ///                         (equivalent to `inference`).
+    ///                 For InferenceIds: pass `{"type": "inference_ids", "inference_ids": [...], "output_source": "inference"}`
+    ///                 For InferenceQuery: pass `{"type": "inference_query", "function_name": "...", "output_source": "inference", ...}`
+    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+    ///                       Can also be specified inside `params.output_source`. If both are provided, an error is raised.
     /// :return: A `CreateDatapointsResponse` object containing the IDs of the newly-created datapoints.
     #[pyo3(signature = (*, dataset_name, params, output_source=None))]
     fn create_datapoints_from_inferences<'a>(
@@ -2516,18 +2547,25 @@ impl AsyncTensorZeroGateway {
         output_source: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
+
+        // Handle output_source: can be passed as parameter or inside params, but not both
+        if let Some(source) = &output_source {
+            let existing = params.getattr("output_source").ok();
+            if let Some(existing) = existing
+                && !existing.is_none()
+            {
+                return Err(PyValueError::new_err(
+                    "You must specify `output_source` either at the root or inside the `params` parameter but not both.",
+                ));
+            }
+            params.setattr("output_source", source)?;
+        }
+
         let params = deserialize_from_pyobj(this.py(), &params)?;
-        let output_source_enum = output_source
-            .map(|s| {
-                serde_json::from_value(serde_json::Value::String(s)).map_err(|e| {
-                    PyValueError::new_err(format!("Failed to parse output source: {e:?}"))
-                })
-            })
-            .transpose()?;
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .create_datapoints_from_inferences(dataset_name, params, output_source_enum)
+                .create_datapoints_from_inferences(dataset_name, params)
                 .await;
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
@@ -2923,12 +2961,14 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param stored_samples: A list of stored samples to render.
     /// :param variants: A mapping from function name to variant name.
+    /// :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
     /// :return: A list of rendered samples.
-    #[pyo3(signature = (*, stored_samples, variants))]
+    #[pyo3(signature = (*, stored_samples, variants, concurrency=None))]
     fn experimental_render_samples<'a>(
         this: PyRef<'a, Self>,
         stored_samples: Vec<Bound<'a, PyAny>>,
         variants: HashMap<String, String>,
+        concurrency: Option<usize>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
@@ -2951,7 +2991,7 @@ impl AsyncTensorZeroGateway {
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .experimental_render_samples(stored_samples, variants)
+                .experimental_render_samples(stored_samples, variants, concurrency)
                 .await;
             Python::attach(|py| match res {
                 Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),

@@ -55,7 +55,7 @@ pub async fn embeddings(
     }
     let embedding_model = config
         .embedding_models
-        .get(&params.model_name)
+        .get(&params.model_name, config.gateway.relay.as_ref())
         .await?
         .ok_or_else(|| {
             Error::new(ErrorDetails::ModelNotFound {

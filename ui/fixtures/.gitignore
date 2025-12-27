@@ -1,1 +1,3 @@
 load_complete.marker
+*.jsonl
+.env-gateway

@@ -14,7 +14,7 @@ use axum::{
 use rand::seq::SliceRandom;
 
 use tensorzero_core::{
-    config::Config,
+    config::{Config, provider_types::ProviderTypesConfig},
     db::{
         clickhouse::ClickHouseConnectionInfo,
         clickhouse::query_builder::{InferenceFilter, OrderBy},
@@ -109,7 +109,8 @@ pub async fn launch_optimization_workflow(
         .await?;
     let variants = HashMap::from([(function_name.clone(), template_variant_name.clone())]);
     // Template the inferences and fetch any network resources needed
-    let rendered_inferences = render_samples(config.clone(), stored_inferences, variants).await?;
+    let rendered_inferences =
+        render_samples(config.clone(), stored_inferences, variants, None).await?;
 
     // Drop any examples with output that is None
     let rendered_inferences = rendered_inferences
@@ -119,12 +120,10 @@ pub async fn launch_optimization_workflow(
 
     // Split the inferences into train and val sets
     let (train_examples, val_examples) = split_examples(rendered_inferences, val_fraction)?;
-    let default_credentials = &config.models.default_credentials;
 
     // Launch the optimization job
     optimizer_config
-        .load(default_credentials)
-        .await?
+        .load()
         .launch(
             http_client,
             train_examples,
@@ -161,9 +160,7 @@ pub async fn launch_optimization(
         val_samples: val_examples,
         optimization_config: optimizer_config,
     } = params;
-    let optimizer = optimizer_config
-        .load(&config.models.default_credentials)
-        .await?;
+    let optimizer = optimizer_config.load();
     optimizer
         .launch(
             http_client,
@@ -186,7 +183,13 @@ pub async fn poll_optimization_handler(
 ) -> Result<Response<Body>, Error> {
     let job_handle = OptimizationJobHandle::from_base64_urlencoded(&job_handle)?;
     let default_credentials = &config.models.default_credentials;
-    let info = poll_optimization(&http_client, &job_handle, default_credentials).await?;
+    let info = poll_optimization(
+        &http_client,
+        &job_handle,
+        default_credentials,
+        &config.provider_types,
+    )
+    .await?;
     Ok(Json(info).into_response())
 }
 
@@ -196,12 +199,14 @@ pub async fn poll_optimization(
     http_client: &TensorzeroHttpClient,
     job_handle: &OptimizationJobHandle,
     default_credentials: &ProviderTypeDefaultCredentials,
+    provider_types: &ProviderTypesConfig,
 ) -> Result<OptimizationJobInfo, Error> {
     job_handle
         .poll(
             http_client,
             &InferenceCredentials::default(),
             default_credentials,
+            provider_types,
         )
         .await
 }

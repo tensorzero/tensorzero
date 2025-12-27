@@ -12,6 +12,8 @@ use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
+use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
+use durable_tools::EmbeddedInferenceClient;
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
@@ -54,13 +56,25 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
+    let pool = sqlx::PgPool::connect(&postgres_url).await?;
+
+    let disabled_time = tensorzero_auth::postgres::disable_key(public_id, &pool).await?;
+
+    tracing::info!("Deleted API key {public_id} at {disabled_time}");
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), ExitCode> {
     let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     // We start with empty headers and update them after loading the config
-    let delayed_log_config = observability::setup_observability(args.log_format)
+    let delayed_log_config = observability::setup_observability(args.log_format, true)
         .await
         .log_err_pretty("Failed to set up logs")?;
 
@@ -70,6 +84,14 @@ async fn main() -> Result<(), ExitCode> {
         handle_create_api_key()
             .await
             .log_err_pretty("Failed to create API key")?;
+        return Ok(());
+    }
+
+    if let Some(public_id) = args.early_exit_commands.disable_api_key {
+        handle_disable_api_key(&public_id)
+            .await
+            .log_err_pretty("Failed to delete API key")?;
+
         return Ok(());
     }
 
@@ -90,9 +112,6 @@ async fn main() -> Result<(), ExitCode> {
     }
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
-
-    let metrics_handle =
-        observability::setup_metrics().log_err_pretty("Failed to set up metrics")?;
 
     // Handle `--config-file` or `--default-config`
     let (unwritten_config, glob) = match (args.default_config, args.config_file) {
@@ -132,6 +151,9 @@ async fn main() -> Result<(), ExitCode> {
             )
         }
     };
+
+    let metrics_handle = observability::setup_metrics(Some(&unwritten_config.gateway.metrics))
+        .log_err_pretty("Failed to set up metrics")?;
 
     if unwritten_config.gateway.debug {
         delayed_log_config
@@ -204,6 +226,9 @@ async fn main() -> Result<(), ExitCode> {
         .await
         .log_err_pretty("Failed to initialize AppState")?;
 
+    // Start autopilot worker if configured
+    let autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle).await?;
+
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
         get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
@@ -221,6 +246,11 @@ async fn main() -> Result<(), ExitCode> {
         return Err(ExitCode::from(1));
     }
     let base_path = base_path.trim_end_matches("/");
+
+    if args.early_exit_commands.validate_and_exit {
+        tracing::info!("Config file is valid. Exiting.");
+        return Ok(());
+    }
 
     let (router, in_flight_requests_counter) = router::build_axum_router(
         base_path,
@@ -282,6 +312,11 @@ async fn main() -> Result<(), ExitCode> {
     } else {
         tracing::info!("├ Batch Writes: disabled");
     }
+    if config.gateway.observability.async_writes {
+        tracing::info!("├ Async Writes: enabled");
+    } else {
+        tracing::info!("├ Async Writes: disabled");
+    }
 
     // Print whether postgres is enabled
     tracing::info!("├ Postgres: {postgres_enabled_pretty}");
@@ -295,6 +330,13 @@ async fn main() -> Result<(), ExitCode> {
         tracing::info!("├ Relay mode: enabled (gateway_url = {gateway_url})");
     } else {
         tracing::info!("├ Relay mode: disabled");
+    }
+
+    // Print whether Autopilot Worker is enabled
+    if autopilot_worker_handle.is_some() {
+        tracing::info!("├ Autopilot Worker: enabled");
+    } else {
+        tracing::info!("├ Autopilot Worker: disabled");
     }
 
     // Print whether OpenTelemetry is enabled
@@ -431,6 +473,53 @@ pub async fn shutdown_signal() {
             tracing::info!("Received SIGHUP signal");
         }
     };
+}
+
+/// Spawn the autopilot worker if environment variables are set.
+async fn spawn_autopilot_worker_if_configured(
+    gateway_handle: &gateway::GatewayHandle,
+) -> Result<Option<AutopilotWorkerHandle>, ExitCode> {
+    // Only start if autopilot client is configured
+    if gateway_handle.app_state.autopilot_client.is_none() {
+        tracing::debug!("Autopilot worker not configured: TENSORZERO_AUTOPILOT_API_KEY not set");
+        return Ok(None);
+    }
+
+    // Only start if postgres is enabled (needed for durable task queue)
+    let pool = match &gateway_handle.app_state.postgres_connection_info {
+        PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
+        PostgresConnectionInfo::Disabled => {
+            tracing::error!(
+                "TENSORZERO_AUTOPILOT_API_KEY env var set, but Postgres is not enabled."
+            );
+            return Err(ExitCode::from(1));
+        }
+        #[cfg(test)]
+        #[expect(unreachable_patterns)]
+        _ => return Ok(None),
+    };
+
+    // Create an embedded inference client using the gateway's state
+    let inference_client = std::sync::Arc::new(EmbeddedInferenceClient::new(
+        gateway_handle.app_state.config.clone(),
+        gateway_handle.app_state.http_client.clone(),
+        gateway_handle.app_state.clickhouse_connection_info.clone(),
+        gateway_handle.app_state.postgres_connection_info.clone(),
+        gateway_handle.app_state.deferred_tasks.clone(),
+        gateway_handle.app_state.autopilot_client.clone(),
+    ));
+
+    let config = AutopilotWorkerConfig::new(pool, inference_client);
+
+    Ok(Some(
+        spawn_autopilot_worker(
+            &gateway_handle.app_state.deferred_tasks,
+            gateway_handle.cancel_token.clone(),
+            config,
+        )
+        .await
+        .log_err_pretty("Failed to spawn autopilot worker")?,
+    ))
 }
 
 /// ┌──────────────────────────────────────────────────────────────────────────┐

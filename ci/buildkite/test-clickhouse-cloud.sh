@@ -10,10 +10,12 @@ export CLICKHOUSE_API_KEY=$(buildkite-agent secret get clickhouse_api_key)
 export CLICKHOUSE_KEY_SECRET=$(buildkite-agent secret get clickhouse_key_secret)
 export CLICKHOUSE_USERNAME=$(buildkite-agent secret get clickhouse_username)
 export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get clickhouse_password)
+export R2_ACCESS_KEY_ID=$(buildkite-agent secret get R2_ACCESS_KEY_ID)
+export R2_SECRET_ACCESS_KEY=$(buildkite-agent secret get R2_SECRET_ACCESS_KEY)
 # We concatenate our clickhouse instance prefix, along with our chosen clickhouse id (e.g. 'dev-tensorzero-e2e-tests-instance-' and '0'), to form the instance name
 # Then, we look up the instance url for this name, and add basic-auth credentials to the url to get our full TENSORZERO_CLICKHOUSE_URL
 # The 'export' statements go on separate lines to prevent the return code from the $() command from being ignored
-CURL_OUTPUT=$(curl --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services)
+CURL_OUTPUT=$(curl --retry 3 --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services)
 echo "ClickHouse API response: $CURL_OUTPUT"
 TENSORZERO_CLICKHOUSE_URL=$(echo "$CURL_OUTPUT" | jq -r ".result[] | select(.name == \"${CLICKHOUSE_PREFIX}${CLICKHOUSE_ID}\") | .endpoints[] | select(.protocol == \"https\") | \"https://$CLICKHOUSE_USERNAME:$CLICKHOUSE_PASSWORD@\" + .host + \":\" + (.port | tostring)")
 export TENSORZERO_CLICKHOUSE_URL
@@ -78,7 +80,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
 curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 source $HOME/.local/bin/env
 curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
-uv run ./ui/fixtures/download-fixtures.py
+uv run ./ui/fixtures/download-large-fixtures.py
+uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
 
 # Start postgres service for migrations

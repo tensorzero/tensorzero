@@ -6,8 +6,13 @@ use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
+use crate::http::TensorzeroResponseWrapper;
 use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
+use crate::observability::{
+    TENSORZERO_OTLP_ATTRIBUTE_PREFIX, TENSORZERO_OTLP_HEADERS_PREFIX,
+    TENSORZERO_OTLP_RESOURCE_PREFIX,
+};
 use crate::utils::gateway::DropWrapper;
 use crate::{
     config::Config,
@@ -83,8 +88,8 @@ pub struct HTTPGateway {
 impl HTTPGateway {
     pub async fn check_http_response(
         &self,
-        resp: Result<reqwest::Response, reqwest::Error>,
-    ) -> Result<reqwest::Response, TensorZeroError> {
+        resp: Result<TensorzeroResponseWrapper, reqwest::Error>,
+    ) -> Result<TensorzeroResponseWrapper, TensorZeroError> {
         let resp = resp.map_err(|e| {
             if e.is_timeout() {
                 TensorZeroError::RequestTimeout
@@ -327,6 +332,7 @@ pub enum TensorZeroError {
         source: TensorZeroInternalError,
     },
     RequestTimeout,
+    #[cfg(feature = "git")]
     Git {
         #[source]
         source: git2::Error,
@@ -349,6 +355,7 @@ impl Display for TensorZeroError {
             }
             TensorZeroError::Other { source } => write!(f, "{source}"),
             TensorZeroError::RequestTimeout => write!(f, "HTTP Error: request timed out"),
+            #[cfg(feature = "git")]
             TensorZeroError::Git { source } => write!(f, "Failed to get git info: {source}"),
         }
     }
@@ -559,8 +566,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                let config = unwritten_config
-                    .into_config(&clickhouse_connection_info)
+                let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
                     .await
                     .map_err(|e| {
                         ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
@@ -717,8 +723,7 @@ impl ClientBuilder {
             })?;
 
         // Convert config_load_info into Config with hash
-        let config = unwritten_config
-            .into_config(&clickhouse_connection_info)
+        let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
@@ -1039,7 +1044,17 @@ impl Client {
 
                 // Add OTLP trace headers with the required prefix
                 for (key, value) in &params.otlp_traces_extra_headers {
-                    let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
+                    let header_name = format!("{TENSORZERO_OTLP_HEADERS_PREFIX}{key}");
+                    builder = builder.header(header_name, value);
+                }
+
+                for (key, value) in &params.otlp_traces_extra_attributes {
+                    let header_name = format!("{TENSORZERO_OTLP_ATTRIBUTE_PREFIX}{key}");
+                    builder = builder.header(header_name, value);
+                }
+
+                for (key, value) in &params.otlp_traces_extra_resources {
+                    let header_name = format!("{TENSORZERO_OTLP_RESOURCE_PREFIX}{key}");
                     builder = builder.header(header_name, value);
                 }
 
@@ -1092,7 +1107,8 @@ impl Client {
                         None,
                     ))
                     .await
-                    .map_err(err_to_http)?;
+                    .map_err(err_to_http)?
+                    .output;
                     match res {
                         InferenceOutput::NonStreaming(response) => {
                             Ok(InferenceOutput::NonStreaming(response))

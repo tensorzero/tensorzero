@@ -26,12 +26,48 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::functions::internal::get_function_metrics_handler),
         )
         .route(
-            "/internal/functions/{function_name}/inference-stats",
-            get(endpoints::internal::inference_stats::get_inference_stats_handler),
+            "/internal/functions/{function_name}/variant_performances",
+            get(endpoints::functions::internal::get_variant_performances_handler),
         )
         .route(
-            "/internal/functions/{function_name}/inference-stats/{metric_name}",
-            get(endpoints::internal::inference_stats::get_inference_with_feedback_stats_handler),
+            "/internal/functions/inference_counts",
+            get(endpoints::internal::inference_count::list_functions_with_inference_count_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/inference_count",
+            get(endpoints::internal::inference_count::get_inference_count_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/inference_count/{metric_name}",
+            get(endpoints::internal::inference_count::get_inference_with_feedback_count_handler),
+        )
+        .route(
+            "/internal/feedback/{target_id}",
+            get(endpoints::feedback::internal::get_feedback_by_target_id_handler),
+        )
+        .route(
+            "/internal/feedback/{target_id}/bounds",
+            get(endpoints::feedback::internal::get_feedback_bounds_by_target_id_handler),
+        )
+        .route(
+            "/internal/feedback/{target_id}/latest_id_by_metric",
+            get(endpoints::feedback::internal::get_latest_feedback_id_by_metric_handler),
+        )
+        .route(
+            "/internal/feedback/{target_id}/count",
+            get(endpoints::feedback::internal::count_feedback_by_target_id_handler),
+        )
+        .route(
+            "/internal/feedback/timeseries",
+            get(endpoints::feedback::internal::get_cumulative_feedback_timeseries_handler),
+        )
+        .route(
+            "/internal/feedback/{inference_id}/demonstrations",
+            get(endpoints::feedback::internal::get_demonstration_feedback_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/throughput_by_variant",
+            get(endpoints::internal::inference_count::get_function_throughput_by_variant_handler),
         )
         .route(
             "/internal/model_inferences/{inference_id}",
@@ -42,7 +78,7 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::internal::inference_metadata::get_inference_metadata_handler),
         )
         .route(
-            "/internal/ui-config",
+            "/internal/ui_config",
             get(endpoints::ui::get_config::ui_config_handler),
         )
         .route(
@@ -54,8 +90,13 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::episodes::internal::query_episode_table_bounds_handler),
         )
         .route(
+            "/internal/episodes/{episode_id}/inference_count",
+            get(endpoints::episodes::internal::get_episode_inference_count_handler),
+        )
+        .route(
             "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::insert_from_existing_datapoint_handler),
+            #[expect(deprecated)]
+            post(endpoints::datasets::deprecated_create_datapoints_from_inferences_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/clone",
@@ -84,12 +125,83 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
          )
         // Evaluation endpoints
         .route(
-            "/internal/evaluations/run-stats",
-            get(endpoints::internal::evaluations::get_evaluation_run_stats_handler),
+            "/internal/evaluations/runs/count",
+            get(endpoints::internal::evaluations::count_evaluation_runs_handler),
         )
         .route(
-                        "/internal/evaluations/runs",
+            "/internal/evaluations/datapoint_count",
+            get(endpoints::internal::evaluations::count_datapoints_handler),
+        )
+        .route(
+            "/internal/evaluations/runs",
             get(endpoints::internal::evaluations::list_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/evaluations/runs/search",
+            get(endpoints::internal::evaluations::search_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/evaluations/run_infos",
+            get(endpoints::internal::evaluations::get_evaluation_run_infos_handler),
+        )
+        .route(
+            "/internal/evaluations/datapoints/{datapoint_id}/run_infos",
+            get(endpoints::internal::evaluations::get_evaluation_run_infos_for_datapoint_handler),
+        )
+        .route(
+            "/internal/evaluations/statistics",
+            get(endpoints::internal::evaluations::get_evaluation_statistics_handler),
+        )
+        .route(
+            "/internal/evaluations/results",
+            get(endpoints::internal::evaluations::get_evaluation_results_handler),
+        )
+        // Workflow evaluation endpoints
+        .route(
+            "/internal/workflow_evaluations/projects",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_projects_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/projects/count",
+            get(
+                endpoints::workflow_evaluations::internal::get_workflow_evaluation_project_count_handler,
+            ),
+        )
+        .route(
+            "/internal/workflow_evaluations/list_runs",
+            get(endpoints::workflow_evaluations::internal::list_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/get_runs",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/runs/count",
+            get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/runs/search",
+            get(endpoints::workflow_evaluations::internal::search_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/run_statistics",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_run_statistics_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/episodes_by_task_name",
+            get(endpoints::workflow_evaluations::internal::list_workflow_evaluation_run_episodes_by_task_name_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/episodes_by_task_name/count",
+            get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_run_episodes_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/run_episodes",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_run_episodes_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/run_episodes/count",
+            get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_run_episodes_total_handler),
         )
         .route(
             "/internal/models/usage",
@@ -98,5 +210,39 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/models/latency",
             get(endpoints::internal::models::get_model_latency_handler),
+        )
+        // Config snapshot endpoints
+        .route(
+            "/internal/config",
+            get(endpoints::internal::config::get_live_config_handler)
+                .post(endpoints::internal::config::write_config_handler),
+        )
+        .route(
+            "/internal/config/{hash}",
+            get(endpoints::internal::config::get_config_by_hash_handler),
+        )
+        // Inference count endpoint
+        .route(
+            "/internal/inferences/count",
+            post(endpoints::internal::count_inferences::count_inferences_handler),
+        )
+        // Action endpoint for executing with historical config snapshots
+        .route(
+            "/internal/action",
+            post(endpoints::internal::action::action_handler),
+        )
+        // Autopilot proxy endpoints
+        .route(
+            "/internal/autopilot/v1/sessions",
+            get(endpoints::internal::autopilot::list_sessions_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/events",
+            get(endpoints::internal::autopilot::list_events_handler)
+                .post(endpoints::internal::autopilot::create_event_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/events/stream",
+            get(endpoints::internal::autopilot::stream_events_handler),
         )
 }

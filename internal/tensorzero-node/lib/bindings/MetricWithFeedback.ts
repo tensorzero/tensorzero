@@ -4,6 +4,10 @@ import type { MetricType } from "./MetricType";
 export type MetricWithFeedback = {
   function_name: string;
   metric_name: string;
-  metric_type: MetricType;
+  /**
+   * The type of metric (boolean, float, demonstration).
+   * None if the metric is not in the current config (e.g., was deleted).
+   */
+  metric_type?: MetricType;
   feedback_count: number;
 };

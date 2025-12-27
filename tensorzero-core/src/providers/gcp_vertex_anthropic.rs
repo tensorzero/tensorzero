@@ -12,7 +12,7 @@ use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::cache::ModelProviderRequest;
-use crate::config::skip_credential_validation;
+use crate::config::{e2e_skip_credential_validation, skip_credential_validation};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
@@ -66,14 +66,11 @@ pub struct GCPVertexAnthropicProvider {
 }
 
 fn handle_gcp_error(
-    // This is only used in test mode
-    #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
     provider_type: ProviderType,
     e: impl Display + Debug,
 ) -> Result<GCPVertexCredentials, Error> {
     if skip_credential_validation() {
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
+        if e2e_skip_credential_validation() {
             tracing::warn!(
                 "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
             );
@@ -385,7 +382,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -428,8 +425,6 @@ fn stream_anthropic(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

@@ -1,5 +1,10 @@
 # Feedback via post-commit hook
 
+> [!CAUTION]
+>
+> This example is deprecated and unmaintained.
+> Use at your own risk.
+
 This is very early-stage work and should be considered experimental.
 
 In this directory we include a Rust project that uses tree-sitter to parse diff hunks into syntax trees and the Zhang–Shasha algorithm to compute tree-edit-distance metrics:

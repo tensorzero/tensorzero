@@ -31,12 +31,19 @@ services:
       target: gateway
     volumes:
       - ./config:/app/config:ro
+      # Mount GCP JWT key file (optional - only needed for GCP providers)
+      - ${GCP_CREDENTIALS_PATH:-../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
+      GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+      # For mock server during SFT jobs and batch inference (optional, set via host env or .env)
+      TENSORZERO_INTERNAL_MOCK_PROVIDER_API: ${TENSORZERO_INTERNAL_MOCK_PROVIDER_API:-}
     env_file:
       - .env
-      - .env-gateway
+      - path: .env-gateway
+        required: false
     ports:
       - "3000:3000"
     extra_hosts:
@@ -70,10 +77,12 @@ services:
       - .:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PASSWORD: chpassword
-      CLICKHOUSE_USER: chuser
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PASSWORD=chpassword
+      - CLICKHOUSE_USER=chuser
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
     depends_on:
       gateway:
         condition: service_healthy
@@ -105,9 +114,6 @@ services:
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
-      # For mock server during SFT jobs
-      OPENAI_BASE_URL: http://mock-inference-provider:3030/openai
-      TOGETHER_BASE_URL: http://mock-inference-provider:3030/together
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro
@@ -124,5 +130,5 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-      mock-inference-provider:
+      mock-provider-api:
         condition: service_healthy

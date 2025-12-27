@@ -14,6 +14,8 @@ use tokio::{
     sync::mpsc::UnboundedReceiver,
 };
 
+pub mod relay;
+
 /// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
 #[allow(dead_code)]
 pub async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
@@ -100,8 +102,20 @@ pub async fn start_gateway_on_random_port(
         .parse::<u16>()
         .unwrap();
 
+    // The gateway is configured above to bind to 0.0.0.0:0 so it can listen on all interfaces,
+    // but tests must choose an appropriate address to connect to. On Windows, connecting to
+    // 0.0.0.0 fails with AddrNotAvailable, so use loopback there and 0.0.0.0 elsewhere.
     ChildData {
-        addr: format!("0.0.0.0:{port}").parse::<SocketAddr>().unwrap(),
+        addr: format!(
+            "{}:{port}",
+            if cfg!(target_os = "windows") {
+                "127.0.0.1"
+            } else {
+                "0.0.0.0"
+            }
+        )
+        .parse::<SocketAddr>()
+        .unwrap(),
         output,
         stdout: line_rx,
         child,

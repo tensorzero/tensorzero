@@ -159,6 +159,7 @@ function SupervisedFineTuningImpl(props: LoaderData) {
                   ? "secondary"
                   : "destructive"
             }
+            className="capitalize"
           >
             {jobInfo.status === "pending" ? "running" : jobInfo.status}
           </Badge>

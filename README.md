@@ -99,12 +99,12 @@ from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
-        # Try other providers easily: "anthropic::claude-3-7-sonnet-20250219"
+        # Try other providers easily: "anthropic::claude-sonnet-4-5-20250929"
         input={
             "messages": [
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "Write a haiku about TensorZero.",
                 }
             ]
         },
@@ -139,11 +139,11 @@ patch_openai_client(
 
 response = client.chat.completions.create(
     model="tensorzero::model_name::openai::gpt-4o-mini",
-    # Try other providers easily: "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219"
+    # Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929"
     messages=[
         {
             "role": "user",
-            "content": "Write a haiku about artificial intelligence.",
+            "content": "Write a haiku about TensorZero.",
         }
     ],
 )
@@ -172,11 +172,11 @@ const client = new OpenAI({
 
 const response = await client.chat.completions.create({
   model: "tensorzero::model_name::openai::gpt-4o-mini",
-  // Try other providers easily: "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219"
+  // Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929"
   messages: [
     {
       role: "user",
-      content: "Write a haiku about artificial intelligence.",
+      content: "Write a haiku about TensorZero.",
     },
   ],
 });
@@ -205,7 +205,7 @@ curl -X POST "http://localhost:3000/inference" \
       "messages": [
         {
           "role": "user",
-          "content": "Write a haiku about artificial intelligence."
+          "content": "Write a haiku about TensorZero."
         }
       ]
     }
@@ -301,15 +301,13 @@ Boost performance by dynamically updating your prompts with relevant examples, c
   </tr>
   <tr>
     <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl">Dynamic In-Context Learning (DICL)</a></b></td>
-    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#chain-of-thought-cot">Chain-of-Thought (CoT)</a></b></td>
+    <td width="50%" align="center" valign="middle"></td>
   </tr>
   <tr>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d8489e92-ce93-46ac-9aab-289ce19bb67d"></td>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/ea13d73c-76a4-4e0c-a35b-0c648f898311" height="320"></td>
+    <td width="50%" align="center" valign="middle"></td>
   </tr>
 </table>
-
-_More coming soon..._
 
 <br>
 

@@ -11,6 +11,8 @@ use crate::{
     config::{
         provider_types::{AzureDefaults, ProviderTypesConfig},
         skip_credential_validation,
+        e2e_skip_credential_validation, provider_types::ProviderTypesConfig,
+        skip_credential_validation, with_skip_credential_validation,
     },
     error::{Error, ErrorDetails},
     model::{
@@ -35,6 +37,7 @@ use crate::{
         vllm::VLLMCredentials,
         xai::XAICredentials,
     },
+    relay::TensorzeroRelay,
 };
 use lazy_static::lazy_static;
 use secrecy::SecretString;
@@ -231,19 +234,35 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
         })
     }
 
-    pub async fn get(&self, key: &str) -> Result<Option<CowNoClone<'_, T>>, Error> {
+    pub async fn get(
+        &self,
+        key: &str,
+        relay: Option<&TensorzeroRelay>,
+    ) -> Result<Option<CowNoClone<'_, T>>, Error> {
         if let Some(model_config) = self.table.get(key) {
             return Ok(Some(CowNoClone::Borrowed(model_config)));
         }
         if let Some(shorthand) = check_shorthand(T::SHORTHAND_MODEL_PREFIXES, key) {
-            return Ok(Some(CowNoClone::Owned(
+            let model = if relay.is_some() {
+                let default_credentials = self.default_credentials.clone();
+                with_skip_credential_validation(async move {
+                    T::from_shorthand(
+                        shorthand.provider_type,
+                        shorthand.model_name,
+                        &default_credentials,
+                    )
+                    .await
+                })
+                .await?
+            } else {
                 T::from_shorthand(
                     shorthand.provider_type,
                     shorthand.model_name,
                     &self.default_credentials,
                 )
-                .await?,
-            )));
+                .await?
+            };
+            return Ok(Some(CowNoClone::Owned(model)));
         }
         Ok(None)
     }
@@ -564,8 +583,7 @@ fn load_credential(
             Ok(value) => Ok(Credential::Static(SecretString::from(value))),
             Err(_) => {
                 if skip_credential_validation() {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
+                    if e2e_skip_credential_validation() {
                         tracing::warn!(
                             "You are missing the credentials required for a model provider of type {provider_type} (environment variable `{key_name}` is unset), so the associated tests will likely fail.",
                         );
@@ -585,8 +603,7 @@ fn load_credential(
                 Ok(path) => path,
                 Err(_) => {
                     if skip_credential_validation() {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
+                        if e2e_skip_credential_validation() {
                             tracing::warn!(
                                 "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
                                 env_key,
@@ -609,8 +626,7 @@ fn load_credential(
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                 Err(e) => {
                     if skip_credential_validation() {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
+                        if e2e_skip_credential_validation() {
                             tracing::warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                                 provider_type,
@@ -631,8 +647,7 @@ fn load_credential(
             Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
             Err(e) => {
                 if skip_credential_validation() {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
+                    if e2e_skip_credential_validation() {
                         tracing::warn!(
                             "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                             provider_type,

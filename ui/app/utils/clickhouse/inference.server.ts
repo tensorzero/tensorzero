@@ -1,8 +1,5 @@
-import { CountSchema } from "./common";
 import { data } from "react-router";
 import type { StoredInference, InferenceFilter } from "~/types/tensorzero";
-import { getClickhouseClient } from "./client.server";
-import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "../tensorzero.server";
 import { isTensorZeroServerError } from "../tensorzero";
@@ -31,7 +28,7 @@ export async function listInferencesWithPagination(params: {
   function_name?: string;
   variant_name?: string;
   episode_id?: string;
-  filter?: InferenceFilter;
+  filters?: InferenceFilter;
   search_query?: string;
 }): Promise<ListInferencesResult> {
   const {
@@ -41,7 +38,7 @@ export async function listInferencesWithPagination(params: {
     function_name,
     variant_name,
     episode_id,
-    filter,
+    filters,
     search_query,
   } = params;
 
@@ -61,7 +58,7 @@ export async function listInferencesWithPagination(params: {
       function_name,
       variant_name,
       episode_id,
-      filter,
+      filters,
       search_query_experimental: search_query,
     });
 
@@ -92,7 +89,7 @@ export async function countInferencesForFunction(
   function_name: string,
 ): Promise<number> {
   const client = getTensorZeroClient();
-  const result = await client.getInferenceStats(function_name);
+  const result = await client.getInferenceCount(function_name);
   return Number(result.inference_count);
 }
 
@@ -101,55 +98,8 @@ export async function countInferencesForVariant(
   variant_name: string,
 ): Promise<number> {
   const client = getTensorZeroClient();
-  const result = await client.getInferenceStats(function_name, {
+  const result = await client.getInferenceCount(function_name, {
     variantName: variant_name,
   });
   return Number(result.inference_count);
-}
-
-export async function countInferencesForEpisode(
-  episode_id: string,
-): Promise<number> {
-  const query = `SELECT toUInt32(COUNT()) AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { episode_id },
-  });
-  const rows = await resultSet.json<{ count: string }>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
-}
-
-const functionCountInfoSchema = z.object({
-  function_name: z.string(),
-  max_timestamp: z.string().datetime(),
-  count: z.number(),
-});
-
-export type FunctionCountInfo = z.infer<typeof functionCountInfoSchema>;
-
-export async function countInferencesByFunction(): Promise<
-  FunctionCountInfo[]
-> {
-  const query = `SELECT
-        function_name,
-        formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%SZ') AS max_timestamp,
-        toUInt32(count()) AS count
-    FROM (
-        SELECT function_name, timestamp
-        FROM ChatInference
-        UNION ALL
-        SELECT function_name, timestamp
-        FROM JsonInference
-    )
-    GROUP BY function_name
-    ORDER BY max_timestamp DESC`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await resultSet.json<FunctionCountInfo[]>();
-  const validatedRows = z.array(functionCountInfoSchema).parse(rows);
-  return validatedRows;
 }

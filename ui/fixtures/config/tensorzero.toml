@@ -283,7 +283,7 @@ user_schema = "functions/judge_answer/user_schema.json"
 output_schema = "functions/judge_answer/output_schema.json"
 
 [functions.judge_answer.variants."gpt-4.1-mini"]
-type = "experimental_chain_of_thought"
+type = "chat_completion"
 model = "openai::gpt-4.1-mini"
 system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
 user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
@@ -409,7 +409,6 @@ type = "float"
 level = "inference"
 optimize = "max"
 
-
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  EVALUATIONS                               │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -499,3 +498,15 @@ system_instructions = "evaluations/images/matches_reference/system_instructions.
 temperature = 0
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                               PROVIDER TYPES                               │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[provider_types.fireworks.sft]
+account_id = "viraj-ebfe5a"
+
+[provider_types.gcp_vertex_gemini.sft]
+project_id = "tensorzero-public"
+region = "us-central1"
+bucket_name = "tensorzero-e2e-tests"

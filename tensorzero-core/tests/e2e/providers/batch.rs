@@ -1450,7 +1450,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         .collect();
     assert_eq!(inference_ids.len(), 5);
     let mut inference_id_to_index: HashMap<Uuid, usize> =
-        inference_ids.iter().cloned().zip(0..).collect();
+        inference_ids.iter().copied().zip(0..).collect();
 
     let response_episode_ids = response_json
         .get("episode_ids")

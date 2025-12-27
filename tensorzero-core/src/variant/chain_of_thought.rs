@@ -1,7 +1,11 @@
+//! DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+//! Use `chat_completion` with reasoning instead.
+
 use chrono::Duration;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -19,10 +23,13 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::relay::TensorzeroRelay;
 use crate::variant::chat_completion::{ChatCompletionConfig, UninitializedChatCompletionConfig};
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
+/// DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+/// Use `chat_completion` with reasoning instead.
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ChainOfThoughtConfig {
@@ -30,7 +37,9 @@ pub struct ChainOfThoughtConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+/// DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+/// Use `chat_completion` with reasoning instead.
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChainOfThoughtConfig {
@@ -153,6 +162,7 @@ impl Variant for ChainOfThoughtConfig {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         if !matches!(function.as_ref(), FunctionConfig::Json(_)) {
             return Err(ErrorDetails::UnsupportedVariantForFunctionType {
@@ -172,6 +182,7 @@ impl Variant for ChainOfThoughtConfig {
                 function_name,
                 variant_name,
                 global_outbound_http_timeout,
+                relay,
             )
             .await
     }

@@ -1,21 +1,20 @@
 [package]
 name = "cursorzero"
-version = "0.1.0"
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88.0"
+license = "Apache-2.0"
 
-[lints]
-workspace = true
+[workspace]
 
 [dependencies]
-git2 = { workspace = true }
-tokio = { workspace = true }
-clap = { workspace = true }
-anyhow = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-tree-sitter = "0.25.9"
+git2 = { version = "0.20.3", default-features = false }
+tokio = { version = "1.48.0", features = ["full"] }
+clap = { version = "4.5.53", features = ["derive"] }
+anyhow = "1.0.99"
+tracing = { version = "0.1.43", features = ["log"] }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
+tree-sitter = "0.26.3"
 tree-sitter-rust = "0.24.0"
 tree-sitter-typescript = "0.23.2"
 tree-sitter-python = "0.25.0"
@@ -23,13 +22,13 @@ tree-sitter-toml-ng = "0.7.0"
 tree-sitter-md = "0.5.1"
 tensorzero = { path = "../../../../clients/rust" }
 tensorzero-core = { path = "../../../../tensorzero-core" }
-chrono.workspace = true
-uuid.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+chrono = { version = "0.4.41", features = ["serde"] }
+uuid = { version = "1.19.0", features = ["serde", "v7"] }
+serde = { version = "1.0.204", features = ["derive", "rc"] }
+serde_json = { version = "1.0.143", features = ["preserve_order"] }
 regex = "1.12.2"
-url.workspace = true
+url = "2.5.4"
 rayon = "1.11.0"
-futures = { workspace = true }
+futures = "0.3.30"
 
 [dev-dependencies]

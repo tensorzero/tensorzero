@@ -21,9 +21,9 @@ import { toEvaluationDatapointUrl } from "~/utils/urls";
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
   EvaluationRunInfo,
-  EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
+import type { EvaluationStatistics } from "~/types/tensorzero";
 import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
@@ -231,7 +231,7 @@ interface EvaluationTableProps {
 
 interface MetricValueInfo {
   value: string;
-  evaluator_inference_id: string | null;
+  evaluator_inference_id?: string;
   inference_id: string;
   is_human_feedback: boolean;
 }
@@ -325,7 +325,7 @@ export function EvaluationTable({
       if (runData && result.metric_name) {
         runData.metrics.set(result.metric_name, {
           value: result.metric_value,
-          evaluator_inference_id: result.evaluator_inference_id,
+          evaluator_inference_id: result.evaluator_inference_id ?? undefined,
           inference_id: result.inference_id,
           is_human_feedback: result.is_human_feedback,
         });

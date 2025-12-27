@@ -23,7 +23,7 @@ interface EvaluationFeedbackEditorProps {
   originalValue: string;
   evalRunId: string;
   variantName: string;
-  evaluatorInferenceId: string | null;
+  evaluatorInferenceId?: string;
 }
 
 // Allow users to edit the feedback provided by an LLM Judge.

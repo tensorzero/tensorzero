@@ -3,9 +3,10 @@ ARG DEBUG_BUILD=0
 
 # ========== base ==========
 
-FROM node:24.11.0-bookworm-slim AS base
+FROM node:24.12.0-trixie-slim AS base
 
 RUN npm install -g pnpm
+
 # ========== package-jsons-layer ==========
 
 FROM base AS package-jsons-layer

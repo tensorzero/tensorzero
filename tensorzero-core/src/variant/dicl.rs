@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use futures::future::try_join_all;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -38,6 +39,7 @@ use crate::{
         ContentBlockChatOutput, InferenceResult, InferenceResultStream, JsonInferenceOutput,
     },
     minijinja_util::TemplateConfig,
+    relay::TensorzeroRelay,
 };
 
 use super::{
@@ -190,7 +192,7 @@ impl DiclConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
@@ -266,11 +268,15 @@ impl Variant for DiclConfig {
             )
             .await?;
 
-        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model().to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(self.model(), clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model().to_string(),
+                })
+            })?;
 
         // Instantiate the InferModelRequestArgs struct
         let args = InferModelRequestArgs {
@@ -331,11 +337,15 @@ impl Variant for DiclConfig {
             )
             .await?;
 
-        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownModel {
-                name: self.model().to_string(),
-            })
-        })?;
+        let model_config = models
+            .models
+            .get(self.model(), clients.relay.as_ref())
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownModel {
+                    name: self.model().to_string(),
+                })
+            })?;
 
         // Actually run the inference
         let (inference_result_stream, mut model_used_info) = infer_model_request_stream(
@@ -365,6 +375,7 @@ impl Variant for DiclConfig {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         // TODO (#360): Add the clickhouse connection to this interface
         // Run a count() query on the DynamicInContextLearningExample table
@@ -383,7 +394,7 @@ impl Variant for DiclConfig {
         // Validate that the generation model and embedding model are valid
         models.validate(self.model())?;
         let embedding_model = embedding_models
-            .get(self.embedding_model()).await?
+            .get(self.embedding_model(), relay).await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
@@ -557,7 +568,7 @@ impl DiclConfig {
         })?;
 
         let embedding_model = embedding_models
-            .get(self.embedding_model())
+            .get(self.embedding_model(), clients.relay.as_ref())
             .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
@@ -858,7 +869,7 @@ impl DiclConfig {
             inference_config,
             stream,
             inference_params,
-            self.json_mode().cloned(),
+            self.json_mode().copied(),
             extra_body,
             extra_headers,
         )
