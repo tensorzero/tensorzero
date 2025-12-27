@@ -3128,7 +3128,7 @@ mod tests {
             verbosity: Some("low".to_string()),
         };
         let mut request = AnthropicRequestBody {
-            model: "claude-3-5-sonnet-20241022",
+            model: "claude-sonnet-4-5-20250929",
             messages: vec![],
             max_tokens: 1024,
             ..Default::default()

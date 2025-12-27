@@ -165,7 +165,10 @@ async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
         run_infos[0].evaluation_run_id,
         Uuid::parse_str("0196374b-04a3-7013-9049-e59ed5fe3f74").expect("Valid UUID")
     );
-    assert_eq!(run_infos[0].variant_name, "better_prompt_haiku_3_5");
+    assert_eq!(
+        run_infos[0].variant_name,
+        "better_prompt_claude_haiku_4_5_20251001"
+    );
 }
 
 /// Test that get_evaluation_run_infos_for_datapoint returns empty for nonexistent datapoint.
@@ -490,7 +493,10 @@ async fn test_get_evaluation_results_haiku() {
     // Verify all results belong to the correct evaluation run
     for result in &results {
         assert_eq!(result.evaluation_run_id, evaluation_run_id);
-        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+        assert_eq!(
+            result.variant_name,
+            "better_prompt_claude_haiku_4_5_20251001"
+        );
     }
 
     // Verify we have both metric types
@@ -842,7 +848,10 @@ async fn test_get_evaluation_results_chat_datapoint_details() {
     for result in &results {
         assert_eq!(result.datapoint_id, datapoint_id);
         assert_eq!(result.evaluation_run_id, evaluation_run_id);
-        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+        assert_eq!(
+            result.variant_name,
+            "better_prompt_claude_haiku_4_5_20251001"
+        );
     }
 
     // Verify we have both metrics

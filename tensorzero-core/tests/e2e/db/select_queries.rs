@@ -54,11 +54,11 @@ async fn test_clickhouse_query_model_usage_monthly() {
     // Test data from April 2025
     let april_claude = model_usage.iter().find(|u| {
         u.period_start.format("%Y-%m-%d").to_string() == "2025-04-01"
-            && u.model_name == "anthropic::claude-3-5-haiku-20241022"
+            && u.model_name == "anthropic::claude-haiku-4-5-20251001"
     });
     assert!(
         april_claude.is_some(),
-        "Should have claude-3-5-haiku data for April 2025"
+        "Should have claude-haiku-4-5-20251001 data for April 2025"
     );
     let april_claude = april_claude.unwrap();
     assert_eq!(april_claude.input_tokens, Some(29859));
@@ -378,10 +378,10 @@ async fn test_clickhouse_model_latency_cumulative() {
     // Test specific cumulative latency data
     let claude_haiku_latency = model_latency_data
         .iter()
-        .find(|l| l.model_name == "anthropic::claude-3-5-haiku-20241022");
+        .find(|l| l.model_name == "anthropic::claude-haiku-4-5-20251001");
     assert!(
         claude_haiku_latency.is_some(),
-        "Should have cumulative latency data for claude-3-5-haiku"
+        "Should have cumulative latency data for claude-haiku-4-5-20251001"
     );
     let claude_haiku_latency = claude_haiku_latency.unwrap();
     assert_eq!(claude_haiku_latency.count, 461);

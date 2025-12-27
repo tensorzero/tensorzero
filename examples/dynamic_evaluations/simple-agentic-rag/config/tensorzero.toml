@@ -15,7 +15,7 @@ system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
 
 [functions.multi_hop_rag_agent.variants."claude-3.5-haiku"]
 type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
+model = "anthropic::claude-haiku-4-5-20251001"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
 
 [functions.compact_context]
@@ -29,7 +29,7 @@ system_template = "functions/compact_context/baseline/system_template.minijinja"
 
 [functions.compact_context.variants."claude-3.5-haiku"]
 type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
+model = "anthropic::claude-haiku-4-5-20251001"
 system_template = "functions/compact_context/baseline/system_template.minijinja"
 
 [functions.judge_answer]
