@@ -121,12 +121,12 @@ async fn publish_result_step(
     params: PublishResultParams,
     state: ToolAppState,
 ) -> anyhow::Result<()> {
-    publish_result(&params, state.t0_client().as_ref()).await
+    publish_result(params, state.t0_client().as_ref()).await
 }
 
 /// Publish the tool result to the autopilot API.
 async fn publish_result(
-    params: &PublishResultParams,
+    params: PublishResultParams,
     t0_client: &dyn TensorZeroClient,
 ) -> anyhow::Result<()> {
     let tensorzero_version = TENSORZERO_VERSION.to_string();
@@ -139,7 +139,7 @@ async fn publish_result(
                 tensorzero_version,
                 payload: EventPayload::ToolResult {
                     tool_call_event_id: params.tool_call_event_id,
-                    outcome: params.outcome.clone(),
+                    outcome: params.outcome,
                 },
                 previous_user_message_event_id: None,
             },
@@ -256,7 +256,10 @@ async fn execute_simple_tool_step<T: SimpleTool>(
     state: ToolAppState,
 ) -> anyhow::Result<T::Output> {
     let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client());
-    let idempotency_key = format!("simple_tool:{}:{}", params.tool_name, params.tool_call_event_id);
+    let idempotency_key = format!(
+        "simple_tool:{}:{}",
+        params.tool_name, params.tool_call_event_id
+    );
 
     T::execute(
         params.llm_params,
