@@ -55,7 +55,7 @@ If you need to configure the endpoint at runtime, you can set it to `endpoint = 
 
 ### Credentials
 
-You must set the `AZURE_OPENAI_API_KEY` environment variable before running the gateway.
+You must set the `AZURE_API_KEY` environment variable before running the gateway. (Note: `AZURE_OPENAI_API_KEY` is deprecated but still supported as a fallback.)
 
 You can customize the credential location by setting the `api_key_location` to `env::YOUR_ENVIRONMENT_VARIABLE` or `dynamic::ARGUMENT_NAME`.
 See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
@@ -75,7 +75,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:?Environment variable AZURE_OPENAI_API_KEY must be set.}
+      - AZURE_API_KEY=${AZURE_API_KEY:?Environment variable AZURE_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -130,7 +130,7 @@ routing = ["azure"]
 [models.azure-gpt-5-mini-responses.providers.azure]
 type = "openai"  # CAREFUL: not `azure`!
 api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
-api_key_location = "env::AZURE_OPENAI_API_KEY"
+api_key_location = "env::AZURE_API_KEY"
 model_name = "gpt-5-mini"
 api_type = "responses"
 ```
