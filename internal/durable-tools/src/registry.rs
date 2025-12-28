@@ -8,7 +8,7 @@ use std::time::Duration;
 use tensorzero::{FunctionTool, Tool};
 
 use crate::context::SimpleToolContext;
-use crate::error::{ToolError, ToolResult};
+use crate::error::ToolError;
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
 use crate::tool_metadata::ToolMetadata;
@@ -24,7 +24,7 @@ pub trait ErasedTool: Send + Sync {
     fn description(&self) -> Cow<'static, str>;
 
     /// Get the JSON Schema for the tool's parameters.
-    fn parameters_schema(&self) -> ToolResult<Schema>;
+    fn parameters_schema(&self) -> Schema;
 
     /// Get the tool's execution timeout.
     fn timeout(&self) -> Duration;
@@ -80,7 +80,7 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
         <T as ToolMetadata>::description()
     }
 
-    fn parameters_schema(&self) -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> Schema {
         <T as ToolMetadata>::parameters_schema()
     }
 
@@ -103,7 +103,7 @@ impl<T: SimpleTool> ErasedTool for T {
         <T as ToolMetadata>::description()
     }
 
-    fn parameters_schema(&self) -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> Schema {
         <T as ToolMetadata>::parameters_schema()
     }
 
@@ -165,15 +165,11 @@ impl ToolRegistry {
     /// # Errors
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
     pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
             return Err(ToolError::DuplicateToolName(name.into_owned()));
         }
-
-        // Validate schema generation succeeds
-        <T as ToolMetadata>::parameters_schema()?;
 
         let wrapper = Arc::new(ErasedTaskToolWrapper::<T>::new());
         self.tools.insert(name.into_owned(), wrapper);
@@ -185,7 +181,6 @@ impl ToolRegistry {
     /// # Errors
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
     pub fn register_simple_tool<T: SimpleTool + Default>(
         &mut self,
     ) -> Result<&mut Self, ToolError> {
@@ -193,9 +188,6 @@ impl ToolRegistry {
         if self.tools.contains_key(name.as_ref()) {
             return Err(ToolError::DuplicateToolName(name.into_owned()));
         }
-
-        // Validate schema generation succeeds
-        <T as ToolMetadata>::parameters_schema()?;
 
         let tool = Arc::new(T::default());
         self.tools
@@ -246,7 +238,7 @@ impl ToolRegistry {
     ///
     /// # Errors
     ///
-    /// Returns an error if a tool's parameter schema generation or serialization fails.
+    /// Returns an error if serialization fails.
     pub fn to_tensorzero_tools(&self) -> Result<Vec<Tool>, ToolError> {
         self.tools
             .values()
@@ -254,7 +246,7 @@ impl ToolRegistry {
                 Ok(Tool::Function(FunctionTool {
                     name: tool.name().to_string(),
                     description: tool.description().to_string(),
-                    parameters: serde_json::to_value(tool.parameters_schema()?)?,
+                    parameters: serde_json::to_value(tool.parameters_schema())?,
                     strict: false,
                 }))
             })

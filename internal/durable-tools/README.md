@@ -17,17 +17,19 @@ All tools implement the `ToolMetadata` trait for metadata, plus either `TaskTool
 
 #### `ToolMetadata`
 
-Provides the tool's name, description, parameter schema, and LLM parameter type:
+Provides the tool's name, description, and parameter types. The parameter schema is automatically derived from `LlmParams`:
 
 ```rust
 pub trait ToolMetadata: Send + Sync + 'static {
-    fn name() -> Cow<'static, str>;
-    fn description() -> Cow<'static, str>;
-    fn parameters_schema() -> ToolResult<Schema>;
-
-    type LlmParams: Serialize + DeserializeOwned + Send + 'static;
+    type LlmParams: Serialize + DeserializeOwned + JsonSchema + Send + Sync + 'static;
     type SideInfo: SideInfo;
     type Output: Serialize + DeserializeOwned + Send + 'static;
+
+    fn name() -> Cow<'static, str>;
+    fn description() -> Cow<'static, str>;
+
+    // Automatically derived from LlmParams - override only if needed
+    fn parameters_schema() -> Schema { ... }
 }
 ```
 
@@ -138,7 +140,7 @@ use durable_tools::{
     ToolExecutor, ToolResult, async_trait, WorkerOptions,
     http_gateway_client,
 };
-use schemars::{schema_for, JsonSchema, Schema};
+use schemars::JsonSchema;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -155,6 +157,10 @@ struct SearchResult { results: Vec<String> }
 struct SearchTool;
 
 impl ToolMetadata for SearchTool {
+    type SideInfo = ();
+    type Output = SearchResult;
+    type LlmParams = SearchParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("search")
     }
@@ -162,14 +168,7 @@ impl ToolMetadata for SearchTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Search the web")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(SearchParams))
-    }
-
-    type LlmParams = SearchParams;
-    type SideInfo = ();
-    type Output = SearchResult;
+    // parameters_schema() is automatically derived from LlmParams
 }
 
 #[async_trait]
@@ -195,6 +194,10 @@ struct ResearchResult { summary: String }
 struct ResearchTool;
 
 impl ToolMetadata for ResearchTool {
+    type SideInfo = ();
+    type Output = ResearchResult;
+    type LlmParams = ResearchParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("research")
     }
@@ -202,14 +205,7 @@ impl ToolMetadata for ResearchTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Research a topic")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(ResearchParams))
-    }
-
-    type LlmParams = ResearchParams;
-    type SideInfo = ();
-    type Output = ResearchResult;
+    // parameters_schema() is automatically derived from LlmParams
 }
 
 #[async_trait]
