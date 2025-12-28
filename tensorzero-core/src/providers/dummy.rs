@@ -128,7 +128,7 @@ impl DummyProvider {
         let created = current_timestamp();
         let chained = thinking_chunks
             .into_iter()
-            .chain(response_chunks.into_iter());
+            .chain(response_chunks);
         let total_tokens = num_chunks as u32;
         let stream = tokio_stream::iter(chained.enumerate())
             .map(move |(i, chunk)| {
