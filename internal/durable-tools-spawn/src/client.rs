@@ -109,7 +109,7 @@ impl SpawnClient {
         };
 
         self.durable
-            .spawn_by_name(tool_name, serde_json::to_value(wrapped_params)?, options)
+            .spawn_by_name_unchecked(tool_name, serde_json::to_value(wrapped_params)?, options)
             .await
             .map_err(Into::into)
     }
