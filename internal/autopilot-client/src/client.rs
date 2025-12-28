@@ -11,7 +11,6 @@ use reqwest_eventsource::{Event as SseEvent, EventSource};
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
-use tracing::warn;
 use url::Url;
 use uuid::Uuid;
 
@@ -247,70 +246,69 @@ impl AutopilotClient {
         }
     }
 
+    /// Spawns a durable task to execute an approved tool call.
+    ///
+    /// This is called after a `ToolCallAuthorization` event with `Approved` status
+    /// is successfully created. It retrieves the original tool call details and
+    /// spawns the corresponding durable task for execution.
+    ///
+    /// # Tool Call Lookup
+    ///
+    /// The function first checks the local cache for the tool call. If not found
+    /// (e.g., client was restarted), it fetches the session events from the API
+    /// to retrieve the tool call details.
+    ///
+    /// # Side Info
+    ///
+    /// The spawned task receives side info containing:
+    /// - `tool_call_event_id`: The event ID of the original tool call
+    /// - `tool_call_id`: The tool call ID from the LLM response
+    /// - `session_id`: The session this tool call belongs to
+    /// - `deployment_id`: The deployment that generated this tool call
+    /// - `inner`: Reserved for user-provided side info (currently `null`)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Fetching session events fails
+    /// - The tool call is not found in cache or pending events
+    /// - Tool call arguments cannot be parsed as JSON
+    /// - Spawning the durable task fails
     async fn handle_tool_call_approval(
         &self,
         session_id: Uuid,
         deployment_id: Uuid,
         tool_call_event_id: Uuid,
-    ) {
+    ) -> Result<(), AutopilotError> {
         let mut tool_call = self.tool_call_cache.get(&tool_call_event_id);
 
         if tool_call.is_none() {
-            match self
+            let response = self
                 .list_events(session_id, ListEventsParams::default())
-                .await
-            {
-                Ok(response) => {
-                    tool_call = response.pending_tool_calls.iter().find_map(|event| {
-                        if event.id == tool_call_event_id {
-                            match &event.payload {
-                                EventPayload::ToolCall(tool_call) => {
-                                    self.tool_call_cache.insert(event.id, tool_call.clone());
-                                    Some(tool_call.clone())
-                                }
-                                _ => None,
-                            }
-                        } else {
-                            None
+                .await?;
+
+            tool_call = response.pending_tool_calls.iter().find_map(|event| {
+                if event.id == tool_call_event_id {
+                    match &event.payload {
+                        EventPayload::ToolCall(tool_call) => {
+                            self.tool_call_cache.insert(event.id, tool_call.clone());
+                            Some(tool_call.clone())
                         }
-                    });
+                        _ => None,
+                    }
+                } else {
+                    None
                 }
-                Err(err) => {
-                    warn!(
-                        tool_call_event_id = %tool_call_event_id,
-                        "Failed to fetch tool call approval details: {err}"
-                    );
-                    return;
-                }
-            }
+            });
         }
 
-        let tool_call = match tool_call {
-            Some(tool_call) => tool_call,
-            None => {
-                warn!(
-                    tool_call_event_id = %tool_call_event_id,
-                    "Tool call approval received without matching pending tool call"
-                );
-                return;
-            }
-        };
+        let tool_call = tool_call.ok_or(AutopilotError::ToolCallNotFound(tool_call_event_id))?;
 
         let tool_call_id = tool_call.id.clone();
         let tool_name = tool_call.name.clone();
         let tool_arguments = tool_call.arguments.clone();
 
-        let llm_params = match serde_json::from_str::<JsonValue>(&tool_arguments) {
-            Ok(value) => value,
-            Err(err) => {
-                warn!(
-                    tool_call_event_id = %tool_call_event_id,
-                    tool_name = %tool_name,
-                    "Failed to parse tool call arguments as JSON: {err}"
-                );
-                JsonValue::String(tool_arguments.clone())
-            }
-        };
+        let llm_params = serde_json::from_str::<JsonValue>(&tool_arguments)?;
 
         let side_info = serde_json::json!({
             "tool_call_event_id": tool_call_event_id,
@@ -321,17 +319,11 @@ impl AutopilotClient {
         });
 
         let episode_id = Uuid::now_v7();
-        if let Err(err) = self
-            .spawn_client
+        self.spawn_client
             .spawn_tool_by_name_with_side_info(&tool_name, llm_params, side_info, episode_id)
-            .await
-        {
-            warn!(
-                tool_call_event_id = %tool_call_event_id,
-                tool_name = %tool_name,
-                "Failed to spawn tool call: {err}"
-            );
-        }
+            .await?;
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
@@ -441,7 +433,7 @@ impl AutopilotClient {
 
         if let Some(tool_call_event_id) = tool_call_event_id {
             self.handle_tool_call_approval(session_id, deployment_id, tool_call_event_id)
-                .await;
+                .await?;
         }
 
         Ok(body)
