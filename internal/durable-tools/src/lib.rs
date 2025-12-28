@@ -222,7 +222,7 @@ pub use tensorzero::{
 pub use async_trait::async_trait;
 
 // Re-export durable types that tools may need
-pub use durable::{SpawnOptions, SpawnResult, TaskHandle, WorkerOptions};
+pub use durable::{SpawnOptions, SpawnResult, TaskHandle, Worker, WorkerOptions};
 
 // Re-export schemars for parameter schemas
 pub use schemars;

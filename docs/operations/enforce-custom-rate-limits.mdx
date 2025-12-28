@@ -375,3 +375,12 @@ This creates smoother rate limiting behavior where instead of getting your full 
 To achieve these benefits, you'll typically want to use a low time granularity with a `capacity` much larger than the `refill_rate`.
 
 This approach is particularly useful for burst protection (users can't consume their entire daily allowance in the first few seconds), smoother traffic distribution (requests are naturally spread out over time rather than clustering at window boundaries), and a better user experience (users get a steady trickle of quota rather than having to wait for the next time window).
+
+### Centralize auth across multiple TensorZero deployments
+
+If you have multiple TensorZero deployments (e.g. one per team), you can centralize rate limiting using gateway relay.
+
+With gateway relay, an LLM inference request can be routed through multiple independent TensorZero Gateway deployments before reaching a model provider.
+This enables you to enforce organization-wide controls without restricting how teams build their LLM features.
+
+See [Centralize auth, rate limits, and more](/operations/centralize-auth-rate-limits-and-more) for details.

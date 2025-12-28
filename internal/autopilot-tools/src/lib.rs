@@ -1,6 +1,6 @@
 //! Tool definitions for TensorZero Autopilot.
 //!
-//! This crate provides tool traits and implementations for the autopilot system.
+//! This crate provides tool traits and implementations.
 //!
 //! # Overview
 //!
