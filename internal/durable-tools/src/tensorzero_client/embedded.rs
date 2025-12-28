@@ -4,8 +4,13 @@
 //! and wants to call inference and autopilot endpoints without HTTP overhead.
 
 use async_trait::async_trait;
-use tensorzero::{ClientInferenceParams, InferenceOutput, InferenceResponse, TensorZeroError};
+use tensorzero::{
+    ActionResponse, ClientInferenceParams, InferenceOutput, InferenceResponse, TensorZeroError,
+};
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::inference::inference;
+use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, action};
+use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
 use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
 
@@ -41,7 +46,7 @@ impl TensorZeroClient for EmbeddedClient {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
             })?;
 
-        let result = Box::pin(tensorzero_core::endpoints::inference::inference(
+        let result = Box::pin(inference(
             self.app_state.config.clone(),
             &self.app_state.http_client,
             self.app_state.clickhouse_connection_info.clone(),
@@ -72,13 +77,11 @@ impl TensorZeroClient for EmbeddedClient {
             .as_ref()
             .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
-        tensorzero_core::endpoints::internal::autopilot::create_event(
-            autopilot_client,
-            session_id,
-            request,
-        )
-        .await
-        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+        create_event(autopilot_client, session_id, request)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
     }
 
     async fn list_autopilot_events(
@@ -92,13 +95,11 @@ impl TensorZeroClient for EmbeddedClient {
             .as_ref()
             .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
-        tensorzero_core::endpoints::internal::autopilot::list_events(
-            autopilot_client,
-            session_id,
-            params,
-        )
-        .await
-        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+        list_events(autopilot_client, session_id, params)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
     }
 
     async fn list_autopilot_sessions(
@@ -111,11 +112,9 @@ impl TensorZeroClient for EmbeddedClient {
             .as_ref()
             .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
-        tensorzero_core::endpoints::internal::autopilot::list_sessions(autopilot_client, params)
-            .await
-            .map_err(|e| {
-                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            })
+        list_sessions(autopilot_client, params).await.map_err(|e| {
+            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+        })
     }
 
     async fn action(
@@ -123,23 +122,18 @@ impl TensorZeroClient for EmbeddedClient {
         snapshot_hash: SnapshotHash,
         params: ClientInferenceParams,
     ) -> Result<InferenceResponse, TensorZeroClientError> {
-        use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
-
         let action_input = ActionInputInfo {
             snapshot_hash,
             input: ActionInput::Inference(Box::new(params)),
         };
 
-        let response =
-            tensorzero_core::endpoints::internal::action::action(&self.app_state, action_input)
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-                })?;
+        let response = action(&self.app_state, action_input).await.map_err(|e| {
+            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+        })?;
 
         match response {
-            tensorzero_core::endpoints::internal::action::ActionResponse::Inference(r) => Ok(r),
-            tensorzero_core::endpoints::internal::action::ActionResponse::Feedback(_) => {
+            ActionResponse::Inference(r) => Ok(r),
+            ActionResponse::Feedback(_) => {
                 Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(
                         tensorzero_core::error::ErrorDetails::InternalError {
