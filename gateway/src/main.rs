@@ -69,7 +69,14 @@ async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::erro
 }
 
 #[tokio::main]
-async fn main() -> Result<(), ExitCode> {
+async fn main() -> ExitCode {
+    match run().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(code) => code,
+    }
+}
+
+async fn run() -> Result<(), ExitCode> {
     let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
@@ -117,11 +124,11 @@ async fn main() -> Result<(), ExitCode> {
     let (unwritten_config, glob) = match (args.default_config, args.config_file) {
         (true, Some(_)) => {
             tracing::error!("You must not specify both `--config-file` and `--default-config`.");
-            return Err(ExitCode::from(1));
+            return Err(ExitCode::FAILURE);
         }
         (false, None) => {
             tracing::error!("You must specify either `--config-file` or `--default-config`.");
-            return Err(ExitCode::from(1));
+            return Err(ExitCode::FAILURE);
         }
         (true, None) => {
             tracing::warn!(
@@ -181,7 +188,7 @@ async fn main() -> Result<(), ExitCode> {
                 tracing::error!(
                     "The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)."
                 );
-                return Err(ExitCode::from(1));
+                return Err(ExitCode::FAILURE);
             }
         }
 
@@ -212,7 +219,7 @@ async fn main() -> Result<(), ExitCode> {
                 tracing::error!(
                     "Could not enable OpenTelemetry export due to previous error: `{e}`. Exiting."
                 );
-                return Err(ExitCode::from(1));
+                return Err(ExitCode::FAILURE);
             }
         }
     } else if let Err(e) = delayed_log_config.delayed_otel {
@@ -243,7 +250,7 @@ async fn main() -> Result<(), ExitCode> {
     let base_path = config.gateway.base_path.as_deref().unwrap_or("/");
     if !base_path.starts_with("/") {
         tracing::error!("[gateway.base_path] must start with a `/` : `{base_path}`");
-        return Err(ExitCode::from(1));
+        return Err(ExitCode::FAILURE);
     }
     let base_path = base_path.trim_end_matches("/");
 
@@ -272,11 +279,11 @@ async fn main() -> Result<(), ExitCode> {
                 "Failed to bind to socket address {bind_address}: {e}. Tip: Ensure no other process is using port {} or try a different port.",
                 bind_address.port()
             );
-            return Err(ExitCode::from(1));
+            return Err(ExitCode::FAILURE);
         }
         Err(e) => {
             tracing::error!("Failed to bind to socket address {bind_address}: {e}");
-            return Err(ExitCode::from(1));
+            return Err(ExitCode::FAILURE);
         }
     };
 
@@ -492,7 +499,7 @@ async fn spawn_autopilot_worker_if_configured(
             tracing::error!(
                 "TENSORZERO_AUTOPILOT_API_KEY env var set, but Postgres is not enabled."
             );
-            return Err(ExitCode::from(1));
+            return Err(ExitCode::FAILURE);
         }
         #[cfg(test)]
         #[expect(unreachable_patterns)]
@@ -545,7 +552,7 @@ impl<T, E: Display> LogErrPretty<T> for Result<T, E> {
             Ok(value) => Ok(value),
             Err(err) => {
                 tracing::error!("{msg}: {err}");
-                Err(ExitCode::from(1))
+                Err(ExitCode::FAILURE)
             }
         }
     }
@@ -557,7 +564,7 @@ impl<T> LogErrPretty<T> for Option<T> {
             Some(value) => Ok(value),
             None => {
                 tracing::error!("{msg}");
-                Err(ExitCode::from(1))
+                Err(ExitCode::FAILURE)
             }
         }
     }
