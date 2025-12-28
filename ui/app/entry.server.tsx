@@ -9,6 +9,19 @@ import { renderToPipeableStream } from "react-dom/server";
 
 export const streamTimeout = 30_000;
 
+// Prevent the server from crashing when a promise rejection is not handled.
+// Most notably, this happens when try we defer a promise on a loader but it rejects before RR7 takes over.
+//
+// See:
+// https://github.com/remix-run/remix/issues/9340
+// https://github.com/remix-run/remix/issues/765
+// https://github.com/remix-run/react-router/pull/12764#issuecomment-2598681151
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+process.on("unhandledRejection", (reason: any, p: Promise<any>) => {
+  // eslint-disable-next-line no-console
+  console.error("Unhandled Promise Rejection:", reason, "\n", p);
+});
+
 export default function handleRequest(
   request: Request,
   responseStatusCode: number,
