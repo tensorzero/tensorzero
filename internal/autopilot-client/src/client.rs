@@ -274,7 +274,7 @@ impl AutopilotClient {
     /// - The tool call is not found in cache or pending events
     /// - Tool call arguments cannot be parsed as JSON
     /// - Spawning the durable task fails
-    async fn handle_tool_call_approval(
+    async fn handle_tool_call_authorization(
         &self,
         session_id: Uuid,
         deployment_id: Uuid,
@@ -432,7 +432,7 @@ impl AutopilotClient {
         let body: CreateEventResponse = response.json().await?;
 
         if let Some(tool_call_event_id) = tool_call_event_id {
-            self.handle_tool_call_approval(session_id, deployment_id, tool_call_event_id)
+            self.handle_tool_call_authorization(session_id, deployment_id, tool_call_event_id)
                 .await?;
         }
 
