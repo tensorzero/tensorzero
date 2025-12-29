@@ -11,7 +11,7 @@ pub use side_info::AutopilotSideInfo;
 pub use worker::{
     AutopilotWorker, AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker,
 };
-pub use wrapper::ClientToolWrapper;
+pub use wrapper::ClientTaskToolWrapper;
 
 // Re-export useful types from durable-tools
 pub use durable_tools::{
