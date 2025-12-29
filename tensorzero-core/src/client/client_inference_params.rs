@@ -68,7 +68,7 @@ pub struct ClientInferenceParams {
     /// if the fuser/judge model failed
     #[serde(default)]
     pub include_original_response: bool,
-    /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each provider.
+    /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
     #[serde(default)]
     pub include_raw_usage: bool,
     // NOTE: Currently, ts_rs does not handle #[serde(transparent)] correctly,

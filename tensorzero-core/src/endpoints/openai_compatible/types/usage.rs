@@ -19,8 +19,6 @@ pub struct OpenAICompatibleUsage {
 }
 
 /// OpenAI-compatible usage with optional raw provider-specific usage data.
-/// Uses `#[serde(flatten)]` to inline the base usage fields, producing JSON like:
-/// `{ "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "tensorzero_raw_usage": [...] }`
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct OpenAICompatibleUsageWithRaw {
     #[serde(flatten)]

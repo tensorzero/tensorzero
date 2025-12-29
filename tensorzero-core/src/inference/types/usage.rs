@@ -34,9 +34,7 @@ pub struct Usage {
 }
 
 /// Usage with optional raw provider-specific usage data.
-/// This is used at the API response boundary to include raw_usage when requested.
-/// Uses `#[serde(flatten)]` to inline the `Usage` fields, producing JSON like:
-/// `{ "input_tokens": 100, "output_tokens": 50, "raw_usage": [...] }`
+/// This is used at the API response boundary to include `raw_usage` when requested.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct UsageWithRaw {

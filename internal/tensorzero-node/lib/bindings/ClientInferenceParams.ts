@@ -32,7 +32,7 @@ export type ClientInferenceParams = {
    */
   include_original_response: boolean;
   /**
-   * If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each provider.
+   * If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
    */
   include_raw_usage: boolean;
   internal_dynamic_variant_config: UninitializedVariantInfo | null;
