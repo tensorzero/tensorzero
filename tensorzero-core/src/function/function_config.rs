@@ -801,7 +801,6 @@ mod tests {
     use crate::config::UninitializedSchemas;
     use crate::config::path::ResolvedTomlPathData;
     use crate::endpoints::inference::InferenceIds;
-    use crate::inference::types::ApiType;
     use crate::inference::types::Arguments;
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
@@ -1887,10 +1886,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -1958,10 +1954,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2015,10 +2008,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2074,10 +2064,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2131,10 +2118,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2188,10 +2172,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2264,10 +2245,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2315,10 +2293,7 @@ mod tests {
             finish_reason: None,
             latency,
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2373,10 +2348,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2429,10 +2401,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2492,10 +2461,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(

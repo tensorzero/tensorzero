@@ -1287,7 +1287,7 @@ async fn test_openai_compatible_raw_usage_non_streaming() {
         "messages": [
             {
                 "role": "system",
-                "content": [{"type": "text", "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"}}]
+                "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Alfred Pennyworth"}}]
             },
             {
                 "role": "user",
@@ -1372,7 +1372,7 @@ async fn test_openai_compatible_raw_usage_not_requested() {
         "messages": [
             {
                 "role": "system",
-                "content": [{"type": "text", "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"}}]
+                "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Alfred Pennyworth"}}]
             },
             {
                 "role": "user",
@@ -1418,7 +1418,7 @@ async fn test_openai_compatible_raw_usage_streaming_error_without_include_usage(
         "messages": [
             {
                 "role": "system",
-                "content": [{"type": "text", "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"}}]
+                "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Alfred Pennyworth"}}]
             },
             {
                 "role": "user",
@@ -1469,7 +1469,7 @@ async fn test_openai_compatible_raw_usage_streaming() {
         "messages": [
             {
                 "role": "system",
-                "content": [{"type": "text", "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"}}]
+                "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Alfred Pennyworth"}}]
             },
             {
                 "role": "user",

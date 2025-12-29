@@ -19,8 +19,9 @@ use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{
-    ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
+    ApiType, ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk,
+    InferenceResultChunk, JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk,
+    ThoughtChunk, Usage,
 };
 use crate::inference::types::{
     ModelInferenceRequest, RequestMessage, Role, System,
@@ -346,9 +347,17 @@ pub fn stream_inference_from_non_stream(
     // We set the 'cached' flag on the 'ModelUsedInfo, which will adjust the usage as needed when producing
     // the HTTP response stream.
     let usage = model_inference_result.usage;
-    // Preserve downstream_raw_usage for relay passthrough - this ensures raw_usage entries
+    // Get raw_usage_entries for relay passthrough - this ensures raw_usage entries
     // from downstream are correctly attributed when converting non-streaming to fake streaming
-    let downstream_raw_usage = model_inference_result.downstream_raw_usage.clone();
+    let raw_usage_entries = model_inference_result.raw_usage.clone();
+    // Extract provider_type and api_type from raw_usage_entries if available.
+    // These won't be used for raw_usage construction because the fake stream sets downstream_raw_usage,
+    // but ModelUsedInfo requires these fields to be present.
+    let (provider_type, api_type) = raw_usage_entries
+        .as_ref()
+        .and_then(|entries| entries.first())
+        .map(|e| (e.provider_type.clone(), e.api_type))
+        .unwrap_or_else(|| ("unknown".to_string(), ApiType::ChatCompletions));
     let model_used_info = ModelUsedInfo {
         model_name: model_inference_result.model_name.clone(),
         model_provider_name: model_inference_result.model_provider_name.clone(),
@@ -371,17 +380,17 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
-        provider_type: model_inference_result.provider_type.clone(),
-        api_type: model_inference_result.api_type,
+        provider_type,
+        api_type,
     };
-    let stream = make_stream_from_non_stream(inference_result, Some(usage), downstream_raw_usage)?;
+    let stream = make_stream_from_non_stream(inference_result, Some(usage), raw_usage_entries)?;
     Ok((stream, model_used_info))
 }
 
 fn make_stream_from_non_stream(
     inference_result: InferenceResult,
     usage: Option<Usage>,
-    downstream_raw_usage: Option<Vec<RawUsageEntry>>,
+    raw_usage_entries: Option<Vec<RawUsageEntry>>,
 ) -> Result<InferenceResultStream, Error> {
     let mut id = 0;
     let chunk = match inference_result {
@@ -433,7 +442,7 @@ fn make_stream_from_non_stream(
                 latency: tokio::time::Duration::from_secs(0),
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
-                downstream_raw_usage: downstream_raw_usage.clone(),
+                downstream_raw_usage: raw_usage_entries.clone(),
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -444,7 +453,7 @@ fn make_stream_from_non_stream(
             latency: tokio::time::Duration::from_secs(0),
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
-            downstream_raw_usage,
+            downstream_raw_usage: raw_usage_entries,
         })),
     };
     Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
@@ -947,7 +956,7 @@ mod tests {
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
-            ApiType, Arguments, ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
+            Arguments, ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
             JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
         jsonschema_util::StaticJSONSchema,
@@ -1168,10 +1177,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "dummy".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1206,10 +1212,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "dummy".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1263,10 +1266,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "dummy".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1304,10 +1304,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "dummy".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1386,10 +1383,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "dummy".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1424,10 +1418,7 @@ mod tests {
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "dummy".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(

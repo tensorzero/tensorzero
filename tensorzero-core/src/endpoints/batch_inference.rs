@@ -34,7 +34,7 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    ApiType, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason,
+    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason,
     InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
     Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, UsageWithRaw,
     current_timestamp,
@@ -1042,10 +1042,7 @@ pub async fn write_completed_batch_inference<'a>(
             model_provider_name: batch_request.model_provider_name.clone().into(),
             cached: false,
             finish_reason,
-            raw_usage_json: None, // batch inference does not support include_raw_usage (#5452)
-            provider_type: "batch".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None, // batch inference does not support include_raw_usage (#5452)
         };
         let tool_config: Option<ToolCallConfig> = match tool_params {
             Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {

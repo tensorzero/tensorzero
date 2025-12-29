@@ -301,6 +301,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     let mut usage: Option<Usage> = None;
     // Collect downstream raw_usage entries from relay streaming passthrough
     let mut downstream_raw_usage: Option<Vec<RawUsageEntry>> = None;
+    // Track raw_usage JSON from chunk with usage (for direct provider streaming)
+    let mut raw_usage_json: Option<serde_json::Value> = None;
     let response_time = value
         .last()
         .ok_or_else(|| {
@@ -338,6 +340,13 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
             // ...and then add the chunk usage to it (handling `None` fields)
             if let Some(ref mut u) = usage {
                 u.sum_strict(chunk_usage);
+            }
+            // Extract raw_usage JSON from chunk with usage (for direct provider streaming)
+            // Only capture if we don't already have downstream_raw_usage (relay case)
+            if raw_usage_json.is_none() && downstream_raw_usage.is_none() {
+                raw_usage_json = serde_json::from_str::<serde_json::Value>(chunk.raw_response())
+                    .ok()
+                    .and_then(|v| v.get("usage").cloned());
             }
         }
         // Accumulate downstream raw_usage entries from relay streaming passthrough
@@ -608,8 +617,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         usage: usage.unwrap_or_default(),
         latency: latency.clone(),
         finish_reason,
-        // For streaming responses collected from chunks, we don't have raw_usage_json
-        raw_usage_json: None,
+        // For streaming, extract raw_usage_json from chunk with usage (direct provider)
+        raw_usage_json,
         provider_type,
         api_type,
         // Use pre-generated ID if provided (for streaming raw_usage consistency)

@@ -1177,15 +1177,9 @@ pub struct ProviderInferenceResponse {
     pub usage: Usage,
     pub latency: Latency,
     pub finish_reason: Option<FinishReason>,
-    /// Raw provider-specific usage JSON for `include_raw_usage` feature.
-    pub raw_usage_json: Option<serde_json::Value>,
-    /// Provider type name (e.g., "openai", "anthropic").
-    pub provider_type: String,
-    /// The type of API used (chat_completions, responses, embeddings).
-    pub api_type: ApiType,
-    /// Pre-processed raw_usage entries from downstream (for relay passthrough).
-    /// If present, these entries are used directly instead of constructing from raw_usage_json.
-    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    /// Constructed from provider's raw_usage_json or passed through from relay.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl ProviderInferenceResponse {
@@ -1237,14 +1231,8 @@ pub struct ModelInferenceResponse {
     pub model_provider_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
-    /// Raw provider-specific usage JSON for `include_raw_usage` feature.
-    pub raw_usage_json: Option<serde_json::Value>,
-    /// Provider type name (e.g., "openai", "anthropic").
-    pub provider_type: String,
-    /// The type of API used (chat_completions, responses, embeddings).
-    pub api_type: ApiType,
-    /// Pre-processed raw_usage entries from downstream (for relay passthrough).
-    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1270,14 +1258,8 @@ pub struct ModelInferenceResponseWithMetadata {
     pub model_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
-    /// Raw provider-specific usage JSON for `include_raw_usage` feature.
-    pub raw_usage_json: Option<serde_json::Value>,
-    /// Provider type name (e.g., "openai", "anthropic").
-    pub provider_type: String,
-    /// The type of API used (chat_completions, responses, embeddings).
-    pub api_type: ApiType,
-    /// Pre-processed raw_usage entries from downstream (for relay passthrough).
-    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1573,10 +1555,7 @@ impl ModelInferenceResponse {
             finish_reason: provider_inference_response.finish_reason,
             model_provider_name,
             cached,
-            raw_usage_json: provider_inference_response.raw_usage_json,
-            provider_type: provider_inference_response.provider_type,
-            api_type: provider_inference_response.api_type,
-            downstream_raw_usage: provider_inference_response.downstream_raw_usage,
+            raw_usage: provider_inference_response.raw_usage,
         }
     }
 
@@ -1584,8 +1563,6 @@ impl ModelInferenceResponse {
         cache_lookup: CacheData<NonStreamingCacheData>,
         request: &ModelInferenceRequest<'_>,
         model_provider_name: &str,
-        provider_type: String,
-        api_type: ApiType,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -1605,11 +1582,8 @@ impl ModelInferenceResponse {
             finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
             cached: true,
-            // TensorZero cache hits are excluded from raw_usage list, so these are not needed
-            raw_usage_json: None,
-            provider_type,
-            api_type,
-            downstream_raw_usage: None,
+            // TensorZero cache hits are excluded from raw_usage list
+            raw_usage: None,
         }
     }
 }
@@ -1632,10 +1606,7 @@ impl ModelInferenceResponseWithMetadata {
             model_provider_name: model_inference_response.model_provider_name,
             model_name,
             cached: model_inference_response.cached,
-            raw_usage_json: model_inference_response.raw_usage_json,
-            provider_type: model_inference_response.provider_type,
-            api_type: model_inference_response.api_type,
-            downstream_raw_usage: model_inference_response.downstream_raw_usage,
+            raw_usage: model_inference_response.raw_usage,
         }
     }
 }
@@ -1736,9 +1707,26 @@ pub struct ProviderInferenceResponseArgs {
 
 impl ProviderInferenceResponse {
     pub fn new(args: ProviderInferenceResponseArgs) -> Self {
+        let id = args.id.unwrap_or_else(Uuid::now_v7);
         let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
+
+        // Construct raw_usage_entries immediately:
+        // - If downstream_raw_usage is present (relay), use those entries directly
+        // - Otherwise, construct a single entry from raw_usage_json
+        let raw_usage_entries = match args.downstream_raw_usage {
+            Some(downstream) => Some(downstream),
+            None => args.raw_usage_json.map(|usage| {
+                vec![RawUsageEntry {
+                    model_inference_id: id,
+                    provider_type: args.provider_type,
+                    api_type: args.api_type,
+                    usage: Some(usage),
+                }]
+            }),
+        };
+
         Self {
-            id: args.id.unwrap_or_else(Uuid::now_v7),
+            id,
             created: current_timestamp(),
             output: args.output,
             system: args.system,
@@ -1748,10 +1736,7 @@ impl ProviderInferenceResponse {
             usage: args.usage,
             latency: args.latency,
             finish_reason: args.finish_reason,
-            raw_usage_json: args.raw_usage_json,
-            provider_type: args.provider_type,
-            api_type: args.api_type,
-            downstream_raw_usage: args.downstream_raw_usage,
+            raw_usage: raw_usage_entries,
         }
     }
 }
@@ -2217,10 +2202,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2270,10 +2252,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2326,10 +2305,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2378,10 +2354,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2450,10 +2423,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2540,10 +2510,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2639,10 +2606,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2694,10 +2658,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2773,10 +2734,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2834,10 +2792,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
-            raw_usage_json: None,
-            provider_type: "test_provider".to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -3035,10 +2990,7 @@ mod tests {
                 model_provider_name: "test_provider".into(),
                 model_name: "test_model".into(),
                 cached,
-                raw_usage_json: None,
-                provider_type: "test_provider".to_string(),
-                api_type: ApiType::ChatCompletions,
-                downstream_raw_usage: None,
+                raw_usage: None,
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly

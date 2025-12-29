@@ -894,20 +894,7 @@ fn create_stream(
                 .previous_model_inference_results
                 .iter()
                 .filter(|r| !r.cached)
-                .flat_map(|r| {
-                    // If this result has downstream_raw_usage (from relay), use those entries directly
-                    // Otherwise, construct a single entry from raw_usage_json
-                    if let Some(downstream) = &r.downstream_raw_usage {
-                        downstream.clone()
-                    } else {
-                        vec![RawUsageEntry {
-                            model_inference_id: r.id,
-                            provider_type: r.provider_type.clone(),
-                            api_type: r.api_type,
-                            usage: r.raw_usage_json.clone(),
-                        }]
-                    }
-                })
+                .flat_map(|r| r.raw_usage.clone().unwrap_or_default())
                 .collect();
             Some(entries)
         } else {
@@ -1283,20 +1270,7 @@ impl InferenceResponse {
                 .model_inference_results()
                 .iter()
                 .filter(|r| !r.cached) // Exclude TensorZero cache hits
-                .flat_map(|r| {
-                    // If this result has downstream_raw_usage (from relay), use those entries directly
-                    // Otherwise, construct a single entry from raw_usage_json
-                    if let Some(downstream) = &r.downstream_raw_usage {
-                        downstream.clone()
-                    } else {
-                        vec![RawUsageEntry {
-                            model_inference_id: r.id,
-                            provider_type: r.provider_type.clone(),
-                            api_type: r.api_type,
-                            usage: r.raw_usage_json.clone(),
-                        }]
-                    }
-                })
+                .flat_map(|r| r.raw_usage.clone().unwrap_or_default())
                 .collect();
             Some(entries)
         } else {

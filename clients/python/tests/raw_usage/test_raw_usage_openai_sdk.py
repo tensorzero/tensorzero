@@ -21,8 +21,9 @@ async def test_async_raw_usage_non_streaming(async_openai_client: AsyncOpenAI):
             "role": "system",
             "content": [
                 {
-                    "type": "text",
-                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                    "type": "tensorzero::template",
+                    "name": "system",
+                    "arguments": {"assistant_name": "Alfred Pennyworth"},
                 }
             ],
         },
@@ -59,8 +60,9 @@ async def test_async_raw_usage_not_requested(async_openai_client: AsyncOpenAI):
             "role": "system",
             "content": [
                 {
-                    "type": "text",
-                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                    "type": "tensorzero::template",
+                    "name": "system",
+                    "arguments": {"assistant_name": "Alfred Pennyworth"},
                 }
             ],
         },
@@ -90,8 +92,9 @@ async def test_async_raw_usage_streaming(async_openai_client: AsyncOpenAI):
             "role": "system",
             "content": [
                 {
-                    "type": "text",
-                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},  # type: ignore
+                    "type": "tensorzero::template",
+                    "name": "system",
+                    "arguments": {"assistant_name": "Alfred Pennyworth"},
                 }
             ],
         },

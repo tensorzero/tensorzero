@@ -98,8 +98,6 @@ async fn test_cache_write_and_read() {
         &clickhouse_connection_info,
         model_provider_request,
         Some(max_age_s),
-        "test_provider".to_string(),
-        ApiType::ChatCompletions,
     )
     .await
     .unwrap();
@@ -131,8 +129,6 @@ async fn test_cache_write_and_read() {
         &clickhouse_connection_info,
         model_provider_request,
         Some(max_age_s),
-        "test_provider".to_string(),
-        ApiType::ChatCompletions,
     )
     .await
     .unwrap();
@@ -181,15 +177,9 @@ async fn test_cache_write_and_read() {
 
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
-    let result = cache_lookup(
-        &clickhouse_connection_info,
-        model_provider_request,
-        Some(0),
-        "test_provider".to_string(),
-        ApiType::ChatCompletions,
-    )
-    .await
-    .unwrap();
+    let result = cache_lookup(&clickhouse_connection_info, model_provider_request, Some(0))
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 

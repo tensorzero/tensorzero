@@ -288,7 +288,7 @@ async fn make_openai_request_and_get_raw_usage(input_text: &str, stream: bool) -
         "messages": [
             {
                 "role": "system",
-                "content": [{"type": "text", "tensorzero::arguments": {"assistant_name": "TestBot"}}]
+                "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "TestBot"}}]
             },
             {
                 "role": "user",

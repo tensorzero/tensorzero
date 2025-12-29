@@ -25,9 +25,10 @@ describe("Raw Usage", () => {
         role: "system",
         content: [
           {
-            type: "text",
             // @ts-expect-error - custom TensorZero property
-            "tensorzero::arguments": {
+            type: "tensorzero::template",
+            name: "system",
+            arguments: {
               assistant_name: "Alfred Pennyworth",
             },
           },
@@ -65,9 +66,10 @@ describe("Raw Usage", () => {
         role: "system",
         content: [
           {
-            type: "text",
             // @ts-expect-error - custom TensorZero property
-            "tensorzero::arguments": {
+            type: "tensorzero::template",
+            name: "system",
+            arguments: {
               assistant_name: "Alfred Pennyworth",
             },
           },
@@ -97,9 +99,10 @@ describe("Raw Usage", () => {
         role: "system",
         content: [
           {
-            type: "text",
             // @ts-expect-error - custom TensorZero property
-            "tensorzero::arguments": {
+            type: "tensorzero::template",
+            name: "system",
+            arguments: {
               assistant_name: "Alfred Pennyworth",
             },
           },

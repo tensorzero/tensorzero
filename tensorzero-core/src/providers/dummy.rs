@@ -24,7 +24,8 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
-use crate::inference::types::{ApiType, ContentBlock, FinishReason};
+use crate::inference::types::usage::{ApiType, RawUsageEntry};
+use crate::inference::types::{ContentBlock, FinishReason};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -149,7 +150,12 @@ impl DummyProvider {
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: String::new(),
                 latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
-                downstream_raw_usage: None,
+                downstream_raw_usage: Some(vec![RawUsageEntry {
+                    model_inference_id: Uuid::now_v7(),
+                    provider_type: "dummy".to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    usage: None, // dummy provider doesn't have real raw usage
+                }]),
             })))
             .throttle(std::time::Duration::from_millis(10));
 
@@ -619,10 +625,12 @@ impl InferenceProvider for DummyProvider {
             system,
             input_messages,
             finish_reason,
-            raw_usage_json: None,
-            provider_type: PROVIDER_TYPE.to_string(),
-            api_type: ApiType::ChatCompletions,
-            downstream_raw_usage: None,
+            raw_usage: Some(vec![RawUsageEntry {
+                model_inference_id: id,
+                provider_type: "dummy".to_string(),
+                api_type: ApiType::ChatCompletions,
+                usage: None, // dummy provider doesn't have real raw usage
+            }]),
         })
     }
 
@@ -792,7 +800,12 @@ impl InferenceProvider for DummyProvider {
             finish_reason,
             raw_response: String::new(),
             latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
-            downstream_raw_usage: None,
+            downstream_raw_usage: Some(vec![RawUsageEntry {
+                model_inference_id: Uuid::now_v7(),
+                provider_type: "dummy".to_string(),
+                api_type: ApiType::ChatCompletions,
+                usage: None, // dummy provider doesn't have real raw usage
+            }]),
         })));
 
         // We don't use the tokio `throttled` combinator, since we want to use `sleep_excluding_latency`

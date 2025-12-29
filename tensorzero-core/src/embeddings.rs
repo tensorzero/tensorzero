@@ -28,8 +28,8 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     inference::types::{
-        ApiType, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
-        current_timestamp,
+        ApiType, Latency, ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, Role,
+        Usage, current_timestamp,
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
@@ -527,12 +527,20 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             model_name: response.embedding_model_name,
             cached: false,
             finish_reason: None,
-            raw_usage_json: serde_json::from_str::<serde_json::Value>(&response.raw_response)
-                .ok()
-                .and_then(|v| v.get("usage").cloned()),
-            provider_type: response.embedding_provider_name.to_string(),
-            api_type: ApiType::Embeddings,
-            downstream_raw_usage: None,
+            raw_usage: {
+                let raw_usage_json =
+                    serde_json::from_str::<serde_json::Value>(&response.raw_response)
+                        .ok()
+                        .and_then(|v| v.get("usage").cloned());
+                raw_usage_json.map(|usage| {
+                    vec![RawUsageEntry {
+                        model_inference_id: response.id,
+                        provider_type: response.embedding_provider_name.to_string(),
+                        api_type: ApiType::Embeddings,
+                        usage: Some(usage),
+                    }]
+                })
+            },
         })
     }
 }
