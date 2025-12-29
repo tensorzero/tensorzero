@@ -33,6 +33,7 @@ use evaluations::topk::{
 };
 use evaluations::{Clients, EvaluationFunctionConfig, EvaluationFunctionConfigTable};
 use serde_json::Map;
+use sqlx::{AssertSqlSafe, PgPool, query_as};
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::cache::CacheEnabledMode;
@@ -115,10 +116,10 @@ async fn write_basic_test_datapoints(dataset_name: &str, count: usize) {
 }
 
 /// Helper to get a Postgres pool for tests
-async fn get_postgres_pool() -> sqlx_alpha::PgPool {
+async fn get_postgres_pool() -> PgPool {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .expect("TENSORZERO_POSTGRES_URL must be set for top-k tests");
-    sqlx_alpha::PgPool::connect(&postgres_url)
+    PgPool::connect(&postgres_url)
         .await
         .expect("Failed to connect to Postgres")
 }
@@ -126,7 +127,7 @@ async fn get_postgres_pool() -> sqlx_alpha::PgPool {
 /// Helper to create a durable queue if it doesn't exist.
 ///
 /// Each test should use a unique queue name to prevent shared state.
-async fn ensure_queue_exists(pool: &sqlx_alpha::PgPool, queue_name: &str) {
+async fn ensure_queue_exists(pool: &PgPool, queue_name: &str) {
     // The queue should be created by the durable migrations for production,
     // but for tests we create unique queues to prevent shared state.
     let client = durable::Durable::builder()
@@ -263,7 +264,7 @@ async fn test_topk_found_topk() {
 
         // Check task state (use dynamic table name based on queue)
         let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
-        let state: Option<(String,)> = sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+        let state: Option<(String,)> = query_as(AssertSqlSafe(query))
             .bind(spawn_result.task_id)
             .fetch_optional(&pg_pool)
             .await
@@ -283,12 +284,11 @@ async fn test_topk_found_topk() {
 
     // Get the task result
     let query = format!("SELECT completed_payload FROM durable.t_{queue_name} WHERE task_id = $1");
-    let result: Option<(Option<serde_json::Value>,)> =
-        sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
-            .bind(spawn_result.task_id)
-            .fetch_optional(&pg_pool)
-            .await
-            .expect("Failed to query task result");
+    let result: Option<(Option<serde_json::Value>,)> = query_as(AssertSqlSafe(query))
+        .bind(spawn_result.task_id)
+        .fetch_optional(&pg_pool)
+        .await
+        .expect("Failed to query task result");
 
     let output: TopKTaskOutput = result
         .and_then(|(payload,)| payload)
@@ -753,7 +753,7 @@ async fn test_topk_dataset_exhaustion() {
 
         // Check task state (use dynamic table name based on queue)
         let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
-        let state: Option<(String,)> = sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+        let state: Option<(String,)> = query_as(AssertSqlSafe(query))
             .bind(spawn_result.task_id)
             .fetch_optional(&pg_pool)
             .await
@@ -773,12 +773,11 @@ async fn test_topk_dataset_exhaustion() {
 
     // Get the task result
     let query = format!("SELECT completed_payload FROM durable.t_{queue_name} WHERE task_id = $1");
-    let result: Option<(Option<serde_json::Value>,)> =
-        sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
-            .bind(spawn_result.task_id)
-            .fetch_optional(&pg_pool)
-            .await
-            .expect("Failed to query task result");
+    let result: Option<(Option<serde_json::Value>,)> = query_as(AssertSqlSafe(query))
+        .bind(spawn_result.task_id)
+        .fetch_optional(&pg_pool)
+        .await
+        .expect("Failed to query task result");
 
     let output: TopKTaskOutput = result
         .and_then(|(payload,)| payload)
@@ -917,7 +916,7 @@ async fn test_topk_evaluator_failure_threshold() {
 
         // Check task state (use dynamic table name based on queue)
         let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
-        let state: Option<(String,)> = sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+        let state: Option<(String,)> = query_as(AssertSqlSafe(query))
             .bind(spawn_result.task_id)
             .fetch_optional(&pg_pool)
             .await
@@ -937,12 +936,11 @@ async fn test_topk_evaluator_failure_threshold() {
 
     // Get the task result
     let query = format!("SELECT completed_payload FROM durable.t_{queue_name} WHERE task_id = $1");
-    let result: Option<(Option<serde_json::Value>,)> =
-        sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
-            .bind(spawn_result.task_id)
-            .fetch_optional(&pg_pool)
-            .await
-            .expect("Failed to query task result");
+    let result: Option<(Option<serde_json::Value>,)> = query_as(AssertSqlSafe(query))
+        .bind(spawn_result.task_id)
+        .fetch_optional(&pg_pool)
+        .await
+        .expect("Failed to query task result");
 
     let output: TopKTaskOutput = result
         .and_then(|(payload,)| payload)
@@ -1127,7 +1125,7 @@ async fn test_topk_variant_failure_threshold() {
 
         // Check task state (use dynamic table name based on queue)
         let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
-        let state: Option<(String,)> = sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+        let state: Option<(String,)> = query_as(AssertSqlSafe(query))
             .bind(spawn_result.task_id)
             .fetch_optional(&pg_pool)
             .await
@@ -1147,12 +1145,11 @@ async fn test_topk_variant_failure_threshold() {
 
     // Get the task result
     let query = format!("SELECT completed_payload FROM durable.t_{queue_name} WHERE task_id = $1");
-    let result: Option<(Option<serde_json::Value>,)> =
-        sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
-            .bind(spawn_result.task_id)
-            .fetch_optional(&pg_pool)
-            .await
-            .expect("Failed to query task result");
+    let result: Option<(Option<serde_json::Value>,)> = query_as(AssertSqlSafe(query))
+        .bind(spawn_result.task_id)
+        .fetch_optional(&pg_pool)
+        .await
+        .expect("Failed to query task result");
 
     let output: TopKTaskOutput = result
         .and_then(|(payload,)| payload)

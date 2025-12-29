@@ -18,7 +18,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use durable::{Durable, Task, TaskContext, TaskResult, async_trait};
 use serde::{Deserialize, Serialize};
-use sqlx_alpha::PgPool;
+use sqlx::PgPool;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::endpoints::datasets::v1::get_datapoints;
 use tensorzero_core::endpoints::datasets::v1::list_datapoints;

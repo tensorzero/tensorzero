@@ -2012,6 +2012,7 @@ dependencies = [
  "rand 0.9.2",
  "serde",
  "serde_json",
+ "sqlx",
  "tensorzero-core",
  "tokio",
  "tokio-util",
