@@ -41,7 +41,7 @@ struct PublishResultParams {
 ///
 /// ```ignore
 /// // Register a wrapped tool
-/// executor.register_task_tool::<ClientToolWrapper<MyTool>>().await;
+/// executor.register_task_tool::<ClientTaskToolWrapper<MyTool>>().await;
 /// ```
 pub struct ClientTaskToolWrapper<T: TaskTool> {
     _marker: PhantomData<T>,
