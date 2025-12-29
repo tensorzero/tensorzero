@@ -1228,7 +1228,6 @@ pub struct ChatInferenceResponse {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub content: Vec<ContentBlockChatOutput>,
-    #[serde(flatten)]
     pub usage: UsageWithRaw,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
@@ -1243,7 +1242,6 @@ pub struct JsonInferenceResponse {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub output: JsonInferenceOutput,
-    #[serde(flatten)]
     pub usage: UsageWithRaw,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
@@ -1262,19 +1260,26 @@ impl InferenceResponse {
 
         // Build raw_usage if requested
         let raw_usage = if include_raw_usage {
-            Some(
-                inference_result
-                    .model_inference_results()
-                    .iter()
-                    .filter(|r| !r.cached) // Exclude TensorZero cache hits
-                    .map(|r| RawUsageEntry {
-                        model_inference_id: r.id,
-                        provider_type: r.provider_type.clone(),
-                        api_type: r.api_type,
-                        usage: r.raw_usage_json.clone(),
-                    })
-                    .collect(),
-            )
+            let entries: Vec<RawUsageEntry> = inference_result
+                .model_inference_results()
+                .iter()
+                .filter(|r| !r.cached) // Exclude TensorZero cache hits
+                .flat_map(|r| {
+                    // If this result has downstream_raw_usage (from relay), use those entries directly
+                    // Otherwise, construct a single entry from raw_usage_json
+                    if let Some(downstream) = &r.downstream_raw_usage {
+                        downstream.clone()
+                    } else {
+                        vec![RawUsageEntry {
+                            model_inference_id: r.id,
+                            provider_type: r.provider_type.clone(),
+                            api_type: r.api_type,
+                            usage: r.raw_usage_json.clone(),
+                        }]
+                    }
+                })
+                .collect();
+            Some(entries)
         } else {
             None
         };
@@ -1311,6 +1316,13 @@ impl InferenceResponse {
         match self {
             InferenceResponse::Chat(c) => c.usage.usage,
             InferenceResponse::Json(j) => j.usage.usage,
+        }
+    }
+
+    pub fn raw_usage(&self) -> Option<&Vec<RawUsageEntry>> {
+        match self {
+            InferenceResponse::Chat(c) => c.usage.raw_usage.as_ref(),
+            InferenceResponse::Json(j) => j.usage.raw_usage.as_ref(),
         }
     }
 
@@ -1384,9 +1396,7 @@ pub struct ChatInferenceResponseChunk {
     pub variant_name: String,
     pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<Usage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
+    pub usage: Option<UsageWithRaw>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1400,9 +1410,7 @@ pub struct JsonInferenceResponseChunk {
     pub variant_name: String,
     pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<Usage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
+    pub usage: Option<UsageWithRaw>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1454,6 +1462,13 @@ impl InferenceResponseChunk {
                 result_raw_usage = extra_raw_usage.take();
             }
         }
+
+        // Build UsageWithRaw from result_usage and result_raw_usage
+        let usage_with_raw = result_usage.map(|usage| UsageWithRaw {
+            usage,
+            raw_usage: result_raw_usage,
+        });
+
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
                 // For chat functions with json_mode="tool", convert tool call chunks to text chunks
@@ -1483,8 +1498,7 @@ impl InferenceResponseChunk {
                     content,
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: result_usage,
-                    raw_usage: result_raw_usage,
+                    usage: usage_with_raw.clone(),
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1500,8 +1514,7 @@ impl InferenceResponseChunk {
                     raw: result.raw.unwrap_or_default(),
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: result_usage,
-                    raw_usage: result_raw_usage,
+                    usage: usage_with_raw,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })

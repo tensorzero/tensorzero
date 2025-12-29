@@ -180,26 +180,24 @@ pub fn prepare_serialized_openai_compatible_events(
             inference_id = Some(chunk.inference_id());
             episode_id = Some(chunk.episode_id());
             variant_name = Some(chunk.variant_name().to_string());
-            let (chunk_usage, chunk_raw_usage) = match &chunk {
-                InferenceResponseChunk::Chat(c) => {
-                    (&c.usage, &c.raw_usage)
-                }
-                InferenceResponseChunk::Json(c) => {
-                    (&c.usage, &c.raw_usage)
-                }
+            let chunk_usage_with_raw = match &chunk {
+                InferenceResponseChunk::Chat(c) => &c.usage,
+                InferenceResponseChunk::Json(c) => &c.usage,
             };
-            if let Some(chunk_usage) = chunk_usage {
+            if let Some(usage_with_raw) = chunk_usage_with_raw {
                 // `total_usage` will be `None` if this is the first chunk with usage information....
                 if total_usage.is_none() {
                     // ... so initialize it to zero ...
                     total_usage = Some(OpenAICompatibleUsage::zero());
                 }
                 // ...and then add the chunk usage to it (handling `None` fields)
-                if let Some(ref mut u) = total_usage { u.sum_usage_strict(chunk_usage); }
-            }
-            // Collect raw_usage entries from chunks
-            if let Some(raw_usage) = chunk_raw_usage {
-                raw_usage_entries.extend(raw_usage.iter().cloned());
+                if let Some(ref mut u) = total_usage {
+                    u.sum_usage_strict(&usage_with_raw.usage);
+                }
+                // Collect raw_usage entries from chunks
+                if let Some(raw_usage) = &usage_with_raw.raw_usage {
+                    raw_usage_entries.extend(raw_usage.iter().cloned());
+                }
             }
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
             for chunk in openai_compatible_chunks {

@@ -620,6 +620,7 @@ impl InferenceProvider for DummyProvider {
             raw_usage_json: None,
             provider_type: PROVIDER_TYPE.to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         })
     }
 

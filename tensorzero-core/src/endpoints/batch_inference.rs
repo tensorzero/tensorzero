@@ -1045,6 +1045,7 @@ pub async fn write_completed_batch_inference<'a>(
             raw_usage_json: None, // Batch inference does not support raw_usage
             provider_type: "batch".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let tool_config: Option<ToolCallConfig> = match tool_params {
             Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {

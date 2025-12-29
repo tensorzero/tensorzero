@@ -358,7 +358,7 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
             }
             // ...and then add the chunk usage to it (handling `None` fields)
             if let Some(ref mut u) = usage {
-                u.sum_usage_strict(&chunk_usage);
+                u.sum_usage_strict(&chunk_usage.usage);
             }
         }
     }
@@ -456,7 +456,7 @@ async fn test_stream_fatal_error_usage() {
                     }
                     // ...and then add the chunk usage to it (handling `None` fields)
                     if let Some(ref mut u) = usage {
-                        u.sum_usage_strict(&response_usage);
+                        u.sum_usage_strict(&response_usage.usage);
                     }
                 }
             }

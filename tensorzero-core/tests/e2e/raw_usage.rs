@@ -68,20 +68,24 @@ async fn e2e_test_raw_usage_chat_completions_non_streaming() {
 
     let response_json: Value = response.json().await.unwrap();
 
-    // Check usage fields exist
+    // Check usage exists and contains raw_usage (nested structure)
+    let usage = response_json
+        .get("usage")
+        .expect("Response should have usage field");
+
     assert!(
-        response_json.get("input_tokens").is_some(),
-        "Response should have input_tokens"
+        usage.get("input_tokens").is_some(),
+        "usage should have input_tokens"
     );
     assert!(
-        response_json.get("output_tokens").is_some(),
-        "Response should have output_tokens"
+        usage.get("output_tokens").is_some(),
+        "usage should have output_tokens"
     );
 
-    // Check raw_usage exists and is an array
-    let raw_usage = response_json
+    // Check raw_usage exists inside usage and is an array
+    let raw_usage = usage
         .get("raw_usage")
-        .expect("Response should have raw_usage when include_raw_usage=true");
+        .expect("usage should have raw_usage when include_raw_usage=true");
     assert!(raw_usage.is_array(), "raw_usage should be an array");
 
     let raw_usage_array = raw_usage.as_array().unwrap();
@@ -160,8 +164,10 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
 
         all_chunks.push(chunk_json.clone());
 
-        // Check if this chunk has raw_usage (should only be in the final chunk with usage)
-        if chunk_json.get("raw_usage").is_some() {
+        // Check if this chunk has usage with raw_usage nested inside
+        if let Some(usage) = chunk_json.get("usage")
+            && usage.get("raw_usage").is_some()
+        {
             found_raw_usage = true;
             last_chunk_with_usage = Some(chunk_json.clone());
         }
@@ -169,7 +175,7 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
 
     assert!(
         found_raw_usage,
-        "Streaming response should include raw_usage in final chunk when include_raw_usage=true.\n\
+        "Streaming response should include raw_usage nested in usage in final chunk when include_raw_usage=true.\n\
         Total chunks received: {}\n\
         Last few chunks:\n{:#?}",
         all_chunks.len(),
@@ -178,9 +184,12 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
 
     let final_chunk = last_chunk_with_usage
         .expect("No chunk with raw_usage found despite found_raw_usage being true");
-    let raw_usage = final_chunk
+    let usage = final_chunk
+        .get("usage")
+        .expect("usage field missing from final chunk");
+    let raw_usage = usage
         .get("raw_usage")
-        .expect("raw_usage field missing from final chunk");
+        .expect("raw_usage field missing from usage");
     assert!(raw_usage.is_array(), "raw_usage should be an array");
 
     let _raw_usage_array = raw_usage.as_array().expect("raw_usage should be an array");
@@ -232,10 +241,14 @@ async fn e2e_test_raw_usage_responses_api_non_streaming() {
 
     let response_json: Value = response.json().await.unwrap();
 
-    // Check raw_usage exists
-    let raw_usage = response_json
+    // Check usage exists and contains raw_usage (nested structure)
+    let usage = response_json
+        .get("usage")
+        .expect("Response should have usage field");
+
+    let raw_usage = usage
         .get("raw_usage")
-        .expect("Response should have raw_usage when include_raw_usage=true");
+        .expect("usage should have raw_usage when include_raw_usage=true");
     assert!(raw_usage.is_array(), "raw_usage should be an array");
 
     let raw_usage_array = raw_usage.as_array().unwrap();
@@ -300,14 +313,17 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
 
         all_chunks.push(chunk_json.clone());
 
-        if chunk_json.get("raw_usage").is_some() {
+        // Check if this chunk has usage with raw_usage nested inside
+        if let Some(usage) = chunk_json.get("usage")
+            && usage.get("raw_usage").is_some()
+        {
             found_raw_usage = true;
         }
     }
 
     assert!(
         found_raw_usage,
-        "Streaming response should include raw_usage for Responses API.\n\
+        "Streaming response should include raw_usage nested in usage for Responses API.\n\
         Total chunks received: {}\n\
         Last few chunks:\n{:#?}",
         all_chunks.len(),
@@ -352,10 +368,13 @@ async fn e2e_test_raw_usage_not_requested_non_streaming() {
 
     let response_json: Value = response.json().await.unwrap();
 
-    // raw_usage should NOT be present when not requested
+    // raw_usage should NOT be present in usage when not requested
+    let usage = response_json
+        .get("usage")
+        .expect("Response should have usage field");
     assert!(
-        response_json.get("raw_usage").is_none(),
-        "raw_usage should not be present when include_raw_usage is not set"
+        usage.get("raw_usage").is_none(),
+        "raw_usage should not be present in usage when include_raw_usage is not set"
     );
 }
 
@@ -398,10 +417,12 @@ async fn e2e_test_raw_usage_not_requested_streaming() {
 
         let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
 
-        // raw_usage should NOT be present in any chunk
-        assert!(
-            chunk_json.get("raw_usage").is_none(),
-            "raw_usage should not be present in streaming chunks when not requested"
-        );
+        // raw_usage should NOT be present in any chunk's usage
+        if let Some(usage) = chunk_json.get("usage") {
+            assert!(
+                usage.get("raw_usage").is_none(),
+                "raw_usage should not be present in streaming chunks' usage when not requested"
+            );
+        }
     }
 }

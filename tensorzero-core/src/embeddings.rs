@@ -532,6 +532,7 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
                 .and_then(|v| v.get("usage").cloned()),
             provider_type: response.embedding_provider_name.to_string(),
             api_type: ApiType::Embeddings,
+            downstream_raw_usage: None,
         })
     }
 }

@@ -59,7 +59,9 @@ async fn make_request_and_get_raw_usage_count(
             }
 
             let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
-            if let Some(raw_usage) = chunk_json.get("raw_usage")
+            // Check for raw_usage nested inside usage
+            if let Some(usage) = chunk_json.get("usage")
+                && let Some(raw_usage) = usage.get("raw_usage")
                 && let Some(array) = raw_usage.as_array()
             {
                 raw_usage_count = array.len();
@@ -79,8 +81,10 @@ async fn make_request_and_get_raw_usage_count(
 
         let response_json: Value = response.json().await.unwrap();
 
+        // Get raw_usage nested inside usage
         response_json
-            .get("raw_usage")
+            .get("usage")
+            .and_then(|usage| usage.get("raw_usage"))
             .and_then(|v| v.as_array())
             .map(|a| a.len())
             .unwrap_or(0)
@@ -185,11 +189,14 @@ async fn e2e_test_raw_usage_cache_disabled() {
 
     let response_json: Value = response.json().await.unwrap();
 
-    // With cache disabled, raw_usage should still work
-    let raw_usage = response_json.get("raw_usage");
+    // With cache disabled, raw_usage should still work (nested inside usage)
+    let usage = response_json.get("usage");
+    assert!(usage.is_some(), "usage should be present");
+
+    let raw_usage = usage.unwrap().get("raw_usage");
     assert!(
         raw_usage.is_some(),
-        "raw_usage should be present even with cache disabled"
+        "raw_usage should be present inside usage even with cache disabled"
     );
 
     let raw_usage_array = raw_usage.unwrap().as_array().unwrap();

@@ -587,6 +587,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         api_type,
         // Use pre-generated ID if provided (for streaming raw_usage consistency)
         id: model_inference_id,
+        // Streaming doesn't support relay passthrough of raw_usage
+        downstream_raw_usage: None,
     });
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, cached);

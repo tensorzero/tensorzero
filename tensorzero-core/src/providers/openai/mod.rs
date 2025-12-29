@@ -2721,6 +2721,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: "openai".to_string(),
                 api_type: ApiType::ChatCompletions,
                 id: None,
+                downstream_raw_usage: None,
             },
         ))
     }

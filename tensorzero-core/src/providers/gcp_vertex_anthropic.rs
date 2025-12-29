@@ -785,6 +785,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::ChatCompletions,
                 id: None,
+                downstream_raw_usage: None,
             },
         ))
     }

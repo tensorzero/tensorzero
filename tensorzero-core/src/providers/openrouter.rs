@@ -1674,6 +1674,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::ChatCompletions,
                 id: None,
+                downstream_raw_usage: None,
             },
         ))
     }

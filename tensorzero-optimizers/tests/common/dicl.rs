@@ -328,7 +328,7 @@ pub async fn test_dicl_optimization_chat() {
     if let Some(last_chunk) = chunks.last()
         && let Some(usage) = &last_chunk.usage
     {
-        validate_usage_metrics(*usage);
+        validate_usage_metrics(usage.usage);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -613,7 +613,7 @@ pub async fn test_dicl_optimization_json() {
     if let Some(last_chunk) = chunks.last()
         && let Some(usage) = &last_chunk.usage
     {
-        validate_usage_metrics(*usage);
+        validate_usage_metrics(usage.usage);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)

@@ -41,7 +41,6 @@ mod rate_limiting;
 mod rate_limiting_startup;
 mod raw_usage;
 mod raw_usage_cache;
-mod raw_usage_relay;
 mod render_inferences;
 mod retries;
 mod streaming_errors;

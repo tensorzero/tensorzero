@@ -1183,6 +1183,9 @@ pub struct ProviderInferenceResponse {
     pub provider_type: String,
     /// The type of API used (chat_completions, responses, embeddings).
     pub api_type: ApiType,
+    /// Pre-processed raw_usage entries from downstream (for relay passthrough).
+    /// If present, these entries are used directly instead of constructing from raw_usage_json.
+    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl ProviderInferenceResponse {
@@ -1240,6 +1243,8 @@ pub struct ModelInferenceResponse {
     pub provider_type: String,
     /// The type of API used (chat_completions, responses, embeddings).
     pub api_type: ApiType,
+    /// Pre-processed raw_usage entries from downstream (for relay passthrough).
+    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1271,6 +1276,8 @@ pub struct ModelInferenceResponseWithMetadata {
     pub provider_type: String,
     /// The type of API used (chat_completions, responses, embeddings).
     pub api_type: ApiType,
+    /// Pre-processed raw_usage entries from downstream (for relay passthrough).
+    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1569,6 +1576,7 @@ impl ModelInferenceResponse {
             raw_usage_json: provider_inference_response.raw_usage_json,
             provider_type: provider_inference_response.provider_type,
             api_type: provider_inference_response.api_type,
+            downstream_raw_usage: provider_inference_response.downstream_raw_usage,
         }
     }
 
@@ -1597,10 +1605,11 @@ impl ModelInferenceResponse {
             finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
             cached: true,
-            // TensorZero cache hits are excluded from raw_usage list, so raw_usage_json is not needed
+            // TensorZero cache hits are excluded from raw_usage list, so these are not needed
             raw_usage_json: None,
             provider_type,
             api_type,
+            downstream_raw_usage: None,
         }
     }
 }
@@ -1626,6 +1635,7 @@ impl ModelInferenceResponseWithMetadata {
             raw_usage_json: model_inference_response.raw_usage_json,
             provider_type: model_inference_response.provider_type,
             api_type: model_inference_response.api_type,
+            downstream_raw_usage: model_inference_response.downstream_raw_usage,
         }
     }
 }
@@ -1720,6 +1730,8 @@ pub struct ProviderInferenceResponseArgs {
     /// Pre-generated ID for streaming (to match raw_usage entries sent to client).
     /// If None, a new ID will be generated.
     pub id: Option<Uuid>,
+    /// Pre-processed raw_usage entries from downstream (for relay passthrough).
+    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl ProviderInferenceResponse {
@@ -1739,6 +1751,7 @@ impl ProviderInferenceResponse {
             raw_usage_json: args.raw_usage_json,
             provider_type: args.provider_type,
             api_type: args.api_type,
+            downstream_raw_usage: args.downstream_raw_usage,
         }
     }
 }
@@ -2186,6 +2199,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2238,6 +2252,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2293,6 +2308,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2344,6 +2360,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2415,6 +2432,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2504,6 +2522,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2602,6 +2621,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2656,6 +2676,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2734,6 +2755,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2794,6 +2816,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2994,6 +3017,7 @@ mod tests {
                 raw_usage_json: None,
                 provider_type: "test_provider".to_string(),
                 api_type: ApiType::ChatCompletions,
+                downstream_raw_usage: None,
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly

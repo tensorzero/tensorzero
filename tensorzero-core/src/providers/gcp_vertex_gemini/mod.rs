@@ -2991,6 +2991,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::ChatCompletions,
                 id: None,
+                downstream_raw_usage: None,
             },
         ))
     }

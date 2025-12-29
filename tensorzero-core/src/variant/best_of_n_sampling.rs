@@ -1084,6 +1084,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1124,6 +1125,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1183,6 +1185,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1226,6 +1229,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "dummy".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1301,6 +1305,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1341,6 +1346,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(

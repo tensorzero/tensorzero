@@ -1890,6 +1890,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -1960,6 +1961,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2016,6 +2018,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2074,6 +2077,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2130,6 +2134,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2186,6 +2191,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2261,6 +2267,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2311,6 +2318,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2368,6 +2376,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2423,6 +2432,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2485,6 +2495,7 @@ mod tests {
             raw_usage_json: None,
             provider_type: "test_provider".to_string(),
             api_type: ApiType::ChatCompletions,
+            downstream_raw_usage: None,
         };
         let response = function_config
             .prepare_response(
