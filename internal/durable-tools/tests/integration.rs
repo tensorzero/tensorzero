@@ -19,6 +19,7 @@ use durable_tools::{
 use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use tensorzero::ActionInput;
 use tensorzero::{
     ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
     Usage,
@@ -89,7 +90,7 @@ impl TensorZeroClient for MockTensorZeroClient {
     async fn action(
         &self,
         _snapshot_hash: SnapshotHash,
-        _params: ClientInferenceParams,
+        _input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError> {
         // Mock just returns the same response as inference() for simplicity
         self.response

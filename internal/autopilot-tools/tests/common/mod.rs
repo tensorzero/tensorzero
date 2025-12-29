@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use durable_tools::{TensorZeroClient, TensorZeroClientError};
-use tensorzero::{ClientInferenceParams, InferenceResponse, Usage};
+use tensorzero::{ActionInput, ClientInferenceParams, InferenceResponse, Usage};
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
@@ -14,7 +14,7 @@ use uuid::Uuid;
 /// Mock TensorZeroClient that captures inference calls for verification.
 pub struct MockTensorZeroClient {
     captured_inference_params: Arc<Mutex<Option<ClientInferenceParams>>>,
-    captured_action_params: Arc<Mutex<Option<(SnapshotHash, ClientInferenceParams)>>>,
+    captured_action_params: Arc<Mutex<Option<(SnapshotHash, ActionInput)>>>,
     response: InferenceResponse,
 }
 
@@ -31,9 +31,7 @@ impl MockTensorZeroClient {
         self.captured_inference_params.lock().await.clone()
     }
 
-    pub async fn get_captured_action_params(
-        &self,
-    ) -> Option<(SnapshotHash, ClientInferenceParams)> {
+    pub async fn get_captured_action_params(&self) -> Option<(SnapshotHash, ActionInput)> {
         self.captured_action_params.lock().await.clone()
     }
 }
@@ -51,9 +49,9 @@ impl TensorZeroClient for MockTensorZeroClient {
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
-        params: ClientInferenceParams,
+        input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError> {
-        *self.captured_action_params.lock().await = Some((snapshot_hash, params));
+        *self.captured_action_params.lock().await = Some((snapshot_hash, input));
         Ok(self.response.clone())
     }
 

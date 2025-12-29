@@ -9,7 +9,8 @@ use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{
-    ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse, Input,
+    ActionInput, ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse,
+    Input,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use uuid::Uuid;
@@ -37,9 +38,6 @@ pub struct InferenceToolParams {
     /// Output schema override (for JSON functions).
     #[serde(default)]
     pub output_schema: Option<Value>,
-    /// Optional config snapshot hash - if provided, uses action endpoint with historical config.
-    #[serde(default)]
-    pub config_snapshot_hash: Option<String>,
 }
 
 /// Side information for the inference tool (hidden from LLM).
@@ -53,6 +51,9 @@ pub struct InferenceToolSideInfo {
     pub tool_call_id: Uuid,
     /// Tool call event ID for tagging.
     pub tool_call_event_id: Uuid,
+    /// Optional config snapshot hash - if provided, uses action endpoint with historical config.
+    #[serde(default)]
+    pub config_snapshot_hash: Option<String>,
 }
 
 impl SideInfo for InferenceToolSideInfo {}
@@ -123,14 +124,17 @@ impl SimpleTool for InferenceTool {
             ..Default::default()
         };
 
-        let response = if let Some(hash) = llm_params.config_snapshot_hash {
+        let response = if let Some(hash) = side_info.config_snapshot_hash {
             let snapshot_hash: SnapshotHash =
                 hash.parse()
                     .map_err(|_: std::convert::Infallible| ToolError::Validation {
                         message: "Invalid snapshot hash".to_string(),
                     })?;
             ctx.client()
-                .action(snapshot_hash, client_params)
+                .action(
+                    snapshot_hash,
+                    ActionInput::Inference(Box::new(client_params)),
+                )
                 .await
                 .map_err(|e| ToolError::ExecutionFailed(e.into()))?
         } else {

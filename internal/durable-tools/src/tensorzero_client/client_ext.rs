@@ -228,7 +228,7 @@ impl TensorZeroClient for Client {
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
-        params: ClientInferenceParams,
+        input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
@@ -239,15 +239,10 @@ impl TensorZeroClient for Client {
                         TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
 
-                let action_input = ActionInputInfo {
-                    snapshot_hash,
-                    input: ActionInput::Inference(Box::new(params)),
-                };
-
                 let response = http
                     .http_client
                     .post(url)
-                    .json(&action_input)
+                    .json(&input)
                     .send()
                     .await
                     .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))?;
@@ -272,7 +267,7 @@ impl TensorZeroClient for Client {
             } => {
                 let action_input = ActionInputInfo {
                     snapshot_hash,
-                    input: ActionInput::Inference(Box::new(params)),
+                    input,
                 };
 
                 let result = tensorzero_core::endpoints::internal::action::action(

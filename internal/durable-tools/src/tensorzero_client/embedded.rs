@@ -120,11 +120,11 @@ impl TensorZeroClient for EmbeddedClient {
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
-        params: ClientInferenceParams,
+        input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError> {
         let action_input = ActionInputInfo {
             snapshot_hash,
-            input: ActionInput::Inference(Box::new(params)),
+            input,
         };
 
         let response = action(&self.app_state, action_input).await.map_err(|e| {

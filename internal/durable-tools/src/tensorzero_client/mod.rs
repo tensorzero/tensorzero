@@ -11,8 +11,8 @@ use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tensorzero::{
-    Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, ClientInferenceParams,
-    InferenceResponse, TensorZeroError,
+    ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
+    ClientInferenceParams, InferenceResponse, TensorZeroError,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use url::Url;
@@ -100,7 +100,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
-        params: ClientInferenceParams,
+        input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
 }
 

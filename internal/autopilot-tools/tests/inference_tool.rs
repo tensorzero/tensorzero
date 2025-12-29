@@ -7,7 +7,7 @@ use std::sync::Arc;
 use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext};
 use sqlx::PgPool;
-use tensorzero::{Input, InputMessage, InputMessageContent, Role};
+use tensorzero::{ActionInput, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
@@ -44,7 +44,6 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
         variant_name: None,
         dynamic_tool_params: Default::default(),
         output_schema: None,
-        config_snapshot_hash: None, // Testing the non-hash path
     };
 
     let side_info = InferenceToolSideInfo {
@@ -52,6 +51,7 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
         session_id,
         tool_call_id,
         tool_call_event_id,
+        config_snapshot_hash: None, // Testing the non-hash path
     };
 
     // Create the tool and context
@@ -136,7 +136,6 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
         variant_name: None,
         dynamic_tool_params: Default::default(),
         output_schema: None,
-        config_snapshot_hash: Some(test_snapshot_hash.to_string()), // Testing the action path
     };
 
     let side_info = InferenceToolSideInfo {
@@ -144,6 +143,7 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
         session_id,
         tool_call_id,
         tool_call_event_id,
+        config_snapshot_hash: Some(test_snapshot_hash.to_string()), // Testing the action path
     };
 
     // Create the tool and context
@@ -176,8 +176,12 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
     );
 
     // Verify snapshot hash
-    let (snapshot_hash, params) = captured;
+    let (snapshot_hash, input) = captured;
     assert_eq!(snapshot_hash.to_string(), test_snapshot_hash);
+
+    let ActionInput::Inference(params) = input else {
+        panic!("Expected ActionInput::Inference");
+    };
 
     // Verify params
     assert_eq!(params.function_name, Some("test_function".to_string()));
