@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the error simple tool (visible to LLM).
@@ -22,6 +22,7 @@ pub struct ErrorSimpleTool;
 impl ToolMetadata for ErrorSimpleTool {
     type SideInfo = ();
     type Output = ();
+    type LlmParams = ErrorSimpleParams;
 
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("error_simple")
@@ -32,12 +33,6 @@ impl ToolMetadata for ErrorSimpleTool {
             "Always returns an error with the specified message. A SimpleTool for testing error propagation.",
         )
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(ErrorSimpleParams))
-    }
-
-    type LlmParams = ErrorSimpleParams;
 }
 
 #[async_trait]
