@@ -949,7 +949,7 @@ async fn fetch_datapoint_ids_step(
     params: FetchDatapointIdsParams,
     state: TopKTaskState,
 ) -> anyhow::Result<Vec<Uuid>> {
-    const PAGE_SIZE: u32 = 1000;
+    const PAGE_SIZE: u32 = 100;
 
     let mut all_ids: Vec<Uuid> = Vec::new();
     let mut offset: u32 = 0;
@@ -1008,7 +1008,7 @@ async fn fetch_datapoint_ids_step(
 /// Extracts the variant name from an `EvaluationVariant`.
 ///
 /// For named variants, returns the name directly. For dynamic variants (which don't
-/// have persistent names), returns a placeholder string "dynamic_variant".
+/// have persistent names), returns a placeholder string "tensorzero::dynamic_variant".
 #[allow(dead_code, reason = "used by process_batch_step skeleton")]
 #[allow(
     clippy::allow_attributes,
@@ -1018,7 +1018,7 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
     match variant {
         EvaluationVariant::Name(name) => name.clone(),
         // Dynamic variants don't have names, use a placeholder
-        EvaluationVariant::Info(_) => "dynamic_variant".to_string(),
+        EvaluationVariant::Info(_) => "tensorzero::dynamic_variant".to_string(),
     }
 }
 
