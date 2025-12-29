@@ -26,10 +26,6 @@ futures = { workspace = true }
 indicatif = "0.18.2"
 durable = { workspace = true }
 rand = { workspace = true }
-sqlx_alpha = { package = "sqlx", version = "0.9.0-alpha.1", features = [
-    "postgres",
-    "runtime-tokio",
-] }
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
