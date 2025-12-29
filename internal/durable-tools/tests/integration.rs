@@ -16,7 +16,7 @@ use durable_tools::{
     ErasedSimpleTool, SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient,
     TensorZeroClientError, ToolContext, ToolExecutor, ToolMetadata, ToolResult,
 };
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tensorzero::ActionInput;
@@ -136,6 +136,10 @@ struct EchoOutput {
 struct EchoSimpleTool;
 
 impl ToolMetadata for EchoSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_simple")
     }
@@ -144,17 +148,9 @@ impl ToolMetadata for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
@@ -175,6 +171,10 @@ impl SimpleTool for EchoSimpleTool {
 struct EchoTaskTool;
 
 impl ToolMetadata for EchoTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_task")
     }
@@ -183,17 +183,9 @@ impl ToolMetadata for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
@@ -242,6 +234,10 @@ fn extract_text_from_response(response: &InferenceResponse) -> String {
 struct InferenceSimpleTool;
 
 impl ToolMetadata for InferenceSimpleTool {
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
+    type LlmParams = InferencePromptParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("inference_simple")
     }
@@ -250,17 +246,9 @@ impl ToolMetadata for InferenceSimpleTool {
         Cow::Borrowed("Calls inference and returns the response")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(InferencePromptParams))
-    }
-
-    type LlmParams = InferencePromptParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(30)
     }
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
 }
 
 #[async_trait]
@@ -301,6 +289,10 @@ impl SimpleTool for InferenceSimpleTool {
 struct InferenceTaskTool;
 
 impl ToolMetadata for InferenceTaskTool {
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
+    type LlmParams = InferencePromptParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("inference_task")
     }
@@ -309,17 +301,9 @@ impl ToolMetadata for InferenceTaskTool {
         Cow::Borrowed("Calls inference (durable) and returns the response")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(InferencePromptParams))
-    }
-
-    type LlmParams = InferencePromptParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
 }
 
 #[async_trait]
@@ -523,6 +507,10 @@ static CAPTURED_KEYS: std::sync::LazyLock<Arc<Mutex<Vec<String>>>> =
 struct KeyCapturingSimpleTool;
 
 impl ToolMetadata for KeyCapturingSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("key_capturing_tool")
     }
@@ -530,14 +518,6 @@ impl ToolMetadata for KeyCapturingSimpleTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Captures idempotency keys for testing")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
@@ -561,6 +541,10 @@ impl SimpleTool for KeyCapturingSimpleTool {
 struct MultiCallTaskTool;
 
 impl ToolMetadata for MultiCallTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("multi_call_task")
     }
@@ -568,14 +552,6 @@ impl ToolMetadata for MultiCallTaskTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Calls a SimpleTool multiple times")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]

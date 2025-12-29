@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{SideInfo, SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{
@@ -78,10 +78,6 @@ impl ToolMetadata for InferenceTool {
         Cow::Borrowed(
             "Call TensorZero inference endpoint. Optionally use a config snapshot hash to use historical configuration.",
         )
-    }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(InferenceToolParams))
     }
 }
 
