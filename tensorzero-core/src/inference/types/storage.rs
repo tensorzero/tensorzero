@@ -29,7 +29,7 @@ impl StorageKindExt for StorageKind {
     /// During a normal run, we never use a prefix on the object key.
     /// See `StorageKind::S3Compatible.prefix`
     #[cfg(not(feature = "e2e_tests"))]
-    fn prefix(&self) -> &str {
+    fn prefix(&self) -> &'static str {
         // self is intentionally unused in non-e2e builds
         let _ = self;
         ""

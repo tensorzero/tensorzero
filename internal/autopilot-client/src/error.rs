@@ -32,4 +32,8 @@ pub enum AutopilotError {
     /// Missing required configuration.
     #[error("Missing required configuration: {0}")]
     MissingConfig(&'static str),
+
+    /// Tool call not found.
+    #[error("Tool call not found: {0}")]
+    ToolCallNotFound(uuid::Uuid),
 }
