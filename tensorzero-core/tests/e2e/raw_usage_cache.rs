@@ -208,6 +208,73 @@ async fn e2e_test_raw_usage_cache_disabled() {
     );
 }
 
+#[tokio::test]
+async fn e2e_test_raw_usage_cache_disabled_streaming() {
+    // Use a unique input
+    let unique_input = format!(
+        "What is 5+5? Cache disabled streaming test: {}",
+        Uuid::now_v7()
+    );
+
+    let episode_id = Uuid::now_v7();
+
+    // Request with cache disabled
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": "openai",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": unique_input
+                }
+            ]
+        },
+        "stream": true,
+        "include_raw_usage": true,
+        "cache_options": {
+            "enabled": "off"
+        }
+    });
+
+    let mut chunks = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut raw_usage: Option<Vec<Value>> = None;
+
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.unwrap();
+        let Event::Message(chunk) = chunk else {
+            continue;
+        };
+        if chunk.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
+        // Check for raw_usage nested inside usage
+        if let Some(usage) = chunk_json.get("usage")
+            && let Some(ru) = usage.get("raw_usage")
+        {
+            raw_usage = Some(ru.as_array().expect("raw_usage should be an array").clone());
+        }
+    }
+
+    let raw_usage =
+        raw_usage.expect("Should have received a chunk with usage containing raw_usage");
+
+    // With cache disabled, raw_usage should have entries (no cache hits possible)
+    assert!(
+        !raw_usage.is_empty(),
+        "raw_usage should have entries when cache is disabled (no cache hits possible)"
+    );
+}
+
 // ============================================================================
 // OpenAI-Compatible API Cache Tests
 // ============================================================================

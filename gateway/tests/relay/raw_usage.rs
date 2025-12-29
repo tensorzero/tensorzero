@@ -93,50 +93,6 @@ async fn test_relay_raw_usage_non_streaming() {
     }
 }
 
-/// Test that relay does NOT return raw_usage when not requested
-#[tokio::test]
-async fn test_relay_raw_usage_not_requested() {
-    let downstream_config = "";
-    let relay_config = "";
-
-    let env = start_relay_test_environment(downstream_config, relay_config).await;
-
-    // Make request WITHOUT include_raw_usage
-    let client = Client::new();
-    let response = client
-        .post(format!("http://{}/inference", env.relay.addr))
-        .json(&json!({
-            "model_name": "dummy::good",
-            "episode_id": Uuid::now_v7(),
-            "input": {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Hello"
-                    }
-                ]
-            },
-            "stream": false,
-            "include_raw_usage": false
-        }))
-        .send()
-        .await
-        .unwrap();
-
-    let status = response.status();
-    let body_text = response.text().await.unwrap();
-    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
-
-    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
-
-    // raw_usage should NOT be present in usage when not requested
-    let usage = body.get("usage").expect("Response should have usage field");
-    assert!(
-        usage.get("raw_usage").is_none(),
-        "raw_usage should NOT be present in usage when not requested. Body: {body}"
-    );
-}
-
 /// Test relay streaming with include_raw_usage
 #[tokio::test]
 async fn test_relay_raw_usage_streaming() {
@@ -221,6 +177,99 @@ async fn test_relay_raw_usage_streaming() {
         found_raw_usage,
         "Streaming relay response should include raw_usage nested in usage in final chunk"
     );
+}
+
+/// Test that relay does NOT return raw_usage when not requested
+#[tokio::test]
+async fn test_relay_raw_usage_not_requested() {
+    let downstream_config = "";
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    // Make request WITHOUT include_raw_usage
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false,
+            "include_raw_usage": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    // raw_usage should NOT be present in usage when not requested
+    let usage = body.get("usage").expect("Response should have usage field");
+    assert!(
+        usage.get("raw_usage").is_none(),
+        "raw_usage should NOT be present in usage when not requested. Body: {body}"
+    );
+}
+
+/// Test that relay streaming does NOT return raw_usage when not requested
+#[tokio::test]
+async fn test_relay_raw_usage_not_requested_streaming() {
+    let downstream_config = "";
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true,
+            "include_raw_usage": false
+        }))
+        .eventsource()
+        .unwrap();
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        // raw_usage should NOT be present in any chunk's usage when not requested
+        if let Some(usage) = chunk.get("usage") {
+            assert!(
+                usage.get("raw_usage").is_none(),
+                "raw_usage should NOT be present in streaming chunks when not requested"
+            );
+        }
+    }
 }
 
 /// Test that raw_usage entries have correct structure from downstream

@@ -505,6 +505,80 @@ async fn e2e_test_raw_usage_best_of_n_non_streaming() {
     }
 }
 
+#[tokio::test]
+async fn e2e_test_raw_usage_best_of_n_streaming() {
+    let episode_id = Uuid::now_v7();
+    let random_suffix = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "best_of_n",
+        "variant_name": "best_of_n_variant",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": format!("What is your favorite color? {random_suffix}")
+                }
+            ]
+        },
+        "stream": true,
+        "include_raw_usage": true
+    });
+
+    let mut chunks = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .expect("Failed to create eventsource for streaming request");
+
+    let mut found_raw_usage = false;
+    let mut raw_usage_count = 0;
+
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.expect("Failed to receive chunk from stream");
+        let Event::Message(chunk) = chunk else {
+            continue;
+        };
+        if chunk.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value =
+            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+
+        // Check if this chunk has usage with raw_usage nested inside
+        if let Some(usage) = chunk_json.get("usage")
+            && let Some(raw_usage) = usage.get("raw_usage")
+        {
+            found_raw_usage = true;
+            if let Some(arr) = raw_usage.as_array() {
+                raw_usage_count = arr.len();
+
+                // Validate each entry has required fields
+                for entry in arr {
+                    assert_raw_usage_entry(entry);
+                }
+            }
+        }
+    }
+
+    assert!(
+        found_raw_usage,
+        "Streaming Best-of-N response should include raw_usage in final chunk"
+    );
+
+    // Best-of-N should have multiple entries:
+    // - 2 candidate inferences (variant0 and variant1)
+    // - 1 evaluator/judge inference
+    // Total: 3 model inferences
+    assert!(
+        raw_usage_count >= 3,
+        "Best-of-N streaming should have at least 3 raw_usage entries (2 candidates + 1 judge), got {raw_usage_count}"
+    );
+}
+
 // =============================================================================
 // DICL Tests (with embeddings api_type)
 // =============================================================================
@@ -588,6 +662,81 @@ async fn e2e_test_raw_usage_dicl_non_streaming() {
     );
 }
 
+#[tokio::test]
+async fn e2e_test_raw_usage_dicl_streaming() {
+    let episode_id = Uuid::now_v7();
+    let random_suffix = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "dicl",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": format!("What is the capital of Germany? {random_suffix}")
+                }
+            ]
+        },
+        "stream": true,
+        "include_raw_usage": true
+    });
+
+    let mut chunks = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .expect("Failed to create eventsource for streaming request");
+
+    let mut found_raw_usage = false;
+    let mut api_types: Vec<String> = Vec::new();
+
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.expect("Failed to receive chunk from stream");
+        let Event::Message(chunk) = chunk else {
+            continue;
+        };
+        if chunk.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value =
+            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+
+        // Check if this chunk has usage with raw_usage nested inside
+        if let Some(usage) = chunk_json.get("usage")
+            && let Some(raw_usage) = usage.get("raw_usage")
+        {
+            found_raw_usage = true;
+            if let Some(arr) = raw_usage.as_array() {
+                for entry in arr {
+                    assert_raw_usage_entry(entry);
+                    if let Some(api_type) = entry.get("api_type").and_then(|v| v.as_str()) {
+                        api_types.push(api_type.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        found_raw_usage,
+        "Streaming DICL response should include raw_usage in final chunk"
+    );
+
+    // DICL should have both embeddings and chat_completions api_types
+    assert!(
+        api_types.iter().any(|t| t == "embeddings"),
+        "DICL streaming should have an entry with api_type `embeddings`, got: {api_types:?}"
+    );
+    assert!(
+        api_types.iter().any(|t| t == "chat_completions"),
+        "DICL streaming should have an entry with api_type `chat_completions`, got: {api_types:?}"
+    );
+}
+
 // =============================================================================
 // Streaming Constraint Error Test
 // =============================================================================
@@ -625,5 +774,128 @@ async fn e2e_test_raw_usage_streaming_requires_include_usage() {
         response.status().is_client_error(),
         "Request with include_raw_usage but without include_usage should fail, got status: {}",
         response.status()
+    );
+}
+
+// =============================================================================
+// JSON Function Tests
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_test_raw_usage_json_function_non_streaming() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "json_success",
+        "variant_name": "test",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "JsonBot"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
+                }
+            ]
+        },
+        "stream": false,
+        "include_raw_usage": true
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Response should be successful"
+    );
+
+    let response_json: Value = response.json().await.unwrap();
+
+    // Check usage exists and contains raw_usage
+    let usage = response_json
+        .get("usage")
+        .expect("Response should have usage field");
+
+    let raw_usage = usage
+        .get("raw_usage")
+        .expect("usage should have raw_usage when include_raw_usage=true");
+    assert!(raw_usage.is_array(), "raw_usage should be an array");
+
+    let raw_usage_array = raw_usage.as_array().unwrap();
+    assert!(
+        !raw_usage_array.is_empty(),
+        "raw_usage should have at least one entry for JSON function"
+    );
+
+    // Validate entry structure
+    let first_entry = &raw_usage_array[0];
+    assert_raw_usage_entry(first_entry);
+
+    // JSON functions should still have api_type = "chat_completions"
+    let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
+    assert_eq!(
+        api_type, "chat_completions",
+        "JSON function should have api_type 'chat_completions'"
+    );
+}
+
+#[tokio::test]
+async fn e2e_test_raw_usage_json_function_streaming() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "json_success",
+        "variant_name": "test",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "JsonBot"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "France"}}]
+                }
+            ]
+        },
+        "stream": true,
+        "include_raw_usage": true
+    });
+
+    let mut chunks = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .expect("Failed to create eventsource for streaming request");
+
+    let mut found_raw_usage = false;
+
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.expect("Failed to receive chunk from stream");
+        let Event::Message(chunk) = chunk else {
+            continue;
+        };
+        if chunk.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value =
+            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+
+        // Check if this chunk has usage with raw_usage nested inside
+        if let Some(usage) = chunk_json.get("usage")
+            && usage.get("raw_usage").is_some()
+        {
+            found_raw_usage = true;
+        }
+    }
+
+    assert!(
+        found_raw_usage,
+        "Streaming JSON function response should include raw_usage in final chunk"
     );
 }
