@@ -9,11 +9,6 @@ services:
       - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       - VITE_TENSORZERO_FORCE_CACHE_ON
-      # Allow overriding these from environment variables
-      - OPENAI_BASE_URL
-      - FIREWORKS_BASE_URL
-      - FIREWORKS_ACCOUNT_ID
-      - TOGETHER_BASE_URL
     env_file:
       - .env
     ports:

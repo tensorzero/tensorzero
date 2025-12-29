@@ -29,12 +29,17 @@ services:
       target: gateway
     volumes:
       - ./config:/app/config:ro
+      # Mount GCP JWT key file (optional - only needed for GCP providers)
+      - ${GCP_CREDENTIALS_PATH:-../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
+      GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
     env_file:
       - .env
-      - .env-gateway
+      - path: .env-gateway
+        required: false
     ports:
       - "3000:3000"
     extra_hosts:

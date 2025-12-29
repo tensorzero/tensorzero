@@ -9,7 +9,6 @@ use rand::Rng;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::time::timeout;
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
@@ -35,6 +34,7 @@ use crate::{
     function::FunctionConfig,
     inference::types::{InferenceResult, InferenceResultStream},
     minijinja_util::TemplateConfig,
+    relay::TensorzeroRelay,
     variant::chat_completion::ChatCompletionConfig,
 };
 
@@ -49,7 +49,6 @@ use super::{
 #[ts(export)]
 pub struct MixtureOfNConfig {
     weight: Option<f64>,
-    timeout_s: f64,
     candidates: Vec<String>,
     fuser: FuserConfig,
 }
@@ -63,10 +62,6 @@ impl MixtureOfNConfig {
         self.weight = weight;
     }
 
-    pub fn timeout_s(&self) -> f64 {
-        self.timeout_s
-    }
-
     pub fn candidates(&self) -> &Vec<String> {
         &self.candidates
     }
@@ -76,10 +71,11 @@ impl MixtureOfNConfig {
     }
 
     /// Converts this initialized config back to its uninitialized form.
+    #[expect(deprecated)]
     pub fn as_uninitialized(self) -> UninitializedMixtureOfNConfig {
         UninitializedMixtureOfNConfig {
             weight: self.weight,
-            timeout_s: self.timeout_s,
+            timeout_s: None,
             candidates: self.candidates,
             fuser: UninitializedFuserConfig {
                 inner: self.fuser.inner.as_uninitialized(),
@@ -90,22 +86,19 @@ impl MixtureOfNConfig {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
     pub weight: Option<f64>,
-    #[serde(default = "default_timeout")]
-    pub timeout_s: f64,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
     pub candidates: Vec<String>,
     pub fuser: UninitializedFuserConfig,
 }
 
-fn default_timeout() -> f64 {
-    300.0
-}
-
 #[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct FuserConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
@@ -113,7 +106,7 @@ pub struct FuserConfig {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct UninitializedFuserConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
@@ -127,7 +120,6 @@ impl UninitializedMixtureOfNConfig {
     ) -> Result<MixtureOfNConfig, Error> {
         Ok(MixtureOfNConfig {
             weight: self.weight,
-            timeout_s: self.timeout_s,
             candidates: self.candidates,
             fuser: FuserConfig {
                 inner: self.fuser.inner.load(
@@ -141,6 +133,12 @@ impl UninitializedMixtureOfNConfig {
                 )?,
             },
         })
+    }
+
+    /// Returns the deprecated `timeout_s` value if set.
+    #[expect(deprecated)]
+    pub fn timeout_s(&self) -> Option<f64> {
+        self.timeout_s
     }
 }
 
@@ -240,6 +238,7 @@ impl Variant for MixtureOfNConfig {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
@@ -257,6 +256,7 @@ impl Variant for MixtureOfNConfig {
                 function_name,
                 candidate,
                 global_outbound_http_timeout,
+                relay,
             ))
             .await
             .map_err(|e| {
@@ -277,6 +277,7 @@ impl Variant for MixtureOfNConfig {
                 function_name,
                 variant_name,
                 global_outbound_http_timeout,
+                relay,
             )
             .await?;
         Ok(())
@@ -503,21 +504,18 @@ impl MixtureOfNConfig {
             let clients = clients.clone();
             inference_futures.push((
                 candidate_name.clone(),
-                timeout(
-                    tokio::time::Duration::from_secs_f64(self.timeout_s),
-                    unbounded_recursion_wrapper(async move {
-                        candidate_variant
-                            .infer(
-                                input,
-                                models,
-                                function,
-                                config,
-                                clients,
-                                InferenceParams::default(),
-                            )
-                            .await
-                    }),
-                ),
+                unbounded_recursion_wrapper(async move {
+                    candidate_variant
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            config,
+                            clients,
+                            InferenceParams::default(),
+                        )
+                        .await
+                }),
             ));
         }
 
@@ -531,19 +529,9 @@ impl MixtureOfNConfig {
 
         // Collect the successful results
         let mut successful_results = Vec::new();
-        for (candidate_name, result) in inference_results {
-            match result {
-                Ok(inner_result) => {
-                    if let Ok(res) = inner_result {
-                        successful_results.push(res);
-                    }
-                }
-                Err(_timeout_error) => {
-                    // Map the Tokio timeout error to our own TimeoutError type
-                    Error::new(ErrorDetails::InferenceTimeout {
-                        variant_name: candidate_name.clone(),
-                    });
-                }
+        for (_candidate_name, result) in inference_results {
+            if let Ok(res) = result {
+                successful_results.push(res);
             }
         }
 
@@ -677,11 +665,14 @@ async fn inner_fuse_candidates<'a>(
         }
         .into());
     }
-    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model().to_string(),
-        })
-    })?;
+    let model_config = models
+        .get(fuser.inner.model(), clients.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: fuser.inner.model().to_string(),
+            })
+        })?;
     let infer_model_request_args = InferModelRequestArgs {
         request: inference_request,
         model_name: fuser.inner.model().clone(),
@@ -730,11 +721,14 @@ async fn inner_fuse_candidates_stream<'a>(
         }
         .into());
     }
-    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model().to_string(),
-        })
-    })?;
+    let model_config = models
+        .get(fuser.inner.model(), clients.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: fuser.inner.model().to_string(),
+            })
+        })?;
     infer_model_request_stream(
         inference_request,
         fuser.inner.model().clone(),
@@ -1333,7 +1327,6 @@ mod tests {
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
         };
@@ -1534,7 +1527,6 @@ mod tests {
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
         };
@@ -1616,7 +1608,6 @@ mod tests {
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
-            timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
         };
@@ -1828,10 +1819,11 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated)]
     fn test_as_uninitialized_preserves_basic_fields() {
         let uninitialized = UninitializedMixtureOfNConfig {
             weight: Some(1.0),
-            timeout_s: 60.0,
+            timeout_s: Some(60.0), // deprecated, will be None in exported
             candidates: vec!["variant1".to_string(), "variant2".to_string()],
             fuser: UninitializedFuserConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1849,7 +1841,11 @@ mod tests {
         let exported = config.as_uninitialized();
 
         assert_eq!(exported.weight, Some(1.0));
-        assert_eq!(exported.timeout_s, 60.0);
+        // timeout_s is deprecated and not stored in initialized config, so it's None in exported
+        assert_eq!(
+            exported.timeout_s, None,
+            "timeout_s should be None in exported config"
+        );
         assert_eq!(
             exported.candidates,
             vec!["variant1".to_string(), "variant2".to_string()]
@@ -1859,10 +1855,11 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated)]
     fn test_as_uninitialized_preserves_nested_fuser() {
         let uninitialized = UninitializedMixtureOfNConfig {
             weight: None,
-            timeout_s: 300.0,
+            timeout_s: None,
             candidates: vec!["v1".to_string()],
             fuser: UninitializedFuserConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1888,10 +1885,11 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated)]
     fn test_as_uninitialized_with_empty_candidates() {
         let uninitialized = UninitializedMixtureOfNConfig {
             weight: None,
-            timeout_s: 300.0,
+            timeout_s: None,
             candidates: vec![],
             fuser: UninitializedFuserConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1911,10 +1909,11 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated)]
     fn test_as_uninitialized_serialization_round_trip() {
         let original = UninitializedMixtureOfNConfig {
             weight: Some(0.7),
-            timeout_s: 120.0,
+            timeout_s: None, // deprecated field
             candidates: vec!["a".to_string(), "b".to_string()],
             fuser: UninitializedFuserConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1941,7 +1940,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(reloaded.weight(), Some(0.7));
-        assert_eq!(reloaded.timeout_s(), 120.0);
         assert_eq!(
             reloaded.candidates(),
             &vec!["a".to_string(), "b".to_string()]

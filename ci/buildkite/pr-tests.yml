@@ -24,8 +24,8 @@ steps:
           limit: 3
 
   - label: "Build Mock Inference Provider Container"
-    command: bash ./ci/buildkite/build-mock-inference-provider-container.sh
-    key: "build-mock-inference-provider-container"
+    command: bash ./ci/buildkite/build-mock-provider-api-container.sh
+    key: "build-mock-provider-api-container"
     retry:
       automatic:
         - exit_status: "*"
@@ -83,14 +83,14 @@ steps:
       - "build-gateway-container"
       - "build-node-unit-tests-container"
       - "build-fixtures-container"
-      - "build-mock-inference-provider-container"
+      - "build-mock-provider-api-container"
 
   - label: ":playwright: UI E2E Tests"
     command: |
       bash ./ci/buildkite/ui-e2e-tests.sh
     depends_on:
       - "build-gateway-container"
-      - "build-mock-inference-provider-container"
+      - "build-mock-provider-api-container"
       - "build-ui-container"
       - "build-ui-e2e-tests-container"
       - "build-fixtures-container"

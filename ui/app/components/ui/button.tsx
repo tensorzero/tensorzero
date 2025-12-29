@@ -3,6 +3,7 @@ import { Slot } from "radix-ui";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "~/utils/common";
+import { useHydrated } from "~/hooks/use-hydrated";
 import type { IconProps } from "../icons/Icons";
 
 const buttonVariants = cva(
@@ -68,9 +69,12 @@ const Button: React.FC<ButtonProps> = ({
   children,
   slotLeft,
   slotRight,
+  disabled,
   ...props
 }) => {
   const Comp = asChild ? Slot.Root : "button";
+  const isHydrated = useHydrated();
+  const isDisabled = disabled || (!asChild && !isHydrated);
   const child = asChild ? (
     <Slot.Slottable>{children}</Slot.Slottable>
   ) : (
@@ -83,6 +87,7 @@ const Button: React.FC<ButtonProps> = ({
         "cursor-pointer",
         buttonVariants({ variant, size, className }),
       )}
+      disabled={isDisabled}
       {...props}
     >
       <ButtonContext value={{ variant, size }}>

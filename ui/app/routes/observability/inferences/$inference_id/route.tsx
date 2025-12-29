@@ -1,5 +1,4 @@
 import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   resolveModelInferences,
@@ -19,7 +18,6 @@ import type { ReactNode } from "react";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
 import { logger } from "~/utils/logger";
-import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   InferenceDetailContent,
@@ -44,7 +42,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // --- Define all promises, conditionally choosing the feedback promise ---
 
-  const dbClient = await getNativeDatabaseClient();
   const tensorZeroClient = getTensorZeroClient();
 
   const inferencesPromise = tensorZeroClient.getInferences({
@@ -55,10 +52,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .getModelInferences(inference_id)
     .then((response) => resolveModelInferences(response.model_inferences));
   const demonstrationFeedbackPromise =
-    dbClient.queryDemonstrationFeedbackByInferenceId({
+    tensorZeroClient.getDemonstrationFeedback(
       inference_id,
-      limit: 1, // Only need to know if *any* exist
-    });
+      { limit: 1 }, // Only need to know if *any* exist
+    );
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table and materialized views as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
@@ -127,7 +124,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const usedVariants =
     inference.function_name === DEFAULT_FUNCTION
-      ? await getUsedVariants(inference.function_name)
+      ? await tensorZeroClient.getUsedVariants(inference.function_name)
       : [];
   const resolvedInput = await loadFileDataForStoredInput(inference.input);
 

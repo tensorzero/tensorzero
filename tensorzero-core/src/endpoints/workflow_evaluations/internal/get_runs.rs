@@ -19,7 +19,7 @@ pub struct GetWorkflowEvaluationRunsParams {
     pub project_name: Option<String>,
 }
 
-/// Handler for `GET /internal/workflow-evaluations/get-runs`
+/// Handler for `GET /internal/workflow_evaluations/get_runs`
 ///
 /// Gets workflow evaluation runs by their IDs.
 #[axum::debug_handler(state = AppStateData)]

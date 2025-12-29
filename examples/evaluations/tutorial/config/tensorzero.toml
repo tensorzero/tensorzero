@@ -21,7 +21,7 @@ user_template = "functions/write_haiku/user_template.minijinja"
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [evaluations.haiku_eval]
-type = "static"
+type = "inference"
 function_name = "write_haiku"
 
 [evaluations.haiku_eval.evaluators.exact_match]
@@ -53,7 +53,7 @@ optimize = "max"
 cutoff = 1
 
 [evaluations.haiku_eval.evaluators.metaphor_count.variants.gpt_4o_mini_judge]
-type = "experimental_chain_of_thought"
+type = "chat_completion"
 model = "openai::gpt-4o-mini"
 system_instructions = "evaluations/haiku_eval/metaphor_count/system_instructions.txt"
 json_mode = "strict"

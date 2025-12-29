@@ -1,7 +1,8 @@
 # cargo-deny
 
 [sources]
-allow-git = ["https://github.com/hyperium/mime"]
+allow-git = ["https://github.com/hyperium/mime", "https://github.com/tensorzero/durable"]
+unknown-git = "deny"
 
 [bans]
 deny = [{ name = "native-tls" }, { name = "openssl" }, { name = "openssl-sys" }]

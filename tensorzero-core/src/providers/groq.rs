@@ -425,6 +425,8 @@ where
     }
 }
 
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
 fn serialize_optional_text_content_vec<S>(
     content: &Option<Vec<GroqContentBlock<'_>>>,
     serializer: S,
@@ -1092,7 +1094,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
     }
 
     // Groq supports auto and flex, but not priority and default

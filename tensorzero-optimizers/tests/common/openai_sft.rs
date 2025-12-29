@@ -1,4 +1,4 @@
-use crate::common::{OptimizationTestCase, mock_inference_provider_base};
+use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
     UninitializedOptimizerConfig, UninitializedOptimizerInfo,
     openai_sft::UninitializedOpenAISFTConfig,
@@ -15,7 +15,8 @@ impl OptimizationTestCase for OpenAISFTTestCase {
         true
     }
 
-    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
+    fn get_optimizer_info(&self) -> UninitializedOptimizerInfo {
+        // Note: mock mode is configured via provider_types.openai.sft in the test config file
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::OpenAISFT(UninitializedOpenAISFTConfig {
                 // This is the only model that supports images
@@ -23,14 +24,8 @@ impl OptimizationTestCase for OpenAISFTTestCase {
                 batch_size: None,
                 learning_rate_multiplier: None,
                 n_epochs: None,
-                credentials: None,
                 seed: None,
                 suffix: None,
-                api_base: if use_mock_inference_provider {
-                    Some(mock_inference_provider_base().join("openai/").unwrap())
-                } else {
-                    None
-                },
             }),
         }
     }

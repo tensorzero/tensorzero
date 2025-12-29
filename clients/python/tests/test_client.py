@@ -1392,7 +1392,7 @@ def test_file_inference_base64_bad_content_no_mime_type(sync_client: TensorZeroG
         )
     assert (
         str(exc_info.value)
-        == "Failed to deserialize JSON to tensorzero_core::inference::types::Input: messages[0].content[0]: Error decoding base64: No mime type provided and unable to infer from data at line 1 column 177"
+        == "Failed to deserialize JSON to tensorzero_types::message::Input: messages[0].content[0]: Invalid mime type: No mime type provided and unable to infer from data at line 1 column 177"
     )
 
 
@@ -2858,7 +2858,7 @@ def test_patch_sync_openai_client_sync_setup():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2880,7 +2880,7 @@ async def test_patch_sync_openai_client_async_setup():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2896,7 +2896,7 @@ def test_patch_openai_client_no_config():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2950,7 +2950,7 @@ async def test_patch_async_openai_client_sync_setup():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2972,7 +2972,7 @@ async def test_patch_async_openai_client_async_setup():
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -2995,7 +2995,7 @@ async def test_patch_openai_missing_await():
             messages=[
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "Write a haiku about TensorZero.",
                 }
             ],
         )
@@ -3023,7 +3023,7 @@ async def test_patch_async_openai_missing_await():
             messages=[
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "Write a haiku about TensorZero.",
                 }
             ],
         )
@@ -3387,7 +3387,7 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
 
     assert (
         str(exc_info.value)
-        == 'Failed to deserialize JSON to tensorzero_core::inference::types::Input: messages[0].content[0]: invalid type: string "Invalid", expected internally tagged enum InputMessageContent at line 1 column 54'
+        == 'Failed to deserialize JSON to tensorzero_types::message::Input: messages[0].content[0]: invalid type: string "Invalid", expected internally tagged enum InputMessageContent at line 1 column 54'
     )
 
 
