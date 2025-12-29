@@ -34,7 +34,7 @@
 //!     ToolExecutor, ToolResult, async_trait, WorkerOptions,
 //!     http_gateway_client,
 //! };
-//! use schemars::{schema_for, JsonSchema, Schema};
+//! use schemars::JsonSchema;
 //! use serde::{Deserialize, Serialize};
 //! use std::borrow::Cow;
 //! use uuid::Uuid;
@@ -54,6 +54,10 @@
 //! struct SearchTool;
 //!
 //! impl ToolMetadata for SearchTool {
+//!     type SideInfo = ();
+//!     type Output = SearchResult;
+//!     type LlmParams = SearchParams;
+//!
 //!     fn name() -> Cow<'static, str> {
 //!         Cow::Borrowed("search")
 //!     }
@@ -61,14 +65,7 @@
 //!     fn description() -> Cow<'static, str> {
 //!         Cow::Borrowed("Search the web")
 //!     }
-//!
-//!     fn parameters_schema() -> ToolResult<Schema> {
-//!         Ok(schema_for!(SearchParams))
-//!     }
-//!
-//!     type LlmParams = SearchParams;
-//!     type SideInfo = ();
-//!     type Output = SearchResult;
+//!     // parameters_schema() is automatically derived from LlmParams
 //! }
 //!
 //! #[async_trait]
@@ -98,6 +95,10 @@
 //! struct ResearchTool;
 //!
 //! impl ToolMetadata for ResearchTool {
+//!     type SideInfo = ();
+//!     type Output = ResearchResult;
+//!     type LlmParams = ResearchParams;
+//!
 //!     fn name() -> Cow<'static, str> {
 //!         Cow::Borrowed("research")
 //!     }
@@ -105,14 +106,6 @@
 //!     fn description() -> Cow<'static, str> {
 //!         Cow::Borrowed("Research a topic")
 //!     }
-//!
-//!     fn parameters_schema() -> ToolResult<Schema> {
-//!         Ok(schema_for!(ResearchParams))
-//!     }
-//!
-//!     type LlmParams = ResearchParams;
-//!     type SideInfo = ();
-//!     type Output = ResearchResult;
 //! }
 //!
 //! #[async_trait]
@@ -173,10 +166,10 @@
 mod context;
 mod error;
 mod executor;
-pub mod inference;
 mod registry;
 mod simple_tool;
 mod task_tool;
+pub mod tensorzero_client;
 mod tool_metadata;
 
 #[cfg(test)]
@@ -200,14 +193,14 @@ pub use simple_tool::SimpleTool;
 pub use task_tool::{TaskTool, TaskToolAdapter};
 pub use tool_metadata::{SideInfo, ToolMetadata};
 
-// Re-export inference trait and helpers
-pub use inference::{
-    EmbeddedInferenceClient, InferenceClient, InferenceError, embedded_gateway_client, from_client,
+// Re-export TensorZero client trait and helpers
+pub use tensorzero_client::{
+    EmbeddedClient, TensorZeroClient, TensorZeroClientError, embedded_gateway_client, from_client,
     http_gateway_client,
 };
 
 // Re-export autopilot types for use by tools
-pub use inference::{
+pub use tensorzero_client::{
     CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
     ListSessionsParams, ListSessionsResponse, ToolOutcome,
 };

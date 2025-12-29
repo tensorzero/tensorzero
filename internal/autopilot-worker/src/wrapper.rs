@@ -64,7 +64,7 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
         T::description()
     }
 
-    fn parameters_schema() -> DurableToolResult<Schema> {
+    fn parameters_schema() -> Schema {
         T::parameters_schema()
     }
 
@@ -128,7 +128,7 @@ async fn publish_result_step(
     let tensorzero_version = TENSORZERO_VERSION.to_string();
 
     state
-        .inference_client()
+        .t0_client()
         .create_autopilot_event(
             params.session_id,
             CreateEventRequest {
