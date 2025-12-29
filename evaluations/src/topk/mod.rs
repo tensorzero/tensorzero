@@ -12,6 +12,9 @@
 //!
 //! NOTE: This module is work in progress.
 
+mod updates;
+pub use updates::*;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -1369,6 +1372,7 @@ impl Task<TopKTaskState> for TopKTask {
         };
 
         // Process batches
+        let total_datapoints = datapoint_ids.len();
         let batches: Vec<Vec<Uuid>> = datapoint_ids
             .chunks(batch_size)
             .map(|chunk| chunk.to_vec())
@@ -1412,6 +1416,30 @@ impl Task<TopKTaskState> for TopKTask {
                 "Processing batch"
             );
 
+            // Emit progress update for streaming consumers
+            let batch_update = BatchProgressUpdate {
+                evaluation_run_id,
+                batch_index: batch_idx,
+                num_datapoints_processed: progress.num_datapoints_processed,
+                total_datapoints,
+                variant_summaries: progress
+                    .variant_performance
+                    .iter()
+                    .map(|(k, v)| (k.clone(), VariantSummary::from(v)))
+                    .collect(),
+                variant_statuses: progress.variant_status.clone(),
+                num_active_variants: progress
+                    .variant_status
+                    .values()
+                    .filter(|s| **s == VariantStatus::Active)
+                    .count(),
+            };
+            ctx.emit_event(
+                &format!("topk_progress:{evaluation_run_id}"),
+                &TopKUpdate::BatchProgress(batch_update),
+            )
+            .await?;
+
             if let Some(reason) = check_global_stopping(&progress, &params) {
                 stopping_reason = Some(reason);
                 break;
@@ -1441,6 +1469,19 @@ impl Task<TopKTaskState> for TopKTask {
             num_datapoints_processed = progress.num_datapoints_processed,
             "Top-k evaluation complete"
         );
+
+        // Emit completion event for streaming consumers
+        let completed_update = CompletedUpdate {
+            evaluation_run_id,
+            stopping_reason: stopping_reason.clone(),
+            num_datapoints_processed: progress.num_datapoints_processed,
+            final_variant_statuses: progress.variant_status.clone(),
+        };
+        ctx.emit_event(
+            &format!("topk_completed:{evaluation_run_id}"),
+            &TopKUpdate::Completed(completed_update),
+        )
+        .await?;
 
         Ok(TopKTaskOutput {
             evaluation_run_id,
