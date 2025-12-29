@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 import {
   contentBlockChatOutputSchema,
   jsonInferenceOutputSchema,
@@ -150,7 +151,7 @@ export type ConsolidatedMetric = {
   metric_name: string;
   metric_value: string;
   evaluator_name: string;
-  evaluator_inference_id: string | null;
+  evaluator_inference_id?: string;
   is_human_feedback: boolean;
 };
 
@@ -161,21 +162,28 @@ export type ConsolidatedEvaluationResult = Omit<
 > & {
   metrics: ConsolidatedMetric[];
 };
-
-export const consolidate_evaluation_results = (
-  evaluation_results: ParsedEvaluationResultWithVariant[],
-): ConsolidatedEvaluationResult[] => {
+/**
+ * Parse and consolidate evaluation results from the API.
+ * Groups results by (datapoint_id, evaluation_run_id, variant_name) and collects metrics.
+ */
+export async function consolidateEvaluationResults(
+  evaluationResults: ParsedEvaluationResultWithVariant[],
+): Promise<ConsolidatedEvaluationResult[]> {
   // Create a map to store results by datapoint_id and evaluation_run_id
   const resultMap = new Map<string, ConsolidatedEvaluationResult>();
 
   // Process each evaluation result
-  for (const result of evaluation_results) {
-    const key = `${result.datapoint_id}:${result.evaluation_run_id}:${result.variant_name}`;
+  for (const result of evaluationResults) {
+    // This shouldn't happen in practice, but given the frontend type seemed incorrect, we add this
+    // guard to be safe.
+    if (!result.metric_name || !result.metric_value) {
+      continue;
+    }
 
+    const key = `${result.datapoint_id}:${result.evaluation_run_id}:${result.variant_name}`;
     if (!resultMap.has(key)) {
       // Create a new consolidated result without metric_name and metric_value
       const { metric_name, metric_value, ...baseResult } = result;
-
       resultMap.set(key, {
         ...baseResult,
         metrics: [
@@ -183,7 +191,7 @@ export const consolidate_evaluation_results = (
             metric_name,
             metric_value,
             evaluator_name: getEvaluatorNameFromMetricName(metric_name),
-            evaluator_inference_id: result.evaluator_inference_id,
+            evaluator_inference_id: result.evaluator_inference_id ?? undefined,
             is_human_feedback: result.is_human_feedback,
           },
         ],
@@ -195,12 +203,11 @@ export const consolidate_evaluation_results = (
         metric_name: result.metric_name,
         metric_value: result.metric_value,
         evaluator_name: getEvaluatorNameFromMetricName(result.metric_name),
-        evaluator_inference_id: result.evaluator_inference_id,
+        evaluator_inference_id: result.evaluator_inference_id ?? undefined,
         is_human_feedback: result.is_human_feedback,
       });
     }
   }
-
   // Convert the map values to an array and return
   return Array.from(resultMap.values());
-};
+}

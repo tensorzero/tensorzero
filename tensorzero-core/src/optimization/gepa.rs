@@ -4,8 +4,6 @@ use std::collections::HashMap;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
-use crate::error::Error;
-use crate::model_table::ProviderTypeDefaultCredentials;
 use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 
@@ -254,12 +252,8 @@ impl UninitializedGEPAConfig {
 }
 
 impl UninitializedGEPAConfig {
-    /// Load the configuration (GEPA doesn't need credential resolution)
-    pub async fn load(
-        self,
-        _default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<GEPAConfig, Error> {
-        Ok(GEPAConfig {
+    pub fn load(self) -> GEPAConfig {
+        GEPAConfig {
             function_name: self.function_name,
             evaluation_name: self.evaluation_name,
             initial_variants: self.initial_variants,
@@ -274,7 +268,7 @@ impl UninitializedGEPAConfig {
             include_inference_for_mutation: self.include_inference_for_mutation,
             retries: self.retries,
             max_tokens: self.max_tokens,
-        })
+        }
     }
 }
 

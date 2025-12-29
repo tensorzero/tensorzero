@@ -127,6 +127,8 @@ pub async fn run_llm_judge_evaluator(
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
         otlp_traces_extra_headers: HashMap::new(),
+        otlp_traces_extra_attributes: HashMap::new(),
+        otlp_traces_extra_resources: HashMap::new(),
         api_key: None,
     };
     let result = clients.tensorzero_client.inference(params).await?;

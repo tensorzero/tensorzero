@@ -8,6 +8,7 @@ use crate::error::ErrorDetails;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 
 pub mod gateway;
+pub mod mock;
 pub mod retries;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod testing;

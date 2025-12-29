@@ -7,7 +7,7 @@ with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client
             "messages": [
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "Write a haiku about TensorZero.",
                 }
             ]
         },

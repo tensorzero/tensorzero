@@ -190,6 +190,29 @@ active = true
 system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
+[evaluations.haiku]
+type = "inference"
+function_name = "write_haiku"
+
+[evaluations.haiku.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.haiku.evaluators.topic_starts_with_f]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+include = { reference_output = false }
+cutoff = 0.5
+
+[evaluations.haiku.evaluators.topic_starts_with_f.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+active = true
+system_instructions = "../../../../ui/fixtures/config/evaluations/haiku/topic_starts_with_f/system_instructions.txt"
+json_mode = "strict"
+temperature = 0
+retries = { num_retries = 4, max_delay_s = 10 }
+
 [evaluations.haiku_with_outputs]
 type = "inference"
 function_name = "write_haiku"

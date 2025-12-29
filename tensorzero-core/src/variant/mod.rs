@@ -41,6 +41,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
+use crate::relay::TensorzeroRelay;
 use crate::tool::{ToolCallConfig, create_dynamic_implicit_tool_config};
 use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
@@ -67,6 +68,7 @@ impl VariantInfo {
     }
 }
 
+/// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
 #[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -75,6 +77,7 @@ pub enum VariantConfig {
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
+    /// DEPRECATED (#5298 / 2026.2+): Use `chat_completion` with reasoning instead.
     ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
 }
 
@@ -233,6 +236,7 @@ pub trait Variant {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error>;
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
@@ -513,6 +517,7 @@ impl Variant for VariantInfo {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         self.timeouts.validate(global_outbound_http_timeout)?;
         match &self.inner {
@@ -526,6 +531,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -539,6 +545,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -552,6 +559,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -565,6 +573,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -578,6 +587,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }

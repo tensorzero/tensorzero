@@ -8,6 +8,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::{Value, json};
 use tokio_stream::StreamExt;
+use tracing_futures::Instrument;
 use uuid::Uuid;
 
 use crate::inference::InferenceProvider;
@@ -23,9 +24,7 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
-use crate::inference::types::{
-    ContentBlock, FinishReason, ProviderInferenceResponseStreamInner, Role,
-};
+use crate::inference::types::{ContentBlock, FinishReason, Role};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -34,6 +33,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
+use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::providers::helpers::inject_extra_request_data;
 use crate::rate_limiting::{
     ActiveRateLimitKey, FailedRateLimit, RateLimitResource, RateLimitingScopeKey,
@@ -260,6 +260,19 @@ pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
 
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
 
+/// Like `tokio::time::sleep`, but attaches a span that excludes
+/// this time for our `tensorzero_inference_latency_overhead_seconds` metric
+/// We use this to simulate slow HTTP requests (which also have
+/// their latency excluded via `TensorzeroHttpClient`)
+async fn sleep_excluding_latency(duration: Duration) {
+    tokio::time::sleep(duration)
+        .instrument(tracing::debug_span!(
+            "dummy_sleep",
+            { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true,
+        ))
+        .await;
+}
+
 impl InferenceProvider for DummyProvider {
     async fn infer<'a>(
         &'a self,
@@ -274,10 +287,10 @@ impl InferenceProvider for DummyProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         if self.model_name == "slow" {
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            sleep_excluding_latency(Duration::from_secs(5)).await;
         }
         // Just so they don't seem like 0ms inferences
-        tokio::time::sleep(Duration::from_millis(1)).await;
+        sleep_excluding_latency(Duration::from_millis(1)).await;
 
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
@@ -643,10 +656,10 @@ impl InferenceProvider for DummyProvider {
         _model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         if self.model_name == "slow" {
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            sleep_excluding_latency(Duration::from_secs(5)).await;
         }
         // Just so they don't seem like 0ms inferences
-        tokio::time::sleep(Duration::from_millis(1)).await;
+        sleep_excluding_latency(Duration::from_millis(1)).await;
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
             #[expect(clippy::expect_used)]
@@ -730,7 +743,7 @@ impl InferenceProvider for DummyProvider {
         let stream = async_stream::stream! {
             for (i, chunk) in content_chunks.into_iter().enumerate() {
                 if slow_second_chunk && i == 1 {
-                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    sleep_excluding_latency(Duration::from_secs(2)).await;
                 }
                 if fatal_stream_error && i == 2 {
                     yield Err(Error::new(ErrorDetails::FatalStreamError {
@@ -739,7 +752,7 @@ impl InferenceProvider for DummyProvider {
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }));
-                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    sleep_excluding_latency(Duration::from_secs(5)).await;
                     continue;
                 }
                 if err_in_stream && i == 3 {
@@ -787,23 +800,29 @@ impl InferenceProvider for DummyProvider {
                 });
             }
         };
-        let stream: ProviderInferenceResponseStreamInner = Box::pin(
-            stream
-                .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
-                    created,
-                    content: vec![],
-                    usage: Some(self.get_model_usage(content_chunk_len as u32)),
-                    finish_reason,
-                    raw_response: String::new(),
-                    latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
-                })))
-                .throttle(std::time::Duration::from_millis(10)),
-        );
+
+        let base_stream = stream.chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
+            created,
+            content: vec![],
+            usage: Some(self.get_model_usage(content_chunk_len as u32)),
+            finish_reason,
+            raw_response: String::new(),
+            latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
+        })));
+
+        // We don't use the tokio `throttled` combinator, since we want to use `sleep_excluding_latency`
+        let throttled_stream = Box::pin(async_stream::stream! {
+            futures::pin_mut!(base_stream);
+            while let Some(chunk) = base_stream.next().await {
+                yield chunk;
+                sleep_excluding_latency(Duration::from_millis(10)).await;
+            }
+        });
 
         Ok((
             // We need this verbose path to avoid using `tokio_stream::StreamExt::peekable`,
             // which produces a different types
-            futures::stream::StreamExt::peekable(stream),
+            futures::stream::StreamExt::peekable(throttled_stream),
             DUMMY_RAW_REQUEST.to_string(),
         ))
     }
@@ -867,7 +886,7 @@ impl EmbeddingProvider for DummyProvider {
             .into());
         }
         if self.model_name.contains("slow") {
-            tokio::time::sleep(Duration::from_secs(30)).await;
+            sleep_excluding_latency(Duration::from_secs(30)).await;
         }
 
         let api_key = self

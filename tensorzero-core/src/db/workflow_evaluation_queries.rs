@@ -10,6 +10,8 @@ use mockall::automock;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use ts_rs::TS;
+
 use crate::error::Error;
 
 /// Database struct for deserializing workflow evaluation project info from ClickHouse.
@@ -65,7 +67,6 @@ pub struct WorkflowEvaluationRunStatisticsRow {
     pub ci_lower: Option<f64>,
     pub ci_upper: Option<f64>,
 }
-
 /// Trait for workflow evaluation-related queries.
 #[async_trait]
 #[cfg_attr(test, automock)]
@@ -117,4 +118,91 @@ pub trait WorkflowEvaluationQueries {
         run_id: Uuid,
         metric_name: Option<&str>,
     ) -> Result<Vec<WorkflowEvaluationRunStatisticsRow>, Error>;
+
+    /// Lists workflow evaluation run episodes grouped by task_name for given run IDs.
+    ///
+    /// Returns episodes grouped by task_name. Episodes with NULL task_name are grouped
+    /// individually using a generated key based on their episode_id.
+    ///
+    /// # Parameters
+    /// - `run_ids`: List of run IDs to filter episodes by
+    /// - `limit`: Maximum number of groups to return
+    /// - `offset`: Number of groups to skip
+    ///
+    /// # Returns
+    /// A vector of episode rows ordered by group's last_updated DESC, then by group_key, then by episode_id.
+    async fn list_workflow_evaluation_run_episodes_by_task_name(
+        &self,
+        run_ids: &[Uuid],
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow>, Error>;
+
+    /// Counts the number of distinct task_name groups for the given run IDs.
+    ///
+    /// Episodes with NULL task_name are counted as individual groups.
+    async fn count_workflow_evaluation_run_episodes_by_task_name(
+        &self,
+        run_ids: &[Uuid],
+    ) -> Result<u32, Error>;
+
+    /// Gets workflow evaluation run episodes with their feedback for a specific run.
+    /// Returns episodes with feedback metric names and values, sorted by episode_id descending.
+    async fn get_workflow_evaluation_run_episodes_with_feedback(
+        &self,
+        run_id: Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<WorkflowEvaluationRunEpisodeWithFeedbackRow>, Error>;
+
+    /// Counts the total number of episodes for a specific workflow evaluation run.
+    async fn count_workflow_evaluation_run_episodes(&self, run_id: Uuid) -> Result<u32, Error>;
+}
+
+/// A single workflow evaluation run episode with its associated feedback.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
+    /// The episode ID
+    pub episode_id: Uuid,
+    /// When the episode started (RFC 3339 format)
+    pub timestamp: DateTime<Utc>,
+    /// The run ID this episode belongs to
+    pub run_id: Uuid,
+    /// Tags associated with this episode
+    pub tags: HashMap<String, String>,
+    /// The task name (datapoint_name). NULL for episodes without a task name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub task_name: Option<String>,
+    /// Metric names for feedback, sorted alphabetically
+    pub feedback_metric_names: Vec<String>,
+    /// Feedback values corresponding to feedback_metric_names
+    pub feedback_values: Vec<String>,
+}
+
+/// A workflow evaluation run episode with feedback, including its group key.
+///
+/// The group_key is either the task_name or a generated key for episodes with NULL task_name.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export)]
+pub struct GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow {
+    /// The grouping key - either task_name or 'NULL_EPISODE_{episode_id_uint}'
+    pub group_key: String,
+    /// The episode ID
+    pub episode_id: Uuid,
+    /// When the episode started (RFC 3339 format)
+    pub timestamp: DateTime<Utc>,
+    /// The run ID this episode belongs to
+    pub run_id: Uuid,
+    /// Tags associated with this episode
+    pub tags: HashMap<String, String>,
+    /// The task name (datapoint_name). NULL for episodes without a task name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub task_name: Option<String>,
+    /// Metric names for feedback, sorted alphabetically
+    pub feedback_metric_names: Vec<String>,
+    /// Feedback values corresponding to feedback_metric_names
+    pub feedback_values: Vec<String>,
 }

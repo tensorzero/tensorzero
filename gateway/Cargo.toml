@@ -13,12 +13,14 @@ tracing = { version = "0.1.43", features = ["log", "release_max_level_debug"] }
 tokio = { workspace = true }
 mimalloc = "0.1.48"
 clap = { workspace = true }
-tower-http = { workspace = true, features = ["metrics"] }
+tower-http = { workspace = true, features = ["metrics", "decompression-gzip", "decompression-br", "decompression-zstd"] }
 metrics-exporter-prometheus = { workspace = true }
 http = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
+autopilot-worker = { path = "../internal/autopilot-worker" }
+durable-tools = { path = "../internal/durable-tools" }
 sqlx = { version = "0.9.0-alpha.1", features = ["sqlx-toml", "postgres", "runtime-tokio", "chrono"] }
 secrecy = { workspace = true }
 
@@ -26,7 +28,7 @@ secrecy = { workspace = true }
 workspace = true
 
 [features]
-e2e_tests = ["tensorzero-core/e2e_tests"]
+e2e_tests = ["tensorzero-core/e2e_tests", "autopilot-worker/e2e_tests"]
 default = []
 
 [dev-dependencies]
@@ -39,3 +41,6 @@ futures = { workspace = true }
 secrecy = { workspace = true }
 uuid = { workspace = true }
 tensorzero-unsafe-helpers = { path = "../internal/tensorzero-unsafe-helpers" }
+flate2 = "1.1.5"
+zstd = "0.13.3"
+brotli = "8.0.2"

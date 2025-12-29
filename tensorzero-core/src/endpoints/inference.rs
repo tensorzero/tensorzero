@@ -7,7 +7,7 @@ use futures::FutureExt;
 use futures::stream::Stream;
 use futures_core::FusedStream;
 use indexmap::IndexMap;
-use metrics::counter;
+use metrics::{Label, counter};
 use schemars::JsonSchema;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
-    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
+    InferenceResultChunk, InferenceResultStream, Input, InputExt, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
     ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, TextChunk, Usage,
     collect_chunks,
@@ -52,6 +52,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::observability::request_logging::HttpMetricData;
 use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
 use crate::relay::TensorzeroRelay;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
@@ -172,7 +173,21 @@ pub async fn inference_handler(
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
-) -> Result<Response<Body>, Error> {
+) -> Response<Body> {
+    let mut metric_data = HttpMetricData {
+        extra_overhead_labels: vec![],
+    };
+    // If 'function_name' and 'model_name' are both provided, we'll emit
+    // an error when we call `inference`
+    if let Some(function_name) = &params.function_name {
+        metric_data
+            .extra_overhead_labels
+            .push(Label::new("function_name", function_name.clone()));
+    } else if params.model_name.is_some() {
+        metric_data
+            .extra_overhead_labels
+            .push(Label::new("function_name", "tensorzero::default"));
+    }
     let inference_output = Box::pin(inference(
         config,
         &http_client,
@@ -182,17 +197,29 @@ pub async fn inference_handler(
         params,
         api_key_ext,
     ))
-    .await?;
-    match inference_output {
-        InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
-        InferenceOutput::Streaming(stream) => {
-            let event_stream = prepare_serialized_events(stream);
+    .await;
+    let mut response = match inference_output {
+        Ok(data) => {
+            if let Some(variant_name) = data.exactly_one_variant {
+                metric_data
+                    .extra_overhead_labels
+                    .push(Label::new("variant_name", variant_name));
+            }
+            match data.output {
+                InferenceOutput::NonStreaming(response) => Json(response).into_response(),
+                InferenceOutput::Streaming(stream) => {
+                    let event_stream = prepare_serialized_events(stream);
 
-            Ok(Sse::new(event_stream)
-                .keep_alive(axum::response::sse::KeepAlive::new())
-                .into_response())
+                    Sse::new(event_stream)
+                        .keep_alive(axum::response::sse::KeepAlive::new())
+                        .into_response()
+                }
+            }
         }
-    }
+        Err(e) => e.into_response(),
+    };
+    response.extensions_mut().insert(metric_data);
+    response
 }
 
 pub type InferenceStream =
@@ -218,6 +245,13 @@ pub struct InferenceIds {
     pub episode_id: Uuid,
 }
 
+pub struct InferenceOutputData {
+    pub output: InferenceOutput,
+    /// If `Some`, then we tried exactly one variant (which succeeded)
+    /// If multiple variants were tried (regardless of whether or not one eventually succeeded), then this will be `None`
+    pub exactly_one_variant: Option<String>,
+}
+
 #[instrument(
     name="inference",
     skip_all
@@ -238,7 +272,7 @@ pub async fn inference(
     deferred_tasks: TaskTracker,
     mut params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
-) -> Result<InferenceOutput, Error> {
+) -> Result<InferenceOutputData, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
         span.record("function_name", function_name);
@@ -409,8 +443,8 @@ pub async fn inference(
                 })
             })?;
 
-        return infer_variant(InferVariantArgs {
-            variant_name,
+        let output = infer_variant(InferVariantArgs {
+            variant_name: variant_name.clone(),
             variant,
             function: &function,
             function_name: &function_name,
@@ -433,10 +467,15 @@ pub async fn inference(
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
         })
-        .await;
+        .await?;
+        return Ok(InferenceOutputData {
+            output,
+            exactly_one_variant: Some(variant_name),
+        });
     }
 
     // Keep sampling variants until one succeeds
+    let mut already_sampled = false;
     while !candidate_variants.is_empty() {
         let result = function
             .experimentation()
@@ -487,7 +526,16 @@ pub async fn inference(
         .await;
 
         match result {
-            Ok(output) => return Ok(output),
+            Ok(output) => {
+                return Ok(InferenceOutputData {
+                    output,
+                    exactly_one_variant: if already_sampled {
+                        None
+                    } else {
+                        Some(variant_name)
+                    },
+                });
+            }
             Err(e) => {
                 tracing::warn!(
                     "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
@@ -495,6 +543,7 @@ pub async fn inference(
                     variant_name = variant_name,
                 );
                 variant_errors.insert(variant_name, e);
+                already_sampled = true;
                 continue;
             }
         }
@@ -1527,13 +1576,13 @@ fn prepare_candidate_variants(
             )?;
 
             // Replace templates in the template config with the ones passed in
-            // We Clone here so that we can still reference the old templates that don't conflict
+            // We clone here so that we can still reference the old templates that don't conflict
             let mut dynamic_template_config: TemplateConfig = (**template_config).clone();
             for path_with_contents in candidate_variant_info.get_all_template_paths() {
                 let template_name = path_with_contents.path.get_template_key();
                 if dynamic_template_config.contains_template(&template_name) {
-                    tracing::warn!(
-                        "Dynamic template '{}' is overriding an existing template",
+                    tracing::debug!(
+                        "Dynamic template `{}` is overriding an existing template.",
                         template_name
                     );
                 }

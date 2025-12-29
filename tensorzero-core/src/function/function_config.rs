@@ -1,4 +1,5 @@
 use crate::config::SchemaData;
+use crate::config::gateway::GatewayConfig;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::experimentation::ExperimentationConfig;
@@ -9,7 +10,6 @@ use crate::variant::{
     BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
     DiclConfigPyClass, MixtureOfNConfigPyClass, VariantConfig,
 };
-use chrono::Duration;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
 #[cfg(feature = "pyo3")]
@@ -621,7 +621,7 @@ impl FunctionConfig {
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
-        global_outbound_http_timeout: &Duration,
+        gateway_config: &GatewayConfig,
     ) -> Result<(), Error> {
         // Validate each variant
         for (variant_name, variant) in self.variants() {
@@ -641,7 +641,8 @@ impl FunctionConfig {
                     templates,
                     function_name,
                     variant_name,
-                    global_outbound_http_timeout,
+                    &gateway_config.global_outbound_http_timeout,
+                    gateway_config.relay.as_ref(),
                 )
                 .await?;
         }
@@ -841,6 +842,10 @@ mod tests {
         .expect("Failed to create schema")
     }
 
+    fn test_text_content(text: impl Into<String>) -> InputMessageContent {
+        InputMessageContent::test_only_from_string(text.into())
+    }
+
     #[test]
     fn test_validate_input_chat_no_schema() {
         let chat_config = FunctionConfigChat {
@@ -854,11 +859,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
         ];
 
@@ -872,7 +877,7 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
@@ -906,13 +911,13 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![
-                    "first user content".to_string().into(),
-                    "second user content".to_string().into(),
+                    test_text_content("first user content"),
+                    test_text_content("second user content"),
                 ],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
         ];
         let input = Input {
@@ -945,11 +950,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
         ];
         let input = Input {
@@ -970,11 +975,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
         ];
         let input = Input {
@@ -1012,11 +1017,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
         ];
         let input = Input {
@@ -1047,7 +1052,7 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
         ];
         let input = Input {
@@ -1080,11 +1085,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
         ];
         let input = Input {
@@ -1105,7 +1110,7 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
@@ -1152,11 +1157,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
             InputMessage {
                 role: Role::User,
@@ -1290,13 +1295,13 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![
-                    "user content".to_string().into(),
-                    "extra content".to_string().into(),
+                    test_text_content("user content"),
+                    test_text_content("extra content"),
                 ],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
             InputMessage {
                 role: Role::User,
@@ -1391,11 +1396,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
             InputMessage {
                 role: Role::User,
@@ -1478,11 +1483,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!("assistant content").to_string().into()],
+                content: vec![test_text_content(json!("assistant content").to_string())],
             },
         ];
 
@@ -1505,11 +1510,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!("assistant content").to_string().into()],
+                content: vec![test_text_content(json!("assistant content").to_string())],
             },
         ];
 
@@ -1553,11 +1558,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!("assistant content").to_string().into()],
+                content: vec![test_text_content(json!("assistant content").to_string())],
             },
         ];
 
@@ -1590,7 +1595,7 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
         ];
         let input = Input {
@@ -1628,11 +1633,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec!["assistant content".to_string().into()],
+                content: vec![test_text_content("assistant content")],
             },
         ];
         let input = Input {
@@ -1654,7 +1659,7 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
@@ -1706,11 +1711,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec!["user content".to_string().into()],
+                content: vec![test_text_content("user content")],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!("assistant content").to_string().into()],
+                content: vec![test_text_content(json!("assistant content").to_string())],
             },
         ];
         let input = Input {

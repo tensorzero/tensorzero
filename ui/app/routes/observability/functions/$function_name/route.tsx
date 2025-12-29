@@ -13,7 +13,6 @@ import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
-import { getVariantPerformances } from "~/utils/clickhouse/function";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
@@ -30,10 +29,7 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { TimeWindow } from "~/types/tensorzero";
-import {
-  getNativeDatabaseClient,
-  getNativeTensorZeroClient,
-} from "~/utils/tensorzero/native_client.server";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { applyPaginationLogic } from "~/utils/pagination";
 
@@ -41,7 +37,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
   const config = await getConfig();
-  const dbClient = await getNativeDatabaseClient();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;
@@ -73,7 +68,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const tensorZeroClient = getTensorZeroClient();
   const metricsWithFeedbackPromise =
     tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
-  const variantCountsPromise = tensorZeroClient.getInferenceStats(
+  const variantCountsPromise = tensorZeroClient.getInferenceCount(
     function_name,
     {
       groupBy: "variant",
@@ -82,14 +77,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const variantPerformancesPromise =
     // Only get variant performances if metric_name is provided and valid
     metric_name && config.metrics[metric_name]
-      ? getVariantPerformances({
-          function_name,
-          function_config,
-          metric_name,
-          metric_config: config.metrics[metric_name],
-          time_window_unit: time_granularity,
-        })
-      : undefined;
+      ? tensorZeroClient
+          .getVariantPerformances(function_name, metric_name, time_granularity)
+          .then((response) =>
+            response.performances.length > 0
+              ? response.performances
+              : undefined,
+          )
+      : Promise.resolve(undefined);
   const variantThroughputPromise = tensorZeroClient
     .getFunctionThroughputByVariant(
       function_name,
@@ -109,14 +104,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }
       : null;
   const feedbackTimeseriesPromise = feedbackParams
-    ? (async () => {
-        return dbClient.getCumulativeFeedbackTimeseries({
-          function_name,
-          ...feedbackParams,
-          time_window: feedback_time_granularity as TimeWindow,
-          max_periods: 10,
-        });
-      })()
+    ? tensorZeroClient.getCumulativeFeedbackTimeseries({
+        function_name,
+        ...feedbackParams,
+        time_window: feedback_time_granularity as TimeWindow,
+        max_periods: 10,
+      })
     : Promise.resolve(undefined);
 
   // Get variant sampling probabilities from the gateway
@@ -153,7 +146,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   const variant_counts_with_metadata = (
-    variant_counts.stats_by_variant ?? []
+    variant_counts.count_by_variant ?? []
   ).map((variant_count) => {
     let variant_config = function_config.variants[
       variant_count.variant_name

@@ -8,8 +8,10 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { toEpisodeUrl } from "~/utils/urls";
-import type { WorkflowEvaluationRunEpisodeWithFeedback } from "~/utils/clickhouse/workflow_evaluations";
-import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
+import type {
+  WorkflowEvaluationRunEpisodeWithFeedback,
+  WorkflowEvaluationRunStatistics,
+} from "~/types/tensorzero";
 import { TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
 import { useConfig } from "~/context/config";
@@ -80,7 +82,9 @@ export default function WorkflowEvaluationRunEpisodesTable({
                 <TableCell>
                   {(() => {
                     const filteredTags = Object.entries(episode.tags).filter(
-                      ([k]) => !k.startsWith("tensorzero::"),
+                      (entry): entry is [string, string] =>
+                        !entry[0].startsWith("tensorzero::") &&
+                        entry[1] !== undefined,
                     );
                     if (filteredTags.length === 0) {
                       return "-";

@@ -686,6 +686,8 @@ where
     }
 }
 
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
 fn serialize_optional_text_content_vec<S>(
     content: &Option<Vec<OpenRouterContentBlock<'_>>>,
     serializer: S,
@@ -1434,7 +1436,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
     }
 
     if service_tier.is_some() {
@@ -1450,7 +1452,7 @@ fn apply_inference_params(
     }
 
     if verbosity.is_some() {
-        request.verbosity = verbosity.clone();
+        request.verbosity.clone_from(verbosity);
     }
 }
 
