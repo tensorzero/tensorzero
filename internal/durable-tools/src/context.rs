@@ -9,9 +9,9 @@ use tensorzero::{ClientInferenceParams, InferenceResponse};
 use uuid::Uuid;
 
 use crate::error::{ToolError, ToolResult};
-use crate::inference::{InferenceClient, InferenceError};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
+use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
 use tokio::sync::RwLockReadGuard;
 
 /// Type alias for the Durable client with `ToolAppState`.
@@ -26,8 +26,8 @@ pub struct ToolAppState {
     pool: PgPool,
     /// Tool registry for looking up and calling other tools.
     tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
-    /// Inference client for calling TensorZero inference.
-    inference_client: Arc<dyn InferenceClient>,
+    /// TensorZero client for calling inference and autopilot operations.
+    t0_client: Arc<dyn TensorZeroClient>,
 }
 
 impl ToolAppState {
@@ -35,12 +35,12 @@ impl ToolAppState {
     pub fn new(
         pool: PgPool,
         tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
-        inference_client: Arc<dyn InferenceClient>,
+        t0_client: Arc<dyn TensorZeroClient>,
     ) -> Self {
         Self {
             pool,
             tool_registry,
-            inference_client,
+            t0_client,
         }
     }
 
@@ -49,11 +49,11 @@ impl ToolAppState {
         &self.pool
     }
 
-    /// Get the inference client.
+    /// Get the TensorZero client.
     ///
     /// This provides access to inference, autopilot events, and other client operations.
-    pub fn inference_client(&self) -> &Arc<dyn InferenceClient> {
-        &self.inference_client
+    pub fn t0_client(&self) -> &Arc<dyn TensorZeroClient> {
+        &self.t0_client
     }
 }
 
@@ -115,14 +115,14 @@ impl<'a> ToolContext<'a> {
     /// ```ignore
     /// // Send a tool result to autopilot (checkpointed)
     /// ctx.step("send_result", params, |params, state| async move {
-    ///     state.inference_client()
+    ///     state.t0_client()
     ///         .create_autopilot_event(session_id, request)
     ///         .await
     ///         .map_err(|e| anyhow::anyhow!("{e}"))
     /// }).await?;
     /// ```
-    pub fn client(&self) -> Arc<dyn InferenceClient> {
-        self.app_state.inference_client.clone()
+    pub fn client(&self) -> Arc<dyn TensorZeroClient> {
+        self.app_state.t0_client.clone()
     }
 
     /// Get a read lock on the tool registry.
@@ -293,7 +293,7 @@ impl<'a> ToolContext<'a> {
             (tool_name, task_id, call_id, llm_params, side_info),
             |(tool_name, task_id, call_id, llm_params, side_info), state| async move {
                 // Create SimpleToolContext
-                let simple_ctx = SimpleToolContext::new(&state.pool, &state.inference_client);
+                let simple_ctx = SimpleToolContext::new(&state.pool, &state.t0_client);
 
                 // Generate idempotency key using task_id and call_id
                 let idempotency_key = format!("{task_id}:{tool_name}:{call_id}");
@@ -416,7 +416,7 @@ impl<'a> ToolContext<'a> {
 
         self.step(&step_name, params, |params, state| async move {
             state
-                .inference_client
+                .t0_client
                 .inference(params)
                 .await
                 .map_err(|e| anyhow::anyhow!("{e}"))
@@ -429,19 +429,16 @@ impl<'a> ToolContext<'a> {
 ///
 /// `SimpleTools` run inside a `TaskTool`'s `step()` checkpoint, so they don't
 /// have access to checkpointing operations themselves. They can access the
-/// database pool for queries and the inference client for TensorZero calls.
+/// database pool for queries and the TensorZero client for inference calls.
 pub struct SimpleToolContext<'a> {
     pool: &'a PgPool,
-    inference_client: &'a Arc<dyn InferenceClient>,
+    t0_client: &'a Arc<dyn TensorZeroClient>,
 }
 
 impl<'a> SimpleToolContext<'a> {
     /// Create a new simple tool context.
-    pub fn new(pool: &'a PgPool, inference_client: &'a Arc<dyn InferenceClient>) -> Self {
-        Self {
-            pool,
-            inference_client,
-        }
+    pub fn new(pool: &'a PgPool, t0_client: &'a Arc<dyn TensorZeroClient>) -> Self {
+        Self { pool, t0_client }
     }
 
     /// Get a reference to the database pool.
@@ -449,13 +446,13 @@ impl<'a> SimpleToolContext<'a> {
         self.pool
     }
 
-    /// Get the inference client for direct access to all client operations.
+    /// Get the TensorZero client for direct access to all client operations.
     ///
     /// This provides access to inference, autopilot events, and other client operations.
     /// Note: `SimpleTools` run inside a `TaskTool`'s `step()`, so client calls
     /// are already checkpointed by the outer step.
-    pub fn client(&self) -> &Arc<dyn InferenceClient> {
-        self.inference_client
+    pub fn client(&self) -> &Arc<dyn TensorZeroClient> {
+        self.t0_client
     }
 
     /// Call TensorZero inference.
@@ -469,7 +466,7 @@ impl<'a> SimpleToolContext<'a> {
     pub async fn inference(
         &self,
         params: ClientInferenceParams,
-    ) -> Result<InferenceResponse, InferenceError> {
-        self.inference_client.inference(params).await
+    ) -> Result<InferenceResponse, TensorZeroClientError> {
+        self.t0_client.inference(params).await
     }
 }
