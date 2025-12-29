@@ -2,7 +2,7 @@
 //!
 //! This module implements an adaptive evaluation algorithm that evaluates multiple variants
 //! against a dataset using durable execution for fault tolerance. It aims to stop when it can
-//! confidently identify the top-k variants for k in some user-chosen range of k valuws.
+//! confidently identify the top-k variants for some k in a user-chosen range of k values.
 //! Rankings are determined by a function which compares variants across multiple evaluators
 //! to produce a single scalar score per variant. The algorithm supports:
 //!
