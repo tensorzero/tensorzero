@@ -3,7 +3,6 @@ import type { FuserConfig } from "./FuserConfig";
 
 export type MixtureOfNConfig = {
   weight: number | null;
-  timeout_s: number;
   candidates: Array<string>;
   fuser: FuserConfig;
 };

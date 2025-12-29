@@ -260,7 +260,8 @@ impl InferenceProvider for AWSBedrockProvider {
                 .map(Tool::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
+            let tool_choice: AWSBedrockToolChoice =
+                tool_choice_to_aws_bedrock(tool_config.tool_choice.clone())?;
 
             let aws_bedrock_tool_config = ToolConfiguration::builder()
                 .set_tools(Some(tools))
@@ -400,7 +401,8 @@ impl InferenceProvider for AWSBedrockProvider {
                 .map(Tool::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
+            let tool_choice: AWSBedrockToolChoice =
+                tool_choice_to_aws_bedrock(tool_config.tool_choice.clone())?;
 
             let aws_bedrock_tool_config = ToolConfiguration::builder()
                 .set_tools(Some(tools))
@@ -691,12 +693,10 @@ fn bedrock_to_tensorzero_stream_message(
     }
 }
 
-impl From<Role> for ConversationRole {
-    fn from(role: Role) -> Self {
-        match role {
-            Role::User => ConversationRole::User,
-            Role::Assistant => ConversationRole::Assistant,
-        }
+fn role_to_conversation_role(role: Role) -> ConversationRole {
+    match role {
+        Role::User => ConversationRole::User,
+        Role::Assistant => ConversationRole::Assistant,
     }
 }
 
@@ -936,7 +936,7 @@ fn bedrock_content_block_to_output(
 
 // `Message` is a foreign type, so we cannot write an `impl` block on it
 async fn message_from_request_message(message: &RequestMessage) -> Result<Message, Error> {
-    let role: ConversationRole = message.role.into();
+    let role = role_to_conversation_role(message.role);
     let content: Vec<BedrockContentBlock> = try_join_all(
         message
             .content
@@ -1129,36 +1129,32 @@ impl TryFrom<&FunctionToolConfig> for Tool {
     }
 }
 
-impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
-    type Error = Error;
-
-    fn try_from(tool_choice: ToolChoice) -> Result<Self, Error> {
-        match tool_choice {
-            // Workaround for AWS Bedrock API limitation: they don't support explicitly specifying "none"
-            // for tool choice. Instead, we return Auto but the request construction will ensure
-            // that no tools are sent in the request payload. This achieves the same effect
-            // as explicitly telling the model not to use tools, since without any tools
-            // being provided, the model cannot make tool calls.
-            ToolChoice::None => Ok(AWSBedrockToolChoice::Auto(AutoToolChoice::builder().build())),
-            ToolChoice::Auto => Ok(AWSBedrockToolChoice::Auto(
-                AutoToolChoice::builder().build(),
-            )),
-            ToolChoice::Required => Ok(AWSBedrockToolChoice::Any(AnyToolChoice::builder().build())),
-            ToolChoice::Specific(tool_name) => Ok(AWSBedrockToolChoice::Tool(
-                SpecificToolChoice::builder()
-                    .name(tool_name)
-                    .build()
-                    .map_err(|_| Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: None,
-                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                        message:
-                            "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
-                                .to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    }))?,
-            )),
-        }
+fn tool_choice_to_aws_bedrock(tool_choice: ToolChoice) -> Result<AWSBedrockToolChoice, Error> {
+    match tool_choice {
+        // Workaround for AWS Bedrock API limitation: they don't support explicitly specifying "none"
+        // for tool choice. Instead, we return Auto but the request construction will ensure
+        // that no tools are sent in the request payload. This achieves the same effect
+        // as explicitly telling the model not to use tools, since without any tools
+        // being provided, the model cannot make tool calls.
+        ToolChoice::None => Ok(AWSBedrockToolChoice::Auto(AutoToolChoice::builder().build())),
+        ToolChoice::Auto => Ok(AWSBedrockToolChoice::Auto(
+            AutoToolChoice::builder().build(),
+        )),
+        ToolChoice::Required => Ok(AWSBedrockToolChoice::Any(AnyToolChoice::builder().build())),
+        ToolChoice::Specific(tool_name) => Ok(AWSBedrockToolChoice::Tool(
+            SpecificToolChoice::builder()
+                .name(tool_name)
+                .build()
+                .map_err(|_| Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: None,
+                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                    message:
+                        "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
+                            .to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                }))?,
+        )),
     }
 }
 

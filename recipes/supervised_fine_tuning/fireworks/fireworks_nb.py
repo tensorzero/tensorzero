@@ -12,7 +12,7 @@
 # %% [markdown]
 # To get started:
 #
-# - Set the `TENSORZERO_CLICKHOUSE_URL`, `FIREWORKS_API_KEY`, and `FIREWORKS_ACCOUNT_ID` environment variable. See the `.env.example` file.
+# - Set the `TENSORZERO_CLICKHOUSE_URL` and `FIREWORKS_API_KEY` environment variable. See the `.env.example` file.
 # - Update the following parameters:
 #
 
@@ -26,11 +26,9 @@ load_dotenv()
 
 CLICKHOUSE_URL = os.getenv("TENSORZERO_CLICKHOUSE_URL")
 FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
-account_id = os.getenv("FIREWORKS_ACCOUNT_ID")
 
 assert CLICKHOUSE_URL is not None, "TENSORZERO_CLICKHOUSE_URL is not set"
 assert FIREWORKS_API_KEY is not None, "FIREWORKS_API_KEY is not set"
-assert account_id is not None, "FIREWORKS_ACCOUNT_ID is not set"
 
 tensorzero_path = os.path.abspath(os.path.join(os.getcwd(), "../../../"))
 if tensorzero_path not in sys.path:
@@ -131,7 +129,6 @@ train_samples, val_samples = train_val_split(
 # %%
 optimization_config = FireworksSFTConfig(
     model=MODEL_NAME,
-    account_id=account_id,
 )
 
 job_handle = t0.experimental_launch_optimization(

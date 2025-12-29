@@ -1,0 +1,19 @@
+[package]
+name = "autopilot-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+e2e_tests = []
+
+[dependencies]
+durable-tools = { path = "../durable-tools" }
+async-trait.workspace = true
+schemars.workspace = true
+serde = { workspace = true, features = ["derive"] }
+tokio.workspace = true
+
+[lints]
+workspace = true

@@ -875,11 +875,11 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
     }
 
     if service_tier.is_some() {
-        request.service_tier = service_tier.clone();
+        request.service_tier.clone_from(service_tier);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -891,7 +891,7 @@ fn apply_inference_params(
     }
 
     if verbosity.is_some() {
-        request.verbosity = verbosity.clone();
+        request.verbosity.clone_from(verbosity);
     }
 }
 
@@ -1395,6 +1395,8 @@ where
     }
 }
 
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
 fn serialize_optional_text_content_vec<S>(
     content: &Option<Vec<OpenAIContentBlock<'_>>>,
     serializer: S,

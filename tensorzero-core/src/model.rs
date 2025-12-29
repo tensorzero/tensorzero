@@ -57,6 +57,7 @@ use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
 use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
+use crate::utils::mock::get_mock_provider_api_base;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -220,8 +221,8 @@ impl ModelConfig {
     /// Checks if an Unknown content block should be filtered out based on model_name and provider_name.
     /// Returns true if the block should be filtered (removed), false if it should be kept.
     fn should_filter_unknown_block(
-        block_model_name: &Option<String>,
-        block_provider_name: &Option<String>,
+        block_model_name: Option<&String>,
+        block_provider_name: Option<&String>,
         target_model_name: &str,
         target_provider_name: &str,
     ) -> bool {
@@ -254,8 +255,8 @@ impl ModelConfig {
                     provider_name: block_provider_name,
                     data: _,
                 }) => Self::should_filter_unknown_block(
-                    block_model_name,
-                    block_provider_name,
+                    block_model_name.as_ref(),
+                    block_provider_name.as_ref(),
                     model_name,
                     provider_name,
                 ),
@@ -285,8 +286,8 @@ impl ModelConfig {
                                 data: _,
                             }) => {
                                 if Self::should_filter_unknown_block(
-                                    block_model_name,
-                                    block_provider_name,
+                                    block_model_name.as_ref(),
+                                    block_provider_name.as_ref(),
                                     model_name,
                                     provider_name,
                                 ) {
@@ -728,6 +729,7 @@ async fn wrap_provider_stream(
     let otlp_config = clients.otlp_config.clone();
     let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
+    let span_clone = span.clone();
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
@@ -769,7 +771,7 @@ async fn wrap_provider_stream(
         // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
         let total_usage = total_usage.unwrap_or_default();
 
-        otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
+        otlp_config.apply_usage_to_model_provider_span(&span_clone, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
             let usage = match (total_usage.total_tokens(), errored) {
@@ -793,7 +795,7 @@ async fn wrap_provider_stream(
             {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
-        }.instrument(span));
+        }.instrument(span_clone.clone()));
 
 
         if write_to_cache && !errored {
@@ -806,7 +808,7 @@ async fn wrap_provider_stream(
                 tool_config
             );
         }
-    };
+    }.instrument(span);
     // We unconditionally create a stream, and forward items into it from a separate task
     // This ensures that we keep processing chunks (and call `return_tickets` to update rate-limiting information)
     // even if the top-level HTTP request is later dropped.
@@ -1404,13 +1406,8 @@ impl UninitializedProviderConfig {
                 include_encrypted_reasoning,
                 provider_tools,
             } => {
-                // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
-                #[cfg(feature = "e2e_tests")]
-                let api_base = provider_types
-                    .openai
-                    .batch_inference_api_base
-                    .clone()
-                    .or(api_base);
+                // Use mock API base for testing if set, otherwise defer to the API base set
+                let api_base = get_mock_provider_api_base("openai").or(api_base);
 
                 ProviderConfig::OpenAI(OpenAIProvider::new(
                     model_name,
@@ -3476,7 +3473,7 @@ mod tests {
         // Shorthand models are not added to the model table
         assert_eq!(model_table.static_model_len(), 0);
         let model_config = model_table
-            .get("dummy::gpt-4o")
+            .get("dummy::gpt-4o", None)
             .await
             .unwrap()
             .expect("Missing dummy model");

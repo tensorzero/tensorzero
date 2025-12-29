@@ -1748,7 +1748,7 @@ mod tests {
             .function_calling_config
             .allowed_function_names
             .unwrap();
-        allowed_names.sort();
+        allowed_names.sort_unstable();
         assert_eq!(allowed_names, vec!["tool1", "tool2"]);
 
         // Test Required mode with specific allowed tools (new behavior)

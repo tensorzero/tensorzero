@@ -1349,7 +1349,7 @@ async fn test_run_migrations_fake_row() {
         .unwrap();
 
     let mut actual_migration_ids = rows.iter().map(|r| r.migration_id).collect::<Vec<_>>();
-    actual_migration_ids.sort();
+    actual_migration_ids.sort_unstable();
 
     let all_migrations = migration_manager::make_all_migrations(&clickhouse);
     let mut expected_migration_ids = all_migrations
@@ -1357,7 +1357,7 @@ async fn test_run_migrations_fake_row() {
         .map(|m| m.migration_num().unwrap())
         .collect::<Vec<_>>();
     expected_migration_ids.push(99999);
-    expected_migration_ids.sort();
+    expected_migration_ids.sort_unstable();
 
     if clickhouse.is_cluster_configured() {
         assert_eq!(actual_migration_ids, vec![99999]);

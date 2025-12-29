@@ -14,8 +14,12 @@ import type { Route } from "./+types/root";
 import "./tailwind.css";
 import { getConfig } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
-import { GatewayRequiredState } from "./components/ui/GatewayRequiredState";
-import { isGatewayConnectionError } from "./utils/tensorzero/errors";
+import { GatewayAuthFailedState } from "./components/ui/error/GatewayAuthFailedState";
+import { GatewayRequiredState } from "./components/ui/error/GatewayRequiredState";
+import {
+  isAuthenticationError,
+  isGatewayConnectionError,
+} from "./utils/tensorzero/errors";
 import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
@@ -46,6 +50,7 @@ export const links: Route.LinksFunction = () => [
 export const middleware: Route.MiddlewareFunction[] = [readOnlyMiddleware];
 
 const GATEWAY_UNAVAILABLE_ERROR = "TensorZero Gateway Unavailable";
+const GATEWAY_AUTH_FAILED_ERROR = "TensorZero Gateway Authentication Failed";
 
 export async function loader() {
   // Initialize evaluation cleanup when the app loads
@@ -57,6 +62,9 @@ export async function loader() {
   } catch (e) {
     if (isGatewayConnectionError(e)) {
       throw data({ errorType: GATEWAY_UNAVAILABLE_ERROR }, { status: 503 });
+    }
+    if (isAuthenticationError(e)) {
+      throw data({ errorType: GATEWAY_AUTH_FAILED_ERROR }, { status: 401 });
     }
     throw e;
   }
@@ -109,12 +117,26 @@ export default function App({ loaderData }: Route.ComponentProps) {
 
 // Fallback Error Boundary
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  // Check if this is a gateway connection error
+  // Check if this is a gateway connection error (wrapped with data() or raw)
   if (
     isRouteErrorResponse(error) &&
     error.data?.errorType === GATEWAY_UNAVAILABLE_ERROR
   ) {
     return <GatewayRequiredState />;
+  }
+  if (isGatewayConnectionError(error)) {
+    return <GatewayRequiredState />;
+  }
+
+  // Check if this is a gateway authentication error (wrapped with data() or raw)
+  if (
+    isRouteErrorResponse(error) &&
+    error.data?.errorType === GATEWAY_AUTH_FAILED_ERROR
+  ) {
+    return <GatewayAuthFailedState />;
+  }
+  if (isAuthenticationError(error)) {
+    return <GatewayAuthFailedState />;
   }
 
   let message = "Oops!";

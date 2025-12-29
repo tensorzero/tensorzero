@@ -48,7 +48,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 > **Integrate with TensorZero once and access every major LLM provider.**
 
 - [x] **[Call any LLM](https://www.tensorzero.com/docs/gateway/call-any-llm)** (API or self-hosted) through a single unified API
-- [x] Infer with **[streaming](https://www.tensorzero.com/docs/gateway/guides/streaming-inference)**, **[tool use](https://www.tensorzero.com/docs/gateway/guides/tool-use)**, structured generation, **[batch](https://www.tensorzero.com/docs/gateway/guides/batch-inference)**, **[embeddings](https://www.tensorzero.com/docs/gateway/generate-embeddings)**, **[multimodal (images, files)](https://www.tensorzero.com/docs/gateway/guides/multimodal-inference)**, **[caching](https://www.tensorzero.com/docs/gateway/guides/inference-caching)**, etc.
+- [x] Infer with **[streaming](https://www.tensorzero.com/docs/gateway/guides/streaming-inference)**, **[tool use](https://www.tensorzero.com/docs/gateway/guides/tool-use)**, **[structured outputs (JSON)](https://www.tensorzero.com/docs/gateway/generate-structured-outputs)**, **[batch](https://www.tensorzero.com/docs/gateway/guides/batch-inference)**, **[embeddings](https://www.tensorzero.com/docs/gateway/generate-embeddings)**, **[multimodal (images, files)](https://www.tensorzero.com/docs/gateway/guides/multimodal-inference)**, **[caching](https://www.tensorzero.com/docs/gateway/guides/inference-caching)**, etc.
 - [x] **[Create prompt templates and schemas](https://www.tensorzero.com/docs/gateway/create-a-prompt-template)** to enforce a consistent, typed interface between your application and the LLMs
 - [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: **[<1ms p99 latency overhead at 10k+ QPS](https://www.tensorzero.com/docs/gateway/benchmarks)**
 - [x] Use any programming language: **[integrate via our Python client, any OpenAI SDK, or our HTTP API](https://www.tensorzero.com/docs/gateway/clients)**
@@ -104,7 +104,7 @@ with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") a
             "messages": [
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "Write a haiku about TensorZero.",
                 }
             ]
         },
@@ -143,7 +143,7 @@ response = client.chat.completions.create(
     messages=[
         {
             "role": "user",
-            "content": "Write a haiku about artificial intelligence.",
+            "content": "Write a haiku about TensorZero.",
         }
     ],
 )
@@ -176,7 +176,7 @@ const response = await client.chat.completions.create({
   messages: [
     {
       role: "user",
-      content: "Write a haiku about artificial intelligence.",
+      content: "Write a haiku about TensorZero.",
     },
   ],
 });
@@ -205,7 +205,7 @@ curl -X POST "http://localhost:3000/inference" \
       "messages": [
         {
           "role": "user",
-          "content": "Write a haiku about artificial intelligence."
+          "content": "Write a haiku about TensorZero."
         }
       ]
     }
@@ -301,15 +301,13 @@ Boost performance by dynamically updating your prompts with relevant examples, c
   </tr>
   <tr>
     <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl">Dynamic In-Context Learning (DICL)</a></b></td>
-    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#chain-of-thought-cot">Chain-of-Thought (CoT)</a></b></td>
+    <td width="50%" align="center" valign="middle"></td>
   </tr>
   <tr>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d8489e92-ce93-46ac-9aab-289ce19bb67d"></td>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/ea13d73c-76a4-4e0c-a35b-0c648f898311" height="320"></td>
+    <td width="50%" align="center" valign="middle"></td>
   </tr>
 </table>
-
-_More coming soon..._
 
 <br>
 

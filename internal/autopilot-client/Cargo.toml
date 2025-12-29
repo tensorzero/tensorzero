@@ -7,16 +7,21 @@ license.workspace = true
 
 [dependencies]
 chrono.workspace = true
+durable-tools-spawn.workspace = true
 futures.workspace = true
+moka.workspace = true
 reqwest = { workspace = true, features = ["stream"] }
 reqwest-eventsource.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+ts-rs.workspace = true
 url.workspace = true
 uuid.workspace = true
-tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-types = { path = "../tensorzero-types" }
 
 [lints]
 workspace = true

@@ -30,6 +30,7 @@ use tensorzero_core::endpoints::datasets::v1::{
     types::{GetDatapointsRequest, ListDatapointsRequest},
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::inference::types::InputExt;
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
@@ -147,7 +148,7 @@ pub async fn run_evaluation(
         unwritten_config.gateway.observability.batch_writes.clone(),
     )
     .await?;
-    let config = unwritten_config.into_config(&clickhouse_client).await?;
+    let config = Box::pin(unwritten_config.into_config(&clickhouse_client)).await?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
 
@@ -673,6 +674,8 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         extra_headers: Default::default(),
         internal_dynamic_variant_config: internal_dynamic_variant_config.clone(),
         otlp_traces_extra_headers: HashMap::new(),
+        otlp_traces_extra_attributes: HashMap::new(),
+        otlp_traces_extra_resources: HashMap::new(),
         api_key: None,
     };
     debug!("Making inference request");

@@ -5,7 +5,7 @@ let _postgresClient: PostgresClient | undefined;
 
 export function isPostgresAvailable(): boolean {
   const env = getEnv();
-  return env.TENSORZERO_POSTGRES_URL !== null;
+  return !!env.TENSORZERO_POSTGRES_URL;
 }
 
 export async function getPostgresClient(): Promise<PostgresClient> {

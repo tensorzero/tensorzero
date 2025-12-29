@@ -29,7 +29,7 @@ FIXTURES = {
     "boolean_metric_feedback_examples.jsonl": "boolean_metric_feedback_examples.jsonl",
     "float_metric_feedback_examples.jsonl": "float_metric_feedback_examples.jsonl",
     "demonstration_feedback_examples.jsonl": "demonstration_feedback_examples.jsonl",
-    "model_inference_cache_e2e.jsonl": "model_inference_cache_e2e.jsonl",
+    "model_inference_cache_e2e_20251224_211706.jsonl": "model_inference_cache_e2e.jsonl",
     "json_inference_datapoint_examples.jsonl": "json_inference_datapoint_examples.jsonl",
     "chat_inference_datapoint_examples.jsonl": "chat_inference_datapoint_examples.jsonl",
     "dynamic_evaluation_run_episode_examples.jsonl": "dynamic_evaluation_run_episode_examples.jsonl",

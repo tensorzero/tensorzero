@@ -56,8 +56,10 @@ env:
   SQLX_OFFLINE: 1
   TENSORZERO_E2E_PROXY: http://localhost:3003
   TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
-  TENSORZERO_CI: 1
   TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
+  TENSORZERO_CI: 1
+  # Nextest filter expression for flaky tests to skip (e.g. "test(hyperbolic)|test(tgi)")
+  CARGO_NEXTEST_FLAKY_TESTS: ${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}
 
 jobs:
   live-tests:
@@ -117,6 +119,15 @@ jobs:
         if: always()
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs -t
 
+      - name: Check e2e logs for impossible error messages
+        run: |
+          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
+          if [ -z "$LOGS" ]; then
+            echo "ERROR: Gateway logs are empty"
+            exit 1
+          fi
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
+
       # # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
       # # For now, we only check for deprecation warnings after running the Rust e2e tests
       # TODO - re-enable this: https://github.com/tensorzero/tensorzero/issues/3989
@@ -146,6 +157,8 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+      # Permission to download artifacts
+      actions: read
     timeout-minutes: 45
     strategy:
       matrix:
@@ -250,7 +263,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest
 
@@ -305,11 +318,11 @@ jobs:
       - name: Install Python for python async client tests
         run: uv python install 3.9
 
-      - name: "Python: PyO3 Client: pytest"
+      - name: "Python: PyO3 Client: pytest (non-mock tests)"
         working-directory: clients/python
         run: |
           # Start the test in background and capture its PID
-          bash ./test.sh --verbose -n 8 &
+          bash ./test.sh --verbose -n 8 -m "not mock" &
           TEST_PID=$!
           echo "Started test.sh with PID: $TEST_PID"
 
@@ -347,6 +360,13 @@ jobs:
             echo "No Python processes found"
           fi
           exit 1
+
+      - name: "Python: PyO3 Client: pytest (mock tests)"
+        working-directory: clients/python
+        env:
+          TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://localhost:3030
+        run: |
+          bash ./test.sh --verbose -n 8 -m mock
 
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node
@@ -406,6 +426,10 @@ jobs:
         continue-on-error: true
         run: cat vllm_gpt_oss_modal_logs.txt
 
+      - name: Check e2e logs for impossible error messages
+        run: |
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
+
       - name: Upload client-tests provider-proxy cache
         # Only upload the cache when we're running from a 'good' run
         # (running from the merge queue via 'workflow_call' from general.yml, or a cron job)
@@ -414,32 +438,11 @@ jobs:
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/upload-provider-proxy-cache.sh
 
-  # Test that the ui e2e tests still pass after we regenerate the model inference cache
-  ui-tests-e2e-regen-model-inference-cache:
-    permissions:
-      contents: read
-      actions: write
-    if: github.repository == 'tensorzero/tensorzero'
-    uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
-    with:
-      regen_cache: true
-      is_merge_group: true
-      force_no_auth: true
-    secrets:
-      S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
-      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-
   # See 'ci/README.md' at the repository root for more details.
   check-all-tests-passed:
     permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
-    needs: [ui-tests-e2e-regen-model-inference-cache, client-tests, live-tests]
+    needs: [client-tests, live-tests]
     runs-on: ubuntu-latest
     steps:
       # When running in the merge queue, jobs should never be skipped.

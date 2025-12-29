@@ -1,6 +1,7 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
+use crate::relay::TensorzeroRelay;
 use crate::utils::deprecation_warning;
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
@@ -762,6 +763,7 @@ impl RuntimeOverlay {
             auth,
             global_outbound_http_timeout,
             relay,
+            metrics,
         } = &config.gateway;
 
         Self {
@@ -784,6 +786,7 @@ impl RuntimeOverlay {
                     global_outbound_http_timeout.num_milliseconds() as u64,
                 ),
                 relay: relay.as_ref().map(|relay| relay.original_config.clone()),
+                metrics: metrics.clone(),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
@@ -1059,12 +1062,10 @@ impl Config {
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Error> {
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            Box::pin(with_skip_credential_validation(Self::load_from_toml(
-                ConfigInput::Snapshot {
-                    snapshot: Box::new(snapshot),
-                    runtime_overlay: Box::new(runtime_overlay),
-                },
-            )))
+            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
+                snapshot: Box::new(snapshot),
+                runtime_overlay: Box::new(runtime_overlay),
+            })))
             .await?
         } else {
             Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
@@ -1088,9 +1089,9 @@ impl Config {
     ) -> Result<UnwrittenConfig, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            Box::pin(with_skip_credential_validation(Self::load_from_toml(
-                ConfigInput::Fresh(globbed_config.table),
-            )))
+            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Fresh(
+                globbed_config.table,
+            ))))
             .await?
         } else {
             Box::pin(Self::load_from_toml(ConfigInput::Fresh(
@@ -1219,17 +1220,10 @@ impl Config {
             .into_iter()
             .collect::<HashMap<_, _>>();
 
-        let optimizers = try_join_all(uninitialized_optimizers.into_iter().map(
-            |(name, config)| async {
-                config
-                    .load(&provider_type_default_credentials)
-                    .await
-                    .map(|c| (name, c))
-            },
-        ))
-        .await?
-        .into_iter()
-        .collect::<HashMap<_, _>>();
+        let optimizers = uninitialized_optimizers
+            .into_iter()
+            .map(|(name, config)| (name, config.load()))
+            .collect::<HashMap<_, _>>();
         let models = ModelTable::new(
             loaded_models,
             provider_type_default_credentials.clone(),
@@ -1315,7 +1309,7 @@ impl Config {
                         &config.embedding_models,
                         &config.templates,
                         &evaluation_function_name,
-                        &config.gateway.global_outbound_http_timeout,
+                        &config.gateway,
                     )
                     .await?;
                 config
@@ -1375,7 +1369,7 @@ impl Config {
                     &self.embedding_models,
                     &self.templates,
                     function_name,
-                    &self.gateway.global_outbound_http_timeout,
+                    &self.gateway,
                 )
                 .await?;
         }
@@ -1465,8 +1459,9 @@ impl Config {
     pub async fn get_model<'a>(
         &'a self,
         model_name: &Arc<str>,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<CowNoClone<'a, ModelConfig>, Error> {
-        self.models.get(model_name).await?.ok_or_else(|| {
+        self.models.get(model_name, relay).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })
@@ -1893,6 +1888,87 @@ impl SchemaData {
     }
 }
 
+/// Propagates deprecated `timeout_s` from best_of_n/mixture_of_n variants to their candidate variants.
+///
+/// If a best_of_n or mixture_of_n variant has `timeout_s` set:
+/// 1. Emits a deprecation warning
+/// 2. Sets `timeouts` on each candidate variant (if not already set)
+/// 3. Returns an error if a candidate already has `timeouts` set (conflict)
+fn propagate_timeout_s_to_candidates(
+    function_name: &str,
+    variants: &mut HashMap<String, UninitializedVariantInfo>,
+) -> Result<(), Error> {
+    use crate::utils::deprecation_warning;
+
+    // Collect timeout_s values from best_of_n/mixture_of_n variants
+    let mut timeout_propagations: Vec<(String, f64, Vec<String>)> = Vec::new();
+
+    for (variant_name, variant_info) in variants.iter() {
+        match &variant_info.inner {
+            UninitializedVariantConfig::BestOfNSampling(config) => {
+                if let Some(timeout_s) = config.timeout_s() {
+                    timeout_propagations.push((
+                        variant_name.clone(),
+                        timeout_s,
+                        config.candidates.clone(),
+                    ));
+                }
+            }
+            UninitializedVariantConfig::MixtureOfN(config) => {
+                if let Some(timeout_s) = config.timeout_s() {
+                    timeout_propagations.push((
+                        variant_name.clone(),
+                        timeout_s,
+                        config.candidates.clone(),
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Apply timeout_s to candidate variants
+    for (parent_variant_name, timeout_s, candidates) in timeout_propagations {
+        deprecation_warning(&format!(
+            "Deprecation Warning (#2480 / 2026.2+): `timeout_s` in functions.{function_name}.variants.{parent_variant_name} is deprecated. Please use `[timeouts]` on your candidate variants instead."
+        ));
+
+        let timeout_ms = (timeout_s * 1000.0) as u64;
+        let timeouts_config = TimeoutsConfig {
+            non_streaming: NonStreamingTimeouts {
+                total_ms: Some(timeout_ms),
+            },
+            streaming: StreamingTimeouts {
+                ttft_ms: Some(timeout_ms),
+            },
+        };
+
+        for candidate_name in candidates {
+            let candidate_variant = variants.get_mut(&candidate_name).ok_or_else(|| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "functions.{function_name}.variants.{parent_variant_name}: candidate `{candidate_name}` not found"
+                    ),
+                })
+            })?;
+
+            // Check for conflict
+            if candidate_variant.timeouts.is_some() {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "functions.{function_name}.variants.{parent_variant_name}: cannot use `timeout_s` when candidate `{candidate_name}` already has `[timeouts]` configured. Please remove `timeout_s` and configure timeouts directly on the candidate."
+                    ),
+                }));
+            }
+
+            // Set timeouts on candidate
+            candidate_variant.timeouts = Some(timeouts_config.clone());
+        }
+    }
+
+    Ok(())
+}
+
 impl UninitializedFunctionConfig {
     pub fn load(
         self,
@@ -1900,7 +1976,10 @@ impl UninitializedFunctionConfig {
         metrics: &HashMap<String, MetricConfig>,
     ) -> Result<FunctionConfig, Error> {
         match self {
-            UninitializedFunctionConfig::Chat(params) => {
+            UninitializedFunctionConfig::Chat(mut params) => {
+                // Propagate deprecated timeout_s to candidate variants before loading
+                propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
+
                 let schema_data = SchemaData::load(
                     params
                         .user_schema
@@ -1962,7 +2041,10 @@ impl UninitializedFunctionConfig {
                     experimentation,
                 }))
             }
-            UninitializedFunctionConfig::Json(params) => {
+            UninitializedFunctionConfig::Json(mut params) => {
+                // Propagate deprecated timeout_s to candidate variants before loading
+                propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
+
                 let schema_data = SchemaData::load(
                     params
                         .user_schema
@@ -2071,6 +2153,7 @@ pub struct UninitializedVariantInfo {
     pub timeouts: Option<TimeoutsConfig>,
 }
 
+/// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
 #[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type")]
@@ -2084,6 +2167,7 @@ pub enum UninitializedVariantConfig {
     Dicl(UninitializedDiclConfig),
     #[serde(rename = "experimental_mixture_of_n")]
     MixtureOfN(UninitializedMixtureOfNConfig),
+    /// DEPRECATED (#5298 / 2026.2+): Use `chat_completion` with reasoning instead.
     #[serde(rename = "experimental_chain_of_thought")]
     ChainOfThought(UninitializedChainOfThoughtConfig),
 }
@@ -2122,6 +2206,9 @@ impl UninitializedVariantInfo {
                 VariantConfig::MixtureOfN(params.load(schemas, error_context)?)
             }
             UninitializedVariantConfig::ChainOfThought(params) => {
+                tracing::warn!(
+                    "Deprecation Warning (#5298 / 2026.2+): We are deprecating `experimental_chain_of_thought` now that reasoning models are prevalent. Please use a different variant type (e.g. `chat_completion` with reasoning)."
+                );
                 VariantConfig::ChainOfThought(params.load(schemas, error_context)?)
             }
         };
