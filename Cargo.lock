@@ -1812,7 +1812,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=d564532eb8e46d74db028013e8d3e4dcb0d41d6d#d564532eb8e46d74db028013e8d3e4dcb0d41d6d"
+source = "git+https://github.com/tensorzero/durable?branch=viraj%2Fspawn-unchecked#9860f359d05c4a15e52dc33dbbf5aa96639c2295"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2006,6 +2006,7 @@ version = "2025.12.6"
 dependencies = [
  "anyhow",
  "clap",
+ "durable",
  "futures",
  "indicatif",
  "serde",

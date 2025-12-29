@@ -13,6 +13,20 @@ use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
 use crate::tool_metadata::ToolMetadata;
 
+/// Conversion from an erased tool reference to a TensorZero Tool definition.
+impl TryFrom<&dyn ErasedTool> for Tool {
+    type Error = ToolError;
+
+    fn try_from(tool: &dyn ErasedTool) -> Result<Self, Self::Error> {
+        Ok(Tool::Function(FunctionTool {
+            name: tool.name().to_string(),
+            description: tool.description().to_string(),
+            parameters: serde_json::to_value(tool.parameters_schema())?,
+            strict: false,
+        }))
+    }
+}
+
 /// Type-erased tool trait for registry storage.
 ///
 /// This provides metadata about a tool without exposing its concrete types.
@@ -232,25 +246,17 @@ impl ToolRegistry {
         self.simple_tools.keys().map(String::as_str).collect()
     }
 
-    /// Generate TensorZero tool definitions for all tools.
+    /// Iterate over all registered tools.
     ///
-    /// This can be used directly in TensorZero inference API calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if serialization fails.
-    pub fn to_tensorzero_tools(&self) -> Result<Vec<Tool>, ToolError> {
-        self.tools
-            .values()
-            .map(|tool| {
-                Ok(Tool::Function(FunctionTool {
-                    name: tool.name().to_string(),
-                    description: tool.description().to_string(),
-                    parameters: serde_json::to_value(tool.parameters_schema())?,
-                    strict: false,
-                }))
-            })
-            .collect()
+    /// Use with `Tool::try_from` to convert to TensorZero tool definitions:
+    /// ```ignore
+    /// let tools: Result<Vec<Tool>, _> = registry
+    ///     .iter()
+    ///     .map(Tool::try_from)
+    ///     .collect();
+    /// ```
+    pub fn iter(&self) -> impl Iterator<Item = &dyn ErasedTool> {
+        self.tools.values().map(|arc| arc.as_ref())
     }
 
     /// Get the number of registered tools.

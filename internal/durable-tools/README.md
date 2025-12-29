@@ -292,7 +292,7 @@ DATABASE_URL="postgres://postgres:postgres@localhost:5433/test" cargo test
 
 **Unit tests** (34 tests in `src/tests.rs`):
 
-- Registry: registration, lookup, listing, `is_durable()`, `to_tensorzero_tools()`
+- Registry: registration, lookup, listing, `is_durable()`, `iter()` with `Tool::try_from`
 - Type erasure wrappers: metadata exposure, timeout defaults
 - Builder: default values, method chaining
 - Error conversions: `ToolError` <-> `TaskError`
