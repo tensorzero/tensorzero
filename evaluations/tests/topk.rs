@@ -315,22 +315,25 @@ async fn test_topk_found_topk() {
         }
     }
 
-    // 2. Check variant statuses
+    // 2. Check variant statuses (all non-failed variants should be Stopped)
     assert_eq!(
         output.variant_status.get("echo"),
-        Some(&VariantStatus::Include),
-        "Echo should be Included (winner)"
+        Some(&VariantStatus::Stopped),
+        "Echo should be Stopped"
     );
     assert_eq!(
         output.variant_status.get("empty"),
-        Some(&VariantStatus::Exclude),
-        "empty should be Excluded (loser)"
+        Some(&VariantStatus::Stopped),
+        "empty should be Stopped"
     );
     assert_eq!(
         output.variant_status.get("empty2"),
-        Some(&VariantStatus::Exclude),
-        "Empty2 should be Excluded (loser)"
+        Some(&VariantStatus::Stopped),
+        "Empty2 should be Stopped"
     );
+
+    // Note: top_variants membership is already checked in section 1 above.
+    // The stopping_reason.top_variants is the source of truth for which variants won.
 
     // 3. Check variant performance confidence sequences
     let echo_cs = output
@@ -1177,8 +1180,8 @@ async fn test_topk_variant_failure_threshold() {
     // 3. Verify variant statuses
     assert_eq!(
         output.variant_status.get("test"),
-        Some(&VariantStatus::Include),
-        "test variant status should be Include"
+        Some(&VariantStatus::Stopped),
+        "test variant status should be Stopped"
     );
     assert_eq!(
         output.variant_status.get("error"),
