@@ -214,15 +214,15 @@ pub use inference::{
 
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
-    Client, ClientInferenceParams, InferenceParams, InferenceResponse, Input, InputMessage,
-    InputMessageContent, Role, TensorZeroError,
+    Client, ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse, Input,
+    InputMessage, InputMessageContent, Role, TensorZeroError, Tool,
 };
 
 // Re-export async_trait for convenience
 pub use async_trait::async_trait;
 
 // Re-export durable types that tools may need
-pub use durable::{SpawnOptions, SpawnResult, TaskHandle, WorkerOptions};
+pub use durable::{SpawnOptions, SpawnResult, TaskHandle, Worker, WorkerOptions};
 
 // Re-export schemars for parameter schemas
 pub use schemars;

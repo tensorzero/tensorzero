@@ -2,7 +2,7 @@
 
 - Use `cargo check` for quick verification, restrict further (e.g. `cargo check --package tensorzero-core`) if appropriate. For complex changes, you might want to run `cargo check --all-targets --all-features`. Test suite compilation is slow.
 - If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` from `internal/tensorzero-node` (not root). Run `cargo check` first to catch compilation errors.
-- If you change a signature of a struct, function, and so on, use `rg` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
+- If you change a signature of a struct, function, and so on, use `grep` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
 - Place crate imports at the top of the file or module using `use crate::...`. Avoid imports inside functions or tests. Avoid long inline crate paths.
 - Once you're done with your work, make sure to:
   - Run `cargo fmt`.
@@ -56,4 +56,4 @@ We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 # Misc
 
 - `CONTRIBUTING.md` has additional context on working on this codebase.
-- `rg` should be available by default. Install it if it's missing.
+- Prefer backticks (`) instead of ticks (') to wrap technical terms in comments, error messages, READMEs, etc.
