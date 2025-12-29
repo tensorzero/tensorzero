@@ -297,8 +297,8 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
         inference_id: response.inference_id,
         episode_id: response.episode_id,
         usage: OTelUsage {
-            input_tokens: response.usage.input_tokens.map(|x| x as i64),
-            output_tokens: response.usage.output_tokens.map(|x| x as i64),
+            input_tokens: response.usage.usage.input_tokens.map(|x| x as i64),
+            output_tokens: response.usage.usage.output_tokens.map(|x| x as i64),
         },
         underestimate: false,
         estimated_tokens: 1009,

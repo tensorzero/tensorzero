@@ -19,7 +19,7 @@ use tensorzero_core::{
         LLMJudgeOutputType,
     },
     function::{FunctionConfig, FunctionConfigChat},
-    inference::types::{ContentBlockChatOutput, FinishReason, Input, Text, Usage},
+    inference::types::{ContentBlockChatOutput, FinishReason, Input, Text, UsageWithRaw},
     jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
     optimization::gepa::GEPAConfig,
     tool::StaticToolConfig,
@@ -355,7 +355,7 @@ pub fn create_test_evaluation_info(
         content: vec![ContentBlockChatOutput::Text(Text {
             text: output_text.to_string(),
         })],
-        usage: Usage::default(),
+        usage: UsageWithRaw::default(),
         original_response: None,
         finish_reason: Some(FinishReason::Stop),
     });
@@ -859,7 +859,7 @@ async fn test_analyze_input_format_scenarios() {
                         text: "The answer is 4.".to_string(),
                     },
                 )],
-                usage: tensorzero_core::inference::types::Usage::default(),
+                usage: tensorzero_core::inference::types::UsageWithRaw::default(),
                 original_response: None,
                 finish_reason: Some(tensorzero_core::inference::types::FinishReason::Stop),
             },

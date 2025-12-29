@@ -28,7 +28,8 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     inference::types::{
-        Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage, current_timestamp,
+        ApiType, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
+        current_timestamp,
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
@@ -519,13 +520,18 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
                 })],
             }]), // TODO (#399): Store this information in a more appropriate way for this kind of request
             raw_request: response.raw_request,
-            raw_response: response.raw_response,
+            raw_response: response.raw_response.clone(),
             usage: response.usage,
             latency: response.latency,
-            model_provider_name: response.embedding_provider_name,
+            model_provider_name: response.embedding_provider_name.clone(),
             model_name: response.embedding_model_name,
             cached: false,
             finish_reason: None,
+            raw_usage_json: serde_json::from_str::<serde_json::Value>(&response.raw_response)
+                .ok()
+                .and_then(|v| v.get("usage").cloned()),
+            provider_type: response.embedding_provider_name.to_string(),
+            api_type: ApiType::Embeddings,
         })
     }
 }
@@ -850,6 +856,7 @@ mod tests {
                         api_key_public_id: None,
                     },
                     relay: None,
+                    include_raw_usage: false,
                 },
             )
             .await;

@@ -1,10 +1,51 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// The type of API used for a model inference.
+/// Used in raw usage reporting to help consumers interpret provider-specific usage data.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiType {
+    ChatCompletions,
+    Responses,
+    Embeddings,
+}
+
+/// A single entry in the raw usage array, representing usage data from one model inference.
+/// This preserves the original provider-specific usage object for fields that TensorZero
+/// normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct RawUsageEntry {
+    pub model_inference_id: Uuid,
+    pub provider_type: String,
+    pub api_type: ApiType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub usage: Option<serde_json::Value>,
+}
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
+}
+
+/// Usage with optional raw provider-specific usage data.
+/// This is used at the API response boundary to include raw_usage when requested.
+/// Uses `#[serde(flatten)]` to inline the `Usage` fields, producing JSON like:
+/// `{ "input_tokens": 100, "output_tokens": 50, "raw_usage": [...] }`
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct UsageWithRaw {
+    #[serde(flatten)]
+    #[ts(flatten)]
+    pub usage: Usage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl Usage {
@@ -138,5 +179,92 @@ mod tests {
         let sum = Usage::sum_iter_strict(usages.into_iter());
         assert_eq!(sum.input_tokens, Some(10));
         assert_eq!(sum.output_tokens, Some(20));
+    }
+
+    #[test]
+    fn test_api_type_serialization() {
+        assert_eq!(
+            serde_json::to_string(&ApiType::ChatCompletions).unwrap(),
+            "\"chat_completions\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ApiType::Responses).unwrap(),
+            "\"responses\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ApiType::Embeddings).unwrap(),
+            "\"embeddings\""
+        );
+    }
+
+    #[test]
+    fn test_raw_usage_entry_serialization() {
+        let entry = RawUsageEntry {
+            model_inference_id: Uuid::nil(),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            usage: Some(serde_json::json!({
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "reasoning_tokens": 30
+            })),
+        };
+        let json = serde_json::to_value(&entry).unwrap();
+        assert_eq!(json["provider_type"], "openai");
+        assert_eq!(json["api_type"], "chat_completions");
+        assert_eq!(json["usage"]["prompt_tokens"], 100);
+        assert_eq!(json["usage"]["reasoning_tokens"], 30);
+    }
+
+    #[test]
+    fn test_raw_usage_entry_null_usage() {
+        let entry = RawUsageEntry {
+            model_inference_id: Uuid::nil(),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            usage: None,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        // usage field should be omitted when None
+        assert!(!json.contains("usage"));
+    }
+
+    #[test]
+    fn test_usage_with_raw_serialization() {
+        let usage_with_raw = UsageWithRaw {
+            usage: Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+            },
+            raw_usage: Some(vec![RawUsageEntry {
+                model_inference_id: Uuid::nil(),
+                provider_type: "openai".to_string(),
+                api_type: ApiType::ChatCompletions,
+                usage: Some(serde_json::json!({"prompt_tokens": 100})),
+            }]),
+        };
+        let json = serde_json::to_value(&usage_with_raw).unwrap();
+        // Flattened fields should be at top level
+        assert_eq!(json["input_tokens"], 100);
+        assert_eq!(json["output_tokens"], 50);
+        assert!(json["raw_usage"].is_array());
+        assert_eq!(json["raw_usage"][0]["provider_type"], "openai");
+    }
+
+    #[test]
+    fn test_usage_with_raw_no_raw_usage() {
+        let usage_with_raw = UsageWithRaw {
+            usage: Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+            },
+            raw_usage: None,
+        };
+        let json = serde_json::to_string(&usage_with_raw).unwrap();
+        // raw_usage should be omitted when None
+        assert!(!json.contains("raw_usage"));
+        // But input/output tokens should be present
+        assert!(json.contains("input_tokens"));
+        assert!(json.contains("output_tokens"));
     }
 }

@@ -44,7 +44,7 @@ use tensorzero_core::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage, UsageWithRaw},
 };
 use tensorzero_core::{
     endpoints::inference::{ChatInferenceResponse, JsonInferenceResponse},
@@ -1656,9 +1656,12 @@ async fn test_run_llm_judge_evaluator_chat() {
         finish_reason: None,
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        usage: Usage {
-            input_tokens: Some(0),
-            output_tokens: Some(0),
+        usage: UsageWithRaw {
+            usage: Usage {
+                input_tokens: Some(0),
+                output_tokens: Some(0),
+            },
+            raw_usage: None,
         },
         variant_name: "test_variant".to_string(),
     });
@@ -1833,9 +1836,12 @@ async fn test_run_llm_judge_evaluator_json() {
         finish_reason: None,
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        usage: Usage {
-            input_tokens: Some(0),
-            output_tokens: Some(0),
+        usage: UsageWithRaw {
+            usage: Usage {
+                input_tokens: Some(0),
+                output_tokens: Some(0),
+            },
+            raw_usage: None,
         },
         variant_name: "test_variant".to_string(),
     });

@@ -254,7 +254,7 @@ pub async fn test_dicl_optimization_chat() {
     }
 
     // Verify usage metrics
-    validate_usage_metrics(chat_response.usage);
+    validate_usage_metrics(chat_response.usage.usage);
 
     // Validate ClickHouse data
     validate_inference_clickhouse(chat_response.inference_id, &inference_params, false).await;
@@ -539,7 +539,7 @@ pub async fn test_dicl_optimization_json() {
     }
 
     // Verify usage metrics
-    validate_usage_metrics(json_response.usage);
+    validate_usage_metrics(json_response.usage.usage);
 
     // Validate ClickHouse data
     validate_inference_clickhouse(json_response.inference_id, &inference_params, true).await;
@@ -659,6 +659,7 @@ fn create_inference_params(
         otlp_traces_extra_attributes: Default::default(),
         otlp_traces_extra_resources: Default::default(),
         api_key: None,
+        include_raw_usage: false,
     }
 }
 

@@ -25,8 +25,8 @@ use url::Url;
 use crate::{
     error::{Error, ErrorDetails, warn_discarded_thought_block},
     inference::types::{
-        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
-        ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
+        ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
+        Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
         TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, file::Detail,
     },
@@ -241,6 +241,10 @@ impl OpenAIResponsesResponse<'_> {
             None => None,
         };
 
+        // Extract raw usage JSON from raw_response for include_raw_usage feature
+        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
+            .ok()
+            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output,
@@ -251,6 +255,10 @@ impl OpenAIResponsesResponse<'_> {
                 usage: self.usage.map(|u| u.into()).unwrap_or_default(),
                 latency,
                 finish_reason,
+                raw_usage_json,
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Responses,
+                id: None,
             },
         ))
     }

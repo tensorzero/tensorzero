@@ -36,13 +36,15 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::{
+    ApiType, FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk,
+};
+use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
     ModelInferenceRequest, ModelInferenceRequestJsonMode, ObjectStorageFile,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Role,
     Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 
@@ -1064,6 +1066,11 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
                 usage,
                 latency,
                 finish_reason: aws_stop_reason_to_tensorzero_finish_reason(output.stop_reason),
+                // AWS SDK doesn't serialize to JSON, so we can't extract raw usage
+                raw_usage_json: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+                id: None,
             },
         ))
     }

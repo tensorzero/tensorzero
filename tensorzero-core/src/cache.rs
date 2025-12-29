@@ -7,7 +7,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
+    ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
@@ -458,6 +458,8 @@ pub async fn cache_lookup_streaming(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
+    provider_type: String,
+    api_type: ApiType,
 ) -> Result<Option<StreamResponse>, Error> {
     let result = cache_lookup_inner(
         clickhouse_connection_info,
@@ -465,7 +467,14 @@ pub async fn cache_lookup_streaming(
         max_age_s,
     )
     .await?;
-    Ok(result.map(|result| StreamResponse::from_cache(result, Arc::from(request.provider_name))))
+    Ok(result.map(|result| {
+        StreamResponse::from_cache(
+            result,
+            Arc::from(request.provider_name),
+            provider_type,
+            api_type,
+        )
+    }))
 }
 
 pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(

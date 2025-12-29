@@ -845,7 +845,7 @@ mod tests {
         endpoints::inference::{InferenceCredentials, InferenceIds},
         http::TensorzeroHttpClient,
         inference::types::{
-            Arguments, ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
+            ApiType, Arguments, ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
             RequestMessagesOrBatch, Usage,
         },
         minijinja_util::tests::{
@@ -1081,6 +1081,9 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage_json: None,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1118,6 +1121,9 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage_json: None,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1174,6 +1180,9 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage_json: None,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1214,6 +1223,9 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::ToolCall),
             cached: false,
+            raw_usage_json: None,
+            provider_type: "dummy".to_string(),
+            api_type: ApiType::ChatCompletions,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1286,6 +1298,9 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage_json: None,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1323,6 +1338,9 @@ mod tests {
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage_json: None,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1387,6 +1405,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let input = LazyResolvedInput {
             system: None,

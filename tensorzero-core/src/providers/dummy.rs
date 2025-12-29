@@ -24,7 +24,7 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
-use crate::inference::types::{ContentBlock, FinishReason};
+use crate::inference::types::{ApiType, ContentBlock, FinishReason};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -617,6 +617,9 @@ impl InferenceProvider for DummyProvider {
             system,
             input_messages,
             finish_reason,
+            raw_usage_json: None,
+            provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     }
 

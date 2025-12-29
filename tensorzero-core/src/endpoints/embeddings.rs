@@ -92,6 +92,7 @@ pub async fn embeddings(
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: None,
+        include_raw_usage: false, // Not supported for embeddings endpoint
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)

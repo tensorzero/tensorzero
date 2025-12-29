@@ -31,6 +31,10 @@ export type ClientInferenceParams = {
    * if the fuser/judge model failed
    */
   include_original_response: boolean;
+  /**
+   * If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each provider.
+   */
+  include_raw_usage: boolean;
   internal_dynamic_variant_config: UninitializedVariantInfo | null;
   /**
    * A subset of static tools configured for the function that the inference is allowed to use. Optional.

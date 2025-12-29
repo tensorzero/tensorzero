@@ -68,6 +68,9 @@ pub struct ClientInferenceParams {
     /// if the fuser/judge model failed
     #[serde(default)]
     pub include_original_response: bool,
+    /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each provider.
+    #[serde(default)]
+    pub include_raw_usage: bool,
     // NOTE: Currently, ts_rs does not handle #[serde(transparent)] correctly,
     // so we disable the type generation for the extra_body and extra_headers fields.
     // I tried doing a direct #[ts(type = "InferenceExtraBody[]")] and
@@ -134,6 +137,7 @@ impl TryFrom<ClientInferenceParams> for Params {
                 .collect(),
             cache_options: this.cache_options,
             include_original_response: this.include_original_response,
+            include_raw_usage: this.include_raw_usage,
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
             internal_dynamic_variant_config: this.internal_dynamic_variant_config,
@@ -162,6 +166,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials,
         cache_options,
         include_original_response,
+        include_raw_usage,
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,
@@ -186,6 +191,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials: credentials.into_iter().map(|(k, v)| (k, v.0)).collect(),
         cache_options,
         include_original_response,
+        include_raw_usage,
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,

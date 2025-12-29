@@ -40,6 +40,7 @@ pub enum ActionInput {
 /// Response from the action endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
+#[expect(clippy::large_enum_variant)]
 pub enum ActionResponse {
     Inference(InferenceResponse),
     Feedback(FeedbackResponse),

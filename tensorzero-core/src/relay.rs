@@ -20,8 +20,8 @@ use crate::endpoints::openai_compatible::types::embeddings::{
 use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
 use crate::inference::types::{
-    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    TextChunk, Usage,
+    ApiType, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponseChunk, TextChunk, Usage,
 };
 use crate::model::Credential;
 use crate::{
@@ -335,6 +335,11 @@ impl TensorzeroRelay {
                 usage,
                 latency,
                 finish_reason,
+                // Relay passthrough - raw_usage should be obtained from downstream
+                raw_usage_json: None,
+                provider_type: "relay".to_string(),
+                api_type: ApiType::ChatCompletions,
+                id: None,
             },
         ))
     }
@@ -513,6 +518,7 @@ impl TensorzeroRelay {
             otlp_traces_extra_attributes: HashMap::new(),
             otlp_traces_extra_resources: HashMap::new(),
             include_original_response: false,
+            include_raw_usage: clients.include_raw_usage,
             api_key,
         };
         Ok(res)

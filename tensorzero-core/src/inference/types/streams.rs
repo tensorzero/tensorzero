@@ -6,10 +6,10 @@ use crate::function::FunctionConfig;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
-    ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
-    Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, RequestMessage, Text, Thought, ThoughtSummaryBlock, ToolCall,
-    Unknown, Usage,
+    ApiType, ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType,
+    InferenceConfig, Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, RequestMessage, Text, Thought,
+    ThoughtSummaryBlock, ToolCall, Unknown, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -219,6 +219,12 @@ pub struct CollectChunksArgs {
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
+    /// Provider type for raw usage tracking
+    pub provider_type: String,
+    /// API type for raw usage tracking
+    pub api_type: ApiType,
+    /// Pre-generated model inference ID for streaming (to match raw_usage entries)
+    pub model_inference_id: Option<Uuid>,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -245,6 +251,9 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         fetch_and_encode_input_files_before_inference,
         extra_body,
         extra_headers,
+        provider_type,
+        api_type,
+        model_inference_id,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -572,6 +581,12 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         usage: usage.unwrap_or_default(),
         latency: latency.clone(),
         finish_reason,
+        // For streaming responses collected from chunks, we don't have raw_usage_json
+        raw_usage_json: None,
+        provider_type,
+        api_type,
+        // Use pre-generated ID if provided (for streaming raw_usage consistency)
+        id: model_inference_id,
     });
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, cached);
@@ -834,6 +849,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -900,6 +918,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -998,6 +1019,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1079,6 +1103,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1168,6 +1195,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1284,6 +1314,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1394,6 +1427,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1569,6 +1605,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1702,6 +1741,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1789,6 +1831,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1867,6 +1912,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1949,6 +1997,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2015,6 +2066,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2133,6 +2187,9 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            model_inference_id: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();

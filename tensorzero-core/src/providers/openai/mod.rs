@@ -43,14 +43,15 @@ use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::{Detail, mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
+    ApiType, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+    ThoughtChunk,
+};
+use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Unknown, Usage,
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
-};
-use crate::inference::types::{
-    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::openai::responses::{
@@ -92,7 +93,7 @@ type PreparedOpenAIToolsResult<'a> = (
     Option<bool>,
 );
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -153,6 +154,10 @@ impl OpenAIProvider {
 
     pub fn model_name(&self) -> &str {
         &self.model_name
+    }
+
+    pub fn api_type(&self) -> OpenAIAPIType {
+        self.api_type
     }
 }
 
@@ -2698,6 +2703,10 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
+        // Extract raw usage JSON from raw_response for include_raw_usage feature
+        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
+            .ok()
+            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -2708,6 +2717,10 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
+                raw_usage_json,
+                provider_type: "openai".to_string(),
+                api_type: ApiType::ChatCompletions,
+                id: None,
             },
         ))
     }

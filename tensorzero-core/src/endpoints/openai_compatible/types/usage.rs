@@ -5,7 +5,8 @@
 
 use serde::Serialize;
 
-use crate::inference::types::Usage;
+use crate::inference::types::usage::RawUsageEntry;
+use crate::inference::types::{Usage, UsageWithRaw};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
 pub struct OpenAICompatibleUsage {
@@ -15,6 +16,17 @@ pub struct OpenAICompatibleUsage {
     pub completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_tokens: Option<u32>,
+}
+
+/// OpenAI-compatible usage with optional raw provider-specific usage data.
+/// Uses `#[serde(flatten)]` to inline the base usage fields, producing JSON like:
+/// `{ "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "tensorzero_raw_usage": [...] }`
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct OpenAICompatibleUsageWithRaw {
+    #[serde(flatten)]
+    pub usage: OpenAICompatibleUsage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl OpenAICompatibleUsage {
@@ -52,6 +64,15 @@ impl From<Usage> for OpenAICompatibleUsage {
             prompt_tokens: usage.input_tokens,
             completion_tokens: usage.output_tokens,
             total_tokens: usage.total_tokens(),
+        }
+    }
+}
+
+impl From<UsageWithRaw> for OpenAICompatibleUsageWithRaw {
+    fn from(usage_with_raw: UsageWithRaw) -> Self {
+        OpenAICompatibleUsageWithRaw {
+            usage: usage_with_raw.usage.into(),
+            tensorzero_raw_usage: usage_with_raw.raw_usage,
         }
     }
 }

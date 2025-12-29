@@ -41,7 +41,7 @@ use crate::inference::types::batch::{
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
-    ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
+    ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
     current_timestamp,
 };
@@ -163,12 +163,16 @@ pub struct StreamResponse {
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
     pub cached: bool,
+    pub provider_type: String,
+    pub api_type: ApiType,
 }
 
 impl StreamResponse {
     pub fn from_cache(
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
+        provider_type: String,
+        api_type: ApiType,
     ) -> Self {
         let chunks = cache_lookup.output.chunks;
         let chunks_len = chunks.len();
@@ -206,6 +210,8 @@ impl StreamResponse {
             raw_request: cache_lookup.raw_request,
             model_provider_name,
             cached: true,
+            provider_type,
+            api_type,
         }
     }
 }
@@ -386,6 +392,8 @@ impl ModelConfig {
                 &clients.clickhouse_connection_info,
                 model_provider_request,
                 clients.cache_options.max_age_s,
+                provider.provider_type().to_string(),
+                provider.api_type(),
             )
             .await
             .ok()
@@ -435,6 +443,8 @@ impl ModelConfig {
                 raw_request,
                 model_provider_name: model_provider_request.provider_name.into(),
                 cached: false,
+                provider_type: provider.provider_type().to_string(),
+                api_type: provider.api_type(),
             },
             messages: model_provider_request.request.messages.clone(),
         })
@@ -593,6 +603,8 @@ impl ModelConfig {
                         raw_request,
                         model_provider_name: "tensorzero::relay".into(),
                         cached: false,
+                        provider_type: "relay".to_string(),
+                        api_type: ApiType::ChatCompletions,
                     },
                     messages: request.messages.clone(),
                 });
@@ -878,6 +890,11 @@ impl ModelProvider {
 
     /// The name to report in the OTEL `gen_ai.system` attribute
     fn genai_system_name(&self) -> &'static str {
+        self.provider_type()
+    }
+
+    /// The provider type string (e.g., "openai", "anthropic")
+    pub fn provider_type(&self) -> &'static str {
         match &self.config {
             ProviderConfig::Anthropic(_) => "anthropic",
             ProviderConfig::AWSBedrock(_) => "aws_bedrock",
@@ -900,6 +917,18 @@ impl ModelProvider {
             ProviderConfig::DeepSeek(_) => "deepseek",
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(_) => "dummy",
+        }
+    }
+
+    /// The API type used by this provider (e.g., ChatCompletions, Responses)
+    pub fn api_type(&self) -> ApiType {
+        match &self.config {
+            ProviderConfig::OpenAI(provider) => match provider.api_type() {
+                OpenAIAPIType::ChatCompletions => ApiType::ChatCompletions,
+                OpenAIAPIType::Responses => ApiType::Responses,
+            },
+            // All other providers use ChatCompletions API
+            _ => ApiType::ChatCompletions,
         }
     }
 
@@ -2608,6 +2637,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         // Try inferring the good model only
@@ -2740,6 +2770,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -2827,6 +2858,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2962,6 +2994,8 @@ mod tests {
                     raw_request,
                     model_provider_name,
                     cached: _,
+                    provider_type: _,
+                    api_type: _,
                 },
             messages: _input,
         } = model_config
@@ -2985,6 +3019,7 @@ mod tests {
                         api_key_public_id: None,
                     },
                     relay: None,
+                    include_raw_usage: false,
                 },
                 "my_model",
             )
@@ -3060,6 +3095,7 @@ mod tests {
                         api_key_public_id: None,
                     },
                     relay: None,
+                    include_raw_usage: false,
                 },
                 "my_model",
             )
@@ -3159,6 +3195,8 @@ mod tests {
                     raw_request,
                     model_provider_name,
                     cached: _,
+                    provider_type: _,
+                    api_type: _,
                 },
             messages: _,
         } = model_config
@@ -3182,6 +3220,7 @@ mod tests {
                         api_key_public_id: None,
                     },
                     relay: None,
+                    include_raw_usage: false,
                 },
                 "my_model",
             )
@@ -3266,6 +3305,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3328,6 +3368,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3393,6 +3434,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3454,6 +3496,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)

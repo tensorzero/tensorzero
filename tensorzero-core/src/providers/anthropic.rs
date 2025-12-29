@@ -26,16 +26,16 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, FinishReason, FunctionType, Latency,
-    ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text, Unknown,
-    batch::StartBatchProviderInferenceResponse,
-};
-use crate::inference::types::{
-    ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
+    ApiType, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk,
     UnknownChunk, Usage,
+};
+use crate::inference::types::{
+    ContentBlock, ContentBlockChunk, FinishReason, FunctionType, Latency,
+    ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text, Unknown,
+    batch::StartBatchProviderInferenceResponse,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
@@ -1172,6 +1172,10 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             output
         };
 
+        // Extract raw usage JSON from raw_response for include_raw_usage feature
+        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
+            .ok()
+            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -1182,6 +1186,10 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 usage: response.usage.into(),
                 latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
+                raw_usage_json,
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+                id: None,
             },
         ))
     }

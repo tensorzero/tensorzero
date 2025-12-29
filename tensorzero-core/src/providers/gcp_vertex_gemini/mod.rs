@@ -50,8 +50,8 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
-    ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
+    ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
+    Latency, ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown,
     UnknownChunk,
 };
@@ -2973,6 +2973,10 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             provider_name,
         )?;
 
+        // Extract raw usage JSON from raw_response for include_raw_usage feature
+        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
+            .ok()
+            .and_then(|v| v.get("usageMetadata").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -2983,6 +2987,10 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 usage,
                 latency,
                 finish_reason,
+                raw_usage_json,
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+                id: None,
             },
         ))
     }

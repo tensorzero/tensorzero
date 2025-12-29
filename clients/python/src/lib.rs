@@ -542,6 +542,7 @@ impl BaseTensorZeroGateway {
             cache_options: cache_options.unwrap_or_default(),
             output_schema,
             include_original_response,
+            include_raw_usage: false,
             extra_body,
             extra_headers,
             internal_dynamic_variant_config,

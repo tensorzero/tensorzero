@@ -24,7 +24,7 @@ use crate::endpoints::openai_compatible::types::tool::{
     ChatCompletionToolChoiceOption, OpenAICompatibleTool, OpenAICompatibleToolCall,
     OpenAICompatibleToolChoiceParams, OpenAICompatibleToolMessage,
 };
-use crate::endpoints::openai_compatible::types::usage::OpenAICompatibleUsage;
+use crate::endpoints::openai_compatible::types::usage::OpenAICompatibleUsageWithRaw;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::chat_completion_inference_params::ServiceTier;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
@@ -101,6 +101,8 @@ impl std::fmt::Display for JsonSchemaInfo {
 pub struct OpenAICompatibleStreamOptions {
     #[serde(default)]
     pub include_usage: bool,
+    #[serde(default)]
+    pub include_raw_usage: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -149,6 +151,8 @@ pub struct OpenAICompatibleParams {
     pub tensorzero_provider_tools: Vec<ProviderTool>,
     #[serde(default, rename = "tensorzero::params")]
     pub tensorzero_params: Option<InferenceParams>,
+    #[serde(default, rename = "tensorzero::include_raw_usage")]
+    pub tensorzero_include_raw_usage: bool,
     #[serde(flatten)]
     pub unknown_fields: HashMap<String, Value>,
 }
@@ -204,7 +208,8 @@ pub struct OpenAICompatibleResponse {
     pub system_fingerprint: String,
     pub service_tier: Option<String>,
     pub object: String,
-    pub usage: OpenAICompatibleUsage,
+    #[serde(flatten)]
+    pub usage: OpenAICompatibleUsageWithRaw,
 }
 
 // ============================================================================
@@ -435,6 +440,7 @@ impl Params {
             tags: openai_compatible_params.tensorzero_tags,
             // OpenAI compatible endpoint does not support 'include_original_response'
             include_original_response: false,
+            include_raw_usage: openai_compatible_params.tensorzero_include_raw_usage,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
             internal_dynamic_variant_config: openai_compatible_params
@@ -700,11 +706,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 system_fingerprint: String::new(),
                 service_tier: None,
                 object: "chat.completion".to_string(),
-                usage: OpenAICompatibleUsage {
-                    prompt_tokens: response.usage.input_tokens,
-                    completion_tokens: response.usage.output_tokens,
-                    total_tokens: response.usage.total_tokens(),
-                },
+                usage: response.usage.into(),
                 episode_id: response.episode_id.to_string(),
             },
         }

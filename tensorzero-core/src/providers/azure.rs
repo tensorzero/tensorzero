@@ -21,7 +21,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
+use crate::inference::types::{ApiType, ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::inference::types::{
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -812,6 +812,10 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
         }
 
+        // Extract raw usage JSON from raw_response for include_raw_usage feature
+        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
+            .ok()
+            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -822,6 +826,10 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
+                raw_usage_json,
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+                id: None,
             },
         ))
     }

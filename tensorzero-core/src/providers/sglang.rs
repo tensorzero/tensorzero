@@ -19,13 +19,13 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, FinishReason, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk,
-};
-use crate::inference::types::{
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
+};
+use crate::inference::types::{
+    ContentBlockChunk, ContentBlockOutput, FinishReason, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, TextChunk,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
@@ -742,6 +742,10 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
+        // Extract raw usage JSON from raw_response for include_raw_usage feature
+        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
+            .ok()
+            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -752,6 +756,10 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
+                raw_usage_json,
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+                id: None,
             },
         ))
     }

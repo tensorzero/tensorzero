@@ -69,6 +69,17 @@ pub async fn chat_completions_handler(
         );
     }
     let stream_options = openai_compatible_params.stream_options;
+
+    // Validate that include_raw_usage requires include_usage in streaming
+    if let Some(stream_options) = &stream_options
+        && stream_options.include_raw_usage
+        && !stream_options.include_usage
+    {
+        return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: "`stream_options.include_raw_usage` requires `stream_options.include_usage` to be true".to_string(),
+        }));
+    }
+
     let params = Params::try_from_openai(openai_compatible_params)?;
 
     // The prefix for the response's `model` field depends on the inference target

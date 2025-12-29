@@ -33,7 +33,7 @@ use crate::inference::types::extra_headers::{
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
+    ApiType, FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -203,6 +203,8 @@ pub struct ModelUsedInfo {
     pub cached: bool,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
+    pub provider_type: String,
+    pub api_type: ApiType,
 }
 
 pub trait Variant {
@@ -811,6 +813,8 @@ async fn infer_model_request_stream<'request>(
                 raw_request,
                 model_provider_name,
                 cached,
+                provider_type,
+                api_type,
             },
         messages: input_messages,
     } = retry_config
@@ -831,6 +835,8 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
         cached,
+        provider_type,
+        api_type,
     };
     let config_type = function.config_type();
     let stream =
@@ -1192,6 +1198,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1502,6 +1509,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1674,6 +1682,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1834,6 +1843,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let inference_params = InferenceParams::default();
 

@@ -20,10 +20,11 @@ use crate::{
     inference::{
         InferenceProvider,
         types::{
-            ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
-            ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-            ProviderInferenceResponse, ProviderInferenceResponseArgs,
-            ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, Usage,
+            ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
+            ModelInferenceRequest, ModelInferenceRequestJsonMode,
+            PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+            ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStreamInner, TextChunk, Usage,
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
@@ -759,6 +760,10 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         }
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
+        // Extract raw usage JSON from raw_response for include_raw_usage feature
+        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
+            .ok()
+            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -769,6 +774,10 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
+                raw_usage_json,
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+                id: None,
             },
         ))
     }

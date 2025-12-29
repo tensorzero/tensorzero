@@ -42,12 +42,12 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::extra_stuff::validate_inference_filters;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
+    ApiType, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
     InferenceResultChunk, InferenceResultStream, Input, InputExt, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
-    ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, TextChunk, Usage,
-    collect_chunks,
+    ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, ResolvedInput, TextChunk,
+    Usage, UsageWithRaw, collect_chunks,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -122,6 +122,9 @@ pub struct Params {
     /// if the fuser/judge model failed
     #[serde(default)]
     pub include_original_response: bool,
+    /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each provider.
+    #[serde(default)]
+    pub include_raw_usage: bool,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
@@ -156,6 +159,9 @@ struct InferenceMetadata {
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
     pub include_original_response: bool,
+    pub include_raw_usage: bool,
+    pub provider_type: String,
+    pub api_type: ApiType,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -225,6 +231,7 @@ pub async fn inference_handler(
 pub type InferenceStream =
     Pin<Box<dyn FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
 
+#[expect(clippy::large_enum_variant)]
 pub enum InferenceOutput {
     NonStreaming(InferenceResponse),
     Streaming(InferenceStream),
@@ -419,6 +426,7 @@ pub async fn inference(
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: config.gateway.relay.clone(),
+        include_raw_usage: params.include_raw_usage,
     };
 
     let inference_models = InferenceModels {
@@ -466,6 +474,7 @@ pub async fn inference(
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
+            include_raw_usage: params.include_raw_usage,
         })
         .await?;
         return Ok(InferenceOutputData {
@@ -522,6 +531,7 @@ pub async fn inference(
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
+            include_raw_usage: params.include_raw_usage,
         })
         .await;
 
@@ -579,6 +589,7 @@ struct InferVariantArgs<'a> {
     extra_body: &'a UnfilteredInferenceExtraBody,
     extra_headers: &'a UnfilteredInferenceExtraHeaders,
     include_original_response: bool,
+    include_raw_usage: bool,
 }
 
 async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Error> {
@@ -605,6 +616,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         extra_body,
         extra_headers,
         include_original_response,
+        include_raw_usage,
     } = args;
 
     // Will be edited by the variant as part of making the request so we must clone here
@@ -673,9 +685,12 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             json_mode: model_used_info.inference_params.chat_completion.json_mode,
             extra_headers,
             include_original_response,
+            include_raw_usage,
             fetch_and_encode_input_files_before_inference: config
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
+            provider_type: model_used_info.provider_type,
+            api_type: model_used_info.api_type,
         };
 
         let stream = create_stream(
@@ -753,7 +768,8 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             result.set_original_response(None);
         }
 
-        let response = InferenceResponse::new(result, episode_id, variant_name.clone());
+        let response =
+            InferenceResponse::new(result, episode_id, variant_name.clone(), include_raw_usage);
 
         Ok(InferenceOutput::NonStreaming(response))
     }
@@ -867,6 +883,35 @@ fn create_stream(
         if extra_usage == Some(Usage { input_tokens: Some(0), output_tokens: Some(0) }) {
             extra_usage = None;
         }
+
+        // Generate model_inference_id early for streaming so it matches what we send to client in raw_usage
+        let streaming_model_inference_id = Uuid::now_v7();
+
+        // Build raw_usage entries from previous model inferences if requested.
+        let mut extra_raw_usage = if metadata.include_raw_usage {
+            let entries: Vec<RawUsageEntry> = metadata
+                .previous_model_inference_results
+                .iter()
+                .filter(|r| !r.cached)
+                .map(|r| RawUsageEntry {
+                    model_inference_id: r.id,
+                    provider_type: r.provider_type.clone(),
+                    api_type: r.api_type,
+                    usage: r.raw_usage_json.clone(),
+                })
+                .collect();
+            if entries.is_empty() {
+                None
+            } else {
+                Some(entries)
+            }
+        } else {
+            None
+        };
+
+        // Track whether we've added the current streaming inference's raw_usage
+        let mut added_current_streaming_raw_usage = false;
+
         let mut inference_ttft = None;
         while let Some(chunk) = stream.next().await {
             if inference_ttft.is_none() {
@@ -874,8 +919,35 @@ fn create_stream(
             }
             match chunk {
                 Ok(chunk) => {
+                    // If this chunk has usage and we haven't added the current streaming inference's raw_usage yet,
+                    // extract raw_usage from the chunk's raw_response and add it to extra_raw_usage
+                    if metadata.include_raw_usage
+                        && !added_current_streaming_raw_usage
+                        && !metadata.cached
+                        && chunk.usage().is_some()
+                    {
+                        // Extract raw usage from the chunk's raw_response
+                        let raw_usage_json: Option<serde_json::Value> =
+                            serde_json::from_str::<serde_json::Value>(chunk.raw_response())
+                                .ok()
+                                .and_then(|v| v.get("usage").cloned());
+
+                        let current_entry = RawUsageEntry {
+                            model_inference_id: streaming_model_inference_id,
+                            provider_type: metadata.provider_type.clone(),
+                            api_type: metadata.api_type,
+                            usage: raw_usage_json,
+                        };
+
+                        match &mut extra_raw_usage {
+                            Some(entries) => entries.push(current_entry),
+                            None => extra_raw_usage = Some(vec![current_entry]),
+                        }
+                        added_current_streaming_raw_usage = true;
+                    }
+
                     buffer.push(chunk.clone());
-                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk, &mut extra_usage) {
+                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk, &mut extra_usage, &mut extra_raw_usage) {
                         yield Ok(chunk);
                     }
                 }
@@ -909,7 +981,7 @@ fn create_stream(
                 }
             };
             buffer.push(usage_chunk.clone());
-            if let Some(chunk) = prepare_response_chunk(&metadata, usage_chunk, &mut None) {
+            if let Some(chunk) = prepare_response_chunk(&metadata, usage_chunk, &mut None, &mut extra_raw_usage) {
                 yield Ok(chunk);
             }
         }
@@ -946,6 +1018,9 @@ fn create_stream(
                 extra_headers,
                 fetch_and_encode_input_files_before_inference,
                 include_original_response: _,
+                include_raw_usage: _,
+                provider_type,
+                api_type,
             } = metadata;
 
             let config = config.clone();
@@ -973,6 +1048,9 @@ fn create_stream(
                     extra_body: extra_body.clone(),
                     extra_headers: extra_headers.clone(),
                     fetch_and_encode_input_files_before_inference,
+                    provider_type,
+                    api_type,
+                    model_inference_id: Some(streaming_model_inference_id),
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -1029,6 +1107,7 @@ fn prepare_response_chunk(
     metadata: &InferenceMetadata,
     chunk: InferenceResultChunk,
     extra_usage: &mut Option<Usage>,
+    extra_raw_usage: &mut Option<Vec<RawUsageEntry>>,
 ) -> Option<InferenceResponseChunk> {
     InferenceResponseChunk::new(
         chunk,
@@ -1038,6 +1117,7 @@ fn prepare_response_chunk(
         metadata.cached,
         metadata.include_original_response,
         extra_usage,
+        extra_raw_usage,
         metadata.json_mode,
     )
 }
@@ -1148,7 +1228,8 @@ pub struct ChatInferenceResponse {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub content: Vec<ContentBlockChatOutput>,
-    pub usage: Usage,
+    #[serde(flatten)]
+    pub usage: UsageWithRaw,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1162,7 +1243,8 @@ pub struct JsonInferenceResponse {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub output: JsonInferenceOutput,
-    pub usage: Usage,
+    #[serde(flatten)]
+    pub usage: UsageWithRaw,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1170,15 +1252,42 @@ pub struct JsonInferenceResponse {
 }
 
 impl InferenceResponse {
-    pub fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
+    pub fn new(
+        inference_result: InferenceResult,
+        episode_id: Uuid,
+        variant_name: String,
+        include_raw_usage: bool,
+    ) -> Self {
         let usage = inference_result.usage_considering_cached();
+
+        // Build raw_usage if requested
+        let raw_usage = if include_raw_usage {
+            Some(
+                inference_result
+                    .model_inference_results()
+                    .iter()
+                    .filter(|r| !r.cached) // Exclude TensorZero cache hits
+                    .map(|r| RawUsageEntry {
+                        model_inference_id: r.id,
+                        provider_type: r.provider_type.clone(),
+                        api_type: r.api_type,
+                        usage: r.raw_usage_json.clone(),
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
+        let usage_with_raw = UsageWithRaw { usage, raw_usage };
+
         match inference_result {
             InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
                 inference_id: result.inference_id,
                 episode_id,
                 variant_name,
                 content: result.content,
-                usage,
+                usage: usage_with_raw,
                 original_response: result.original_response,
                 finish_reason: result.finish_reason,
             }),
@@ -1190,7 +1299,7 @@ impl InferenceResponse {
                     episode_id,
                     variant_name,
                     output,
-                    usage,
+                    usage: usage_with_raw,
                     original_response: result.original_response,
                     finish_reason: result.finish_reason,
                 })
@@ -1200,8 +1309,8 @@ impl InferenceResponse {
 
     pub fn usage(&self) -> Usage {
         match self {
-            InferenceResponse::Chat(c) => c.usage,
-            InferenceResponse::Json(j) => j.usage,
+            InferenceResponse::Chat(c) => c.usage.usage,
+            InferenceResponse::Json(j) => j.usage.usage,
         }
     }
 
@@ -1277,6 +1386,8 @@ pub struct ChatInferenceResponseChunk {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_chunk: Option<String>,
@@ -1290,6 +1401,8 @@ pub struct JsonInferenceResponseChunk {
     pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1306,6 +1419,7 @@ impl InferenceResponseChunk {
         cached: bool,
         include_original_response: bool,
         extra_usage: &mut Option<Usage>,
+        extra_raw_usage: &mut Option<Vec<RawUsageEntry>>,
         json_mode: Option<JsonMode>,
     ) -> Option<Self> {
         let mut result_usage = if cached {
@@ -1325,13 +1439,19 @@ impl InferenceResponseChunk {
         // in `create_stream`
         // We do this in both cached and non-cached mode, so that our decision to emit
         // an extra usage chunk is consistent across both modes.
+        let mut result_raw_usage = None;
         if let Some(result_usage) = &mut result_usage {
             let is_empty = match &inference_result {
                 InferenceResultChunk::Chat(result) => result.content.is_empty(),
                 InferenceResultChunk::Json(result) => result.raw.is_none(),
             };
-            if is_empty && let Some(extra_usage) = extra_usage.take() {
-                result_usage.sum_strict(&extra_usage);
+            if is_empty {
+                // Add extra_usage if available
+                if let Some(extra_usage) = extra_usage.take() {
+                    result_usage.sum_strict(&extra_usage);
+                }
+                // Take raw_usage on the first empty chunk with usage (separate from extra_usage)
+                result_raw_usage = extra_raw_usage.take();
             }
         }
         Some(match inference_result {
@@ -1364,6 +1484,7 @@ impl InferenceResponseChunk {
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
                     usage: result_usage,
+                    raw_usage: result_raw_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1380,6 +1501,7 @@ impl InferenceResponseChunk {
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
                     usage: result_usage,
+                    raw_usage: result_raw_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1423,6 +1545,7 @@ pub struct InferenceClients {
     pub deferred_tasks: TaskTracker,
     pub scope_info: ScopeInfo,
     pub relay: Option<TensorzeroRelay>,
+    pub include_raw_usage: bool,
 }
 
 // Carryall struct for models used in inference
@@ -1669,9 +1792,13 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            include_raw_usage: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
+        let result =
+            prepare_response_chunk(&inference_metadata, chunk, &mut None, &mut None).unwrap();
         match result {
             InferenceResponseChunk::Chat(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
@@ -1724,9 +1851,13 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
+            provider_type: "test_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            include_raw_usage: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
+        let result =
+            prepare_response_chunk(&inference_metadata, chunk, &mut None, &mut None).unwrap();
         match result {
             InferenceResponseChunk::Json(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);

@@ -21,10 +21,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tensorzero::{
     ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
-    Usage,
 };
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
-use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
+use tensorzero_core::inference::types::{ContentBlockChatOutput, Text, Usage, UsageWithRaw};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -95,9 +94,12 @@ fn create_mock_chat_response(text: &str) -> InferenceResponse {
         content: vec![ContentBlockChatOutput::Text(Text {
             text: text.to_string(),
         })],
-        usage: Usage {
-            input_tokens: Some(10),
-            output_tokens: Some(5),
+        usage: UsageWithRaw {
+            usage: Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(5),
+            },
+            raw_usage: None,
         },
         original_response: None,
         finish_reason: None,

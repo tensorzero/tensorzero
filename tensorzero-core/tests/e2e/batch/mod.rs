@@ -404,8 +404,8 @@ async fn test_write_read_completed_batch_inference_chat() {
                 }
                 _ => panic!("Unexpected content block type"),
             }
-            assert_eq!(chat_inference_response.usage.input_tokens, Some(10));
-            assert_eq!(chat_inference_response.usage.output_tokens, Some(20));
+            assert_eq!(chat_inference_response.usage.usage.input_tokens, Some(10));
+            assert_eq!(chat_inference_response.usage.usage.output_tokens, Some(20));
         }
         InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
@@ -419,8 +419,8 @@ async fn test_write_read_completed_batch_inference_chat() {
                 }
                 _ => panic!("Unexpected content block type"),
             }
-            assert_eq!(chat_inference_response.usage.input_tokens, Some(20));
-            assert_eq!(chat_inference_response.usage.output_tokens, Some(30));
+            assert_eq!(chat_inference_response.usage.usage.input_tokens, Some(20));
+            assert_eq!(chat_inference_response.usage.usage.output_tokens, Some(30));
         }
         InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
@@ -651,7 +651,7 @@ async fn test_write_read_completed_batch_inference_json() {
                 json_inference_response.output.parsed.as_ref().unwrap()["answer"],
                 "hello world"
             );
-            assert_eq!(json_inference_response.usage.input_tokens, Some(10));
+            assert_eq!(json_inference_response.usage.usage.input_tokens, Some(10));
             assert_eq!(
                 json_inference_response.finish_reason,
                 Some(FinishReason::Stop)
