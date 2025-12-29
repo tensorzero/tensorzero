@@ -77,9 +77,14 @@ async fn test_relay_raw_usage_non_streaming() {
             entry.get("model_inference_id").is_some(),
             "raw_usage entry should have model_inference_id"
         );
-        assert!(
-            entry.get("provider_type").is_some(),
-            "raw_usage entry should have provider_type"
+        // Verify provider_type is from downstream (not "relay")
+        let provider_type = entry
+            .get("provider_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_usage entry should have provider_type");
+        assert_eq!(
+            provider_type, "dummy",
+            "provider_type should be from downstream provider, not relay"
         );
         assert!(
             entry.get("api_type").is_some(),
@@ -195,9 +200,14 @@ async fn test_relay_raw_usage_streaming() {
                     entry.get("model_inference_id").is_some(),
                     "raw_usage entry should have model_inference_id"
                 );
-                assert!(
-                    entry.get("provider_type").is_some(),
-                    "raw_usage entry should have provider_type"
+                // Verify provider_type is from downstream (not "relay")
+                let provider_type = entry
+                    .get("provider_type")
+                    .and_then(|v| v.as_str())
+                    .expect("raw_usage entry should have provider_type");
+                assert_eq!(
+                    provider_type, "dummy",
+                    "provider_type should be from downstream provider, not relay"
                 );
                 assert!(
                     entry.get("api_type").is_some(),

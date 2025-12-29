@@ -426,3 +426,204 @@ async fn e2e_test_raw_usage_not_requested_streaming() {
         }
     }
 }
+
+// =============================================================================
+// Multi-Inference Variant Tests (Best-of-N)
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_test_raw_usage_best_of_n_non_streaming() {
+    let episode_id = Uuid::now_v7();
+    let random_suffix = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "best_of_n",
+        "variant_name": "best_of_n_variant",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": format!("Hello, what is your name? {random_suffix}")
+                }
+            ]
+        },
+        "stream": false,
+        "include_raw_usage": true
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Response should be successful"
+    );
+
+    let response_json: Value = response.json().await.unwrap();
+
+    // Check usage exists and contains raw_usage
+    let usage = response_json
+        .get("usage")
+        .expect("Response should have usage field");
+
+    let raw_usage = usage
+        .get("raw_usage")
+        .expect("usage should have raw_usage when include_raw_usage=true");
+    assert!(raw_usage.is_array(), "raw_usage should be an array");
+
+    let raw_usage_array = raw_usage.as_array().unwrap();
+
+    // Best-of-N should have multiple entries:
+    // - 2 candidate inferences (variant0 and variant1)
+    // - 1 evaluator/judge inference
+    // Total: 3 model inferences
+    assert!(
+        raw_usage_array.len() >= 3,
+        "Best-of-N should have at least 3 raw_usage entries (2 candidates + 1 judge), got {}",
+        raw_usage_array.len()
+    );
+
+    // Validate each entry has required fields
+    for entry in raw_usage_array {
+        assert_raw_usage_entry(entry);
+    }
+
+    // All entries should have api_type = "chat_completions" for this variant
+    for entry in raw_usage_array {
+        let api_type = entry.get("api_type").unwrap().as_str().unwrap();
+        assert_eq!(
+            api_type, "chat_completions",
+            "All Best-of-N inferences should have api_type 'chat_completions'"
+        );
+    }
+}
+
+// =============================================================================
+// DICL Tests (with embeddings api_type)
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_test_raw_usage_dicl_non_streaming() {
+    let episode_id = Uuid::now_v7();
+    let random_suffix = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "dicl",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": format!("What is the capital of France? {random_suffix}")
+                }
+            ]
+        },
+        "stream": false,
+        "include_raw_usage": true
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Response should be successful"
+    );
+
+    let response_json: Value = response.json().await.unwrap();
+
+    // Check usage exists and contains raw_usage
+    let usage = response_json
+        .get("usage")
+        .expect("Response should have usage field");
+
+    let raw_usage = usage
+        .get("raw_usage")
+        .expect("usage should have raw_usage when include_raw_usage=true");
+    assert!(raw_usage.is_array(), "raw_usage should be an array");
+
+    let raw_usage_array = raw_usage.as_array().unwrap();
+
+    // DICL should have at least 2 entries:
+    // - 1 embedding call (api_type = "embeddings")
+    // - 1 chat completion call (api_type = "chat_completions")
+    assert!(
+        raw_usage_array.len() >= 2,
+        "DICL should have at least 2 raw_usage entries (embedding + chat), got {}",
+        raw_usage_array.len()
+    );
+
+    // Validate each entry has required fields
+    for entry in raw_usage_array {
+        assert_raw_usage_entry(entry);
+    }
+
+    // Check that we have both api_types
+    let api_types: Vec<&str> = raw_usage_array
+        .iter()
+        .map(|e| e.get("api_type").unwrap().as_str().unwrap())
+        .collect();
+
+    assert!(
+        api_types.contains(&"embeddings"),
+        "DICL should have an entry with api_type `embeddings`, got: {api_types:?}"
+    );
+    assert!(
+        api_types.contains(&"chat_completions"),
+        "DICL should have an entry with api_type `chat_completions`, got: {api_types:?}"
+    );
+}
+
+// =============================================================================
+// Streaming Constraint Error Test
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_test_raw_usage_streaming_requires_include_usage() {
+    let episode_id = Uuid::now_v7();
+
+    // OpenAI-compatible API: include_raw_usage without include_usage should error
+    let payload = json!({
+        "model": "tensorzero::function_name::basic_test",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hello"
+            }
+        ],
+        "stream": true,
+        "stream_options": {
+            "include_usage": false  // Explicitly false
+        },
+        "tensorzero::episode_id": episode_id,
+        "tensorzero::include_raw_usage": true  // This should error without include_usage
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Should return an error status
+    assert!(
+        response.status().is_client_error(),
+        "Request with include_raw_usage but without include_usage should fail, got status: {}",
+        response.status()
+    );
+}

@@ -917,28 +917,39 @@ fn create_stream(
             match chunk {
                 Ok(chunk) => {
                     // If this chunk has usage and we haven't added the current streaming inference's raw_usage yet,
-                    // extract raw_usage from the chunk's raw_response and add it to extra_raw_usage
+                    // extract raw_usage from the chunk and add it to extra_raw_usage
                     if metadata.include_raw_usage
                         && !added_current_streaming_raw_usage
                         && !metadata.cached
                         && chunk.usage().is_some()
                     {
-                        // Extract raw usage from the chunk's raw_response
-                        let raw_usage_json: Option<serde_json::Value> =
-                            serde_json::from_str::<serde_json::Value>(chunk.raw_response())
-                                .ok()
-                                .and_then(|v| v.get("usage").cloned());
+                        // For relay streaming, use downstream_raw_usage which already contains
+                        // the correct entries from downstream. For direct provider calls, parse
+                        // raw_response to extract the provider's usage object.
+                        if let Some(downstream_entries) = chunk.downstream_raw_usage() {
+                            // Relay case: use downstream entries directly
+                            match &mut extra_raw_usage {
+                                Some(entries) => entries.extend(downstream_entries.iter().cloned()),
+                                None => extra_raw_usage = Some(downstream_entries.clone()),
+                            }
+                        } else {
+                            // Direct provider case: extract from raw_response
+                            let raw_usage_json: Option<serde_json::Value> =
+                                serde_json::from_str::<serde_json::Value>(chunk.raw_response())
+                                    .ok()
+                                    .and_then(|v| v.get("usage").cloned());
 
-                        let current_entry = RawUsageEntry {
-                            model_inference_id: streaming_model_inference_id,
-                            provider_type: metadata.provider_type.clone(),
-                            api_type: metadata.api_type,
-                            usage: raw_usage_json,
-                        };
+                            let current_entry = RawUsageEntry {
+                                model_inference_id: streaming_model_inference_id,
+                                provider_type: metadata.provider_type.clone(),
+                                api_type: metadata.api_type,
+                                usage: raw_usage_json,
+                            };
 
-                        match &mut extra_raw_usage {
-                            Some(entries) => entries.push(current_entry),
-                            None => extra_raw_usage = Some(vec![current_entry]),
+                            match &mut extra_raw_usage {
+                                Some(entries) => entries.push(current_entry),
+                                None => extra_raw_usage = Some(vec![current_entry]),
+                            }
                         }
                         added_current_streaming_raw_usage = true;
                     }
