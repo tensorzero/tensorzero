@@ -45,6 +45,8 @@ pub fn to_openai_compatible(schema: &mut Value) {
 
     resolve_refs_with_siblings(schema, defs.as_ref());
     remove_unsupported_keywords(schema);
+    normalize_any_type_schemas(schema);
+    remove_unsupported_formats(schema);
     set_additional_properties_false(schema);
     enforce_all_required(schema);
 }
@@ -288,6 +290,125 @@ fn remove_unsupported_keywords(value: &mut Value) {
         Value::Array(arr) => {
             for v in arr.iter_mut() {
                 remove_unsupported_keywords(v);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Normalize schemas that accept "any" type (represented as `true` or missing type).
+///
+/// OpenAI Structured Outputs requires explicit types. When we encounter:
+/// - `true` (JSON Schema shorthand for "accept anything")
+/// - A schema object without a `type` field (and no `$ref`, `anyOf`, etc.)
+///
+/// We convert these to an empty object type `{"type": "object", "additionalProperties": true}`,
+/// which OpenAI interprets as an arbitrary JSON object.
+///
+/// Note: We keep `additionalProperties: true` here because `set_additional_properties_false`
+/// will set it to `false` later, but only for schemas that are actual object types with properties.
+fn normalize_any_type_schemas(value: &mut Value) {
+    match value {
+        Value::Object(obj) => {
+            // Check each property value for `true` schema or missing type
+            if let Some(Value::Object(properties)) = obj.get_mut("properties") {
+                for prop_value in properties.values_mut() {
+                    // Handle `true` schema (accept anything)
+                    if *prop_value == Value::Bool(true) {
+                        *prop_value = serde_json::json!({});
+                        continue;
+                    }
+
+                    // Handle schema objects without type
+                    if let Value::Object(prop_obj) = prop_value {
+                        let has_type = prop_obj.contains_key("type");
+                        let has_ref = prop_obj.contains_key("$ref");
+                        let has_any_of = prop_obj.contains_key("anyOf");
+                        let has_one_of = prop_obj.contains_key("oneOf");
+                        let has_all_of = prop_obj.contains_key("allOf");
+                        let has_enum = prop_obj.contains_key("enum");
+                        let has_const = prop_obj.contains_key("const");
+
+                        // If no type-defining keyword is present, this is effectively "any"
+                        if !has_type
+                            && !has_ref
+                            && !has_any_of
+                            && !has_one_of
+                            && !has_all_of
+                            && !has_enum
+                            && !has_const
+                        {
+                            // Convert to empty schema (matches anything)
+                            let description = prop_obj.remove("description");
+                            prop_obj.clear();
+                            if let Some(desc) = description {
+                                prop_obj.insert("description".to_string(), desc);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Handle items in arrays
+            if let Some(items) = obj.get_mut("items") {
+                if *items == Value::Bool(true) {
+                    *items = serde_json::json!({});
+                }
+            }
+
+            // Recurse into all values
+            for v in obj.values_mut() {
+                normalize_any_type_schemas(v);
+            }
+        }
+        Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                normalize_any_type_schemas(v);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Supported format values per OpenAI documentation:
+/// - date-time, time, date, duration
+/// - email, hostname
+/// - ipv4, ipv6, uuid
+const SUPPORTED_FORMATS: &[&str] = &[
+    "date-time",
+    "time",
+    "date",
+    "duration",
+    "email",
+    "hostname",
+    "ipv4",
+    "ipv6",
+    "uuid",
+];
+
+/// Remove unsupported `format` values from string properties.
+///
+/// OpenAI only supports a specific set of format values. Other formats like
+/// `float`, `int32`, `uint32` (commonly used in OpenAPI/JSON Schema for numbers)
+/// are not supported and must be removed.
+fn remove_unsupported_formats(value: &mut Value) {
+    match value {
+        Value::Object(obj) => {
+            // Check if this object has an unsupported format
+            if let Some(Value::String(format)) = obj.get("format") {
+                if !SUPPORTED_FORMATS.contains(&format.as_str()) {
+                    obj.remove("format");
+                }
+            }
+
+            // Recurse into all values
+            for v in obj.values_mut() {
+                remove_unsupported_formats(v);
+            }
+        }
+        Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                remove_unsupported_formats(v);
             }
         }
         _ => {}
@@ -1232,5 +1353,309 @@ mod tests {
         assert!(nested_branch["properties"].get("type").is_some());
         assert!(nested_branch["properties"].get("id").is_some());
         assert!(nested_branch["properties"].get("name").is_some());
+    }
+
+    #[test]
+    fn test_normalizes_true_schema_to_empty_object() {
+        // Properties with `true` as schema (accept any value) should be normalized
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "parameters": true,
+                "data": true
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // `true` should be converted to an empty schema `{}`
+        assert_eq!(schema["properties"]["parameters"], json!({}));
+        assert_eq!(schema["properties"]["data"], json!({}));
+    }
+
+    #[test]
+    fn test_normalizes_schema_missing_type() {
+        // Properties with only description (no type) should be normalized
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Some arbitrary data"
+                },
+                "output": {
+                    "description": "Output value that can be anything"
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // Should be converted to just description (empty schema)
+        assert_eq!(
+            schema["properties"]["data"],
+            json!({ "description": "Some arbitrary data" })
+        );
+        assert_eq!(
+            schema["properties"]["output"],
+            json!({ "description": "Output value that can be anything" })
+        );
+    }
+
+    #[test]
+    fn test_preserves_schema_with_ref() {
+        // Properties with $ref should not be modified
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "user": {
+                    "$ref": "#/$defs/User",
+                    "description": "A user reference"
+                }
+            },
+            "$defs": {
+                "User": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string" }
+                    }
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // $ref should be preserved
+        assert!(schema["properties"]["user"].get("$ref").is_some());
+    }
+
+    #[test]
+    fn test_preserves_schema_with_anyof() {
+        // Properties with anyOf should not be modified
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "value": {
+                    "anyOf": [
+                        { "type": "string" },
+                        { "type": "null" }
+                    ],
+                    "description": "A nullable string"
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // anyOf should be preserved
+        assert!(schema["properties"]["value"].get("anyOf").is_some());
+        assert_eq!(
+            schema["properties"]["value"]["description"],
+            json!("A nullable string")
+        );
+    }
+
+    #[test]
+    fn test_removes_unsupported_format_float() {
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "temperature": {
+                    "type": "number",
+                    "format": "float"
+                },
+                "count": {
+                    "type": "integer",
+                    "format": "int32"
+                },
+                "size": {
+                    "type": "integer",
+                    "format": "uint32"
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // Unsupported formats should be removed
+        assert!(schema["properties"]["temperature"].get("format").is_none());
+        assert!(schema["properties"]["count"].get("format").is_none());
+        assert!(schema["properties"]["size"].get("format").is_none());
+    }
+
+    #[test]
+    fn test_preserves_supported_formats() {
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "email": {
+                    "type": "string",
+                    "format": "email"
+                },
+                "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "date": {
+                    "type": "string",
+                    "format": "date"
+                },
+                "time": {
+                    "type": "string",
+                    "format": "time"
+                },
+                "duration": {
+                    "type": "string",
+                    "format": "duration"
+                },
+                "hostname": {
+                    "type": "string",
+                    "format": "hostname"
+                },
+                "ipv4": {
+                    "type": "string",
+                    "format": "ipv4"
+                },
+                "ipv6": {
+                    "type": "string",
+                    "format": "ipv6"
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // All supported formats should be preserved
+        assert_eq!(schema["properties"]["id"]["format"], json!("uuid"));
+        assert_eq!(schema["properties"]["email"]["format"], json!("email"));
+        assert_eq!(
+            schema["properties"]["created_at"]["format"],
+            json!("date-time")
+        );
+        assert_eq!(schema["properties"]["date"]["format"], json!("date"));
+        assert_eq!(schema["properties"]["time"]["format"], json!("time"));
+        assert_eq!(
+            schema["properties"]["duration"]["format"],
+            json!("duration")
+        );
+        assert_eq!(
+            schema["properties"]["hostname"]["format"],
+            json!("hostname")
+        );
+        assert_eq!(schema["properties"]["ipv4"]["format"], json!("ipv4"));
+        assert_eq!(schema["properties"]["ipv6"]["format"], json!("ipv6"));
+    }
+
+    #[test]
+    fn test_removes_nested_unsupported_formats() {
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "params": {
+                    "type": "object",
+                    "properties": {
+                        "temp": {
+                            "type": "number",
+                            "format": "float"
+                        },
+                        "max_tokens": {
+                            "type": "integer",
+                            "format": "uint32",
+                            "minimum": 0
+                        }
+                    }
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "value": {
+                                "type": "number",
+                                "format": "double"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // Unsupported formats should be removed at all nesting levels
+        assert!(
+            schema["properties"]["params"]["properties"]["temp"]
+                .get("format")
+                .is_none()
+        );
+        assert!(
+            schema["properties"]["params"]["properties"]["max_tokens"]
+                .get("format")
+                .is_none()
+        );
+        // minimum should be preserved
+        assert_eq!(
+            schema["properties"]["params"]["properties"]["max_tokens"]["minimum"],
+            json!(0)
+        );
+        assert!(
+            schema["properties"]["items"]["items"]["properties"]["value"]
+                .get("format")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_normalizes_true_in_nested_properties() {
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "tool": {
+                    "type": "object",
+                    "properties": {
+                        "parameters": true,
+                        "name": { "type": "string" }
+                    }
+                }
+            },
+            "$defs": {
+                "Config": {
+                    "type": "object",
+                    "properties": {
+                        "data": true
+                    }
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // `true` should be normalized at all levels
+        assert_eq!(
+            schema["properties"]["tool"]["properties"]["parameters"],
+            json!({})
+        );
+        assert_eq!(schema["$defs"]["Config"]["properties"]["data"], json!({}));
+    }
+
+    #[test]
+    fn test_normalizes_true_in_array_items() {
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": true
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // `true` in items should be normalized
+        assert_eq!(schema["properties"]["items"]["items"], json!({}));
     }
 }

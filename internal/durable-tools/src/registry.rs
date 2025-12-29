@@ -25,7 +25,7 @@ impl TryFrom<&dyn ErasedTool> for Tool {
             name: tool.name().to_string(),
             description: tool.description().to_string(),
             parameters,
-            strict: false,
+            strict: true,
         }))
     }
 }
