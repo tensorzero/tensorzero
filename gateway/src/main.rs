@@ -36,41 +36,8 @@ fn print_key(key: &secrecy::SecretString) {
     println!("{}", key.expose_secret());
 }
 
-/// Specify the expiration policy for newly-created API keys.
-#[derive(Debug, Clone)]
-enum ApiKeyExpirySetting {
-    /// Denotes an API key that has no expiration datetime.
-    NoExpiration,
-    /// Denotes an API key that is set to expire at the corresponding datetime.
-    ExpiresAt(DateTime<Utc>),
-}
-
-impl From<&str> for ApiKeyExpirySetting {
-    fn from(v: &str) -> Self {
-        if v == "no-expiration" {
-            Self::NoExpiration
-        } else {
-            v.parse::<DateTime<Utc>>()
-                .map_or(Self::NoExpiration, Self::ExpiresAt)
-        }
-    }
-}
-
-impl std::fmt::Display for ApiKeyExpirySetting {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                ApiKeyExpirySetting::NoExpiration => "no-expiration".to_string(),
-                ApiKeyExpirySetting::ExpiresAt(dt) => dt.to_string(),
-            }
-        )
-    }
-}
-
 async fn handle_create_api_key(
-    expiration: ApiKeyExpirySetting,
+    expiration: Option<DateTime<Utc>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Read the Postgres URL from the environment
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
@@ -84,15 +51,18 @@ async fn handle_create_api_key(
         DEFAULT_ORGANIZATION,
         DEFAULT_WORKSPACE,
         None,
-        match expiration {
-            ApiKeyExpirySetting::NoExpiration => None,
-            ApiKeyExpirySetting::ExpiresAt(datetime) => Some(datetime),
-        },
+        expiration,
         &pool,
     )
     .await?;
 
-    tracing::debug!("Created API key with expiration: {expiration}");
+    tracing::debug!(
+        "Created API key with expiration: {}",
+        match expiration {
+            None => "no-expiration".to_string(),
+            Some(datetime) => datetime.to_string(),
+        },
+    );
 
     // Print only the API key to stdout for easy machine parsing
     print_key(&key);
@@ -124,8 +94,8 @@ async fn main() -> Result<(), ExitCode> {
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
-    if let Some(expiration) = args.early_exit_commands.create_api_key {
-        handle_create_api_key(expiration)
+    if args.early_exit_commands.create_api_key {
+        handle_create_api_key(args.early_exit_commands.expiration)
             .await
             .log_err_pretty("Failed to create API key")?;
         return Ok(());
