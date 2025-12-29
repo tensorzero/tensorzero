@@ -55,8 +55,8 @@ impl Migration for Migration0044<'_> {
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
-            "ALTER TABLE ModelInferenceCache{on_cluster_name} MODIFY COLUMN input_tokens UInt32;
-          ALTER TABLE ModelInferenceCache{on_cluster_name} MODIFY COLUMN output_tokens UInt32;"
+            "ALTER TABLE ModelInferenceCache{on_cluster_name} MODIFY COLUMN input_tokens UInt32 DEFAULT 0;
+          ALTER TABLE ModelInferenceCache{on_cluster_name} MODIFY COLUMN output_tokens UInt32 DEFAULT 0;"
         )
     }
 
