@@ -1,6 +1,6 @@
 # E2E Tests
 
-# Running E2E Tests
+## Running E2E Tests
 
 - Spin up the ClickHouse container using Docker Compose:
 
@@ -18,3 +18,7 @@
     ```sh
     GATEWAY_URL="http://localhost:1234" cargo test-e2e
     ```
+
+## Notes
+
+- Tests involving gateway relay should go in `gateway/tests/relay` instead of `tensorzero-core`.

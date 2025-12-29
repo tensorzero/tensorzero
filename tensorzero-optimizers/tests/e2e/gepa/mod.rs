@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![expect(clippy::expect_used)]
 
 use serde_json::json;
 use std::collections::HashMap;

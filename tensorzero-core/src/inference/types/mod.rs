@@ -2041,6 +2041,27 @@ impl ProviderInferenceResponseChunk {
             raw_response,
             latency,
             finish_reason,
+            downstream_raw_usage: None,
+        }
+    }
+
+    /// Creates a new chunk with downstream raw_usage passthrough (for relay streaming)
+    pub fn new_with_downstream_raw_usage(
+        content: Vec<ContentBlockChunk>,
+        usage: Option<Usage>,
+        raw_response: String,
+        latency: Duration,
+        finish_reason: Option<FinishReason>,
+        downstream_raw_usage: Option<Vec<RawUsageEntry>>,
+    ) -> Self {
+        Self {
+            content,
+            created: current_timestamp(),
+            usage,
+            raw_response,
+            latency,
+            finish_reason,
+            downstream_raw_usage,
         }
     }
 }

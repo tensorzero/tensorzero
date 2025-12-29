@@ -428,6 +428,7 @@ fn make_stream_from_non_stream(
                 latency: tokio::time::Duration::from_secs(0),
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
+                downstream_raw_usage: None,
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -438,6 +439,7 @@ fn make_stream_from_non_stream(
             latency: tokio::time::Duration::from_secs(0),
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
+            downstream_raw_usage: None,
         })),
     };
     Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
@@ -1841,6 +1843,7 @@ mod tests {
                 latency: std::time::Duration::from_secs(0),
                 raw_response: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),
+                downstream_raw_usage: None,
             })),]
         );
     }

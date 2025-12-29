@@ -2970,6 +2970,7 @@ mod tests {
             raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
+            downstream_raw_usage: None,
         };
         let mut result = chunk.clone();
         prefill_json_chunk_response(&mut result);
@@ -2991,6 +2992,7 @@ mod tests {
                 text: "\"key\": \"value ".to_string(),
                 id: "0".to_string(),
             })],
+            downstream_raw_usage: None,
         };
         let mut result = chunk.clone();
         prefill_json_chunk_response(&mut result);
@@ -3019,6 +3021,7 @@ mod tests {
                     id: "test_id".to_string(),
                 }),
             ],
+            downstream_raw_usage: None,
         };
         let mut result = chunk.clone();
         prefill_json_chunk_response(&mut result);
@@ -3036,6 +3039,7 @@ mod tests {
                 raw_name: Some("test_tool".to_string()),
                 raw_arguments: "{}".to_string(),
             })],
+            downstream_raw_usage: None,
         };
         let mut result = chunk.clone();
         prefill_json_chunk_response(&mut result);

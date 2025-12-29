@@ -1,13 +1,9 @@
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
-
 //! Tests for include_raw_usage with relay passthrough.
 //!
 //! These tests validate that raw_usage is correctly passed through
 //! when using the relay feature.
 
-mod common;
-
-use common::relay::start_relay_test_environment;
+use crate::common::relay::start_relay_test_environment;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -186,6 +182,28 @@ async fn test_relay_raw_usage_streaming() {
                 raw_usage.is_array(),
                 "raw_usage should be an array, got: {raw_usage}"
             );
+
+            let raw_usage_array = raw_usage.as_array().expect("raw_usage should be an array");
+            assert!(
+                !raw_usage_array.is_empty(),
+                "raw_usage should have entries from downstream gateway"
+            );
+
+            // Verify structure of entries (same checks as non-streaming test)
+            for entry in raw_usage_array {
+                assert!(
+                    entry.get("model_inference_id").is_some(),
+                    "raw_usage entry should have model_inference_id"
+                );
+                assert!(
+                    entry.get("provider_type").is_some(),
+                    "raw_usage entry should have provider_type"
+                );
+                assert!(
+                    entry.get("api_type").is_some(),
+                    "raw_usage entry should have api_type"
+                );
+            }
         }
     }
 

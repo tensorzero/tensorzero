@@ -5,6 +5,8 @@ These tests verify that raw provider-specific usage data is correctly returned
 when include_raw_usage is set to True.
 """
 
+from typing import AsyncIterator, Iterator
+
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
@@ -78,6 +80,7 @@ async def test_async_raw_usage_streaming(async_client: AsyncTensorZeroGateway):
         stream=True,
         include_raw_usage=True,
     )
+    assert isinstance(stream, AsyncIterator)
 
     found_raw_usage = False
     async for chunk in stream:
@@ -136,6 +139,7 @@ def test_sync_raw_usage_streaming(sync_client: TensorZeroGateway):
         stream=True,
         include_raw_usage=True,
     )
+    assert isinstance(stream, Iterator)
 
     found_raw_usage = False
     for chunk in stream:

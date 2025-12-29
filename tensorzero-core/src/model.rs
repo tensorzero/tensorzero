@@ -199,6 +199,8 @@ impl StreamResponse {
                         } else {
                             None
                         },
+                        // Cache hits don't have downstream raw_usage from relay
+                        downstream_raw_usage: None,
                     })
                 },
             ))) as ProviderInferenceResponseStreamInner)

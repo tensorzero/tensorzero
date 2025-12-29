@@ -1,0 +1,1 @@
+- Tests involving gateway relay should go in `gateway/tests/relay` instead of `tensorzero-core`.

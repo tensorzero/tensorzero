@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used)]
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -139,6 +139,7 @@ impl DummyProvider {
                     raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     finish_reason: None,
+                    downstream_raw_usage: None,
                 })
             })
             .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
@@ -148,6 +149,7 @@ impl DummyProvider {
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: String::new(),
                 latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
+                downstream_raw_usage: None,
             })))
             .throttle(std::time::Duration::from_millis(10));
 
@@ -778,6 +780,7 @@ impl InferenceProvider for DummyProvider {
                     finish_reason: None,
                     raw_response: chunk.to_string(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
+                    downstream_raw_usage: None,
                 });
             }
         };
@@ -789,6 +792,7 @@ impl InferenceProvider for DummyProvider {
             finish_reason,
             raw_response: String::new(),
             latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
+            downstream_raw_usage: None,
         })));
 
         // We don't use the tokio `throttled` combinator, since we want to use `sleep_excluding_latency`

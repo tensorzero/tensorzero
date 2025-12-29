@@ -259,6 +259,7 @@ async fn test_cache_stream_write_and_read() {
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(999),
             finish_reason: None,
+            downstream_raw_usage: None,
         },
         ProviderInferenceResponseChunk {
             content: vec![ContentBlockChunk::Text(TextChunk {
@@ -273,6 +274,7 @@ async fn test_cache_stream_write_and_read() {
             raw_response: "raw response 2".to_string(),
             latency: Duration::from_secs(999),
             finish_reason: Some(FinishReason::Stop),
+            downstream_raw_usage: None,
         },
     ];
 
@@ -313,6 +315,7 @@ async fn test_cache_stream_write_and_read() {
             raw_response,
             latency,
             finish_reason,
+            ..
         } = &chunk;
         assert_eq!(content, &initial_chunks[i].content);
         // 'created' should be different (current timestamp is different)

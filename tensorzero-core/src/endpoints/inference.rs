@@ -963,6 +963,7 @@ fn create_stream(
                         finish_reason: None,
                         latency: Duration::from_millis(0),
                         raw_response: String::new(),
+                        downstream_raw_usage: None,
                     })
                 }
                 FunctionConfig::Json(_) => {
@@ -974,6 +975,7 @@ fn create_stream(
                         raw: None,
                         raw_response: String::new(),
                         finish_reason: None,
+                        downstream_raw_usage: None,
                     })
                 }
             };
@@ -1773,6 +1775,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
             latency: Duration::from_millis(100),
+            downstream_raw_usage: None,
         });
         let raw_request = "raw request".to_string();
         let inference_metadata = InferenceMetadata {
@@ -1833,6 +1836,7 @@ mod tests {
             raw_response: String::new(),
             latency: Duration::from_millis(100),
             finish_reason: Some(FinishReason::Stop),
+            downstream_raw_usage: None,
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),

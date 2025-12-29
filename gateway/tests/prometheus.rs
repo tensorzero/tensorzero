@@ -1,4 +1,4 @@
-#![allow(clippy::print_stderr, clippy::print_stdout, clippy::unwrap_used)]
+#![expect(clippy::print_stdout, clippy::unwrap_used)]
 use std::time::{Duration, Instant};
 
 use reqwest::Client;

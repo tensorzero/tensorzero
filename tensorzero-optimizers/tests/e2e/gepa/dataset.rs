@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
-
 use std::collections::HashSet;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_dataset_clickhouse, select_json_dataset_clickhouse,

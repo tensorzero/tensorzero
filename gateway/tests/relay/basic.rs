@@ -1,4 +1,4 @@
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 
 //! Tests for the TensorZero relay feature.
 //!
@@ -9,15 +9,14 @@
 //! This validates that the relay correctly proxies inference requests through
 //! another TensorZero gateway instance.
 
-mod common;
-
-use common::start_gateway_on_random_port;
+use crate::common::{
+    get_postgres_pool_for_testing, relay::start_relay_test_environment,
+    start_gateway_on_random_port,
+};
 use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde_json::json;
 use uuid::Uuid;
-
-use crate::common::{get_postgres_pool_for_testing, relay::start_relay_test_environment};
 
 // ============================================================================
 // Basic Tests
