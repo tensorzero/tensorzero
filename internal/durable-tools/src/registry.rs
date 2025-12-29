@@ -244,6 +244,11 @@ impl ToolRegistry {
     ///
     /// This can be used directly in TensorZero inference API calls.
     ///
+    /// The schemas are automatically transformed to be compatible with OpenAI Structured Outputs:
+    /// - `additionalProperties: false` is set on all objects
+    /// - All properties are added to `required`
+    /// - Unsupported keywords are removed or converted
+    ///
     /// # Errors
     ///
     /// Returns an error if a tool's parameter schema generation or serialization fails.
@@ -251,11 +256,16 @@ impl ToolRegistry {
         self.tools
             .values()
             .map(|tool| {
+                let mut parameters = serde_json::to_value(tool.parameters_schema()?)?;
+
+                // Transform schema to be OpenAI Structured Outputs compatible
+                crate::openai_schema::to_openai_compatible(&mut parameters);
+
                 Ok(Tool::Function(FunctionTool {
                     name: tool.name().to_string(),
                     description: tool.description().to_string(),
-                    parameters: serde_json::to_value(tool.parameters_schema()?)?,
-                    strict: false,
+                    parameters,
+                    strict: true, // Enable strict mode since schema is now compliant
                 }))
             })
             .collect()

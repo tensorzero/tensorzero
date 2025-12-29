@@ -174,6 +174,7 @@ mod context;
 mod error;
 mod executor;
 pub mod inference;
+mod openai_schema;
 mod registry;
 mod simple_tool;
 mod task_tool;
@@ -226,3 +227,6 @@ pub use durable::{SpawnOptions, SpawnResult, TaskHandle, Worker, WorkerOptions};
 
 // Re-export schemars for parameter schemas
 pub use schemars;
+
+// Re-export OpenAI schema transformation for manual use
+pub use openai_schema::to_openai_compatible;

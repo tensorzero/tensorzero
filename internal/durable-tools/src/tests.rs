@@ -321,7 +321,8 @@ mod registry_tests {
                 assert_eq!(func.name, "echo_simple");
                 assert_eq!(func.description, "Echoes the input message");
                 assert!(func.parameters.is_object());
-                assert!(!func.strict);
+                // strict: true because schemas are transformed to be OpenAI Structured Outputs compatible
+                assert!(func.strict);
             }
             Tool::OpenAICustom(_) => panic!("Expected Function tool"),
         }
