@@ -1,1 +1,1 @@
-- Tests involving gateway relay should go in `gateway/tests/relay` instead of `tensorzero-core`.
+- Tests involving gateway relay should go in `gateway/tests/relay` instead of `tensorzero-core`. [kw: gateway_relay, relay_gateway, GatewayRelay, RelayGateway]
