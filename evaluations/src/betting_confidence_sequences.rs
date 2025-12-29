@@ -13,6 +13,7 @@
 //! has not exceeded the threshold 1/α, where α is the confidence level.
 
 use anyhow::{Result, bail};
+use serde::{Deserialize, Serialize};
 
 const DEFAULT_M_RESOLUTION: usize = 1001;
 const BET_TRUNCATION_LEVEL: f64 = 0.5;
@@ -20,7 +21,7 @@ const BET_TRUNCATION_LEVEL: f64 = 0.5;
 /// Specifies the grid of candidate mean values where the wealth processes will be tracked.
 ///
 /// Finer grids mean more precise (less conservative) confidence sequences.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WealthProcessGridPoints {
     /// Custom grid of candidate mean values (for unequally spaced points).
     MValues(Vec<f64>),
@@ -129,7 +130,7 @@ fn find_cs_upper(
 /// The confidence set is defined as {m : wealth_hedged(m) < 1/α}, where
 /// wealth_hedged is a combination of the upper and lower wealth processes.
 /// These processes are evaluated on a grid of candidate mean values.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WealthProcesses {
     /// Grid specification for candidate mean values.
     pub grid: WealthProcessGridPoints,
@@ -144,7 +145,7 @@ pub struct WealthProcesses {
 /// This struct maintains the state needed to incrementally update a confidence
 /// sequence as new observations arrive. The confidence interval [cs_lower, cs_upper]
 /// is valid at any stopping time with coverage probability at least 1 - α.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeanBettingConfidenceSequence {
     /// Identifier for this sequence (e.g., variant or evaluator name).
     pub name: String,

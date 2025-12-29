@@ -12,6 +12,7 @@ use crate::error::{ToolError, ToolResult};
 use crate::inference::{InferenceClient, InferenceError};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
+use tokio::sync::RwLockReadGuard;
 
 /// Type alias for the Durable client with `ToolAppState`.
 pub type DurableClient = Durable<ToolAppState>;
@@ -122,6 +123,23 @@ impl<'a> ToolContext<'a> {
     /// ```
     pub fn client(&self) -> Arc<dyn InferenceClient> {
         self.app_state.inference_client.clone()
+    }
+
+    /// Get a read lock on the tool registry.
+    ///
+    /// Use this to iterate over tools and convert them to TensorZero tool definitions.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let registry = ctx.registry().await;
+    /// let tools: Result<Vec<Tool>, _> = registry.iter()
+    ///     .filter(|t| !t.is_durable())
+    ///     .map(Tool::try_from)
+    ///     .collect();
+    /// ```
+    pub async fn registry_read_lock(&self) -> RwLockReadGuard<'_, ToolRegistry> {
+        self.app_state.tool_registry.read().await
     }
 
     /// Get mutable access to the underlying durable `TaskContext`.
