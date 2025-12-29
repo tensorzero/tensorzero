@@ -2,6 +2,26 @@
 // ============================================================================
 // Top-K Evaluation Tests
 // ============================================================================
+//
+// Integration tests for the top-k variant selection algorithm using confidence
+// sequences. These tests verify the durable task implementation that identifies
+// the best-performing variants from a set of candidates.
+//
+// There are four possible stopping conditions for the algorithm. These tests
+// check all four conditions.
+// - test_topk_found_topk: Verifies correct identification of the winning variant
+//   (`TopKFound` stopping condition) when k = 1.
+// - test_topk_dataset_exhaustion: Verifies `DatasetExhausted` stopping condition,
+//   when there is insufficient data to identify a top-k set of variants.
+// - test_topk_evaluator_failure_threshold: Verifies `EvaluatorsFailed` stopping
+//   condition, when the confidence sequence for any evaluator's failure rate lies
+//   above a user-chosen threshold.
+// - test_topk_variant_failure_threshold: Verifies `TooManyVariantsFailed` stopping
+//   condition, when enough variants have failed that there are fewer than k variants
+//   remaining. Variant failure occurs when the confidence sequence for a variant's
+//   failure rate lies above a user-chosen threshold.
+//
+// ============================================================================
 
 mod common;
 
