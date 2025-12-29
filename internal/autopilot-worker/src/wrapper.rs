@@ -41,13 +41,13 @@ struct PublishResultParams {
 ///
 /// ```ignore
 /// // Register a wrapped tool
-/// executor.register_task_tool::<ClientToolWrapper<MyTool>>().await;
+/// executor.register_task_tool::<ClientTaskToolWrapper<MyTool>>().await;
 /// ```
-pub struct ClientToolWrapper<T: TaskTool> {
+pub struct ClientTaskToolWrapper<T: TaskTool> {
     _marker: PhantomData<T>,
 }
 
-impl<T: TaskTool> Default for ClientToolWrapper<T> {
+impl<T: TaskTool> Default for ClientTaskToolWrapper<T> {
     fn default() -> Self {
         Self {
             _marker: PhantomData,
@@ -55,7 +55,7 @@ impl<T: TaskTool> Default for ClientToolWrapper<T> {
     }
 }
 
-impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
+impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
     fn name() -> Cow<'static, str> {
         T::name()
     }
@@ -64,7 +64,7 @@ impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
         T::description()
     }
 
-    fn parameters_schema() -> DurableToolResult<Schema> {
+    fn parameters_schema() -> Schema {
         T::parameters_schema()
     }
 
@@ -74,7 +74,7 @@ impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
 }
 
 #[async_trait]
-impl<T> TaskTool for ClientToolWrapper<T>
+impl<T> TaskTool for ClientTaskToolWrapper<T>
 where
     T: TaskTool,
     T::SideInfo: Default + PartialEq,

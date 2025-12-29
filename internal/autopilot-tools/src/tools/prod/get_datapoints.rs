@@ -43,8 +43,8 @@ impl ToolMetadata for GetDatapointsTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(GetDatapointsToolParams))
+    fn parameters_schema() -> Schema {
+        schema_for!(GetDatapointsToolParams)
     }
 }
 

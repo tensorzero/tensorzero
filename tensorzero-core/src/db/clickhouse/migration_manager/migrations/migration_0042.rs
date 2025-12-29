@@ -69,8 +69,8 @@ impl Migration for Migration0042<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ModelInferenceCache MODIFY COLUMN input_tokens UInt32;
-          ALTER TABLE ModelInferenceCache MODIFY COLUMN output_tokens UInt32;"
+        r"ALTER TABLE ModelInferenceCache MODIFY COLUMN input_tokens UInt32 DEFAULT 0;
+          ALTER TABLE ModelInferenceCache MODIFY COLUMN output_tokens UInt32 DEFAULT 0;"
             .to_string()
     }
 

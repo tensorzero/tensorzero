@@ -44,8 +44,8 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(CreateDatapointsFromInferencesToolParams))
+    fn parameters_schema() -> Schema {
+        schema_for!(CreateDatapointsFromInferencesToolParams)
     }
 }
 

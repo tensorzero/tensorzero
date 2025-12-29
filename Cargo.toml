@@ -106,7 +106,7 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 blake3 = "1.8.2"
 moka = { version = "0.12.10", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "d564532eb8e46d74db028013e8d3e4dcb0d41d6d" }
+durable = { git = "https://github.com/tensorzero/durable", branch = "viraj/spawn-unchecked" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
@@ -152,6 +152,7 @@ inefficient_to_string = "deny"
 assigning_clones = "deny"
 stable_sort_primitive = "deny"
 ref_option = "deny"
+unnecessary_literal_bound = "deny"
 
 # The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
 default_trait_access = "allow"

@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the slow simple tool (visible to LLM).
@@ -44,10 +44,6 @@ impl ToolMetadata for SlowSimpleTool {
         Cow::Borrowed(
             "Sleeps for the specified duration before returning. A SimpleTool for testing timeout behavior.",
         )
-    }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(SlowSimpleParams))
     }
 }
 

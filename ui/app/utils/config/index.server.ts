@@ -13,8 +13,8 @@ import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { DEFAULT_FUNCTION } from "../constants";
 import { logger } from "../logger";
 
-// Poll interval in milliseconds (30 seconds)
-const CONFIG_HASH_POLL_INTERVAL_MS = 30_000;
+// Poll interval in milliseconds (5 seconds)
+const CONFIG_HASH_POLL_INTERVAL_MS = 5_000;
 
 // Track if polling has been started
 let pollingStarted = false;

@@ -42,8 +42,8 @@ impl ToolMetadata for DeleteDatapointsTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(DeleteDatapointsToolParams))
+    fn parameters_schema() -> Schema {
+        schema_for!(DeleteDatapointsToolParams)
     }
 }
 

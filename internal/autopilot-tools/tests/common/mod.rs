@@ -50,7 +50,7 @@ mock! {
         async fn action(
             &self,
             snapshot_hash: SnapshotHash,
-            params: ClientInferenceParams,
+            input: tensorzero::ActionInput,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
 
         async fn create_datapoints(

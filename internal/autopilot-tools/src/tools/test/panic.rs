@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the panic tool (visible to LLM).
@@ -30,10 +30,6 @@ impl ToolMetadata for PanicTool {
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Panics with the given message. Used for testing crash recovery.")
-    }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(PanicToolParams))
     }
 }
 

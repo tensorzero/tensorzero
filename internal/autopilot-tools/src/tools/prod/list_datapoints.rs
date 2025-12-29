@@ -42,8 +42,8 @@ impl ToolMetadata for ListDatapointsTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(ListDatapointsToolParams))
+    fn parameters_schema() -> Schema {
+        schema_for!(ListDatapointsToolParams)
     }
 }
 
