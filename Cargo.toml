@@ -40,7 +40,7 @@ reqwest = { version = "0.12.28", features = [
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
 uuid = { version = "1.19.0", features = ["serde", "v7"] }
-serde_json = { version = "1.0.143", features = ["preserve_order"] }
+serde_json = { version = "1.0.148", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "0.9.8", features = ["preserve_order"] }
 reqwest-eventsource = "0.6.0"
@@ -70,7 +70,7 @@ minijinja = { version = "2.14.0", features = [
 url = "2.5.4"
 google-cloud-auth = "1.3.0"
 serde-untagged = "0.1.8"
-object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
+object_store = { version = "0.13.0", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
 ts-rs = { version = "11.1.0", features = [
     "serde-compat",
@@ -103,7 +103,7 @@ rlt = "0.2.1"
 metrics-exporter-prometheus = { version = "0.18.1", features = [
     "http-listener",
 ], default-features = false }
-schemars = "1.1.0"
+schemars = "1.2.0"
 blake3 = "1.8.2"
 moka = { version = "0.12.10", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", branch = "viraj/spawn-unchecked" }

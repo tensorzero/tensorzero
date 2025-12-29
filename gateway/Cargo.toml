@@ -33,7 +33,7 @@ default = []
 
 [dev-dependencies]
 reqwest.workspace = true
-tempfile = "3.21.0"
+tempfile = "3.24.0"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 serde_json = { workspace = true }
 reqwest-eventsource = { workspace = true }
