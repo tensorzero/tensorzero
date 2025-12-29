@@ -90,21 +90,7 @@ fn empty_progress(variant_names: &[&str]) -> TopKProgress {
 
 /// Helper to create a fresh confidence sequence with no observations (for testing updates)
 fn mock_fresh_cs(name: &str) -> MeanBettingConfidenceSequence {
-    MeanBettingConfidenceSequence {
-        name: name.to_string(),
-        mean_regularized: 0.5,
-        variance_regularized: 0.25,
-        count: 0,
-        mean_est: 0.5,
-        cs_lower: 0.0,
-        cs_upper: 1.0,
-        alpha: 0.05,
-        wealth: WealthProcesses {
-            grid: WealthProcessGridPoints::Resolution(101),
-            wealth_upper: vec![1.0; 101],
-            wealth_lower: vec![1.0; 101],
-        },
-    }
+    MeanBettingConfidenceSequence::new(name.to_string(), 101, 0.05)
 }
 
 /// Helper to create a mock DatapointVariantResult for testing.
@@ -199,6 +185,7 @@ fn test_compute_updates_empty_results() {
             .into_iter()
             .collect();
 
+    // Empty results should not change any confidence sequences
     let results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
     let result = compute_updates(
         &results_by_datapoint,
@@ -426,57 +413,68 @@ fn test_compute_updates_successful_evaluations() {
 
     assert!(result.is_ok());
 
+    // ===============================================
     // Check variant_a performance (observation = 0.8)
-    // mean_regularized = (0.5 * 1 + 0.8) / 2 = 0.65
-    // variance_regularized = (0.25 * 1 + (0.8 - 0.65)^2) / 2 = 0.13625
-    // mean_est = 0.8
+    // ===============================================
+    // Starting from fresh CS (count=0, mean_reg=0.5, var_reg=0.25)
+    // After one observation x=0.8:
+    //   mean_regularized = (0.5 * 1 + 0.8) / 2 = 0.65
+    //   variance_regularized = (0.25 * 1 + (0.8 - 0.65)^2) / 2 = (0.25 + 0.0225) / 2 = 0.13625
+    //   mean_est = 0.8 (single observation)
     let vp_a = &variant_performance["variant_a"];
     assert_eq!(vp_a.count, 1);
     assert!((vp_a.mean_regularized - 0.65).abs() < 1e-10);
     assert!((vp_a.variance_regularized - 0.13625).abs() < 1e-10);
     assert!((vp_a.mean_est - 0.8).abs() < 1e-10);
 
+    // ===============================================
     // Check variant_b performance (observation = 0.6)
-    // mean_regularized = (0.5 * 1 + 0.6) / 2 = 0.55
-    // variance_regularized = (0.25 * 1 + (0.6 - 0.55)^2) / 2 = 0.12625
-    // mean_est = 0.6
+    // ===============================================
+    // After one observation x=0.6:
+    //   mean_regularized = (0.5 * 1 + 0.6) / 2 = 0.55
+    //   variance_regularized = (0.25 * 1 + (0.6 - 0.55)^2) / 2 = (0.25 + 0.0025) / 2 = 0.12625
+    //   mean_est = 0.6 (single observation)
     let vp_b = &variant_performance["variant_b"];
     assert_eq!(vp_b.count, 1);
     assert!((vp_b.mean_regularized - 0.55).abs() < 1e-10);
     assert!((vp_b.variance_regularized - 0.12625).abs() < 1e-10);
     assert!((vp_b.mean_est - 0.6).abs() < 1e-10);
 
-    // Check variant_a failures (observation = 0.0, success)
-    // mean_regularized = (0.5 * 1 + 0.0) / 2 = 0.25
-    // variance_regularized = (0.25 * 1 + (0.0 - 0.25)^2) / 2 = 0.15625
-    // mean_est = 0.0
+    // ===============================================================
+    // Check variant failures (both get observation = 0.0 for success)
+    // ===============================================================
+    // After one observation x=0.0:
+    //   mean_regularized = (0.5 * 1 + 0.0) / 2 = 0.25
+    //   variance_regularized = (0.25 * 1 + (0.0 - 0.25)^2) / 2 = (0.25 + 0.0625) / 2 = 0.15625
+    //   mean_est = 0.0
     let vf_a = &variant_failures["variant_a"];
     assert_eq!(vf_a.count, 1);
     assert!((vf_a.mean_regularized - 0.25).abs() < 1e-10);
     assert!((vf_a.variance_regularized - 0.15625).abs() < 1e-10);
     assert!((vf_a.mean_est - 0.0).abs() < 1e-10);
 
-    // Check variant_b failures (observation = 0.0, success)
     let vf_b = &variant_failures["variant_b"];
     assert_eq!(vf_b.count, 1);
     assert!((vf_b.mean_regularized - 0.25).abs() < 1e-10);
     assert!((vf_b.variance_regularized - 0.15625).abs() < 1e-10);
     assert!((vf_b.mean_est - 0.0).abs() < 1e-10);
 
-    // Check evaluator1 failures (2 observations, both = 0.0, success)
-    // After first observation (0.0):
-    //   mean_regularized = (0.5 * 1 + 0.0) / 2 = 0.25
-    //   variance_regularized = (0.25 * 1 + (0.0 - 0.25)^2) / 2 = 0.15625
-    // After second observation (0.0):
-    //   mean_regularized = (0.25 * 2 + 0.0) / 3 = 0.16666...
-    //   variance_regularized = (0.15625 * 2 + (0.0 - 0.16666...)^2) / 3 = 0.11319...
-    // mean_est = (0.0 + 0.0) / 2 = 0.0
+    // ==================================================
+    // Check evaluator failures (two observations of 0.0)
+    // ==================================================
+    // After two observations x1=0.0, x2=0.0:
+    //   After x1=0.0: mean_reg1 = 0.25, var_reg1 = 0.15625 (same as above)
+    //   After x2=0.0:
+    //     mean_regularized = (0.25 * 2 + 0.0) / 3 = 0.5 / 3 = 0.16666...
+    //     variance_regularized = (0.15625 * 2 + (0.0 - 0.16666...)^2) / 3
+    //                          = (0.3125 + 0.02777...) / 3 = 0.34027... / 3 = 0.11342...
+    //   mean_est = (0.0 + 0.0) / 2 = 0.0
     let ef = &evaluator_failures["evaluator1"];
     assert_eq!(ef.count, 2);
     assert!((ef.mean_regularized - 1.0 / 6.0).abs() < 1e-10);
-    assert!(
-        (ef.variance_regularized - (0.15625 * 2.0 + (1.0_f64 / 6.0).powi(2)) / 3.0).abs() < 1e-10
-    );
+    // var_reg = (0.15625 * 2 + (0 - 1/6)^2) / 3 = (0.3125 + 1/36) / 3 = (0.3125 + 0.02777...) / 3
+    let expected_var = (0.3125 + (1.0_f64 / 6.0).powi(2)) / 3.0;
+    assert!((ef.variance_regularized - expected_var).abs() < 1e-10);
     assert!((ef.mean_est - 0.0).abs() < 1e-10);
 }
 
