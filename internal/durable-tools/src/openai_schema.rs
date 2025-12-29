@@ -108,13 +108,111 @@ fn resolve_ref(ref_path: &str, defs: Option<&Value>) -> Option<Value> {
 ///
 /// Properties from the source are added to the target (target properties take precedence).
 /// Required arrays are merged (deduplicated).
+///
+/// Special handling for `anyOf`: When the source contains `anyOf`, we can't just copy it
+/// to the target because having both `properties` AND `anyOf` at the same level is invalid
+/// for OpenAI Structured Outputs. Instead, we expand each `anyOf` branch to include the
+/// target's inline properties, then replace the target with just the expanded `anyOf`.
 fn merge_schema(target: &mut Map<String, Value>, source: Value) {
     let Value::Object(source_obj) = source else {
         return;
     };
 
-    // Merge properties
-    if let Some(Value::Object(source_props)) = source_obj.get("properties") {
+    // Special case: if source has `anyOf`, we need to expand each branch with the target's
+    // inline properties, then replace the target entirely with the expanded `anyOf`.
+    // This is because OpenAI doesn't allow `properties` and `anyOf` at the same level.
+    if let Some(Value::Array(any_of_branches)) = source_obj.get("anyOf") {
+        let expanded_branches = expand_anyof_branches(target, any_of_branches);
+
+        // Clear the target and replace with just the expanded anyOf
+        // Keep only description if present (it's valid metadata for anyOf schemas)
+        let description = target.remove("description");
+        target.clear();
+        if let Some(desc) = description {
+            target.insert("description".to_string(), desc);
+        }
+        target.insert("anyOf".to_string(), Value::Array(expanded_branches));
+        return;
+    }
+
+    // Standard merge for non-anyOf sources
+    merge_properties(target, &source_obj);
+    merge_required(target, &source_obj);
+
+    // Copy other fields from source if not present in target
+    // (except $ref-specific fields we don't want to carry over)
+    for (key, value) in source_obj {
+        if !matches!(key.as_str(), "properties" | "required" | "$ref") {
+            target.entry(key).or_insert(value);
+        }
+    }
+}
+
+/// Expand each branch of an `anyOf` with the target's inline properties.
+///
+/// For each branch, we merge in the target's `type`, `properties`, `required`,
+/// and `additionalProperties` to create a complete schema.
+/// Inline properties (from target) take precedence over branch properties.
+fn expand_anyof_branches(target: &Map<String, Value>, branches: &[Value]) -> Vec<Value> {
+    branches
+        .iter()
+        .map(|branch| {
+            let mut expanded = if let Value::Object(obj) = branch {
+                obj.clone()
+            } else {
+                // Non-object branch (e.g., {"type": "null"}), just clone it
+                return branch.clone();
+            };
+
+            // Merge properties: inline properties (from target) take precedence over branch
+            if let Some(Value::Object(target_props)) = target.get("properties") {
+                let branch_props = expanded
+                    .entry("properties")
+                    .or_insert_with(|| Value::Object(Map::new()));
+
+                if let Value::Object(branch_props_obj) = branch_props {
+                    // Overwrite branch properties with target properties (target takes precedence)
+                    for (key, value) in target_props {
+                        branch_props_obj.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+
+            // Merge target's required into this branch
+            if let Some(target_required) = target.get("required") {
+                merge_required(
+                    &mut expanded,
+                    &map_with_key("required", target_required.clone()),
+                );
+            }
+
+            // Copy target's type if branch doesn't have one
+            if let Some(target_type) = target.get("type") {
+                expanded.entry("type").or_insert(target_type.clone());
+            }
+
+            // Copy target's additionalProperties if branch doesn't have one
+            if let Some(target_additional) = target.get("additionalProperties") {
+                expanded
+                    .entry("additionalProperties")
+                    .or_insert(target_additional.clone());
+            }
+
+            Value::Object(expanded)
+        })
+        .collect()
+}
+
+/// Helper to create a Map with a single key-value pair.
+fn map_with_key(key: &str, value: Value) -> Map<String, Value> {
+    let mut map = Map::new();
+    map.insert(key.to_string(), value);
+    map
+}
+
+/// Merge properties from source into target (target properties take precedence).
+fn merge_properties(target: &mut Map<String, Value>, source: &Map<String, Value>) {
+    if let Some(Value::Object(source_props)) = source.get("properties") {
         let target_props = target
             .entry("properties")
             .or_insert_with(|| Value::Object(Map::new()));
@@ -126,9 +224,11 @@ fn merge_schema(target: &mut Map<String, Value>, source: Value) {
             }
         }
     }
+}
 
-    // Merge required arrays
-    if let Some(Value::Array(source_required)) = source_obj.get("required") {
+/// Merge required arrays from source into target (deduplicated).
+fn merge_required(target: &mut Map<String, Value>, source: &Map<String, Value>) {
+    if let Some(Value::Array(source_required)) = source.get("required") {
         let target_required = target
             .entry("required")
             .or_insert_with(|| Value::Array(Vec::new()));
@@ -139,14 +239,6 @@ fn merge_schema(target: &mut Map<String, Value>, source: Value) {
                     target_required_arr.push(item.clone());
                 }
             }
-        }
-    }
-
-    // Copy other fields from source if not present in target
-    // (except $ref-specific fields we don't want to carry over)
-    for (key, value) in source_obj {
-        if !matches!(key.as_str(), "properties" | "required" | "$ref") {
-            target.entry(key).or_insert(value);
         }
     }
 }
@@ -837,5 +929,308 @@ mod tests {
             data["description"],
             json!("Data fields from the definition")
         );
+    }
+
+    #[test]
+    fn test_ref_to_anyof_expands_branches() {
+        // When $ref points to an anyOf schema, we need to expand each branch
+        // with the inline properties instead of creating invalid schema with
+        // both properties and anyOf at the same level
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "object",
+                    "properties": {
+                        "type": { "type": "string", "const": "tool_call" }
+                    },
+                    "$ref": "#/$defs/ToolCallWrapper",
+                    "required": ["type"],
+                    "additionalProperties": false
+                }
+            },
+            "$defs": {
+                "ToolCallWrapper": {
+                    "anyOf": [
+                        { "$ref": "#/$defs/ToolCall" },
+                        { "$ref": "#/$defs/InferenceResponseToolCall" }
+                    ]
+                },
+                "ToolCall": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "name": { "type": "string" }
+                    },
+                    "required": ["id", "name"],
+                    "additionalProperties": false
+                },
+                "InferenceResponseToolCall": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "raw_name": { "type": "string" }
+                    },
+                    "required": ["id", "raw_name"],
+                    "additionalProperties": false
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        let content = &schema["properties"]["content"];
+
+        // The result should be an anyOf with expanded branches, NOT properties + anyOf
+        assert!(
+            content.get("properties").is_none(),
+            "Should not have both properties and anyOf at same level"
+        );
+        assert!(content.get("anyOf").is_some(), "Should have anyOf");
+
+        let any_of = content["anyOf"].as_array().unwrap();
+        assert_eq!(any_of.len(), 2);
+
+        // Each branch should have the inline "type" property merged in
+        for branch in any_of {
+            assert!(
+                branch["properties"].get("type").is_some(),
+                "Each branch should have the 'type' property"
+            );
+            // Each branch should have additionalProperties: false
+            assert_eq!(
+                branch["additionalProperties"],
+                json!(false),
+                "Each branch should have additionalProperties: false"
+            );
+        }
+
+        // First branch should have ToolCall properties + inline type
+        assert!(any_of[0]["properties"].get("id").is_some());
+        assert!(any_of[0]["properties"].get("name").is_some());
+        assert!(any_of[0]["properties"].get("type").is_some());
+
+        // Second branch should have InferenceResponseToolCall properties + inline type
+        assert!(any_of[1]["properties"].get("id").is_some());
+        assert!(any_of[1]["properties"].get("raw_name").is_some());
+        assert!(any_of[1]["properties"].get("type").is_some());
+    }
+
+    #[test]
+    fn test_ref_to_anyof_merges_required() {
+        // When expanding anyOf branches, required arrays should be merged
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "item": {
+                    "type": "object",
+                    "properties": {
+                        "tag": { "type": "string", "const": "special" }
+                    },
+                    "$ref": "#/$defs/TypeUnion",
+                    "required": ["tag"],
+                    "additionalProperties": false
+                }
+            },
+            "$defs": {
+                "TypeUnion": {
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "a": { "type": "string" }
+                            },
+                            "required": ["a"]
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "b": { "type": "number" }
+                            },
+                            "required": ["b"]
+                        }
+                    ]
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        let item = &schema["properties"]["item"];
+        let any_of = item["anyOf"].as_array().unwrap();
+
+        // First branch should require both "tag" and "a"
+        let required_0 = any_of[0]["required"].as_array().unwrap();
+        assert!(required_0.contains(&json!("tag")));
+        assert!(required_0.contains(&json!("a")));
+
+        // Second branch should require both "tag" and "b"
+        let required_1 = any_of[1]["required"].as_array().unwrap();
+        assert!(required_1.contains(&json!("tag")));
+        assert!(required_1.contains(&json!("b")));
+    }
+
+    #[test]
+    fn test_ref_to_anyof_preserves_description() {
+        // Description on the inline schema should be preserved
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "choice": {
+                    "description": "A choice between options",
+                    "type": "object",
+                    "properties": {
+                        "kind": { "type": "string" }
+                    },
+                    "$ref": "#/$defs/Options",
+                    "required": ["kind"]
+                }
+            },
+            "$defs": {
+                "Options": {
+                    "anyOf": [
+                        { "type": "object", "properties": { "x": { "type": "number" } } },
+                        { "type": "object", "properties": { "y": { "type": "number" } } }
+                    ]
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        let choice = &schema["properties"]["choice"];
+        // Description should be preserved on the anyOf schema
+        assert_eq!(choice["description"], json!("A choice between options"));
+        assert!(choice.get("anyOf").is_some());
+    }
+
+    #[test]
+    fn test_ref_to_anyof_inline_properties_take_precedence() {
+        // When both inline and branch have same property, inline should win
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string", "description": "Inline ID" }
+                    },
+                    "$ref": "#/$defs/TypedData",
+                    "required": ["id"],
+                    "additionalProperties": false
+                }
+            },
+            "$defs": {
+                "TypedData": {
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "id": { "type": "integer", "description": "Branch ID" },
+                                "value": { "type": "string" }
+                            }
+                        }
+                    ]
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        let data = &schema["properties"]["data"];
+        let branch = &data["anyOf"][0];
+
+        // Inline property should take precedence
+        assert_eq!(branch["properties"]["id"]["type"], json!("string"));
+        assert_eq!(
+            branch["properties"]["id"]["description"],
+            json!("Inline ID")
+        );
+        // But branch's unique property should be merged
+        assert!(branch["properties"].get("value").is_some());
+    }
+
+    #[test]
+    fn test_nested_ref_to_anyof() {
+        // Test deeply nested $ref to anyOf - this is the real-world ToolCallWrapper case
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/Message"
+                    }
+                }
+            },
+            "$defs": {
+                "Message": {
+                    "type": "object",
+                    "properties": {
+                        "content": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/ContentBlock"
+                            }
+                        }
+                    }
+                },
+                "ContentBlock": {
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": { "const": "text" },
+                                "text": { "type": "string" }
+                            },
+                            "required": ["type", "text"]
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": { "const": "tool_call" }
+                            },
+                            "$ref": "#/$defs/ToolCallData",
+                            "required": ["type"],
+                            "additionalProperties": false
+                        }
+                    ]
+                },
+                "ToolCallData": {
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "id": { "type": "string" },
+                                "name": { "type": "string" }
+                            },
+                            "required": ["id", "name"]
+                        }
+                    ]
+                }
+            }
+        });
+
+        to_openai_compatible(&mut schema);
+
+        // Navigate to the tool_call content block
+        let content_block = &schema["$defs"]["ContentBlock"];
+        let tool_call_branch = &content_block["anyOf"][1];
+
+        // The tool_call branch should now be an anyOf (expanded from ToolCallData)
+        assert!(
+            tool_call_branch.get("anyOf").is_some(),
+            "tool_call branch should be expanded to anyOf"
+        );
+        assert!(
+            tool_call_branch.get("properties").is_none(),
+            "tool_call branch should not have properties at top level"
+        );
+
+        // The nested anyOf branch should have both inline "type" and ToolCallData properties
+        let nested_branch = &tool_call_branch["anyOf"][0];
+        assert!(nested_branch["properties"].get("type").is_some());
+        assert!(nested_branch["properties"].get("id").is_some());
+        assert!(nested_branch["properties"].get("name").is_some());
     }
 }
