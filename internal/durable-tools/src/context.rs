@@ -12,6 +12,7 @@ use crate::error::{ToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
+use tokio::sync::RwLockReadGuard;
 
 /// Handle returned by `spawn_tool`, can be joined later with `join_tool`.
 ///
@@ -135,6 +136,23 @@ impl<'a> ToolContext<'a> {
     /// ```
     pub fn client(&self) -> Arc<dyn TensorZeroClient> {
         self.app_state.t0_client.clone()
+    }
+
+    /// Get a read lock on the tool registry.
+    ///
+    /// Use this to iterate over tools and convert them to TensorZero tool definitions.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let registry = ctx.registry().await;
+    /// let tools: Result<Vec<Tool>, _> = registry.iter()
+    ///     .filter(|t| !t.is_durable())
+    ///     .map(Tool::try_from)
+    ///     .collect();
+    /// ```
+    pub async fn registry(&self) -> RwLockReadGuard<'_, ToolRegistry> {
+        self.app_state.tool_registry.read().await
     }
 
     /// Get mutable access to the underlying durable `TaskContext`.
