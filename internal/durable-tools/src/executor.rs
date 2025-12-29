@@ -351,7 +351,7 @@ impl ToolExecutor {
     /// Returns an error if a tool's parameter schema generation or serialization fails.
     pub async fn tool_definitions(&self) -> Result<Vec<Tool>, ToolError> {
         let registry = self.registry.read().await;
-        registry.to_tensorzero_tools()
+        registry.iter().map(Tool::try_from).collect()
     }
 
     /// Get a reference to the tool registry.
