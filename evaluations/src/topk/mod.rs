@@ -1435,7 +1435,7 @@ impl Task<TopKTaskState> for TopKTask {
                     .count(),
             };
             ctx.emit_event(
-                &format!("topk_progress:{evaluation_run_id}"),
+                &format!("topk_progress:{}", ctx.task_id),
                 &TopKUpdate::BatchProgress(batch_update),
             )
             .await?;
@@ -1478,7 +1478,7 @@ impl Task<TopKTaskState> for TopKTask {
             final_variant_statuses: progress.variant_status.clone(),
         };
         ctx.emit_event(
-            &format!("topk_completed:{evaluation_run_id}"),
+            &format!("topk_completed:{}", ctx.task_id),
             &TopKUpdate::Completed(completed_update),
         )
         .await?;
