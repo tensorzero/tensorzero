@@ -306,13 +306,17 @@ mod registry_tests {
     }
 
     #[test]
-    fn to_tensorzero_tools_generates_correct_structure() {
+    fn iter_and_try_from_generates_correct_structure() {
         use tensorzero::Tool;
 
         let mut registry = ToolRegistry::new();
         registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
-        let tools = registry.to_tensorzero_tools().unwrap();
+        let tools: Vec<Tool> = registry
+            .iter()
+            .map(Tool::try_from)
+            .collect::<Result<_, _>>()
+            .unwrap();
         assert_eq!(tools.len(), 1);
 
         let tool = &tools[0];

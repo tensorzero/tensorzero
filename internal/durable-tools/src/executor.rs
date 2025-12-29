@@ -1,7 +1,7 @@
 use durable::{DurableBuilder, DurableError, SpawnOptions, SpawnResult, Worker, WorkerOptions};
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value as JsonValue;
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool, Postgres};
 use std::sync::Arc;
 use tensorzero::Tool;
 use tokio::sync::RwLock;
@@ -9,10 +9,10 @@ use uuid::Uuid;
 
 use crate::context::{DurableClient, ToolAppState};
 use crate::error::ToolError;
-use crate::inference::InferenceClient;
 use crate::registry::ToolRegistry;
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::{TaskTool, TaskToolAdapter};
+use crate::tensorzero_client::TensorZeroClient;
 use durable_tools_spawn::TaskToolParams;
 
 /// High-level orchestrator for tool execution.
@@ -31,15 +31,15 @@ use durable_tools_spawn::TaskToolParams;
 /// use secrecy::SecretString;
 /// use url::Url;
 ///
-/// // Create inference client
-/// let inference_client = http_gateway_client(Url::parse("http://localhost:3000")?)?;
+/// // Create TensorZero client
+/// let t0_client = http_gateway_client(Url::parse("http://localhost:3000")?)?;
 ///
 /// // Create executor
 /// let database_url: SecretString = std::env::var("DATABASE_URL")?.into();
 /// let executor = ToolExecutor::builder()
 ///     .database_url(database_url)
 ///     .queue_name("tools")
-///     .inference_client(inference_client)
+///     .t0_client(t0_client)
 ///     .build()
 ///     .await?;
 ///
@@ -71,7 +71,7 @@ impl ToolExecutor {
     ///
     /// * `database_url` - Database connection URL (as a `SecretString` for security)
     /// * `queue_name` - Name of the durable queue for tool tasks
-    /// * `inference_client` - The inference client for TensorZero calls
+    /// * `t0_client` - The TensorZero client for inference and autopilot calls
     ///
     /// # Errors
     ///
@@ -79,12 +79,12 @@ impl ToolExecutor {
     pub async fn new(
         database_url: SecretString,
         queue_name: &str,
-        inference_client: Arc<dyn InferenceClient>,
+        t0_client: Arc<dyn TensorZeroClient>,
     ) -> anyhow::Result<Self> {
         Self::builder()
             .database_url(database_url)
             .queue_name(queue_name)
-            .inference_client(inference_client)
+            .t0_client(t0_client)
             .build()
             .await
     }
@@ -185,34 +185,18 @@ impl ToolExecutor {
     /// Spawn a tool by name with JSON parameters.
     ///
     /// This allows dynamic tool invocation without knowing the concrete type.
-    /// Side info defaults to `null` (compatible with `SideInfo = ()`).
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    /// * `episode_id` - The episode ID for this execution
     ///
     /// # Errors
     ///
     /// Returns an error if spawning the tool fails.
     pub async fn spawn_tool_by_name(
-        &self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        episode_id: Uuid,
-    ) -> anyhow::Result<SpawnResult> {
-        self.spawn_tool_by_name_with_side_info(
-            tool_name,
-            llm_params,
-            serde_json::json!(null),
-            episode_id,
-        )
-        .await
-    }
-
-    /// Spawn a tool by name with JSON parameters and explicit side info.
-    ///
-    /// This allows dynamic tool invocation without knowing the concrete type.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool_by_name_with_side_info(
         &self,
         tool_name: &str,
         llm_params: JsonValue,
@@ -235,6 +219,126 @@ impl ToolExecutor {
             .map_err(Into::into)
     }
 
+    /// Spawn a `TaskTool` execution using a custom executor (e.g., a transaction).
+    ///
+    /// This allows you to atomically enqueue a task as part of a larger transaction.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut tx = executor.pool().begin().await?;
+    ///
+    /// sqlx::query("INSERT INTO orders (id) VALUES ($1)")
+    ///     .bind(order_id)
+    ///     .execute(&mut *tx)
+    ///     .await?;
+    ///
+    /// executor.spawn_tool_with::<ProcessOrder, _>(
+    ///     &mut *tx,
+    ///     params,
+    ///     (),
+    ///     episode_id,
+    /// ).await?;
+    ///
+    /// tx.commit().await?;
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if spawning the tool fails.
+    pub async fn spawn_tool_with<'e, T, E>(
+        &self,
+        executor: E,
+        llm_params: T::LlmParams,
+        side_info: T::SideInfo,
+        episode_id: Uuid,
+    ) -> anyhow::Result<SpawnResult>
+    where
+        T: TaskTool,
+        E: Executor<'e, Database = Postgres>,
+    {
+        self.spawn_tool_with_options_with::<T, E>(
+            executor,
+            llm_params,
+            side_info,
+            episode_id,
+            SpawnOptions::default(),
+        )
+        .await
+    }
+
+    /// Spawn a `TaskTool` execution with custom spawn options using a custom executor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if spawning the tool fails.
+    pub async fn spawn_tool_with_options_with<'e, T, E>(
+        &self,
+        executor: E,
+        llm_params: T::LlmParams,
+        side_info: T::SideInfo,
+        episode_id: Uuid,
+        options: SpawnOptions,
+    ) -> anyhow::Result<SpawnResult>
+    where
+        T: TaskTool,
+        E: Executor<'e, Database = Postgres>,
+    {
+        let wrapped = TaskToolParams {
+            llm_params,
+            side_info,
+            episode_id,
+        };
+        self.durable
+            .spawn_with_options_with::<TaskToolAdapter<T>, E>(executor, wrapped, options)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Spawn a tool by name using a custom executor (e.g., a transaction).
+    ///
+    /// This allows dynamic tool invocation without knowing the concrete type,
+    /// while atomically enqueuing as part of a larger transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `executor` - The executor to use (e.g., `&mut *tx` for a transaction)
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    /// * `episode_id` - The episode ID for this execution
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if spawning the tool fails.
+    pub async fn spawn_tool_by_name_with<'e, E>(
+        &self,
+        executor: E,
+        tool_name: &str,
+        llm_params: JsonValue,
+        side_info: JsonValue,
+        episode_id: Uuid,
+    ) -> anyhow::Result<SpawnResult>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
+        let wrapped_params = TaskToolParams {
+            llm_params,
+            side_info,
+            episode_id,
+        };
+
+        self.durable
+            .spawn_by_name_with(
+                executor,
+                tool_name,
+                serde_json::to_value(wrapped_params)?,
+                SpawnOptions::default(),
+            )
+            .await
+            .map_err(Into::into)
+    }
+
     /// Start a worker that processes tool tasks.
     pub async fn start_worker(&self, options: WorkerOptions) -> Result<Worker, DurableError> {
         self.durable.start_worker(options).await
@@ -247,7 +351,7 @@ impl ToolExecutor {
     /// Returns an error if a tool's parameter schema generation or serialization fails.
     pub async fn tool_definitions(&self) -> Result<Vec<Tool>, ToolError> {
         let registry = self.registry.read().await;
-        registry.to_tensorzero_tools()
+        registry.iter().map(Tool::try_from).collect()
     }
 
     /// Get a reference to the tool registry.
@@ -281,7 +385,7 @@ pub struct ToolExecutorBuilder {
     pool: Option<PgPool>,
     queue_name: String,
     default_max_attempts: u32,
-    inference_client: Option<Arc<dyn InferenceClient>>,
+    t0_client: Option<Arc<dyn TensorZeroClient>>,
 }
 
 impl ToolExecutorBuilder {
@@ -292,7 +396,7 @@ impl ToolExecutorBuilder {
             pool: None,
             queue_name: "tools".to_string(),
             default_max_attempts: 5,
-            inference_client: None,
+            t0_client: None,
         }
     }
 
@@ -324,10 +428,10 @@ impl ToolExecutorBuilder {
         self
     }
 
-    /// Set the inference client for TensorZero calls (required).
+    /// Set the TensorZero client (required).
     #[must_use]
-    pub fn inference_client(mut self, client: Arc<dyn InferenceClient>) -> Self {
-        self.inference_client = Some(client);
+    pub fn t0_client(mut self, client: Arc<dyn TensorZeroClient>) -> Self {
+        self.t0_client = Some(client);
         self
     }
 
@@ -335,13 +439,13 @@ impl ToolExecutorBuilder {
     ///
     /// # Errors
     ///
-    /// Returns an error if the database connection fails or if the inference
+    /// Returns an error if the database connection fails or if the TensorZero
     /// client was not provided.
     pub async fn build(self) -> anyhow::Result<ToolExecutor> {
-        // Inference client is required
-        let inference_client = self
-            .inference_client
-            .ok_or_else(|| anyhow::anyhow!("inference_client is required"))?;
+        // TensorZero client is required
+        let t0_client = self
+            .t0_client
+            .ok_or_else(|| anyhow::anyhow!("t0_client is required"))?;
 
         // Create the tool registry
         let registry = Arc::new(RwLock::new(ToolRegistry::new()));
@@ -356,8 +460,8 @@ impl ToolExecutorBuilder {
             PgPool::connect(url.expose_secret()).await?
         };
 
-        // Create the app context with the pool and inference client
-        let app_ctx = ToolAppState::new(pool.clone(), registry.clone(), inference_client);
+        // Create the app context with the pool and TensorZero client
+        let app_ctx = ToolAppState::new(pool.clone(), registry.clone(), t0_client);
 
         // Build the durable client with the app context
         let durable = DurableBuilder::new()

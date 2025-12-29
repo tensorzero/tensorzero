@@ -11,7 +11,24 @@ use crate::context::SimpleToolContext;
 use crate::error::{ToolError, ToolResult};
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
+use crate::to_openai_compatible;
 use crate::tool_metadata::ToolMetadata;
+
+/// Conversion from an erased tool reference to a TensorZero Tool definition.
+impl TryFrom<&dyn ErasedTool> for Tool {
+    type Error = ToolError;
+
+    fn try_from(tool: &dyn ErasedTool) -> Result<Self, Self::Error> {
+        let mut parameters = serde_json::to_value(tool.parameters_schema()?)?;
+        to_openai_compatible(&mut parameters);
+        Ok(Tool::Function(FunctionTool {
+            name: tool.name().to_string(),
+            description: tool.description().to_string(),
+            parameters,
+            strict: false,
+        }))
+    }
+}
 
 /// Type-erased tool trait for registry storage.
 ///
@@ -240,35 +257,17 @@ impl ToolRegistry {
         self.simple_tools.keys().map(String::as_str).collect()
     }
 
-    /// Generate TensorZero tool definitions for all tools.
+    /// Iterate over all registered tools.
     ///
-    /// This can be used directly in TensorZero inference API calls.
-    ///
-    /// The schemas are automatically transformed to be compatible with OpenAI Structured Outputs:
-    /// - `additionalProperties: false` is set on all objects
-    /// - All properties are added to `required`
-    /// - Unsupported keywords are removed or converted
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a tool's parameter schema generation or serialization fails.
-    pub fn to_tensorzero_tools(&self) -> Result<Vec<Tool>, ToolError> {
-        self.tools
-            .values()
-            .map(|tool| {
-                let mut parameters = serde_json::to_value(tool.parameters_schema()?)?;
-
-                // Transform schema to be OpenAI Structured Outputs compatible
-                crate::openai_schema::to_openai_compatible(&mut parameters);
-
-                Ok(Tool::Function(FunctionTool {
-                    name: tool.name().to_string(),
-                    description: tool.description().to_string(),
-                    parameters,
-                    strict: true, // Enable strict mode since schema is now compliant
-                }))
-            })
-            .collect()
+    /// Use with `Tool::try_from` to convert to TensorZero tool definitions:
+    /// ```ignore
+    /// let tools: Result<Vec<Tool>, _> = registry
+    ///     .iter()
+    ///     .map(Tool::try_from)
+    ///     .collect();
+    /// ```
+    pub fn iter(&self) -> impl Iterator<Item = &dyn ErasedTool> {
+        self.tools.values().map(|arc| arc.as_ref())
     }
 
     /// Get the number of registered tools.

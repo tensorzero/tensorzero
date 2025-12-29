@@ -12,9 +12,3 @@ pub use worker::{
     AutopilotWorker, AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker,
 };
 pub use wrapper::ClientToolWrapper;
-
-// Re-export useful types from durable-tools
-pub use durable_tools::{
-    SideInfo, SimpleTool, SimpleToolContext, TaskTool, ToolContext, ToolError, ToolMetadata,
-    ToolResult,
-};

@@ -3,13 +3,16 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use durable_tools::{InferenceClient, ToolExecutor, Worker, WorkerOptions};
+use async_trait::async_trait;
+use autopilot_tools::ToolVisitor;
+use durable_tools::{
+    SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
+};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-#[cfg(feature = "e2e_tests")]
-use crate::wrapper::ClientToolWrapper;
+use crate::wrapper::{ClientSimpleToolWrapper, ClientToolWrapper};
 
 /// Configuration for the autopilot worker.
 pub struct AutopilotWorkerConfig {
@@ -17,8 +20,8 @@ pub struct AutopilotWorkerConfig {
     pub pool: PgPool,
     /// Queue name for durable tasks (default: "autopilot").
     pub queue_name: String,
-    /// Inference client for calling TensorZero endpoints.
-    pub inference_client: Arc<dyn InferenceClient>,
+    /// TensorZero client for calling inference and autopilot operations.
+    pub t0_client: Arc<dyn TensorZeroClient>,
 }
 
 impl AutopilotWorkerConfig {
@@ -27,11 +30,11 @@ impl AutopilotWorkerConfig {
     /// # Arguments
     ///
     /// * `pool` - Database pool for the durable task queue
-    /// * `inference_client` - Inference client for TensorZero operations
+    /// * `t0_client` - TensorZero client for inference and autopilot operations
     ///
     /// Environment variables:
     /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Queue name (default: "autopilot")
-    pub fn new(pool: PgPool, inference_client: Arc<dyn InferenceClient>) -> Self {
+    pub fn new(pool: PgPool, t0_client: Arc<dyn TensorZeroClient>) -> Self {
         let mut queue_name = autopilot_client::DEFAULT_SPAWN_QUEUE_NAME.to_string();
         if cfg!(feature = "e2e_tests")
             && let Some(name) = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME").ok()
@@ -42,7 +45,7 @@ impl AutopilotWorkerConfig {
         Self {
             pool,
             queue_name,
-            inference_client,
+            t0_client,
         }
     }
 }
@@ -62,7 +65,7 @@ impl AutopilotWorker {
         let executor = ToolExecutor::builder()
             .pool(config.pool)
             .queue_name(&config.queue_name)
-            .inference_client(config.inference_client)
+            .t0_client(config.t0_client)
             .build()
             .await?;
 
@@ -73,18 +76,10 @@ impl AutopilotWorker {
 
     /// Register all autopilot tools with the executor.
     pub async fn register_tools(&self) -> Result<()> {
-        #[cfg(feature = "e2e_tests")]
-        {
-            // Register test tools
-
-            use autopilot_tools::tools::EchoTool;
-            self.executor
-                .register_task_tool::<ClientToolWrapper<EchoTool>>()
-                .await?;
-            // Additional test tools can be registered here
-        }
-
-        // Production tools will be registered here when implemented
+        let visitor = LocalToolVisitor {
+            executor: &self.executor,
+        };
+        autopilot_tools::for_each_tool(&visitor).await?;
         Ok(())
     }
 
@@ -120,6 +115,38 @@ impl AutopilotWorker {
                 worker.shutdown().await;
             }
         }
+    }
+}
+
+/// Visitor that registers tools for local execution on the autopilot worker.
+///
+/// All tools are wrapped to:
+/// 1. Inject [`AutopilotSideInfo`] around the tool's native `SideInfo`
+/// 2. Publish results to the autopilot API after execution
+///
+/// - TaskTools are wrapped in [`ClientToolWrapper`]
+/// - SimpleTools are wrapped in [`ClientSimpleToolWrapper`] which promotes them to TaskTools
+struct LocalToolVisitor<'a> {
+    executor: &'a ToolExecutor,
+}
+
+#[async_trait]
+impl ToolVisitor for LocalToolVisitor<'_> {
+    type Error = ToolError;
+
+    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError> {
+        self.executor
+            .register_task_tool::<ClientToolWrapper<T>>()
+            .await?;
+        Ok(())
+    }
+
+    async fn visit_simple_tool<T: SimpleTool + Default>(&self) -> Result<(), ToolError> {
+        // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
+        self.executor
+            .register_task_tool::<ClientSimpleToolWrapper<T>>()
+            .await?;
+        Ok(())
     }
 }
 
