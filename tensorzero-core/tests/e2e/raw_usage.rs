@@ -787,7 +787,7 @@ async fn e2e_test_raw_usage_json_function_non_streaming() {
 
     let payload = json!({
         "function_name": "json_success",
-        "variant_name": "test",
+        "variant_name": "openai",
         "episode_id": episode_id,
         "input": {
             "system": {"assistant_name": "JsonBot"},
@@ -851,7 +851,7 @@ async fn e2e_test_raw_usage_json_function_streaming() {
 
     let payload = json!({
         "function_name": "json_success",
-        "variant_name": "test",
+        "variant_name": "openai",
         "episode_id": episode_id,
         "input": {
             "system": {"assistant_name": "JsonBot"},

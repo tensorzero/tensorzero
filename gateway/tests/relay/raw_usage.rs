@@ -23,7 +23,7 @@ async fn test_relay_raw_usage_non_streaming() {
     let response = client
         .post(format!("http://{}/inference", env.relay.addr))
         .json(&json!({
-            "model_name": "dummy::good",
+            "model_name": "openai::gpt-5-nano",
             "episode_id": Uuid::now_v7(),
             "input": {
                 "messages": [
@@ -34,7 +34,12 @@ async fn test_relay_raw_usage_non_streaming() {
                 ]
             },
             "stream": false,
-            "include_raw_usage": true
+            "include_raw_usage": true,
+            "params": {
+                "chat_completion": {
+                    "reasoning_effort": "minimal"
+                }
+            }
         }))
         .send()
         .await
@@ -83,7 +88,7 @@ async fn test_relay_raw_usage_non_streaming() {
             .and_then(|v| v.as_str())
             .expect("raw_usage entry should have provider_type");
         assert_eq!(
-            provider_type, "dummy",
+            provider_type, "openai",
             "provider_type should be from downstream provider, not relay"
         );
         assert!(
@@ -105,7 +110,7 @@ async fn test_relay_raw_usage_streaming() {
     let mut stream = client
         .post(format!("http://{}/inference", env.relay.addr))
         .json(&json!({
-            "model_name": "dummy::good",
+            "model_name": "openai::gpt-5-nano",
             "episode_id": Uuid::now_v7(),
             "input": {
                 "messages": [
@@ -116,7 +121,12 @@ async fn test_relay_raw_usage_streaming() {
                 ]
             },
             "stream": true,
-            "include_raw_usage": true
+            "include_raw_usage": true,
+            "params": {
+                "chat_completion": {
+                    "reasoning_effort": "minimal"
+                }
+            }
         }))
         .eventsource()
         .unwrap();
@@ -162,7 +172,7 @@ async fn test_relay_raw_usage_streaming() {
                     .and_then(|v| v.as_str())
                     .expect("raw_usage entry should have provider_type");
                 assert_eq!(
-                    provider_type, "dummy",
+                    provider_type, "openai",
                     "provider_type should be from downstream provider, not relay"
                 );
                 assert!(
@@ -192,7 +202,7 @@ async fn test_relay_raw_usage_not_requested() {
     let response = client
         .post(format!("http://{}/inference", env.relay.addr))
         .json(&json!({
-            "model_name": "dummy::good",
+            "model_name": "openai::gpt-5-nano",
             "episode_id": Uuid::now_v7(),
             "input": {
                 "messages": [
@@ -203,7 +213,12 @@ async fn test_relay_raw_usage_not_requested() {
                 ]
             },
             "stream": false,
-            "include_raw_usage": false
+            "include_raw_usage": false,
+            "params": {
+                "chat_completion": {
+                    "reasoning_effort": "minimal"
+                }
+            }
         }))
         .send()
         .await
@@ -235,7 +250,7 @@ async fn test_relay_raw_usage_not_requested_streaming() {
     let mut stream = client
         .post(format!("http://{}/inference", env.relay.addr))
         .json(&json!({
-            "model_name": "dummy::good",
+            "model_name": "openai::gpt-5-nano",
             "episode_id": Uuid::now_v7(),
             "input": {
                 "messages": [
@@ -246,7 +261,12 @@ async fn test_relay_raw_usage_not_requested_streaming() {
                 ]
             },
             "stream": true,
-            "include_raw_usage": false
+            "include_raw_usage": false,
+            "params": {
+                "chat_completion": {
+                    "reasoning_effort": "minimal"
+                }
+            }
         }))
         .eventsource()
         .unwrap();
@@ -272,6 +292,233 @@ async fn test_relay_raw_usage_not_requested_streaming() {
     }
 }
 
+// =============================================================================
+// Advanced Variant Tests (Best-of-N)
+// =============================================================================
+
+/// Test relay raw_usage passthrough with best-of-n variant (non-streaming).
+/// This tests that raw_usage entries from multiple model inferences (candidates + judge)
+/// are correctly passed through the relay with correct provider_type values.
+#[tokio::test]
+async fn test_relay_raw_usage_best_of_n_non_streaming() {
+    // Downstream uses default shorthand models
+    let downstream_config = "";
+
+    // Define the function and best-of-n variant on the relay gateway.
+    // Model calls will be forwarded to the downstream via relay.
+    // Using gpt-5-mini with reasoning disabled for speed.
+    let relay_config = r#"
+[functions.best_of_n_test]
+type = "chat"
+
+[functions.best_of_n_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.best_of_n_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.best_of_n_test.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.best_of_n_test.variants.best_of_n.evaluator]
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "best_of_n_test",
+            "variant_name": "best_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false,
+            "include_raw_usage": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    let usage = body
+        .get("usage")
+        .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
+
+    let raw_usage = usage
+        .get("raw_usage")
+        .unwrap_or_else(|| panic!("usage should have raw_usage when requested. Body: {body}"))
+        .as_array()
+        .expect("raw_usage should be an array");
+
+    // Best-of-n should have at least 3 entries: 2 candidates + 1 judge
+    assert!(
+        raw_usage.len() >= 3,
+        "Best-of-n relay should have at least 3 raw_usage entries (2 candidates + 1 judge), got {}. Body: {body}",
+        raw_usage.len()
+    );
+
+    // All entries should have provider_type = "openai" (from downstream), not "relay"
+    for entry in raw_usage {
+        let provider_type = entry
+            .get("provider_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_usage entry should have provider_type");
+        assert_eq!(
+            provider_type, "openai",
+            "All raw_usage entries should have provider_type 'openai' from downstream, not 'relay'"
+        );
+
+        // Verify each entry has required fields
+        assert!(
+            entry.get("model_inference_id").is_some(),
+            "raw_usage entry should have model_inference_id"
+        );
+        assert!(
+            entry.get("api_type").is_some(),
+            "raw_usage entry should have api_type"
+        );
+    }
+}
+
+/// Test relay raw_usage passthrough with best-of-n variant (streaming).
+/// This tests that streaming raw_usage entries from multiple model inferences
+/// are correctly passed through the relay.
+#[tokio::test]
+async fn test_relay_raw_usage_best_of_n_streaming() {
+    // Downstream uses default shorthand models
+    let downstream_config = "";
+
+    // Define the function and best-of-n variant on the relay gateway.
+    // Model calls will be forwarded to the downstream via relay.
+    // Using gpt-5-mini with reasoning disabled for speed.
+    let relay_config = r#"
+[functions.best_of_n_test]
+type = "chat"
+
+[functions.best_of_n_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.best_of_n_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.best_of_n_test.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.best_of_n_test.variants.best_of_n.evaluator]
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "best_of_n_test",
+            "variant_name": "best_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true,
+            "include_raw_usage": true
+        }))
+        .eventsource()
+        .unwrap();
+
+    let mut raw_usage_entries: Vec<Value> = Vec::new();
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        // Check if this chunk has usage with raw_usage nested inside
+        if let Some(usage) = chunk.get("usage")
+            && let Some(raw_usage) = usage.get("raw_usage")
+            && let Some(arr) = raw_usage.as_array()
+        {
+            raw_usage_entries = arr.clone();
+        }
+    }
+
+    // Best-of-n streaming should have at least 3 entries: 2 candidates + 1 judge
+    assert!(
+        raw_usage_entries.len() >= 3,
+        "Best-of-n relay streaming should have at least 3 raw_usage entries (2 candidates + 1 judge), got {}",
+        raw_usage_entries.len()
+    );
+
+    // All entries should have provider_type = "openai" (from downstream), not "relay"
+    for entry in &raw_usage_entries {
+        let provider_type = entry
+            .get("provider_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_usage entry should have provider_type");
+        assert_eq!(
+            provider_type, "openai",
+            "All streaming raw_usage entries should have provider_type 'openai' from downstream, not 'relay'"
+        );
+
+        // Verify each entry has required fields
+        assert!(
+            entry.get("model_inference_id").is_some(),
+            "raw_usage entry should have model_inference_id"
+        );
+        assert!(
+            entry.get("api_type").is_some(),
+            "raw_usage entry should have api_type"
+        );
+    }
+}
+
+// =============================================================================
+// Entry Structure Tests
+// =============================================================================
+
 /// Test that raw_usage entries have correct structure from downstream
 #[tokio::test]
 async fn test_relay_raw_usage_entry_structure() {
@@ -284,7 +531,7 @@ async fn test_relay_raw_usage_entry_structure() {
     let response = client
         .post(format!("http://{}/inference", env.relay.addr))
         .json(&json!({
-            "model_name": "dummy::good",
+            "model_name": "openai::gpt-5-nano",
             "episode_id": Uuid::now_v7(),
             "input": {
                 "messages": [
@@ -295,7 +542,12 @@ async fn test_relay_raw_usage_entry_structure() {
                 ]
             },
             "stream": false,
-            "include_raw_usage": true
+            "include_raw_usage": true,
+            "params": {
+                "chat_completion": {
+                    "reasoning_effort": "minimal"
+                }
+            }
         }))
         .send()
         .await
