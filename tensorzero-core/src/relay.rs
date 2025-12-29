@@ -532,7 +532,14 @@ impl TensorzeroRelay {
             internal_dynamic_variant_config: None,
             episode_id: None,
             dryrun: None,
-            tags: (*clients.tags).clone(),
+            // Filter out internal tags (those starting with "tensorzero::") before forwarding
+            // to the downstream gateway, as they will be rejected by tag validation
+            tags: clients
+                .tags
+                .iter()
+                .filter(|(k, _)| !k.starts_with("tensorzero::"))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
             otlp_traces_extra_headers: HashMap::new(),
             otlp_traces_extra_attributes: HashMap::new(),
             otlp_traces_extra_resources: HashMap::new(),

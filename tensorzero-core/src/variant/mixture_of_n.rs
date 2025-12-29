@@ -17,6 +17,7 @@ use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
@@ -345,6 +346,9 @@ pub fn stream_inference_from_non_stream(
     // We set the 'cached' flag on the 'ModelUsedInfo, which will adjust the usage as needed when producing
     // the HTTP response stream.
     let usage = model_inference_result.usage;
+    // Preserve downstream_raw_usage for relay passthrough - this ensures raw_usage entries
+    // from downstream are correctly attributed when converting non-streaming to fake streaming
+    let downstream_raw_usage = model_inference_result.downstream_raw_usage.clone();
     let model_used_info = ModelUsedInfo {
         model_name: model_inference_result.model_name.clone(),
         model_provider_name: model_inference_result.model_provider_name.clone(),
@@ -370,13 +374,14 @@ pub fn stream_inference_from_non_stream(
         provider_type: model_inference_result.provider_type.clone(),
         api_type: model_inference_result.api_type,
     };
-    let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
+    let stream = make_stream_from_non_stream(inference_result, Some(usage), downstream_raw_usage)?;
     Ok((stream, model_used_info))
 }
 
 fn make_stream_from_non_stream(
     inference_result: InferenceResult,
     usage: Option<Usage>,
+    downstream_raw_usage: Option<Vec<RawUsageEntry>>,
 ) -> Result<InferenceResultStream, Error> {
     let mut id = 0;
     let chunk = match inference_result {
@@ -428,7 +433,7 @@ fn make_stream_from_non_stream(
                 latency: tokio::time::Duration::from_secs(0),
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
-                downstream_raw_usage: None,
+                downstream_raw_usage: downstream_raw_usage.clone(),
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -439,7 +444,7 @@ fn make_stream_from_non_stream(
             latency: tokio::time::Duration::from_secs(0),
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
-            downstream_raw_usage: None,
+            downstream_raw_usage,
         })),
     };
     Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
@@ -1792,6 +1797,7 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
             }),
+            None, // downstream_raw_usage
         )
         .unwrap();
 
