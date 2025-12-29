@@ -1245,7 +1245,7 @@ fn test_check_topk_stopping_all_identical_variants() {
 
 /// Test that check_topk_stopping filters out failed variants.
 ///
-/// Without filtering, variant "a" (failed) would be included in top-1 since it has the
+/// Without filtering, variant "a" (failed) would be in top-1 since it has the
 /// highest confidence bounds. With filtering, only "b" (the best non-failed variant)
 /// should be returned.
 #[test]
@@ -1322,7 +1322,7 @@ fn test_update_variant_statuses_skips_non_active() {
     // Non-active variants should remain unchanged
     assert_eq!(variant_status["stopped"], VariantStatus::Stopped);
     assert_eq!(variant_status["failed"], VariantStatus::Failed);
-    // Active variant should still be active (no early exclusion with single variant logic)
+    // Active variant should still be active (no early stopping with single variant logic)
     assert_eq!(variant_status["active"], VariantStatus::Active);
 }
 
@@ -1370,9 +1370,12 @@ fn test_update_variant_statuses_marks_failed() {
     assert_eq!(variant_status["low_failure"], VariantStatus::Stopped);
 }
 
-/// Test early exclusion when variant's upper bound is below k_max others' lower bounds.
+/// Test early stopping when variant is confidently excluded from top-k.
+///
+/// A variant gets stopped when its upper bound is below k_max others' lower bounds,
+/// meaning it cannot be in the top k_max.
 #[test]
-fn test_update_variant_statuses_early_exclusion() {
+fn test_update_variant_statuses_early_stopping_exclusion() {
     let mut variant_status: HashMap<String, VariantStatus> = [
         ("good_a".to_string(), VariantStatus::Active),
         ("good_b".to_string(), VariantStatus::Active),
@@ -1383,7 +1386,7 @@ fn test_update_variant_statuses_early_exclusion() {
 
     // "bad" has upper bound 0.4, while "good_a" and "good_b" have lower bounds 0.5 and 0.6
     // So 2 variants are definitely better than "bad"
-    // With k_max=2, "bad" cannot be in top-2 and should be excluded
+    // With k_max=2, "bad" cannot be in top-2 and should be stopped (excluded from top-k)
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
         mock_cs_with_bounds("good_a", 0.5, 0.7), // cs_lower = 0.5 > bad's cs_upper
         mock_cs_with_bounds("good_b", 0.6, 0.8), // cs_lower = 0.6 > bad's cs_upper
@@ -1415,9 +1418,9 @@ fn test_update_variant_statuses_early_exclusion() {
     assert_eq!(variant_status["good_b"], VariantStatus::Active);
 }
 
-/// Test that early exclusion does NOT happen when fewer than k_max variants are better.
+/// Test that early stopping does NOT happen when fewer than k_max variants are definitely better.
 #[test]
-fn test_update_variant_statuses_no_early_exclusion_when_uncertain() {
+fn test_update_variant_statuses_no_early_stopping_when_uncertain() {
     let mut variant_status: HashMap<String, VariantStatus> = [
         ("good".to_string(), VariantStatus::Active),
         ("uncertain".to_string(), VariantStatus::Active),
@@ -1429,7 +1432,7 @@ fn test_update_variant_statuses_no_early_exclusion_when_uncertain() {
     // "bad" has upper bound 0.4
     // Only "good" (cs_lower = 0.5) is definitely better
     // "uncertain" overlaps with "bad"
-    // With k_max=2, we need 2 variants definitely better to exclude "bad"
+    // With k_max=2, we need 2 variants definitely better to stop "bad" (exclude from top-k)
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
         mock_cs_with_bounds("good", 0.5, 0.7), // definitely better than bad
         mock_cs_with_bounds("uncertain", 0.3, 0.6), // overlaps with bad
@@ -1506,8 +1509,7 @@ fn test_update_variant_statuses_failure_takes_priority() {
     assert_eq!(variant_status["healthy"], VariantStatus::Stopped);
 }
 
-/// Test that update_variant_statuses filters out failed variants when computing
-/// early exclusion and early inclusion.
+/// Test that update_variant_statuses filters out failed variants when computing early stopping.
 ///
 /// Scenario: 4 variants with k_min=1, k_max=2
 /// - "good_a" and "good_b" are clearly better than "bad_a" and "bad_b"
@@ -1516,10 +1518,11 @@ fn test_update_variant_statuses_failure_takes_priority() {
 ///
 /// Without any failures:
 /// - "good_a" and "good_b" stay Active (neither can prove it beats the other)
-/// - "bad_a" and "bad_b" get Stopped (2 variants are definitely better, k_max=2)
+/// - "bad_a" and "bad_b" get Stopped (excluded from top-k: 2 variants are definitely better, k_max=2)
 ///
 /// Then "good_a" fails:
-/// - "good_b" gets Stopped, "bad_a" and "bad_b" stay Active
+/// - "good_b" gets Stopped (included in top-k: beats 2 others, needs >= 2 for k_min=1)
+/// - "bad_a" and "bad_b" stay Active (only 1 non-failed variant is better, need 2 for exclusion)
 #[test]
 fn test_update_variant_statuses_filters_failed_variants() {
     // Setup: 4 variants, 2 good (distinguishable from bad), 2 bad (indistinguishable from each other)
@@ -1541,7 +1544,7 @@ fn test_update_variant_statuses_filters_failed_variants() {
         variant_failure_threshold: 1.0, // Disabled
     };
 
-    // Test 1: No failures - good variants stay Active, bad variants get Excluded
+    // Test 1: No failures - good variants stay Active, bad variants get Stopped (excluded from top-k)
     let mut variant_status: HashMap<String, VariantStatus> = [
         ("good_a".to_string(), VariantStatus::Active),
         ("good_b".to_string(), VariantStatus::Active),
@@ -1586,7 +1589,7 @@ fn test_update_variant_statuses_filters_failed_variants() {
     assert_eq!(variant_status["good_a"], VariantStatus::Failed);
     // good_b gets Stopped: beats 2 others (bad_a, bad_b), needs >= (3 - 1) = 2
     assert_eq!(variant_status["good_b"], VariantStatus::Stopped);
-    // Bad variants stay Active: only 1 non-failed variant (good_b) is better, need 2 for exclusion
+    // Bad variants stay Active: only 1 non-failed variant (good_b) is better, need 2 for early stopping
     assert_eq!(variant_status["bad_a"], VariantStatus::Active);
     assert_eq!(variant_status["bad_b"], VariantStatus::Active);
 }
@@ -1668,7 +1671,7 @@ fn test_update_variant_statuses_failure_check_skipped() {
     }
 }
 
-/// Test that variants not in variant_performance map don't cause errors in early exclusion.
+/// Test that variants not in variant_performance map don't cause errors in early stopping.
 #[test]
 fn test_update_variant_statuses_missing_performance_cs() {
     let mut variant_status: HashMap<String, VariantStatus> =
@@ -1693,7 +1696,7 @@ fn test_update_variant_statuses_missing_performance_cs() {
         &params,
     );
 
-    // Without performance CS, early exclusion check doesn't apply
+    // Without performance CS, early stopping check doesn't apply
     assert_eq!(variant_status["variant"], VariantStatus::Active);
 }
 
