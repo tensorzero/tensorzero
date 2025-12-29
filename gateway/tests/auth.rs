@@ -756,6 +756,24 @@ async fn test_disable_api_key_cli() {
 }
 
 #[tokio::test]
+async fn test_create_api_key_with_invalid_expiration() {
+    let past_datetime = "2025-12-20 23:00:00.000000 UTC";
+
+    let output = Command::new(common::gateway_path())
+        .args(["--create-api-key", "--expiration", past_datetime])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "Expected --create-api-key to fail w/ --expiration in the past but it didn't"
+    );
+}
+
+#[tokio::test]
 async fn test_create_api_key_cli_with_expiration() {
     let pool = get_postgres_pool_for_testing().await;
 
