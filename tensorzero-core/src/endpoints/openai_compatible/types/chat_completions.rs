@@ -97,12 +97,10 @@ impl std::fmt::Display for JsonSchemaInfo {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
 pub struct OpenAICompatibleStreamOptions {
     #[serde(default)]
     pub include_usage: bool,
-    #[serde(default)]
-    pub include_raw_usage: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -208,7 +206,6 @@ pub struct OpenAICompatibleResponse {
     pub system_fingerprint: String,
     pub service_tier: Option<String>,
     pub object: String,
-    #[serde(flatten)]
     pub usage: OpenAICompatibleUsageWithRaw,
 }
 

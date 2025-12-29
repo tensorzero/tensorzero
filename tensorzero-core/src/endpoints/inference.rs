@@ -888,6 +888,7 @@ fn create_stream(
         let streaming_model_inference_id = Uuid::now_v7();
 
         // Build raw_usage entries from previous model inferences if requested.
+        // Returns Some(entries) if requested (even if empty), None if not requested.
         let mut extra_raw_usage = if metadata.include_raw_usage {
             let entries: Vec<RawUsageEntry> = metadata
                 .previous_model_inference_results
@@ -900,11 +901,7 @@ fn create_stream(
                     usage: r.raw_usage_json.clone(),
                 })
                 .collect();
-            if entries.is_empty() {
-                None
-            } else {
-                Some(entries)
-            }
+            Some(entries)
         } else {
             None
         };
@@ -1259,6 +1256,7 @@ impl InferenceResponse {
         let usage = inference_result.usage_considering_cached();
 
         // Build raw_usage if requested
+        // Returns Some(entries) if requested (even if empty when all cached), None if not requested
         let raw_usage = if include_raw_usage {
             let entries: Vec<RawUsageEntry> = inference_result
                 .model_inference_results()

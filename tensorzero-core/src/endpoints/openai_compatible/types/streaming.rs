@@ -160,6 +160,7 @@ pub fn prepare_serialized_openai_compatible_events(
     mut stream: InferenceStream,
     response_model_prefix: String,
     stream_options: Option<OpenAICompatibleStreamOptions>,
+    include_raw_usage: bool,
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         let mut tool_id_to_index = HashMap::new();
@@ -260,9 +261,8 @@ pub fn prepare_serialized_openai_compatible_events(
                     message: format!("Failed to convert usage chunk to JSON: {e}"),
                 })
             })?;
-            // Add raw_usage to the usage object if include_raw_usage is set and we have entries
-            if stream_options.map(|s| s.include_raw_usage).unwrap_or(false)
-                && !raw_usage_entries.is_empty()
+            // Add raw_usage to the usage object if include_raw_usage is set (even if empty)
+            if include_raw_usage
                 && let Some(usage_obj) = chunk_json.get_mut("usage")
             {
                 usage_obj["tensorzero_raw_usage"] = serde_json::to_value(&raw_usage_entries).unwrap_or_default();

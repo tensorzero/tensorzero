@@ -434,7 +434,7 @@ mod tests {
     use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
     use tensorzero_core::evaluations::LLMJudgeOptimize;
     use tensorzero_core::inference::types::Input;
-    use tensorzero_core::inference::types::{Usage, UsageWithRaw};
+    use tensorzero_core::inference::types::UsageWithRaw;
     use tensorzero_core::tool::{ToolCall, ToolCallWrapper};
     use tensorzero_core::{
         inference::types::{ContentBlockChatOutput, RawText, Text, Thought, Unknown},
@@ -578,10 +578,7 @@ mod tests {
                 })],
                 inference_id: Uuid::now_v7(),
                 variant_name: "foo".to_string(),
-                usage: UsageWithRaw {
-                    usage: Usage::default(),
-                    raw_usage: None,
-                },
+                usage: UsageWithRaw::default(),
                 original_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
@@ -650,10 +647,7 @@ mod tests {
                 })],
                 inference_id: Uuid::now_v7(),
                 variant_name: "foo".to_string(),
-                usage: UsageWithRaw {
-                    usage: Usage::default(),
-                    raw_usage: None,
-                },
+                usage: UsageWithRaw::default(),
                 original_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
@@ -1048,10 +1042,7 @@ mod tests {
                 })],
                 inference_id: Uuid::now_v7(),
                 variant_name: "model".to_string(),
-                usage: UsageWithRaw {
-                    usage: Usage::default(),
-                    raw_usage: None,
-                },
+                usage: UsageWithRaw::default(),
                 original_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
@@ -1162,10 +1153,7 @@ mod tests {
                 },
                 inference_id: Uuid::now_v7(),
                 variant_name: "model".to_string(),
-                usage: UsageWithRaw {
-                    usage: Usage::default(),
-                    raw_usage: None,
-                },
+                usage: UsageWithRaw::default(),
                 original_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
