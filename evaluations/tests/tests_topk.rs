@@ -244,11 +244,12 @@ async fn test_topk_found_topk() {
     // Start a worker to process the task
     let worker = durable_client
         .start_worker(WorkerOptions {
-            poll_interval: 0.1,
-            claim_timeout: 60,
+            poll_interval: Duration::from_millis(100),
+            claim_timeout: Duration::from_secs(60),
             ..Default::default()
         })
-        .await;
+        .await
+        .expect("Failed to start worker");
 
     // Wait for the task to complete (with timeout)
     let start = std::time::Instant::now();
@@ -733,11 +734,12 @@ async fn test_topk_dataset_exhaustion() {
 
     let worker = durable_client
         .start_worker(WorkerOptions {
-            poll_interval: 0.1,
-            claim_timeout: 60,
+            poll_interval: Duration::from_millis(100),
+            claim_timeout: Duration::from_secs(60),
             ..Default::default()
         })
-        .await;
+        .await
+        .expect("Failed to start worker");
 
     // Wait for completion
     let start = std::time::Instant::now();
@@ -896,11 +898,12 @@ async fn test_topk_evaluator_failure_threshold() {
 
     let worker = durable_client
         .start_worker(WorkerOptions {
-            poll_interval: 0.1,
-            claim_timeout: 60,
+            poll_interval: Duration::from_millis(100),
+            claim_timeout: Duration::from_secs(60),
             ..Default::default()
         })
-        .await;
+        .await
+        .expect("Failed to start worker");
 
     // Wait for completion
     let start = std::time::Instant::now();
@@ -1105,11 +1108,12 @@ async fn test_topk_variant_failure_threshold() {
 
     let worker = durable_client
         .start_worker(WorkerOptions {
-            poll_interval: 0.1,
-            claim_timeout: 60,
+            poll_interval: Duration::from_millis(100),
+            claim_timeout: Duration::from_secs(60),
             ..Default::default()
         })
-        .await;
+        .await
+        .expect("Failed to start worker");
 
     // Wait for completion
     let start = std::time::Instant::now();

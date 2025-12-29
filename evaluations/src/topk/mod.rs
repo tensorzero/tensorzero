@@ -922,7 +922,7 @@ pub async fn create_client(
         .build_with_state(state)
         .await?;
 
-    client.register::<TopKTask>().await;
+    client.register::<TopKTask>().await?;
 
     Ok(client)
 }
@@ -1218,7 +1218,9 @@ pub struct TopKTask;
 
 #[async_trait]
 impl Task<TopKTaskState> for TopKTask {
-    const NAME: &'static str = "topk-evaluation";
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("topk-evaluation")
+    }
     type Params = TopKTaskParams;
     type Output = TopKTaskOutput;
 
@@ -1229,33 +1231,36 @@ impl Task<TopKTaskState> for TopKTask {
     ) -> TaskResult<Self::Output> {
         // Validate arguments
         if params.variant_names.is_empty() {
-            return Err(durable::TaskError::Failed(anyhow::anyhow!(
-                "At least one variant must be provided"
-            )));
+            return Err(durable::TaskError::Validation {
+                message: "At least one variant must be provided".to_string(),
+            });
         }
         if params.k_min == 0 {
-            return Err(durable::TaskError::Failed(anyhow::anyhow!(
-                "k_min must be > 0"
-            )));
+            return Err(durable::TaskError::Validation {
+                message: "k_min must be > 0".to_string(),
+            });
         }
         if params.k_max < params.k_min {
-            return Err(durable::TaskError::Failed(anyhow::anyhow!(
-                "k_max ({}) must be >= k_min ({})",
-                params.k_max,
-                params.k_min
-            )));
+            return Err(durable::TaskError::Validation {
+                message: format!(
+                    "k_max ({}) must be >= k_min ({})",
+                    params.k_max, params.k_min
+                ),
+            });
         }
         if params.k_max as usize > params.variant_names.len() {
-            return Err(durable::TaskError::Failed(anyhow::anyhow!(
-                "k_max ({}) must be <= number of variants ({})",
-                params.k_max,
-                params.variant_names.len()
-            )));
+            return Err(durable::TaskError::Validation {
+                message: format!(
+                    "k_max ({}) must be <= number of variants ({})",
+                    params.k_max,
+                    params.variant_names.len()
+                ),
+            });
         }
         if params.batch_size == Some(0) {
-            return Err(durable::TaskError::Failed(anyhow::anyhow!(
-                "batch_size must be > 0"
-            )));
+            return Err(durable::TaskError::Validation {
+                message: "batch_size must be > 0".to_string(),
+            });
         }
 
         let batch_size = params.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
@@ -1306,9 +1311,9 @@ impl Task<TopKTaskState> for TopKTask {
         }
 
         if total_datapoints == 0 {
-            return Err(durable::TaskError::Failed(anyhow::anyhow!(
-                "Dataset is empty"
-            )));
+            return Err(durable::TaskError::Validation {
+                message: "Dataset is empty".to_string(),
+            });
         }
 
         // Initialize loop state
