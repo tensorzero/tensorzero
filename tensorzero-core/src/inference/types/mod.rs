@@ -1576,6 +1576,8 @@ impl ModelInferenceResponse {
         cache_lookup: CacheData<NonStreamingCacheData>,
         request: &ModelInferenceRequest<'_>,
         model_provider_name: &str,
+        provider_type: String,
+        api_type: ApiType,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -1595,10 +1597,10 @@ impl ModelInferenceResponse {
             finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
             cached: true,
-            // TensorZero cache hits are excluded from raw_usage list, so these don't matter
+            // TensorZero cache hits are excluded from raw_usage list, so raw_usage_json is not needed
             raw_usage_json: None,
-            provider_type: String::new(),
-            api_type: ApiType::ChatCompletions,
+            provider_type,
+            api_type,
         }
     }
 }

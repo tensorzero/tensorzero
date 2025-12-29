@@ -442,6 +442,8 @@ pub async fn cache_lookup(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
+    provider_type: String,
+    api_type: ApiType,
 ) -> Result<Option<ModelInferenceResponse>, Error> {
     let result = cache_lookup_inner::<NonStreamingCacheData>(
         clickhouse_connection_info,
@@ -450,7 +452,13 @@ pub async fn cache_lookup(
     )
     .await?;
     Ok(result.map(|result| {
-        ModelInferenceResponse::from_cache(result, request.request, request.provider_name)
+        ModelInferenceResponse::from_cache(
+            result,
+            request.request,
+            request.provider_name,
+            provider_type,
+            api_type,
+        )
     }))
 }
 

@@ -349,6 +349,8 @@ impl ModelConfig {
                 &clients.clickhouse_connection_info,
                 model_provider_request,
                 clients.cache_options.max_age_s,
+                provider.provider_type().to_string(),
+                provider.api_type(),
             )
             .await
             .ok()
