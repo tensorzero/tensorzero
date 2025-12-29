@@ -215,7 +215,7 @@ pub use inference::{
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
     Client, ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse, Input,
-    InputMessage, InputMessageContent, Role, TensorZeroError,
+    InputMessage, InputMessageContent, Role, TensorZeroError, Tool,
 };
 
 // Re-export async_trait for convenience
