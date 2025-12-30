@@ -44,6 +44,7 @@ blake3 = { workspace = true }
 bytes = "1.6.1"
 chrono = { workspace = true }
 derive_builder = "0.20.0"
+durable = { workspace = true }
 futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"

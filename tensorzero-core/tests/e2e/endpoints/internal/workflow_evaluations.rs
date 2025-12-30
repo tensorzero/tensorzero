@@ -15,7 +15,7 @@ use crate::common::get_gateway_endpoint;
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_projects_endpoint() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/projects");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/projects");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -47,7 +47,7 @@ async fn test_get_workflow_evaluation_projects_endpoint() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_projects_with_pagination() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/projects?limit=1&offset=0");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/projects?limit=1&offset=0");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -69,7 +69,7 @@ async fn test_get_workflow_evaluation_projects_with_pagination() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_project_count_endpoint() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/projects/count");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/projects/count");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -89,7 +89,7 @@ async fn test_get_workflow_evaluation_project_count_endpoint() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_workflow_evaluation_runs_endpoint() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/list-runs");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/list_runs");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -114,7 +114,7 @@ async fn test_list_workflow_evaluation_runs_endpoint() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_workflow_evaluation_runs_with_pagination() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/list-runs?limit=1&offset=0");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/list_runs?limit=1&offset=0");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -137,7 +137,7 @@ async fn test_list_workflow_evaluation_runs_with_pagination() {
 async fn test_list_workflow_evaluation_runs_with_project_filter() {
     let http_client = Client::new();
     let url =
-        get_gateway_endpoint("/internal/workflow-evaluations/list-runs?project_name=21_questions");
+        get_gateway_endpoint("/internal/workflow_evaluations/list_runs?project_name=21_questions");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -161,7 +161,7 @@ async fn test_list_workflow_evaluation_runs_with_project_filter() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_workflow_evaluation_runs_endpoint() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/runs/count");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/runs/count");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -181,7 +181,7 @@ async fn test_count_workflow_evaluation_runs_endpoint() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_workflow_evaluation_runs_endpoint() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/runs/search");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/runs/search");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -203,7 +203,7 @@ async fn test_search_workflow_evaluation_runs_endpoint() {
 async fn test_search_workflow_evaluation_runs_with_project_filter() {
     let http_client = Client::new();
     let url = get_gateway_endpoint(
-        "/internal/workflow-evaluations/runs/search?project_name=21_questions",
+        "/internal/workflow_evaluations/runs/search?project_name=21_questions",
     );
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -228,7 +228,7 @@ async fn test_search_workflow_evaluation_runs_with_project_filter() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_workflow_evaluation_runs_with_search_query() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/runs/search?q=baseline");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/runs/search?q=baseline");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -255,7 +255,7 @@ async fn test_search_workflow_evaluation_runs_with_search_query() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_workflow_evaluation_runs_with_pagination() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/runs/search?limit=1&offset=0");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/runs/search?limit=1&offset=0");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -280,7 +280,7 @@ async fn test_get_workflow_evaluation_runs_endpoint() {
     // Use a known run ID from the fixture data
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/get-runs?run_ids={run_id}"
+        "/internal/workflow_evaluations/get_runs?run_ids={run_id}"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -313,7 +313,7 @@ async fn test_get_workflow_evaluation_runs_multiple_ids() {
     let run_id1 = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let run_id2 = "01968d05-d734-7751-ab33-75dd8b3fb4a3";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/get-runs?run_ids={run_id1},{run_id2}"
+        "/internal/workflow_evaluations/get_runs?run_ids={run_id1},{run_id2}"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -339,7 +339,7 @@ async fn test_get_workflow_evaluation_runs_with_project_filter() {
     let http_client = Client::new();
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/get-runs?run_ids={run_id}&project_name=21_questions"
+        "/internal/workflow_evaluations/get_runs?run_ids={run_id}&project_name=21_questions"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -367,7 +367,7 @@ async fn test_get_workflow_evaluation_runs_with_project_filter() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_runs_empty_ids() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/get-runs?run_ids=");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/get_runs?run_ids=");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -397,7 +397,7 @@ async fn test_list_episodes_by_task_name_endpoint() {
     // Use a known run_id from the fixture data
     let run_id = "0196a0e5-9600-7c83-ab3b-da81097b66cd";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/episodes-by-task-name?run_ids={run_id}"
+        "/internal/workflow_evaluations/episodes_by_task_name?run_ids={run_id}"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -438,7 +438,7 @@ async fn test_list_episodes_by_task_name_with_multiple_run_ids() {
     // Use multiple run_ids from the fixture data
     let run_ids = "0196a0e5-9600-7c83-ab3b-da81097b66cd,0196a0e5-9600-7c83-ab3b-dabb145a9dbe";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/episodes-by-task-name?run_ids={run_ids}"
+        "/internal/workflow_evaluations/episodes_by_task_name?run_ids={run_ids}"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -462,7 +462,7 @@ async fn test_list_episodes_by_task_name_with_pagination() {
     let http_client = Client::new();
     let run_id = "0196a0e5-9600-7c83-ab3b-da81097b66cd";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/episodes-by-task-name?run_ids={run_id}&limit=2&offset=0"
+        "/internal/workflow_evaluations/episodes_by_task_name?run_ids={run_id}&limit=2&offset=0"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -485,7 +485,7 @@ async fn test_list_episodes_by_task_name_with_pagination() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_episodes_by_task_name_empty_run_ids() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/episodes-by-task-name");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/episodes_by_task_name");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -509,7 +509,7 @@ async fn test_count_episode_groups_endpoint() {
     // Use a known run_id from the fixture data
     let run_id = "0196a0e5-9600-7c83-ab3b-da81097b66cd";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/episodes-by-task-name/count?run_ids={run_id}"
+        "/internal/workflow_evaluations/episodes_by_task_name/count?run_ids={run_id}"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -535,7 +535,7 @@ async fn test_count_episode_groups_with_multiple_run_ids() {
     // Use multiple run_ids from the fixture data
     let run_ids = "0196a0e5-9600-7c83-ab3b-da81097b66cd,0196a0e5-9600-7c83-ab3b-dabb145a9dbe";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/episodes-by-task-name/count?run_ids={run_ids}"
+        "/internal/workflow_evaluations/episodes_by_task_name/count?run_ids={run_ids}"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -558,7 +558,7 @@ async fn test_count_episode_groups_with_multiple_run_ids() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_episode_groups_empty_run_ids() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/episodes-by-task-name/count");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/episodes_by_task_name/count");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(
@@ -580,7 +580,7 @@ async fn test_count_matches_list_length_endpoint() {
 
     // Get count
     let count_url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/episodes-by-task-name/count?run_ids={run_id}"
+        "/internal/workflow_evaluations/episodes_by_task_name/count?run_ids={run_id}"
     ));
     let count_resp = http_client.get(count_url).send().await.unwrap();
     let count_response: CountWorkflowEvaluationRunEpisodesByTaskNameResponse =
@@ -588,7 +588,7 @@ async fn test_count_matches_list_length_endpoint() {
 
     // Get list with large limit
     let list_url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/episodes-by-task-name?run_ids={run_id}&limit=1000"
+        "/internal/workflow_evaluations/episodes_by_task_name?run_ids={run_id}&limit=1000"
     ));
     let list_resp = http_client.get(list_url).send().await.unwrap();
     let list_response: ListWorkflowEvaluationRunEpisodesByTaskNameResponse =
@@ -610,7 +610,7 @@ async fn test_get_workflow_evaluation_run_episodes_endpoint() {
     // Use a known run ID from the fixture data
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/run-episodes?run_id={run_id}"
+        "/internal/workflow_evaluations/run_episodes?run_id={run_id}"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -646,7 +646,7 @@ async fn test_get_workflow_evaluation_run_episodes_with_pagination() {
     let http_client = Client::new();
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/run-episodes?run_id={run_id}&limit=1&offset=0"
+        "/internal/workflow_evaluations/run_episodes?run_id={run_id}&limit=1&offset=0"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -671,7 +671,7 @@ async fn test_get_workflow_evaluation_run_episodes_beyond_offset() {
     let http_client = Client::new();
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/run-episodes?run_id={run_id}&limit=10&offset=10000"
+        "/internal/workflow_evaluations/run_episodes?run_id={run_id}&limit=10&offset=10000"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -701,7 +701,7 @@ async fn test_count_workflow_evaluation_run_episodes_endpoint() {
     let http_client = Client::new();
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/run-episodes/count?run_id={run_id}"
+        "/internal/workflow_evaluations/run_episodes/count?run_id={run_id}"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -727,7 +727,7 @@ async fn test_count_workflow_evaluation_run_episodes_nonexistent_run() {
     // Use a valid but non-existent UUIDv7
     let run_id = "01942e26-4693-7e80-8591-47b98e25d999";
     let url = get_gateway_endpoint(&format!(
-        "/internal/workflow-evaluations/run-episodes/count?run_id={run_id}"
+        "/internal/workflow_evaluations/run_episodes/count?run_id={run_id}"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -750,7 +750,7 @@ async fn test_count_workflow_evaluation_run_episodes_nonexistent_run() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_workflow_evaluation_run_episodes_missing_run_id() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/workflow-evaluations/run-episodes/count");
+    let url = get_gateway_endpoint("/internal/workflow_evaluations/run_episodes/count");
 
     let resp = http_client.get(url).send().await.unwrap();
     // Should fail with 400 Bad Request when run_id is missing

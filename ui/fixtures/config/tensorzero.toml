@@ -409,7 +409,6 @@ type = "float"
 level = "inference"
 optimize = "max"
 
-
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  EVALUATIONS                               │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -499,3 +498,15 @@ system_instructions = "evaluations/images/matches_reference/system_instructions.
 temperature = 0
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                               PROVIDER TYPES                               │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[provider_types.fireworks.sft]
+account_id = "viraj-ebfe5a"
+
+[provider_types.gcp_vertex_gemini.sft]
+project_id = "tensorzero-public"
+region = "us-central1"
+bucket_name = "tensorzero-e2e-tests"

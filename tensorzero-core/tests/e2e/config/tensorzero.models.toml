@@ -448,11 +448,6 @@ model_name = "grok-4-1-fast-non-reasoning"
 [models."grok_4_1_fast_non_reasoning-dynamic"]
 routing = ["xai"]
 
-[provider_types.gcp_vertex_gemini.batch]
-storage_type = "cloud_storage"
-input_uri_prefix = "gs://tensorzero-batch-tests-input/input-prefix/"
-output_uri_prefix = "gs://tensorzero-batch-tests-output/output-prefix/"
-
 [models."grok_4_1_fast_non_reasoning-dynamic".providers.xai]
 type = "xai"
 model_name = "grok-4-1-fast-non-reasoning"

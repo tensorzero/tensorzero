@@ -23,7 +23,7 @@ pub struct ListWorkflowEvaluationRunsParams {
 const DEFAULT_LIST_WORKFLOW_EVALUATION_RUNS_LIMIT: u32 = 100;
 const DEFAULT_LIST_WORKFLOW_EVALUATION_RUNS_OFFSET: u32 = 0;
 
-/// Handler for `GET /internal/workflow-evaluations/runs`
+/// Handler for `GET /internal/workflow_evaluations/runs`
 ///
 /// Returns a paginated list of workflow evaluation runs with episode counts.
 #[axum::debug_handler(state = AppStateData)]

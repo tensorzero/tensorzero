@@ -23,6 +23,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::relay::TensorzeroRelay;
 use crate::variant::chat_completion::{ChatCompletionConfig, UninitializedChatCompletionConfig};
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
@@ -161,6 +162,7 @@ impl Variant for ChainOfThoughtConfig {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         if !matches!(function.as_ref(), FunctionConfig::Json(_)) {
             return Err(ErrorDetails::UnsupportedVariantForFunctionType {
@@ -180,6 +182,7 @@ impl Variant for ChainOfThoughtConfig {
                 function_name,
                 variant_name,
                 global_outbound_http_timeout,
+                relay,
             )
             .await
     }

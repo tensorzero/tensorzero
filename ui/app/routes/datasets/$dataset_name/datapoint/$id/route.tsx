@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
-import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   data,
   isRouteErrorResponse,
@@ -601,6 +600,16 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     });
   };
 
+  const onModelSelect = (model: string) => {
+    setSelectedVariant(model);
+    setIsModalOpen(true);
+    submitVariantInference({
+      resource: datapoint,
+      source: "t0_datapoint",
+      model_name: model,
+    });
+  };
+
   const handleModalClose = () => {
     setIsModalOpen(false);
     setSelectedVariant(null);
@@ -682,6 +691,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           <DatapointActions
             variants={variants}
             onVariantSelect={onVariantSelect}
+            onModelSelect={onModelSelect}
             variantInferenceIsLoading={variantInferenceIsLoading}
             onDelete={handleDelete}
             isDeleting={isDeleting}
@@ -691,7 +701,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             isSaving={isSaving}
             onSave={handleUpdate}
             onReset={handleReset}
-            showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
+            function_name={datapoint.function_name}
             isStale={!!datapoint.staled_at}
             datapoint={datapoint}
           />

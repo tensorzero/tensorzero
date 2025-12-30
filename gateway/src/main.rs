@@ -13,6 +13,8 @@ use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
+use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
+use durable_tools::EmbeddedClient;
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
@@ -91,7 +93,14 @@ async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::erro
 }
 
 #[tokio::main]
-async fn main() -> Result<(), ExitCode> {
+async fn main() -> ExitCode {
+    match run().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(code) => code,
+    }
+}
+
+async fn run() -> Result<(), ExitCode> {
     let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
@@ -135,18 +144,15 @@ async fn main() -> Result<(), ExitCode> {
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
-    let metrics_handle =
-        observability::setup_metrics().log_err_pretty("Failed to set up metrics")?;
-
     // Handle `--config-file` or `--default-config`
     let (unwritten_config, glob) = match (args.default_config, args.config_file) {
         (true, Some(_)) => {
             tracing::error!("You must not specify both `--config-file` and `--default-config`.");
-            return Err(ExitCode::from(1));
+            return Err(ExitCode::FAILURE);
         }
         (false, None) => {
             tracing::error!("You must specify either `--config-file` or `--default-config`.");
-            return Err(ExitCode::from(1));
+            return Err(ExitCode::FAILURE);
         }
         (true, None) => {
             tracing::warn!(
@@ -177,6 +183,9 @@ async fn main() -> Result<(), ExitCode> {
         }
     };
 
+    let metrics_handle = observability::setup_metrics(Some(&unwritten_config.gateway.metrics))
+        .log_err_pretty("Failed to set up metrics")?;
+
     if unwritten_config.gateway.debug {
         delayed_log_config
             .delayed_debug_logs
@@ -203,7 +212,7 @@ async fn main() -> Result<(), ExitCode> {
                 tracing::error!(
                     "The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)."
                 );
-                return Err(ExitCode::from(1));
+                return Err(ExitCode::FAILURE);
             }
         }
 
@@ -234,7 +243,7 @@ async fn main() -> Result<(), ExitCode> {
                 tracing::error!(
                     "Could not enable OpenTelemetry export due to previous error: `{e}`. Exiting."
                 );
-                return Err(ExitCode::from(1));
+                return Err(ExitCode::FAILURE);
             }
         }
     } else if let Err(e) = delayed_log_config.delayed_otel {
@@ -247,6 +256,9 @@ async fn main() -> Result<(), ExitCode> {
     let gateway_handle = gateway::GatewayHandle::new(unwritten_config)
         .await
         .log_err_pretty("Failed to initialize AppState")?;
+
+    // Start autopilot worker if configured
+    let autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle).await?;
 
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
@@ -262,7 +274,7 @@ async fn main() -> Result<(), ExitCode> {
     let base_path = config.gateway.base_path.as_deref().unwrap_or("/");
     if !base_path.starts_with("/") {
         tracing::error!("[gateway.base_path] must start with a `/` : `{base_path}`");
-        return Err(ExitCode::from(1));
+        return Err(ExitCode::FAILURE);
     }
     let base_path = base_path.trim_end_matches("/");
 
@@ -291,11 +303,11 @@ async fn main() -> Result<(), ExitCode> {
                 "Failed to bind to socket address {bind_address}: {e}. Tip: Ensure no other process is using port {} or try a different port.",
                 bind_address.port()
             );
-            return Err(ExitCode::from(1));
+            return Err(ExitCode::FAILURE);
         }
         Err(e) => {
             tracing::error!("Failed to bind to socket address {bind_address}: {e}");
-            return Err(ExitCode::from(1));
+            return Err(ExitCode::FAILURE);
         }
     };
 
@@ -349,6 +361,13 @@ async fn main() -> Result<(), ExitCode> {
         tracing::info!("├ Relay mode: enabled (gateway_url = {gateway_url})");
     } else {
         tracing::info!("├ Relay mode: disabled");
+    }
+
+    // Print whether Autopilot Worker is enabled
+    if autopilot_worker_handle.is_some() {
+        tracing::info!("├ Autopilot Worker: enabled");
+    } else {
+        tracing::info!("├ Autopilot Worker: disabled");
     }
 
     // Print whether OpenTelemetry is enabled
@@ -487,6 +506,46 @@ pub async fn shutdown_signal() {
     };
 }
 
+/// Spawn the autopilot worker if environment variables are set.
+async fn spawn_autopilot_worker_if_configured(
+    gateway_handle: &gateway::GatewayHandle,
+) -> Result<Option<AutopilotWorkerHandle>, ExitCode> {
+    // Only start if autopilot client is configured
+    if gateway_handle.app_state.autopilot_client.is_none() {
+        tracing::debug!("Autopilot worker not configured: TENSORZERO_AUTOPILOT_API_KEY not set");
+        return Ok(None);
+    }
+
+    // Only start if postgres is enabled (needed for durable task queue)
+    let pool = match &gateway_handle.app_state.postgres_connection_info {
+        PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
+        PostgresConnectionInfo::Disabled => {
+            tracing::error!(
+                "TENSORZERO_AUTOPILOT_API_KEY env var set, but Postgres is not enabled."
+            );
+            return Err(ExitCode::FAILURE);
+        }
+        #[cfg(test)]
+        #[expect(unreachable_patterns)]
+        _ => return Ok(None),
+    };
+
+    // Create an embedded TensorZero client using the gateway's state
+    let t0_client = std::sync::Arc::new(EmbeddedClient::new(gateway_handle.app_state.clone()));
+
+    let config = AutopilotWorkerConfig::new(pool, t0_client);
+
+    Ok(Some(
+        spawn_autopilot_worker(
+            &gateway_handle.app_state.deferred_tasks,
+            gateway_handle.cancel_token.clone(),
+            config,
+        )
+        .await
+        .log_err_pretty("Failed to spawn autopilot worker")?,
+    ))
+}
+
 /// ┌──────────────────────────────────────────────────────────────────────────┐
 /// │                           MAIN.RS ESCAPE HATCH                           │
 /// └──────────────────────────────────────────────────────────────────────────┘
@@ -510,7 +569,7 @@ impl<T, E: Display> LogErrPretty<T> for Result<T, E> {
             Ok(value) => Ok(value),
             Err(err) => {
                 tracing::error!("{msg}: {err}");
-                Err(ExitCode::from(1))
+                Err(ExitCode::FAILURE)
             }
         }
     }
@@ -522,7 +581,7 @@ impl<T> LogErrPretty<T> for Option<T> {
             Some(value) => Ok(value),
             None => {
                 tracing::error!("{msg}");
-                Err(ExitCode::from(1))
+                Err(ExitCode::FAILURE)
             }
         }
     }

@@ -1,6 +1,7 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
+use crate::relay::TensorzeroRelay;
 use crate::utils::deprecation_warning;
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
@@ -762,6 +763,7 @@ impl RuntimeOverlay {
             auth,
             global_outbound_http_timeout,
             relay,
+            metrics,
         } = &config.gateway;
 
         Self {
@@ -784,6 +786,7 @@ impl RuntimeOverlay {
                     global_outbound_http_timeout.num_milliseconds() as u64,
                 ),
                 relay: relay.as_ref().map(|relay| relay.original_config.clone()),
+                metrics: metrics.clone(),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
@@ -1059,12 +1062,10 @@ impl Config {
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Error> {
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            Box::pin(with_skip_credential_validation(Self::load_from_toml(
-                ConfigInput::Snapshot {
-                    snapshot: Box::new(snapshot),
-                    runtime_overlay: Box::new(runtime_overlay),
-                },
-            )))
+            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
+                snapshot: Box::new(snapshot),
+                runtime_overlay: Box::new(runtime_overlay),
+            })))
             .await?
         } else {
             Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
@@ -1088,9 +1089,9 @@ impl Config {
     ) -> Result<UnwrittenConfig, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            Box::pin(with_skip_credential_validation(Self::load_from_toml(
-                ConfigInput::Fresh(globbed_config.table),
-            )))
+            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Fresh(
+                globbed_config.table,
+            ))))
             .await?
         } else {
             Box::pin(Self::load_from_toml(ConfigInput::Fresh(
@@ -1219,17 +1220,10 @@ impl Config {
             .into_iter()
             .collect::<HashMap<_, _>>();
 
-        let optimizers = try_join_all(uninitialized_optimizers.into_iter().map(
-            |(name, config)| async {
-                config
-                    .load(&provider_type_default_credentials)
-                    .await
-                    .map(|c| (name, c))
-            },
-        ))
-        .await?
-        .into_iter()
-        .collect::<HashMap<_, _>>();
+        let optimizers = uninitialized_optimizers
+            .into_iter()
+            .map(|(name, config)| (name, config.load()))
+            .collect::<HashMap<_, _>>();
         let models = ModelTable::new(
             loaded_models,
             provider_type_default_credentials.clone(),
@@ -1315,7 +1309,7 @@ impl Config {
                         &config.embedding_models,
                         &config.templates,
                         &evaluation_function_name,
-                        &config.gateway.global_outbound_http_timeout,
+                        &config.gateway,
                     )
                     .await?;
                 config
@@ -1375,7 +1369,7 @@ impl Config {
                     &self.embedding_models,
                     &self.templates,
                     function_name,
-                    &self.gateway.global_outbound_http_timeout,
+                    &self.gateway,
                 )
                 .await?;
         }
@@ -1465,8 +1459,9 @@ impl Config {
     pub async fn get_model<'a>(
         &'a self,
         model_name: &Arc<str>,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<CowNoClone<'a, ModelConfig>, Error> {
-        self.models.get(model_name).await?.ok_or_else(|| {
+        self.models.get(model_name, relay).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })

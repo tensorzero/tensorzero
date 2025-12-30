@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::ToolContext;
@@ -37,6 +37,10 @@ struct EchoOutput {
 struct EchoSimpleTool;
 
 impl ToolMetadata for EchoSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_simple")
     }
@@ -45,18 +49,9 @@ impl ToolMetadata for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
-
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
@@ -77,6 +72,10 @@ impl SimpleTool for EchoSimpleTool {
 struct EchoTaskTool;
 
 impl ToolMetadata for EchoTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_task")
     }
@@ -85,17 +84,9 @@ impl ToolMetadata for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
@@ -115,6 +106,10 @@ impl TaskTool for EchoTaskTool {
 struct DefaultTimeoutTaskTool;
 
 impl ToolMetadata for DefaultTimeoutTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_task")
     }
@@ -122,16 +117,7 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     // Uses default timeout (60 seconds from ToolMetadata)
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
@@ -152,6 +138,10 @@ impl TaskTool for DefaultTimeoutTaskTool {
 struct DefaultTimeoutSimpleTool;
 
 impl ToolMetadata for DefaultTimeoutSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_simple")
     }
@@ -159,16 +149,7 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     // Uses default timeout (60 seconds from ToolMetadata)
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
@@ -306,13 +287,17 @@ mod registry_tests {
     }
 
     #[test]
-    fn to_tensorzero_tools_generates_correct_structure() {
+    fn iter_and_try_from_generates_correct_structure() {
         use tensorzero::Tool;
 
         let mut registry = ToolRegistry::new();
         registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
-        let tools = registry.to_tensorzero_tools().unwrap();
+        let tools: Vec<Tool> = registry
+            .iter()
+            .map(Tool::try_from)
+            .collect::<Result<_, _>>()
+            .unwrap();
         assert_eq!(tools.len(), 1);
 
         let tool = &tools[0];
@@ -394,6 +379,10 @@ mod registry_tests {
         struct ConflictingSimpleTool;
 
         impl ToolMetadata for ConflictingSimpleTool {
+            type SideInfo = ();
+            type Output = EchoOutput;
+            type LlmParams = EchoParams;
+
             fn name() -> Cow<'static, str> {
                 Cow::Borrowed("echo_task") // Same name as EchoTaskTool
             }
@@ -401,14 +390,6 @@ mod registry_tests {
             fn description() -> Cow<'static, str> {
                 Cow::Borrowed("Conflicting tool")
             }
-
-            fn parameters_schema() -> ToolResult<schemars::Schema> {
-                Ok(schemars::schema_for!(EchoParams))
-            }
-
-            type LlmParams = EchoParams;
-            type SideInfo = ();
-            type Output = EchoOutput;
         }
 
         #[async_trait::async_trait]
@@ -505,7 +486,7 @@ mod erasure_tests {
     #[test]
     fn erased_task_tool_wrapper_parameters_schema_has_message_field() {
         let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
-        let schema = wrapper.parameters_schema().unwrap();
+        let schema = wrapper.parameters_schema();
 
         // The schema should be an object with a "message" property
         let schema_json = serde_json::to_value(&schema).unwrap();

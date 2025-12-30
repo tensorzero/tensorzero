@@ -18,7 +18,7 @@ pub struct CountWorkflowEvaluationRunEpisodesParams {
     pub run_id: Uuid,
 }
 
-/// Handler for `GET /internal/workflow-evaluations/run-episodes/count`
+/// Handler for `GET /internal/workflow_evaluations/run_episodes/count`
 ///
 /// Returns the total count of episodes for a given workflow evaluation run.
 #[axum::debug_handler(state = AppStateData)]

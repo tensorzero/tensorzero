@@ -19,12 +19,15 @@ use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
 use serde_json::Value;
 #[cfg(feature = "e2e_tests")]
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use uuid::Uuid;
 
-lazy_static::lazy_static! {
-    pub static ref CLICKHOUSE_URL: String = std::env::var("TENSORZERO_CLICKHOUSE_URL").expect("Environment variable TENSORZERO_CLICKHOUSE_URL must be set");
-    pub static ref CLICKHOUSE_REPLICA_URL: Option<String> = std::env::var("TENSORZERO_CLICKHOUSE_REPLICA_URL").ok();
-}
+pub static CLICKHOUSE_URL: LazyLock<String> = LazyLock::new(|| {
+    std::env::var("TENSORZERO_CLICKHOUSE_URL")
+        .expect("Environment variable TENSORZERO_CLICKHOUSE_URL must be set")
+});
+pub static CLICKHOUSE_REPLICA_URL: LazyLock<Option<String>> =
+    LazyLock::new(|| std::env::var("TENSORZERO_CLICKHOUSE_REPLICA_URL").ok());
 
 pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
     let clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();

@@ -31,7 +31,7 @@ use crate::tool_metadata::ToolMetadata;
 ///
 /// ```ignore
 /// use durable_tools::{SimpleTool, SimpleToolContext, ToolResult, ToolMetadata, async_trait};
-/// use schemars::{schema_for, JsonSchema, Schema};
+/// use schemars::JsonSchema;
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
 ///
@@ -48,6 +48,10 @@ use crate::tool_metadata::ToolMetadata;
 /// struct SearchTool;
 ///
 /// impl ToolMetadata for SearchTool {
+///     type SideInfo = ();
+///     type Output = SearchResult;
+///     type LlmParams = SearchParams;
+///
 ///     fn name() -> Cow<'static, str> {
 ///         Cow::Borrowed("search")
 ///     }
@@ -55,25 +59,17 @@ use crate::tool_metadata::ToolMetadata;
 ///     fn description() -> Cow<'static, str> {
 ///         Cow::Borrowed("Search the web")
 ///     }
-///
-///     fn parameters_schema() -> ToolResult<Schema> {
-///         Ok(schema_for!(SearchParams))
-///     }
-///
-///     type LlmParams = SearchParams;
+///     // parameters_schema() is automatically derived from LlmParams
 /// }
 ///
 /// #[async_trait]
 /// impl SimpleTool for SearchTool {
-///     type SideInfo = ();
-///     type Output = SearchResult;
-///
 ///     async fn execute(
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
-///         _side_info: Self::SideInfo,
+///         _side_info: <Self as ToolMetadata>::SideInfo,
 ///         ctx: SimpleToolContext<'_>,
 ///         idempotency_key: &str,
-///     ) -> ToolResult<Self::Output> {
+///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Use idempotency_key for external API calls
 ///         let results = external_search_api(&llm_params.query, idempotency_key).await?;
 ///         Ok(SearchResult { results })

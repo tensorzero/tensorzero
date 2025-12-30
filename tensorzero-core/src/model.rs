@@ -57,6 +57,7 @@ use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
 use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
+use crate::utils::mock::get_mock_provider_api_base;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -220,8 +221,8 @@ impl ModelConfig {
     /// Checks if an Unknown content block should be filtered out based on model_name and provider_name.
     /// Returns true if the block should be filtered (removed), false if it should be kept.
     fn should_filter_unknown_block(
-        block_model_name: &Option<String>,
-        block_provider_name: &Option<String>,
+        block_model_name: Option<&String>,
+        block_provider_name: Option<&String>,
         target_model_name: &str,
         target_provider_name: &str,
     ) -> bool {
@@ -254,8 +255,8 @@ impl ModelConfig {
                     provider_name: block_provider_name,
                     data: _,
                 }) => Self::should_filter_unknown_block(
-                    block_model_name,
-                    block_provider_name,
+                    block_model_name.as_ref(),
+                    block_provider_name.as_ref(),
                     model_name,
                     provider_name,
                 ),
@@ -285,8 +286,8 @@ impl ModelConfig {
                                 data: _,
                             }) => {
                                 if Self::should_filter_unknown_block(
-                                    block_model_name,
-                                    block_provider_name,
+                                    block_model_name.as_ref(),
+                                    block_provider_name.as_ref(),
                                     model_name,
                                     provider_name,
                                 ) {
@@ -1405,13 +1406,8 @@ impl UninitializedProviderConfig {
                 include_encrypted_reasoning,
                 provider_tools,
             } => {
-                // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
-                #[cfg(feature = "e2e_tests")]
-                let api_base = provider_types
-                    .openai
-                    .batch_inference_api_base
-                    .clone()
-                    .or(api_base);
+                // Use mock API base for testing if set, otherwise defer to the API base set
+                let api_base = get_mock_provider_api_base("openai").or(api_base);
 
                 ProviderConfig::OpenAI(OpenAIProvider::new(
                     model_name,
@@ -3477,7 +3473,7 @@ mod tests {
         // Shorthand models are not added to the model table
         assert_eq!(model_table.static_model_len(), 0);
         let model_config = model_table
-            .get("dummy::gpt-4o")
+            .get("dummy::gpt-4o", None)
             .await
             .unwrap()
             .expect("Missing dummy model");

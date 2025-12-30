@@ -46,7 +46,6 @@ export * from "./CreateDatapointsResponse";
 export * from "./CreateEventRequest";
 export * from "./CreateEventResponse";
 export * from "./CreateJsonDatapointRequest";
-export * from "./CredentialLocationWithFallback";
 export * from "./CumulativeFeedbackTimeSeriesPoint";
 export * from "./Datapoint";
 export * from "./DatapointFilter";

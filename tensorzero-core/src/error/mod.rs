@@ -17,7 +17,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
-use crate::db::clickhouse::migration_manager::get_run_migrations_command;
+use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
@@ -171,7 +171,7 @@ impl Error {
 }
 
 // Expect for derive Serialize
-#[expect(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref, clippy::ref_option)]
 fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -1082,10 +1082,9 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error running ClickHouse migration {id}: {message}")
             }
             ErrorDetails::ClickHouseMigrationsDisabled => {
-                let run_migrations_command: String = get_run_migrations_command();
                 write!(
                     f,
-                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`"
+                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. {RUN_MIGRATIONS_COMMAND}"
                 )
             }
             ErrorDetails::ClickHouseQuery { message } => {
@@ -1714,9 +1713,19 @@ impl From<autopilot_client::AutopilotError> for Error {
                 message: format!("Invalid URL: {e}"),
                 status_code: None,
             }),
+            autopilot_client::AutopilotError::Spawn(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Spawn error: {e}"),
+                status_code: None,
+            }),
             autopilot_client::AutopilotError::MissingConfig(field) => {
                 Self::new(ErrorDetails::Autopilot {
                     message: format!("Missing config: {field}"),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::ToolCallNotFound(id) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Tool call not found: {id}"),
                     status_code: None,
                 })
             }

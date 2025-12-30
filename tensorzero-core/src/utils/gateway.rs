@@ -190,7 +190,7 @@ impl GatewayHandle {
         postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let config = Arc::new(config.into_config(&clickhouse_connection_info).await?);
+        let config = Arc::new(Box::pin(config.into_config(&clickhouse_connection_info)).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
@@ -278,7 +278,7 @@ impl GatewayHandle {
                 .build(),
         );
 
-        let autopilot_client = setup_autopilot_client()?;
+        let autopilot_client = setup_autopilot_client(&postgres_connection_info).await?;
 
         Ok(Self {
             app_state: AppStateData {
@@ -456,14 +456,30 @@ pub async fn setup_postgres(
 /// Sets up the Autopilot API client from the environment.
 /// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
 /// `Ok(None)` if not set, or an error if client construction fails.
+/// Requires Postgres to be enabled.
 ///
 /// Environment variables:
 /// - `TENSORZERO_AUTOPILOT_API_KEY`: Required to enable the client
 /// - `TENSORZERO_AUTOPILOT_BASE_URL`: Optional custom base URL (for testing)
-fn setup_autopilot_client() -> Result<Option<Arc<AutopilotClient>>, Error> {
+/// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Optional queue name for tool dispatching
+async fn setup_autopilot_client(
+    postgres_connection_info: &PostgresConnectionInfo,
+) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
+            let pool = postgres_connection_info.get_pool().ok_or_else(|| {
+                Error::new(ErrorDetails::AppState {
+                    message: "Autopilot client requires Postgres; set `TENSORZERO_POSTGRES_URL`."
+                        .to_string(),
+                })
+            })?;
+            let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
+                .unwrap_or_else(|_| "autopilot".to_string());
+
             let mut builder = AutopilotClient::builder().api_key(api_key);
+            builder = builder
+                .spawn_pool(pool.clone())
+                .spawn_queue_name(queue_name);
 
             // Allow custom base URL for testing
             if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
@@ -476,7 +492,7 @@ fn setup_autopilot_client() -> Result<Option<Arc<AutopilotClient>>, Error> {
                 tracing::info!("Autopilot client using custom base URL: {}", base_url);
             }
 
-            let client = builder.build().map_err(Error::from)?;
+            let client = builder.build().await.map_err(Error::from)?;
             // TODO: Handshake with API to validate credentials
             tracing::info!("Autopilot client initialized");
             Ok(Some(Arc::new(client)))
@@ -655,6 +671,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
 
         let config = Config {
@@ -726,6 +743,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
 
         let config = Config {
@@ -762,6 +780,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
@@ -797,6 +816,7 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
             relay: None,
+            metrics: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
