@@ -13,7 +13,9 @@ use tensorzero::{
     TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
-use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+use tensorzero_core::endpoints::feedback::internal::{
+    LatestFeedbackIdByMetricResponse, get_latest_feedback_id_by_metric,
+};
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use uuid::Uuid;
@@ -402,7 +404,7 @@ impl TensorZeroClient for Client {
             ClientMode::EmbeddedGateway {
                 gateway,
                 timeout: _,
-            } => tensorzero_core::endpoints::feedback::internal::get_latest_feedback_id_by_metric(
+            } => get_latest_feedback_id_by_metric(
                 &gateway.handle.app_state.clickhouse_connection_info,
                 target_id,
             )

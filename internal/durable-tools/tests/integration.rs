@@ -25,6 +25,7 @@ use tensorzero::{
     Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
 use tokio::sync::Mutex;
@@ -149,10 +150,7 @@ impl TensorZeroClient for MockTensorZeroClient {
     async fn get_latest_feedback_id_by_metric(
         &self,
         _target_id: Uuid,
-    ) -> Result<
-        tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse,
-        TensorZeroClientError,
-    > {
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 }
