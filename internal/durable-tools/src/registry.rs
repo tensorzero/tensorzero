@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{FunctionTool, Tool};
 
+use crate::ToolResult;
 use crate::context::SimpleToolContext;
 use crate::error::ToolError;
 use crate::simple_tool::SimpleTool;
@@ -21,7 +22,7 @@ impl TryFrom<&dyn ErasedTool> for Tool {
         Ok(Tool::Function(FunctionTool {
             name: tool.name().to_string(),
             description: tool.description().to_string(),
-            parameters: serde_json::to_value(tool.parameters_schema())?,
+            parameters: serde_json::to_value(tool.parameters_schema()?)?,
             strict: false,
         }))
     }
@@ -38,7 +39,7 @@ pub trait ErasedTool: Send + Sync {
     fn description(&self) -> Cow<'static, str>;
 
     /// Get the JSON Schema for the tool's parameters.
-    fn parameters_schema(&self) -> Schema;
+    fn parameters_schema(&self) -> ToolResult<Schema>;
 
     /// Get the tool's execution timeout.
     fn timeout(&self) -> Duration;
@@ -94,7 +95,7 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
         <T as ToolMetadata>::description()
     }
 
-    fn parameters_schema(&self) -> Schema {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         <T as ToolMetadata>::parameters_schema()
     }
 
@@ -117,7 +118,7 @@ impl<T: SimpleTool> ErasedTool for T {
         <T as ToolMetadata>::description()
     }
 
-    fn parameters_schema(&self) -> Schema {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         <T as ToolMetadata>::parameters_schema()
     }
 
