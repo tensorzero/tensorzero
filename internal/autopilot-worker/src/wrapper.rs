@@ -70,7 +70,9 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
 
     type LlmParams = T::LlmParams;
     type SideInfo = AutopilotSideInfo<T::SideInfo>;
-    type Output = T::Output;
+    /// The wrapped tool "returns" by writing to the autopilot API
+    /// so for our purposes the output of the tool is ()
+    type Output = ();
 }
 
 #[async_trait]
@@ -116,7 +118,7 @@ where
         ctx.step("publish_result", publish_params, publish_result_step)
             .await?;
 
-        result
+        Ok(())
     }
 }
 
@@ -189,7 +191,9 @@ impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T> {
 
     type LlmParams = T::LlmParams;
     type SideInfo = AutopilotSideInfo<T::SideInfo>;
-    type Output = T::Output;
+    /// The wrapped tool "returns" by writing to the autopilot API
+    /// so for our purposes the output of the tool is ()
+    type Output = ();
 }
 
 /// Parameters for executing a simple tool within a checkpointed step.
@@ -210,8 +214,10 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
     ) -> DurableToolResult<Self::Output> {
         let tool_name = T::name().to_string();
 
-        // Execute the underlying simple tool within a checkpointed step
-        let output: Self::Output = ctx
+        // Execute the underlying simple tool within a checkpointed step.
+        // The step returns Ok(Result<output, error_string>) so tool errors are
+        // checkpointed, not retried.
+        let step_result: Result<T::Output, String> = ctx
             .step(
                 "execute_simple_tool",
                 SimpleToolStepParams {
@@ -224,15 +230,20 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
             )
             .await?;
 
-        // Serialize output before the next await point
-        let result_json = serde_json::to_string(&output)?;
-
         // Prepare the outcome for the autopilot API
-        let outcome = ToolOutcome::Success(AutopilotToolResult {
-            name: tool_name.clone(),
-            result: result_json,
-            id: side_info.tool_call_id.clone(),
-        });
+        let outcome = match &step_result {
+            Ok(output) => {
+                let result_json = serde_json::to_string(output)?;
+                ToolOutcome::Success(AutopilotToolResult {
+                    name: tool_name.clone(),
+                    result: result_json,
+                    id: side_info.tool_call_id.clone(),
+                })
+            }
+            Err(error_message) => ToolOutcome::Failure {
+                message: error_message.clone(),
+            },
+        };
 
         // Publish result to autopilot API (checkpointed)
         let publish_params = PublishResultParams {
@@ -247,29 +258,36 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
         ctx.step("publish_result", publish_params, publish_result_step)
             .await?;
 
-        Ok(output)
+        Ok(())
     }
 }
 
 /// Step function to execute a simple tool.
+///
+/// Returns `Ok(Result<output, error_message>)` where the inner result is either
+/// success or failure. This ensures tool errors are checkpointed rather than
+/// causing step retries. The error is converted to String since ToolError
+/// contains non-serializable types.
 async fn execute_simple_tool_step<T: SimpleTool>(
     params: SimpleToolStepParams<T::LlmParams, T::SideInfo>,
     state: ToolAppState,
-) -> anyhow::Result<T::Output> {
+) -> anyhow::Result<Result<T::Output, String>> {
     let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client());
     let idempotency_key = format!(
         "simple_tool:{}:{}",
         params.tool_name, params.tool_call_event_id
     );
 
-    T::execute(
+    // Wrap the result in Ok so tool errors are checkpointed, not retried.
+    // Convert ToolError to String since it contains non-serializable types.
+    Ok(T::execute(
         params.llm_params,
         params.side_info,
         simple_ctx,
         &idempotency_key,
     )
     .await
-    .map_err(|e| anyhow::anyhow!("{e}"))
+    .map_err(|e| e.to_string()))
 }
 
 #[cfg(test)]
