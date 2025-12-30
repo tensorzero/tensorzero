@@ -28,6 +28,9 @@ pub struct GatewayArgs {
     /// These commands trigger some workflow then exit without launching the gateway.
     #[command(flatten)]
     pub early_exit_commands: EarlyExitCommands,
+
+    #[command(flatten)]
+    pub early_exit_command_arguments: EarlyExitCommandArguments,
 }
 
 #[derive(Args, Debug)]
@@ -41,9 +44,6 @@ pub struct EarlyExitCommands {
     #[arg(long)]
     pub run_postgres_migrations: bool,
 
-    #[arg(long, requires = "create_api_key")]
-    pub expiration: Option<DateTime<Utc>>,
-
     /// Create an API key then exit.
     #[arg(long)]
     pub create_api_key: bool,
@@ -55,4 +55,11 @@ pub struct EarlyExitCommands {
     /// Validate the config file then exit.
     #[arg(long)]
     pub validate_and_exit: bool,
+}
+
+#[derive(Args, Debug)]
+#[group(multiple = false)]
+pub struct EarlyExitCommandArguments {
+    #[arg(long, requires = "create_api_key", value_name = "DATETIME")]
+    pub expiration: Option<DateTime<Utc>>,
 }

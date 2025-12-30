@@ -43,6 +43,14 @@ async fn handle_create_api_key(
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
 
+    let now = Utc::now();
+
+    if let Some(expiration_datetime) = expiration {
+        if expiration_datetime < now {
+            return Err("Expiration datetime needs to be in the future".into());
+        }
+    }
+
     // Create connection pool (alpha version for tensorzero-auth)
     let pool = sqlx::PgPool::connect(&postgres_url).await?;
 
@@ -95,7 +103,7 @@ async fn main() -> Result<(), ExitCode> {
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
     if args.early_exit_commands.create_api_key {
-        handle_create_api_key(args.early_exit_commands.expiration)
+        handle_create_api_key(args.early_exit_command_arguments.expiration)
             .await
             .log_err_pretty("Failed to create API key")?;
         return Ok(());
