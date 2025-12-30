@@ -7,7 +7,8 @@ use async_trait::async_trait;
 use autopilot_client::ToolResult as AutopilotToolResult;
 use durable_tools::{
     CreateEventRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient,
-    ToolAppState, ToolContext, ToolMetadata, ToolOutcome, ToolResult as DurableToolResult,
+    ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
+    ToolResult as DurableToolResult,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -209,8 +210,10 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
     ) -> DurableToolResult<Self::Output> {
         let tool_name = T::name().to_string();
 
-        // Execute the underlying simple tool within a checkpointed step
-        let result: DurableToolResult<Self::Output> = ctx
+        // Execute the underlying simple tool within a checkpointed step.
+        // The step returns Ok(Result<output, error_string>) so tool errors are
+        // checkpointed, not retried.
+        let step_result: Result<Self::Output, String> = ctx
             .step(
                 "execute_simple_tool",
                 SimpleToolStepParams {
@@ -221,10 +224,10 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
                 },
                 execute_simple_tool_step::<T>,
             )
-            .await;
+            .await?;
 
         // Prepare the outcome for the autopilot API
-        let outcome = match &result {
+        let outcome = match &step_result {
             Ok(output) => {
                 let result_json = serde_json::to_string(output)?;
                 ToolOutcome::Success(AutopilotToolResult {
@@ -233,8 +236,8 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
                     id: side_info.tool_call_id.clone(),
                 })
             }
-            Err(e) => ToolOutcome::Failure {
-                message: e.to_string(),
+            Err(error_message) => ToolOutcome::Failure {
+                message: error_message.clone(),
             },
         };
 
@@ -251,29 +254,37 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
         ctx.step("publish_result", publish_params, publish_result_step)
             .await?;
 
-        result
+        // Convert Result<Output, String> back to DurableToolResult<Output>
+        step_result.map_err(|msg| ToolError::Validation { message: msg })
     }
 }
 
 /// Step function to execute a simple tool.
+///
+/// Returns `Ok(Result<output, error_message>)` where the inner result is either
+/// success or failure. This ensures tool errors are checkpointed rather than
+/// causing step retries. The error is converted to String since ToolError
+/// contains non-serializable types.
 async fn execute_simple_tool_step<T: SimpleTool>(
     params: SimpleToolStepParams<T::LlmParams, T::SideInfo>,
     state: ToolAppState,
-) -> anyhow::Result<T::Output> {
+) -> anyhow::Result<Result<T::Output, String>> {
     let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client());
     let idempotency_key = format!(
         "simple_tool:{}:{}",
         params.tool_name, params.tool_call_event_id
     );
 
-    T::execute(
+    // Wrap the result in Ok so tool errors are checkpointed, not retried.
+    // Convert ToolError to String since it contains non-serializable types.
+    Ok(T::execute(
         params.llm_params,
         params.side_info,
         simple_ctx,
         &idempotency_key,
     )
     .await
-    .map_err(|e| anyhow::anyhow!("{e}"))
+    .map_err(|e| e.to_string()))
 }
 
 #[cfg(test)]
