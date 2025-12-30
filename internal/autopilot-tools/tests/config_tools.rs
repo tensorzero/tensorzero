@@ -99,7 +99,7 @@ async fn test_write_config_tool_merges_tags(pool: PgPool) {
         .withf(move |request| {
             request.config.functions.is_empty()
                 && request.extra_templates.get("template_a") == Some(&"content".to_string())
-                && request.tags.get("autopilot_session_id") == Some(&"user_override".to_string())
+                && request.tags.get("autopilot_session_id") == Some(&session_id.to_string())
                 && request.tags.get("custom_tag") == Some(&"custom_value".to_string())
                 && request.tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
                 && request.tags.get("autopilot_tool_call_event_id")
