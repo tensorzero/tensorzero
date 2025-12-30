@@ -1,4 +1,4 @@
-//! Integration tests for FeedbackTool and GetLatestFeedbackByMetricTool.
+//! Integration tests for feedback tools.
 
 mod common;
 
