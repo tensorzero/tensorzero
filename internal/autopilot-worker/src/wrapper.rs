@@ -64,7 +64,7 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
         T::description()
     }
 
-    fn parameters_schema() -> Schema {
+    fn parameters_schema() -> DurableToolResult<Schema> {
         T::parameters_schema()
     }
 
