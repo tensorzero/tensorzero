@@ -29,6 +29,7 @@ pub struct GatewayArgs {
     #[command(flatten)]
     pub early_exit_commands: EarlyExitCommands,
 
+    /// These arguments influence the execution of early exit "command" arguments.
     #[command(flatten)]
     pub early_exit_command_arguments: EarlyExitCommandArguments,
 }
