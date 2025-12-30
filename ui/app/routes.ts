@@ -98,6 +98,16 @@ export default [
     ),
   ]),
 
+  // Autopilot
+  route("autopilot", "routes/autopilot/layout.tsx", [
+    index("routes/autopilot/route.tsx"),
+    route("sessions", "routes/autopilot/sessions/route.tsx"),
+    route(
+      "sessions/:session_id",
+      "routes/autopilot/sessions/$session_id/route.tsx",
+    ),
+  ]),
+
   // Playground
   route("playground", "routes/playground/route.tsx"),
 

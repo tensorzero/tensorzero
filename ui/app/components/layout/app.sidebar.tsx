@@ -11,6 +11,7 @@ import {
   SequenceChecks,
   Playground,
   Model,
+  Chat,
 } from "~/components/icons/Icons";
 import { KeyRound } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
@@ -90,6 +91,11 @@ const navigation: NavigationSection[] = [
         title: "Playground",
         url: "/playground",
         icon: Playground,
+      },
+      {
+        title: "Autopilot",
+        url: "/autopilot",
+        icon: Chat,
       },
       {
         title: "Datasets",
