@@ -332,9 +332,6 @@ async fn test_topk_found_topk() {
         "Empty2 should be Stopped"
     );
 
-    // Note: top_variants membership is already checked in section 1 above.
-    // The stopping_reason.top_variants is the source of truth for which variants won.
-
     // 3. Check variant performance confidence sequences
     let echo_cs = output
         .variant_performance
