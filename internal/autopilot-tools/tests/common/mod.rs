@@ -14,6 +14,7 @@ use tensorzero::{
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Input, InputMessage, Text};
 use tensorzero_core::tool::DynamicToolParams;
@@ -88,6 +89,11 @@ mock! {
             dataset_name: String,
             ids: Vec<Uuid>,
         ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+        async fn get_latest_feedback_id_by_metric(
+            &self,
+            target_id: Uuid,
+        ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
     }
 }
 

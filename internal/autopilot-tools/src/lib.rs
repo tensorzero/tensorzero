@@ -17,6 +17,7 @@
 //! - `GetDatapointsTool` - Gets specific datapoints by ID
 //! - `UpdateDatapointsTool` - Updates existing datapoints
 //! - `DeleteDatapointsTool` - Deletes datapoints by ID
+//! - `GetLatestFeedbackByMetricTool` - Gets the latest feedback ID for each metric for a target
 //!
 //! # Test Tools (e2e_tests feature)
 //!
@@ -63,6 +64,9 @@ pub fn register_production_tools(registry: &mut ToolRegistry) -> ToolResult<()> 
     registry.register_simple_tool::<tools::GetDatapointsTool>()?;
     registry.register_simple_tool::<tools::UpdateDatapointsTool>()?;
     registry.register_simple_tool::<tools::DeleteDatapointsTool>()?;
+
+    // Feedback tools
+    registry.register_simple_tool::<tools::GetLatestFeedbackByMetricTool>()?;
 
     Ok(())
 }

@@ -145,6 +145,16 @@ impl TensorZeroClient for MockTensorZeroClient {
     ) -> Result<tensorzero::DeleteDatapointsResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
+
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<
+        tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse,
+        TensorZeroClientError,
+    > {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
 }
 
 /// Create a mock chat inference response with the given text content.
