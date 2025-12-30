@@ -2086,58 +2086,20 @@ fn mock_cs_with_count_and_mean(
 // get_rank_based_hedge_weight tests
 // ----------------------------------------------------------------------------
 
-/// Test that variants in top-k (rank < k_min) get weight 0.8.
+/// Test get_rank_based_hedge_weight assigns correct weights based on rank relative to k_min/k_max.
 #[test]
-fn test_hedge_weight_top_variants() {
-    // k_min = 2, k_max = 4
-    // Ranks 0 and 1 (< k_min) should get weight 0.8
+fn test_get_rank_based_hedge_weight() {
+    // k_min = 2, k_max = 4: rank <= 2 gets 0.8, rank > 4 gets 0.2, else 0.5
     assert_eq!(get_rank_based_hedge_weight(0, 2, 4), 0.8);
     assert_eq!(get_rank_based_hedge_weight(1, 2, 4), 0.8);
-}
-
-/// Test that variants outside top-k (rank >= k_max) get weight 0.2.
-#[test]
-fn test_hedge_weight_bottom_variants() {
-    // k_min = 2, k_max = 4
-    // Ranks 4 and above (>= k_max) should get weight 0.2
-    assert_eq!(get_rank_based_hedge_weight(4, 2, 4), 0.2);
+    assert_eq!(get_rank_based_hedge_weight(2, 2, 4), 0.8);
+    assert_eq!(get_rank_based_hedge_weight(3, 2, 4), 0.5);
+    assert_eq!(get_rank_based_hedge_weight(4, 2, 4), 0.5);
     assert_eq!(get_rank_based_hedge_weight(5, 2, 4), 0.2);
     assert_eq!(get_rank_based_hedge_weight(10, 2, 4), 0.2);
-}
 
-/// Test that variants in the middle (k_min <= rank < k_max) get weight 0.5.
-#[test]
-fn test_hedge_weight_middle_variants() {
-    // k_min = 2, k_max = 4
-    // Ranks 2 and 3 (k_min <= rank < k_max) should get weight 0.5
-    assert_eq!(get_rank_based_hedge_weight(2, 2, 4), 0.5);
-    assert_eq!(get_rank_based_hedge_weight(3, 2, 4), 0.5);
-}
-
-/// Test hedge weight boundary cases.
-#[test]
-fn test_hedge_weight_boundary_cases() {
-    // k_min = 3, k_max = 5
-    // rank = 2 (k_min - 1) -> top variant, weight 0.8
-    assert_eq!(get_rank_based_hedge_weight(2, 3, 5), 0.8);
-    // rank = 3 (= k_min) -> middle variant, weight 0.5
-    assert_eq!(get_rank_based_hedge_weight(3, 3, 5), 0.5);
-    // rank = 4 (k_max - 1) -> middle variant, weight 0.5
-    assert_eq!(get_rank_based_hedge_weight(4, 3, 5), 0.5);
-    // rank = 5 (= k_max) -> bottom variant, weight 0.2
-    assert_eq!(get_rank_based_hedge_weight(5, 3, 5), 0.2);
-}
-
-/// Test edge case where k_min = k_max (no middle variants).
-#[test]
-fn test_hedge_weight_k_min_equals_k_max() {
-    // k_min = k_max = 2
-    // rank 0, 1 -> top (< 2), weight 0.8
-    // rank 2+ -> bottom (>= 2), weight 0.2
-    // No middle variants possible
-    assert_eq!(get_rank_based_hedge_weight(0, 2, 2), 0.8);
-    assert_eq!(get_rank_based_hedge_weight(1, 2, 2), 0.8);
-    assert_eq!(get_rank_based_hedge_weight(2, 2, 2), 0.2);
+    // k_min = k_max = 2: rank <= 2 gets 0.8, rank > 2 gets 0.2, no middle
+    assert_eq!(get_rank_based_hedge_weight(2, 2, 2), 0.8);
     assert_eq!(get_rank_based_hedge_weight(3, 2, 2), 0.2);
 }
 
@@ -2145,79 +2107,42 @@ fn test_hedge_weight_k_min_equals_k_max() {
 // compute_hedge_weights tests
 // ----------------------------------------------------------------------------
 
-/// Test that compute_hedge_weights returns None when count < MIN_SAMPLES_FOR_REBALANCING.
+/// Test that compute_hedge_weights returns None when any variant is below MIN_SAMPLES_FOR_REBALANCING.
 #[test]
-fn test_compute_hedge_weights_below_threshold() {
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_count_and_mean("a", 19, 0.8), // Below threshold (20)
+fn test_compute_hedge_weights_threshold() {
+    // Below threshold: returns None
+    let below_threshold: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 19, 0.8),
         mock_cs_with_count_and_mean("b", 19, 0.6),
-        mock_cs_with_count_and_mean("c", 19, 0.4),
     ]
     .into_iter()
     .collect();
+    assert_eq!(compute_hedge_weights(&below_threshold, 1, 2), None);
 
-    let result = compute_hedge_weights(&variant_performance, 1, 2);
-    assert!(result.is_none(), "Should return None when count < 20");
-}
-
-/// Test that compute_hedge_weights returns Some when count >= MIN_SAMPLES_FOR_REBALANCING.
-#[test]
-fn test_compute_hedge_weights_at_threshold() {
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_count_and_mean("a", 20, 0.8), // At threshold
-        mock_cs_with_count_and_mean("b", 20, 0.6),
-        mock_cs_with_count_and_mean("c", 20, 0.4),
+    // At threshold: returns weights (k_min=1, k_max=2: rank 0 and 1 both <= k_min, get 0.8)
+    let at_threshold: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 20, 0.8), // Rank 0
+        mock_cs_with_count_and_mean("b", 20, 0.6), // Rank 1
     ]
     .into_iter()
     .collect();
+    let weights = compute_hedge_weights(&at_threshold, 1, 2).unwrap();
+    assert_eq!(weights["a"], 0.8);
+    assert_eq!(weights["b"], 0.8);
 
-    let result = compute_hedge_weights(&variant_performance, 1, 2);
-    assert!(result.is_some(), "Should return Some when count >= 20");
-}
-
-/// Test that compute_hedge_weights returns None if any variant is below threshold.
-#[test]
-fn test_compute_hedge_weights_mixed_counts() {
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_count_and_mean("a", 100, 0.8), // Above threshold
-        mock_cs_with_count_and_mean("b", 50, 0.6),  // Above threshold
-        mock_cs_with_count_and_mean("c", 19, 0.4),  // Below threshold
+    // Mixed counts with one below threshold: returns None
+    let mixed: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 100, 0.8),
+        mock_cs_with_count_and_mean("b", 19, 0.6), // Below threshold
     ]
     .into_iter()
     .collect();
-
-    let result = compute_hedge_weights(&variant_performance, 1, 2);
-    assert!(
-        result.is_none(),
-        "Should return None if any variant is below threshold"
-    );
+    assert_eq!(compute_hedge_weights(&mixed, 1, 2), None);
 }
 
-/// Test that compute_hedge_weights ranks variants correctly by mean_est (descending).
+/// Test that compute_hedge_weights ranks variants by mean and assigns correct weights.
 #[test]
-fn test_compute_hedge_weights_correct_ranking() {
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_count_and_mean("low", 25, 0.3), // Rank 2 (worst)
-        mock_cs_with_count_and_mean("high", 25, 0.9), // Rank 0 (best)
-        mock_cs_with_count_and_mean("medium", 25, 0.6), // Rank 1
-    ]
-    .into_iter()
-    .collect();
-
-    // k_min = 1, k_max = 2
-    // rank 0 (high) -> weight 0.8 (< k_min)
-    // rank 1 (medium) -> weight 0.5 (k_min <= rank < k_max)
-    // rank 2 (low) -> weight 0.2 (>= k_max)
-    let weights = compute_hedge_weights(&variant_performance, 1, 2).unwrap();
-
-    assert_eq!(weights["high"], 0.8, "Rank 0 should have weight 0.8");
-    assert_eq!(weights["medium"], 0.5, "Rank 1 should have weight 0.5");
-    assert_eq!(weights["low"], 0.2, "Rank 2 should have weight 0.2");
-}
-
-/// Test compute_hedge_weights with more variants and different k range.
-#[test]
-fn test_compute_hedge_weights_assigns_correct_weights() {
+fn test_compute_hedge_weights_ranking_and_weights() {
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
         mock_cs_with_count_and_mean("v1", 30, 0.9), // Rank 0
         mock_cs_with_count_and_mean("v2", 30, 0.8), // Rank 1
@@ -2228,44 +2153,28 @@ fn test_compute_hedge_weights_assigns_correct_weights() {
     .into_iter()
     .collect();
 
-    // k_min = 2, k_max = 3
-    // rank 0, 1 -> weight 0.8 (< k_min = 2)
-    // rank 2 -> weight 0.5 (k_min <= rank < k_max)
-    // rank 3, 4 -> weight 0.2 (>= k_max = 3)
+    // k_min = 2, k_max = 3: rank <= 2 gets 0.8, rank > 3 gets 0.2, else 0.5
     let weights = compute_hedge_weights(&variant_performance, 2, 3).unwrap();
+    assert_eq!(weights["v1"], 0.8); // rank 0
+    assert_eq!(weights["v2"], 0.8); // rank 1
+    assert_eq!(weights["v3"], 0.8); // rank 2
+    assert_eq!(weights["v4"], 0.5); // rank 3
+    assert_eq!(weights["v5"], 0.2); // rank 4
 
-    assert_eq!(weights["v1"], 0.8, "Rank 0 should have weight 0.8");
-    assert_eq!(weights["v2"], 0.8, "Rank 1 should have weight 0.8");
-    assert_eq!(weights["v3"], 0.5, "Rank 2 should have weight 0.5");
-    assert_eq!(weights["v4"], 0.2, "Rank 3 should have weight 0.2");
-    assert_eq!(weights["v5"], 0.2, "Rank 4 should have weight 0.2");
-}
-
-/// Test compute_hedge_weights with tied mean_est values.
-#[test]
-fn test_compute_hedge_weights_tied_means() {
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_count_and_mean("a", 25, 0.7), // Tied
-        mock_cs_with_count_and_mean("b", 25, 0.7), // Tied
-        mock_cs_with_count_and_mean("c", 25, 0.5), // Worst
+    // Test tied means: tied variants get adjacent ranks
+    let tied: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 25, 0.7),
+        mock_cs_with_count_and_mean("b", 25, 0.7), // Tied with a
+        mock_cs_with_count_and_mean("c", 25, 0.5),
     ]
     .into_iter()
     .collect();
-
-    // k_min = 1, k_max = 2
-    // With ties, sort order is deterministic (by name in HashMap iteration order, which
-    // becomes stable after sorting). The two tied variants will get ranks 0 and 1.
-    let weights = compute_hedge_weights(&variant_performance, 1, 2).unwrap();
-
-    // "c" should definitely be rank 2 (worst) -> weight 0.2
-    assert_eq!(weights["c"], 0.2, "Worst variant should have weight 0.2");
-
-    // "a" and "b" are tied for best. One gets rank 0 (0.8), one gets rank 1 (0.5)
-    let ab_weights: Vec<f64> = vec![weights["a"], weights["b"]];
-    assert!(
-        ab_weights.contains(&0.8) && ab_weights.contains(&0.5),
-        "Tied variants should get weights 0.8 and 0.5 (one each)"
-    );
+    // k_min=1, k_max=2: rank <= 1 gets 0.8, rank > 2 gets 0.2
+    let weights = compute_hedge_weights(&tied, 1, 2).unwrap();
+    assert_eq!(weights["c"], 0.5); // rank 2 (1 < 2 <= 2)
+    // a and b are tied at ranks 0 and 1, both <= k_min=1, so both get 0.8
+    assert_eq!(weights["a"], 0.8);
+    assert_eq!(weights["b"], 0.8);
 }
 
 // ----------------------------------------------------------------------------
