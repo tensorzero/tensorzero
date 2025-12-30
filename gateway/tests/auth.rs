@@ -771,6 +771,19 @@ async fn test_create_api_key_with_invalid_expiration() {
         !output.status.success(),
         "Expected --create-api-key to fail w/ --expiration in the past but it didn't"
     );
+
+    let output = Command::new(common::gateway_path())
+        .args(["--create-api-key", "--expiration", "some complete nonsense"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "Expected --create-api-key to fail w/ non-datetime --expiration value but it didn't"
+    );
 }
 
 #[tokio::test]
