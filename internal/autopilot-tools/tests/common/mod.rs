@@ -9,8 +9,9 @@ use durable_tools::{TensorZeroClient, TensorZeroClientError};
 use mockall::mock;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
-    ListDatapointsRequest, Role, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
+    CreateDatapointsResponse, DeleteDatapointsResponse, GetConfigResponse, GetDatapointsResponse,
+    InferenceResponse, ListDatapointsRequest, Role, UpdateDatapointRequest,
+    UpdateDatapointsResponse, Usage, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
@@ -52,6 +53,16 @@ mock! {
             snapshot_hash: SnapshotHash,
             input: tensorzero::ActionInput,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+        async fn get_config_snapshot(
+            &self,
+            hash: Option<String>,
+        ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+        async fn write_config(
+            &self,
+            request: WriteConfigRequest,
+        ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
         async fn create_datapoints(
             &self,

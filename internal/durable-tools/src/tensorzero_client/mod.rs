@@ -13,8 +13,9 @@ use std::sync::Arc;
 use tensorzero::{
     ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
-    ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    CreateDatapointsResponse, DeleteDatapointsResponse, GetConfigResponse, GetDatapointsResponse,
+    InferenceResponse, ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use url::Url;
@@ -104,6 +105,18 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         snapshot_hash: SnapshotHash,
         input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+    /// Get a config snapshot by hash, or the live config if no hash is provided.
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+    /// Write a config snapshot to storage.
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
     // ========== Datapoint CRUD Operations ==========
 

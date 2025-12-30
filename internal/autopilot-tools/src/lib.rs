@@ -64,6 +64,10 @@ pub fn register_production_tools(registry: &mut ToolRegistry) -> ToolResult<()> 
     registry.register_simple_tool::<tools::UpdateDatapointsTool>()?;
     registry.register_simple_tool::<tools::DeleteDatapointsTool>()?;
 
+    // Config snapshot tools
+    registry.register_simple_tool::<tools::GetConfigTool>()?;
+    registry.register_simple_tool::<tools::WriteConfigTool>()?;
+
     Ok(())
 }
 
