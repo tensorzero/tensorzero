@@ -9,8 +9,6 @@
 //! - Multi-variant evaluation with per-variant stopping conditions
 //! - Batch processing for efficiency
 //! - Checkpointed execution for crash recovery
-//!
-//! NOTE: This module is work in progress.
 
 use std::collections::HashMap;
 use std::sync::Arc;
