@@ -15,6 +15,7 @@ use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsRequest, DeleteDatapointsRequest,
     GetDatapointsRequest, UpdateDatapointsRequest,
 };
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, action};
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
@@ -292,6 +293,18 @@ impl TensorZeroClient for EmbeddedClient {
             &job_handle,
             &self.app_state.config.models.default_credentials,
             &self.app_state.config.provider_types,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::feedback::internal::get_latest_feedback_id_by_metric(
+            &self.app_state.clickhouse_connection_info,
+            target_id,
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))

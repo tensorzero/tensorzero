@@ -303,6 +303,7 @@ mod tests {
         InferenceResponse, ListDatapointsRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
+    use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
     use tensorzero_core::optimization::OptimizationJobInfo;
     use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
@@ -386,6 +387,11 @@ mod tests {
                 &self,
                 job_handle: String,
             ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
+
+            async fn get_latest_feedback_id_by_metric(
+                &self,
+                target_id: Uuid,
+            ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
         }
     }
 

@@ -17,6 +17,7 @@ pub use tensorzero::{
     ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 pub use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 pub use tensorzero_core::optimization::OptimizationJobInfo;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use url::Url;
@@ -168,6 +169,12 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         job_handle: String,
     ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
+
+    /// Get the latest feedback ID for each metric for a target.
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.
