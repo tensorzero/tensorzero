@@ -24,7 +24,7 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
-use crate::inference::types::{ContentBlock, FinishReason};
+use crate::inference::types::{ContentBlock, FinishReason, Role};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -568,6 +568,29 @@ impl InferenceProvider for DummyProvider {
             "llm_judge::false" => vec![r#"{"score": false}"#.to_string().into()],
             "llm_judge::zero" => vec![r#"{"score": 0}"#.to_string().into()],
             "llm_judge::one" => vec![r#"{"score": 1}"#.to_string().into()],
+            // Echo model: returns the text content of the last user message
+            "echo" => {
+                let text = request
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == Role::User)
+                    .and_then(|m| {
+                        m.content.iter().find_map(|block| {
+                            if let ContentBlock::Text(text_block) = block {
+                                Some(text_block.text.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .unwrap_or_default();
+                vec![ContentBlockOutput::Text(Text { text })]
+            }
+            // Empty model: always returns an empty string
+            "empty" => vec![ContentBlockOutput::Text(Text {
+                text: String::new(),
+            })],
             "llm_judge::error" => {
                 return Err(ErrorDetails::InferenceClient {
                     message: "Dummy error in inference".to_string(),

@@ -1,7 +1,7 @@
 use durable::{DurableBuilder, DurableError, SpawnOptions, SpawnResult, Worker, WorkerOptions};
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value as JsonValue;
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool, Postgres};
 use std::sync::Arc;
 use tensorzero::Tool;
 use tokio::sync::RwLock;
@@ -147,28 +147,6 @@ impl ToolExecutor {
         llm_params: T::LlmParams,
         side_info: T::SideInfo,
         episode_id: Uuid,
-    ) -> anyhow::Result<SpawnResult> {
-        let wrapped = TaskToolParams {
-            llm_params,
-            side_info,
-            episode_id,
-        };
-        self.durable
-            .spawn_with_options::<TaskToolAdapter<T>>(wrapped, SpawnOptions::default())
-            .await
-            .map_err(Into::into)
-    }
-
-    /// Spawn a `TaskTool` execution with custom spawn options.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool_with_options<T: TaskTool>(
-        &self,
-        llm_params: T::LlmParams,
-        side_info: T::SideInfo,
-        episode_id: Uuid,
         options: SpawnOptions,
     ) -> anyhow::Result<SpawnResult> {
         let wrapped = TaskToolParams {
@@ -185,34 +163,18 @@ impl ToolExecutor {
     /// Spawn a tool by name with JSON parameters.
     ///
     /// This allows dynamic tool invocation without knowing the concrete type.
-    /// Side info defaults to `null` (compatible with `SideInfo = ()`).
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    /// * `episode_id` - The episode ID for this execution
     ///
     /// # Errors
     ///
     /// Returns an error if spawning the tool fails.
     pub async fn spawn_tool_by_name(
-        &self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        episode_id: Uuid,
-    ) -> anyhow::Result<SpawnResult> {
-        self.spawn_tool_by_name_with_side_info(
-            tool_name,
-            llm_params,
-            serde_json::json!(null),
-            episode_id,
-        )
-        .await
-    }
-
-    /// Spawn a tool by name with JSON parameters and explicit side info.
-    ///
-    /// This allows dynamic tool invocation without knowing the concrete type.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool_by_name_with_side_info(
         &self,
         tool_name: &str,
         llm_params: JsonValue,
@@ -227,6 +189,78 @@ impl ToolExecutor {
 
         self.durable
             .spawn_by_name(
+                tool_name,
+                serde_json::to_value(wrapped_params)?,
+                SpawnOptions::default(),
+            )
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Spawn a `TaskTool` execution with custom spawn options using a custom executor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if spawning the tool fails.
+    pub async fn spawn_tool_with<'e, T, E>(
+        &self,
+        executor: E,
+        llm_params: T::LlmParams,
+        side_info: T::SideInfo,
+        episode_id: Uuid,
+        options: SpawnOptions,
+    ) -> anyhow::Result<SpawnResult>
+    where
+        T: TaskTool,
+        E: Executor<'e, Database = Postgres>,
+    {
+        let wrapped = TaskToolParams {
+            llm_params,
+            side_info,
+            episode_id,
+        };
+        self.durable
+            .spawn_with_options_with::<TaskToolAdapter<T>, E>(executor, wrapped, options)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Spawn a tool by name using a custom executor (e.g., a transaction).
+    ///
+    /// This allows dynamic tool invocation without knowing the concrete type,
+    /// while atomically enqueuing as part of a larger transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `executor` - The executor to use (e.g., `&mut *tx` for a transaction)
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    /// * `episode_id` - The episode ID for this execution
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if spawning the tool fails.
+    pub async fn spawn_tool_by_name_with<'e, E>(
+        &self,
+        executor: E,
+        tool_name: &str,
+        llm_params: JsonValue,
+        side_info: JsonValue,
+        episode_id: Uuid,
+    ) -> anyhow::Result<SpawnResult>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
+        let wrapped_params = TaskToolParams {
+            llm_params,
+            side_info,
+            episode_id,
+        };
+
+        self.durable
+            .spawn_by_name_with(
+                executor,
                 tool_name,
                 serde_json::to_value(wrapped_params)?,
                 SpawnOptions::default(),

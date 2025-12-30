@@ -5,9 +5,17 @@
 
 use async_trait::async_trait;
 use tensorzero::{
-    ActionResponse, ClientInferenceParams, InferenceOutput, InferenceResponse, TensorZeroError,
+    ActionResponse, ClientInferenceParams, CreateDatapointRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
+    GetDatapointsResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::datasets::v1::types::{
+    CreateDatapointsFromInferenceRequest, CreateDatapointsRequest, DeleteDatapointsRequest,
+    GetDatapointsRequest, UpdateDatapointsRequest,
+};
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, action};
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
@@ -145,5 +153,116 @@ impl TensorZeroClient for EmbeddedClient {
                 }))
             }
         }
+    }
+
+    // ========== Datapoint CRUD Operations ==========
+
+    async fn create_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<CreateDatapointRequest>,
+    ) -> Result<CreateDatapointsResponse, TensorZeroClientError> {
+        let request = CreateDatapointsRequest { datapoints };
+
+        tensorzero_core::endpoints::datasets::v1::create_datapoints(
+            &self.app_state.config,
+            &self.app_state.http_client,
+            &self.app_state.clickhouse_connection_info,
+            &dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn create_datapoints_from_inferences(
+        &self,
+        dataset_name: String,
+        params: CreateDatapointsFromInferenceRequestParams,
+    ) -> Result<CreateDatapointsResponse, TensorZeroClientError> {
+        let request = CreateDatapointsFromInferenceRequest { params };
+
+        tensorzero_core::endpoints::datasets::v1::create_from_inferences(
+            &self.app_state.config,
+            &self.app_state.clickhouse_connection_info,
+            dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn list_datapoints(
+        &self,
+        dataset_name: String,
+        request: ListDatapointsRequest,
+    ) -> Result<GetDatapointsResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::datasets::v1::list_datapoints(
+            &self.app_state.clickhouse_connection_info,
+            dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn get_datapoints(
+        &self,
+        dataset_name: Option<String>,
+        ids: Vec<Uuid>,
+    ) -> Result<GetDatapointsResponse, TensorZeroClientError> {
+        let request = GetDatapointsRequest { ids };
+
+        tensorzero_core::endpoints::datasets::v1::get_datapoints(
+            &self.app_state.clickhouse_connection_info,
+            dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn update_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<UpdateDatapointRequest>,
+    ) -> Result<UpdateDatapointsResponse, TensorZeroClientError> {
+        let request = UpdateDatapointsRequest { datapoints };
+
+        tensorzero_core::endpoints::datasets::v1::update_datapoints(
+            &self.app_state,
+            &dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn delete_datapoints(
+        &self,
+        dataset_name: String,
+        ids: Vec<Uuid>,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroClientError> {
+        let request = DeleteDatapointsRequest { ids };
+
+        tensorzero_core::endpoints::datasets::v1::delete_datapoints(
+            &self.app_state.clickhouse_connection_info,
+            &dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::feedback::internal::get_latest_feedback_id_by_metric(
+            &self.app_state.clickhouse_connection_info,
+            target_id,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 }
