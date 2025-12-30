@@ -1,11 +1,22 @@
 //! Tool definitions for TensorZero Autopilot.
 //!
-//! This crate provides tool traits and test tool implementations for the autopilot system.
+//! This crate provides tool traits and implementations for the autopilot system.
 //!
 //! # Overview
 //!
 //! - Re-exports tool traits from `durable-tools` for defining custom tools
+//! - Provides production tools for autopilot operations
 //! - Provides test tools (when `e2e_tests` feature is enabled) for testing the autopilot infrastructure
+//!
+//! # Production Tools
+//!
+//! - `InferenceTool` - Calls TensorZero inference endpoint, optionally with a historical config snapshot
+//! - `CreateDatapointsTool` - Creates datapoints in a dataset
+//! - `CreateDatapointsFromInferencesTool` - Creates datapoints from existing inferences
+//! - `ListDatapointsTool` - Lists datapoints with filtering and pagination
+//! - `GetDatapointsTool` - Gets specific datapoints by ID
+//! - `UpdateDatapointsTool` - Updates existing datapoints
+//! - `DeleteDatapointsTool` - Deletes datapoints by ID
 //!
 //! # Test Tools (e2e_tests feature)
 //!
@@ -23,8 +34,10 @@
 //! - `ErrorSimpleTool` - Always returns an error
 //! - `SlowSimpleTool` - Sleeps for configurable duration
 
-#[cfg(feature = "e2e_tests")]
 pub mod tools;
+pub mod types;
+
+pub use types::AutopilotToolSideInfo;
 
 // Re-export from durable-tools
 pub use durable_tools::{
@@ -34,9 +47,23 @@ pub use durable_tools::{
 
 /// Register production tools with the given registry.
 ///
-/// Currently this registers no tools, as there are no production tools yet.
-pub fn register_production_tools(_registry: &mut ToolRegistry) -> ToolResult<()> {
-    // No production tools yet
+/// This registers all production tools for autopilot operations.
+///
+/// # Errors
+///
+/// Returns an error if any tool registration fails.
+pub fn register_production_tools(registry: &mut ToolRegistry) -> ToolResult<()> {
+    // Inference tool
+    registry.register_simple_tool::<tools::InferenceTool>()?;
+
+    // Datapoint CRUD tools
+    registry.register_simple_tool::<tools::CreateDatapointsTool>()?;
+    registry.register_simple_tool::<tools::CreateDatapointsFromInferencesTool>()?;
+    registry.register_simple_tool::<tools::ListDatapointsTool>()?;
+    registry.register_simple_tool::<tools::GetDatapointsTool>()?;
+    registry.register_simple_tool::<tools::UpdateDatapointsTool>()?;
+    registry.register_simple_tool::<tools::DeleteDatapointsTool>()?;
+
     Ok(())
 }
 
