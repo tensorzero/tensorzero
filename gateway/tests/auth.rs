@@ -1,10 +1,11 @@
 #![expect(clippy::print_stdout)]
-use std::process::Stdio;
 use std::str::FromStr;
+use std::{process::Stdio, time::Duration};
 
 use http::{Method, StatusCode};
 use serde_json::{Value, json};
 
+use sqlx::types::chrono::Utc;
 use tensorzero_auth::{
     key::TensorZeroApiKey,
     postgres::{AuthResult, check_key},
@@ -790,12 +791,14 @@ async fn test_create_api_key_with_invalid_expiration() {
 async fn test_create_api_key_cli_with_expiration() {
     let pool = get_postgres_pool_for_testing().await;
 
-    // Deliberately set an expiration time in the past
+    // Deliberately set a soon-to-expire expiration time
+    let expire_datetime = Utc::now() + Duration::from_secs(2);
+
     let output = Command::new(common::gateway_path())
         .args([
             "--create-api-key",
             "--expiration",
-            "2025-12-20 23:00:00.000000 UTC",
+            expire_datetime.to_string().as_str(),
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -819,6 +822,9 @@ async fn test_create_api_key_cli_with_expiration() {
     );
 
     let api_key = TensorZeroApiKey::parse(api_key).unwrap();
+
+    // Wait for the created key to expire
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
     assert!(matches!(
         check_key(&api_key, &pool).await.unwrap(),
