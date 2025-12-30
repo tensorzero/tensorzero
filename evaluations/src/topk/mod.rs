@@ -1,12 +1,14 @@
 //! Durable Top-K Variant Evaluation Task
 //!
 //! This module implements an adaptive evaluation algorithm that evaluates multiple variants
-//! against a dataset using durable execution for fault tolerance. The algorithm supports:
+//! against a dataset using durable execution for fault tolerance. It aims to stop when it can
+//! confidently identify the top-k variants for some k in a user-chosen range of k values.
+//! Rankings are determined by a function which compares variants across multiple evaluators
+//! to produce a single scalar score per variant. The algorithm supports:
 //!
 //! - Multi-variant evaluation with per-variant stopping conditions
 //! - Batch processing for efficiency
 //! - Checkpointed execution for crash recovery
-//! - Configurable minimum/maximum datapoints and precision targets
 //!
 //! NOTE: This module is work in progress.
 
@@ -14,7 +16,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
+use durable::{Durable, Task, TaskContext, TaskResult, async_trait};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::endpoints::datasets::v1::get_datapoints;
 use tensorzero_core::endpoints::datasets::v1::list_datapoints;
@@ -22,7 +26,7 @@ use tensorzero_core::endpoints::datasets::v1::types::{
     GetDatapointsRequest, ListDatapointsRequest,
 };
 use tensorzero_core::evaluations::EvaluationConfig;
-use tracing::info;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::betting_confidence_sequences::{MeanBettingConfidenceSequence, update_betting_cs};
@@ -37,6 +41,18 @@ use crate::{
 // ============================================================================
 // Constants
 // ============================================================================
+
+/// Default batch size for top-k evaluation
+const DEFAULT_BATCH_SIZE: usize = 20;
+
+/// Default confidence sequence resolution (grid points for mean estimation)
+const DEFAULT_CS_RESOLUTION: usize = 1001;
+
+/// Default alpha (significance level) for confidence sequences
+const DEFAULT_ALPHA: f32 = 0.05;
+
+/// Queue name for top-k evaluation tasks
+const QUEUE_NAME: &str = "evaluations_topk";
 
 /// Default failure rate threshold for both variants and evaluators.
 /// A 5% failure rate is the default threshold for marking a variant as failed
@@ -455,11 +471,6 @@ fn non_failed_variants<'a>(
 /// If a variant's failure rate CS lower bound exceeds `variant_failure_threshold`,
 /// the variant is marked as Failed. Failed variants are not candidates for the
 /// returned top-k set.
-#[allow(dead_code, reason = "used in tests and by process_batch_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
 struct VariantStatusParams {
     k_min: u32,
     k_max: u32,
@@ -499,11 +510,6 @@ struct VariantStatusParams {
 /// - **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
 ///   `(num_non_failed - k_min)` other non-failed variants (adjusted by epsilon), it's
 ///   confidently in the top k_min, so mark as `Include`
-#[allow(dead_code, reason = "used in tests and by process_batch_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
 fn update_variant_statuses(
     variant_status: &mut HashMap<String, VariantStatus>,
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
@@ -838,11 +844,6 @@ pub fn check_topk(
 /// The fourth available reason, DatasetExhausted, is checked elsewhere, because
 /// check_global_stopping() doesn't have access to the number of batches processed
 /// and remaining.
-#[allow(dead_code, reason = "used in tests")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
 fn check_global_stopping(
     progress: &TopKProgress,
     params: &TopKTaskParams,
@@ -894,42 +895,42 @@ fn check_global_stopping(
 }
 
 // ============================================================================
-// Durable Task (skeleton - implementation in separate PR)
+// Durable Task
 // ============================================================================
 
-// The durable task implementation will use the types and functions defined above:
-//
-// - `TopKTaskState`: Passed to `Durable::build_with_state()` to provide clients
-// - `TopKTaskParams`: Serialized as task input, contains all config for reproducible runs
-// - `TopKProgress`: Checkpointed between batches via `ProcessBatchStepParams`
-// - `TopKTaskOutput`: Returned when task completes
-//
-// Key functions used in the task loop:
-// - `compute_updates()`: Called after each batch to update confidence sequences
-// - `update_variant_statuses()`: Called to transition variants between states
-//                                and check variant-specific stopping conditions
-// - `check_global_stopping()`: Called after each batch to check if we should stop
-// - `check_topk_stopping()`: Called within `check_global_stopping()` for TopKFound check
-//
-// The task will:
-// 1. Fetch and shuffle datapoint IDs (checkpointed step)
-// 2. For each batch:
-//    a. Fetch datapoints and run inference+evaluation on active variants
-//    b. Call `compute_updates()` to update confidence sequences
-//    c. Call `update_variant_statuses()` to transition variant states
-//    d. Call `check_global_stopping()` to determine if we should stop
-//    e. Checkpoint progress via `ProcessBatchStepParams`
-// 3. Return `TopKTaskOutput` with final state and stopping reason
+/// Creates a Durable client configured for top-k evaluation tasks.
+///
+/// The client is configured to use the `evaluations_topk` queue by default,
+/// which must have been created by running the database migrations.
+///
+/// # Arguments
+/// * `pool` - A PostgreSQL connection pool
+/// * `state` - Application state containing clients for inference and database access
+/// * `queue_name` - Optional custom queue name. If None, uses the default "evaluations_topk" queue.
+///
+/// # Returns
+/// A configured `Durable` client for spawning and processing `TopKTask` tasks.
+pub async fn create_client(
+    pool: PgPool,
+    state: TopKTaskState,
+    queue_name: Option<&str>,
+) -> Result<Durable<TopKTaskState>> {
+    let queue_name = queue_name.unwrap_or(QUEUE_NAME);
+    let client = Durable::builder()
+        .pool(pool)
+        .queue_name(queue_name)
+        .build_with_state(state)
+        .await?;
+
+    client.register::<TopKTask>().await?;
+
+    Ok(client)
+}
 
 /// Parameters for the `fetch_datapoint_ids` durable step.
 ///
 /// This step paginates through the dataset to collect all datapoint IDs,
 /// then shuffles them for randomized evaluation order.
-#[allow(dead_code, reason = "used by fetch_datapoint_ids_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct FetchDatapointIdsParams {
     /// Name of the function to filter datapoints by
@@ -944,7 +945,6 @@ struct FetchDatapointIdsParams {
 ///
 /// Paginates through the entire dataset to fetch all datapoint IDs, respecting
 /// `max_datapoints` if set. The IDs are shuffled for randomized evaluation order.
-#[expect(dead_code)]
 async fn fetch_datapoint_ids_step(
     params: FetchDatapointIdsParams,
     state: TopKTaskState,
@@ -1008,12 +1008,7 @@ async fn fetch_datapoint_ids_step(
 /// Extracts the variant name from an `EvaluationVariant`.
 ///
 /// For named variants, returns the name directly. For dynamic variants (which don't
-/// have persistent names), returns a placeholder string "tensorzero::dynamic_variant".
-#[allow(dead_code, reason = "used by process_batch_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
+/// have persistent names), returns a placeholder string "dynamic_variant".
 fn get_variant_name(variant: &EvaluationVariant) -> String {
     match variant {
         EvaluationVariant::Name(name) => name.clone(),
@@ -1027,11 +1022,6 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
 /// This step processes a batch of datapoints: runs inference for each active variant,
 /// evaluates the results, updates confidence sequences, and checks stopping conditions.
 /// All necessary context is included to enable durable execution with checkpointing.
-#[allow(dead_code, reason = "used by process_batch_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProcessBatchStepParams {
     /// IDs of the datapoints to process in this batch
@@ -1071,7 +1061,6 @@ struct ProcessBatchStepParams {
 }
 
 /// Durable step function to process a batch and update progress state.
-#[expect(dead_code)]
 async fn process_batch_step(
     params: ProcessBatchStepParams,
     state: TopKTaskState,
@@ -1219,38 +1208,251 @@ async fn process_batch_step(
 /// - **TopKFound**: A top-k set is confidently identified (for some k in [k_min, k_max])
 /// - **DatasetExhausted**: All datapoints have been processed
 /// - **EvaluatorsFailed**: An evaluator's failure rate exceeds the threshold
-/// - **TooManyVariantsFailed**: Too many variants failed to identify top-k
+/// - **TooManyVariantsFailed**: Too many variants failed to identify a top-k
 ///
 /// # Usage
 ///
 /// Use [`create_client`] to create a durable client, then spawn tasks with
 /// [`TopKTaskParams`] specifying the evaluation configuration.
-#[expect(dead_code)]
-struct TopKTask;
+pub struct TopKTask;
 
-// #[async_trait]
-// impl Task<TopKTaskState> for TopKTask {
-//     const NAME: &'static str = "topk-evaluation";
-//     type Params = TopKTaskParams;
-//     type Output = TopKTaskOutput;
+#[async_trait]
+impl Task<TopKTaskState> for TopKTask {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("topk-evaluation")
+    }
+    type Params = TopKTaskParams;
+    type Output = TopKTaskOutput;
 
-//     async fn run(
-//         params: Self::Params,
-//         mut ctx: TaskContext<TopKTaskState>,
-//         _state: TopKTaskState,
-//     ) -> TaskResult<Self::Output> {
-//         The implementation will:
-//           1. Validate input parameters (k_min > 0, k_max >= k_min, etc.)
-//           2. Generate a durable evaluation_run_id via ctx.uuid7()
-//           3. Checkpoint 1: Fetch and shuffle datapoint IDs via fetch_datapoint_ids_step
-//           4. Initialize TopKProgress with all variants Active
-//           5. For each batch:
-//             - Checkpoint 2: Process batch via process_batch_step
-//             - Check global stopping conditions via check_global_stopping()
-//             - Break if stopping condition met
-//           6. Return TopKTaskOutput with final state and stopping reason
-//     }
-// }
+    async fn run(
+        params: Self::Params,
+        mut ctx: TaskContext<TopKTaskState>,
+        _state: TopKTaskState,
+    ) -> TaskResult<Self::Output> {
+        // Validate arguments
+        if params.variant_names.is_empty() {
+            return Err(durable::TaskError::Validation {
+                message: "At least one variant must be provided".to_string(),
+            });
+        }
+        if params.k_min == 0 {
+            return Err(durable::TaskError::Validation {
+                message: "k_min must be > 0".to_string(),
+            });
+        }
+        if params.k_max < params.k_min {
+            return Err(durable::TaskError::Validation {
+                message: format!(
+                    "k_max ({}) must be >= k_min ({})",
+                    params.k_max, params.k_min
+                ),
+            });
+        }
+        if params.k_max as usize > params.variant_names.len() {
+            return Err(durable::TaskError::Validation {
+                message: format!(
+                    "k_max ({}) must be <= number of variants ({})",
+                    params.k_max,
+                    params.variant_names.len()
+                ),
+            });
+        }
+        if params.batch_size == Some(0) {
+            return Err(durable::TaskError::Validation {
+                message: "batch_size must be > 0".to_string(),
+            });
+        }
+
+        let batch_size = params.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
+
+        // Get evaluator names from the evaluation config
+        let EvaluationConfig::Inference(inference_config) = &params.evaluation_config;
+        let evaluator_names: Vec<String> = inference_config.evaluators.keys().cloned().collect();
+
+        // Generate evaluation run ID durably
+        let evaluation_run_id = ctx.uuid7().await?;
+
+        info!(
+            evaluation_run_id = %evaluation_run_id,
+            num_variants = params.variant_names.len(),
+            k_min = params.k_min,
+            k_max = params.k_max,
+            batch_size = batch_size,
+            "Starting top-k evaluation"
+        );
+
+        // CHECKPOINT 1: Fetch and shuffle datapoint IDs
+        let fetch_params = FetchDatapointIdsParams {
+            function_name: inference_config.function_name.clone(),
+            dataset_name: params.dataset_name.clone(),
+            max_datapoints: params.max_datapoints,
+        };
+        let datapoint_ids: Vec<Uuid> = ctx
+            .step(
+                "fetch_datapoint_ids",
+                fetch_params,
+                fetch_datapoint_ids_step,
+            )
+            .await?;
+
+        let total_datapoints = datapoint_ids.len();
+        info!(
+            total_datapoints = total_datapoints,
+            "Loaded and shuffled datapoint IDs"
+        );
+
+        // Log if fewer datapoints are available than the configured max
+        if let Some(max) = params.max_datapoints
+            && total_datapoints < max
+        {
+            info!(
+                "Dataset contains {total_datapoints} datapoints, fewer than max_datapoints ({max})"
+            );
+        }
+
+        if total_datapoints == 0 {
+            return Err(durable::TaskError::Validation {
+                message: "Dataset is empty".to_string(),
+            });
+        }
+
+        // Initialize loop state
+        let mut progress = TopKProgress {
+            variant_status: params
+                .variant_names
+                .iter()
+                .map(|name| (name.clone(), VariantStatus::Active))
+                .collect(),
+            variant_performance: params
+                .variant_names
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        MeanBettingConfidenceSequence::new(
+                            name.clone(),
+                            DEFAULT_CS_RESOLUTION,
+                            DEFAULT_ALPHA,
+                        ),
+                    )
+                })
+                .collect(),
+            variant_failures: params
+                .variant_names
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        MeanBettingConfidenceSequence::new(
+                            name.clone(),
+                            DEFAULT_CS_RESOLUTION,
+                            DEFAULT_ALPHA,
+                        ),
+                    )
+                })
+                .collect(),
+            evaluator_failures: evaluator_names
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        MeanBettingConfidenceSequence::new(
+                            name.clone(),
+                            DEFAULT_CS_RESOLUTION,
+                            DEFAULT_ALPHA,
+                        ),
+                    )
+                })
+                .collect(),
+            num_datapoints_processed: 0,
+            batch_index: 0,
+        };
+
+        // Process batches
+        let batches: Vec<Vec<Uuid>> = datapoint_ids
+            .chunks(batch_size)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+
+        let mut stopping_reason: Option<GlobalStoppingReason> = None;
+
+        for (batch_idx, batch_ids) in batches.into_iter().enumerate() {
+            let current_batch_size = batch_ids.len();
+            // CHECKPOINT 2: Process batch and update state
+            let batch_step_params = ProcessBatchStepParams {
+                batch_ids,
+                progress: progress.clone(),
+                k_min: params.k_min,
+                k_max: params.k_max,
+                epsilon: params.epsilon,
+                variant_failure_threshold: params.variant_failure_threshold,
+                evaluator_failure_threshold: params.evaluator_failure_threshold,
+                batch_idx,
+                evaluation_name: params.evaluation_name.clone(),
+                evaluation_run_id,
+                dataset_name: params.dataset_name.clone(),
+                inference_cache: params.inference_cache,
+                concurrency: params.concurrency,
+                // Config fields (passed from params for durable execution)
+                evaluation_config: params.evaluation_config.clone(),
+                function_configs: params.function_configs.clone(),
+                scoring_function: params.scoring_function.clone(),
+            };
+            progress = ctx
+                .step(
+                    &format!("batch_{batch_idx}"),
+                    batch_step_params,
+                    process_batch_step,
+                )
+                .await?;
+
+            debug!(
+                batch_number = batch_idx + 1,
+                batch_size = current_batch_size,
+                "Processing batch"
+            );
+
+            if let Some(reason) = check_global_stopping(&progress, &params) {
+                stopping_reason = Some(reason);
+                break;
+            }
+        }
+
+        // If we processed all batches without satisfying one of the other stopping conditions,
+        // then assign reason DatasetExhausted.
+        let stopping_reason = stopping_reason.unwrap_or(GlobalStoppingReason::DatasetExhausted);
+
+        // Finalize variant statuses if a top-k set was found
+        if let GlobalStoppingReason::TopKFound { top_variants, .. } = &stopping_reason {
+            // Mark top variants as Include, remaining non-failed variants as Exclude
+            for (name, status) in &mut progress.variant_status {
+                if *status == VariantStatus::Active {
+                    if top_variants.contains(name) {
+                        *status = VariantStatus::Include;
+                    } else {
+                        *status = VariantStatus::Exclude;
+                    }
+                }
+            }
+        }
+
+        info!(
+            stopping_reason = ?stopping_reason,
+            num_datapoints_processed = progress.num_datapoints_processed,
+            "Top-k evaluation complete"
+        );
+
+        Ok(TopKTaskOutput {
+            evaluation_run_id,
+            variant_status: progress.variant_status,
+            variant_performance: progress.variant_performance,
+            variant_failures: progress.variant_failures,
+            evaluator_failures: progress.evaluator_failures,
+            stopping_reason,
+            num_datapoints_processed: progress.num_datapoints_processed,
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests;

@@ -10,13 +10,13 @@ mod embedded;
 use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tensorzero::{
+pub use tensorzero::{
     ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
     ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
-use tensorzero_core::config::snapshot::SnapshotHash;
+pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use url::Url;
 use uuid::Uuid;
