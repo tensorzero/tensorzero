@@ -193,13 +193,6 @@ pub fn create_test_input(text: &str) -> Input {
 
 // ===== Inference Mock Response Factories =====
 
-/// Create a mock GetInferencesResponse with the given inferences.
-pub fn create_mock_get_inferences_response(
-    inferences: Vec<StoredInference>,
-) -> GetInferencesResponse {
-    GetInferencesResponse { inferences }
-}
-
 /// Create a mock stored chat inference for testing.
 pub fn create_mock_stored_chat_inference(
     inference_id: Uuid,

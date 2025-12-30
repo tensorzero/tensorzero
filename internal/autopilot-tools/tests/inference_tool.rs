@@ -8,7 +8,8 @@ use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
 use tensorzero::{
-    ActionInput, Input, InputMessage, InputMessageContent, ListInferencesRequest, Role,
+    ActionInput, GetInferencesResponse, Input, InputMessage, InputMessageContent,
+    ListInferencesRequest, Role,
 };
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
@@ -22,7 +23,7 @@ use autopilot_tools::{
 };
 use common::{MockTensorZeroClient, create_mock_chat_response};
 
-use crate::common::{create_mock_get_inferences_response, create_mock_stored_chat_inference};
+use crate::common::create_mock_stored_chat_inference;
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
@@ -190,7 +191,9 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
     let inference_id = Uuid::now_v7();
     let inference =
         create_mock_stored_chat_inference(inference_id, "test_function", "test_variant");
-    let mock_response = create_mock_get_inferences_response(vec![inference]);
+    let mock_response = GetInferencesResponse {
+        inferences: vec![inference],
+    };
 
     let llm_params = ListInferencesToolParams {
         request: ListInferencesRequest::default(),
@@ -227,7 +230,7 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_list_inferences_tool_with_filters(pool: PgPool) {
-    let mock_response = create_mock_get_inferences_response(vec![]);
+    let mock_response = GetInferencesResponse { inferences: vec![] };
 
     let llm_params = ListInferencesToolParams {
         request: ListInferencesRequest {
@@ -278,7 +281,7 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
-    let mock_response = create_mock_get_inferences_response(vec![]);
+    let mock_response = GetInferencesResponse { inferences: vec![] };
     let cursor_id = Uuid::now_v7();
 
     let llm_params = ListInferencesToolParams {
