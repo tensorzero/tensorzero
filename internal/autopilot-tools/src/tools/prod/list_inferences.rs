@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 
@@ -40,10 +40,6 @@ impl ToolMetadata for ListInferencesTool {
              Can filter by function name, variant name, episode ID, tags, metrics, \
              time ranges, and order results. Supports both offset and cursor-based pagination.",
         )
-    }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(ListInferencesToolParams))
     }
 }
 

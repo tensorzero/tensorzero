@@ -147,28 +147,6 @@ impl ToolExecutor {
         llm_params: T::LlmParams,
         side_info: T::SideInfo,
         episode_id: Uuid,
-    ) -> anyhow::Result<SpawnResult> {
-        let wrapped = TaskToolParams {
-            llm_params,
-            side_info,
-            episode_id,
-        };
-        self.durable
-            .spawn_with_options::<TaskToolAdapter<T>>(wrapped, SpawnOptions::default())
-            .await
-            .map_err(Into::into)
-    }
-
-    /// Spawn a `TaskTool` execution with custom spawn options.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool_with_options<T: TaskTool>(
-        &self,
-        llm_params: T::LlmParams,
-        side_info: T::SideInfo,
-        episode_id: Uuid,
         options: SpawnOptions,
     ) -> anyhow::Result<SpawnResult> {
         let wrapped = TaskToolParams {
@@ -219,60 +197,12 @@ impl ToolExecutor {
             .map_err(Into::into)
     }
 
-    /// Spawn a `TaskTool` execution using a custom executor (e.g., a transaction).
-    ///
-    /// This allows you to atomically enqueue a task as part of a larger transaction.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let mut tx = executor.pool().begin().await?;
-    ///
-    /// sqlx::query("INSERT INTO orders (id) VALUES ($1)")
-    ///     .bind(order_id)
-    ///     .execute(&mut *tx)
-    ///     .await?;
-    ///
-    /// executor.spawn_tool_with::<ProcessOrder, _>(
-    ///     &mut *tx,
-    ///     params,
-    ///     (),
-    ///     episode_id,
-    /// ).await?;
-    ///
-    /// tx.commit().await?;
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool_with<'e, T, E>(
-        &self,
-        executor: E,
-        llm_params: T::LlmParams,
-        side_info: T::SideInfo,
-        episode_id: Uuid,
-    ) -> anyhow::Result<SpawnResult>
-    where
-        T: TaskTool,
-        E: Executor<'e, Database = Postgres>,
-    {
-        self.spawn_tool_with_options_with::<T, E>(
-            executor,
-            llm_params,
-            side_info,
-            episode_id,
-            SpawnOptions::default(),
-        )
-        .await
-    }
-
     /// Spawn a `TaskTool` execution with custom spawn options using a custom executor.
     ///
     /// # Errors
     ///
     /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool_with_options_with<'e, T, E>(
+    pub async fn spawn_tool_with<'e, T, E>(
         &self,
         executor: E,
         llm_params: T::LlmParams,
@@ -351,7 +281,7 @@ impl ToolExecutor {
     /// Returns an error if a tool's parameter schema generation or serialization fails.
     pub async fn tool_definitions(&self) -> Result<Vec<Tool>, ToolError> {
         let registry = self.registry.read().await;
-        registry.to_tensorzero_tools()
+        registry.iter().map(Tool::try_from).collect()
     }
 
     /// Get a reference to the tool registry.

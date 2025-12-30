@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use durable::{Durable, TaskContext, TaskHandle};
+use durable::{Durable, SpawnOptions, TaskContext, TaskHandle};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
@@ -12,6 +12,7 @@ use crate::error::{ToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
+use tokio::sync::RwLockReadGuard;
 
 /// Handle returned by `spawn_tool`, can be joined later with `join_tool`.
 ///
@@ -137,6 +138,23 @@ impl<'a> ToolContext<'a> {
         self.app_state.t0_client.clone()
     }
 
+    /// Get a read lock on the tool registry.
+    ///
+    /// Use this to iterate over tools and convert them to TensorZero tool definitions.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let registry = ctx.registry().await;
+    /// let tools: Result<Vec<Tool>, _> = registry.iter()
+    ///     .filter(|t| !t.is_durable())
+    ///     .map(Tool::try_from)
+    ///     .collect();
+    /// ```
+    pub async fn registry_read_lock(&self) -> RwLockReadGuard<'_, ToolRegistry> {
+        self.app_state.tool_registry.read().await
+    }
+
     /// Get mutable access to the underlying durable `TaskContext`.
     ///
     /// Use this for advanced operations not exposed by `ToolContext`.
@@ -192,8 +210,11 @@ impl<'a> ToolContext<'a> {
         tool_name: &str,
         llm_params: JsonValue,
         side_info: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<JsonValue> {
-        let handle = self.spawn_tool(tool_name, llm_params, side_info).await?;
+        let handle = self
+            .spawn_tool(tool_name, llm_params, side_info, options)
+            .await?;
         self.join_tool(handle).await
     }
 
@@ -232,6 +253,7 @@ impl<'a> ToolContext<'a> {
         tool_name: &str,
         llm_params: JsonValue,
         side_info: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<ToolHandle> {
         let is_durable = {
             let registry = self.app_state.tool_registry.read().await;
@@ -251,7 +273,7 @@ impl<'a> ToolContext<'a> {
             let wrapped_params = serde_json::to_value(wrapped_params)?;
             let spawn_name = format!("spawn:{tool_name}:{call_id}");
             let handle: TaskHandle<JsonValue> = self
-                .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params)
+                .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params, options)
                 .await?;
             Ok(ToolHandle::Async(handle))
         } else {
@@ -287,10 +309,11 @@ impl<'a> ToolContext<'a> {
         name: &str,
         task_name: &str,
         params: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<TaskHandle<T>> {
         let handle: TaskHandle<T> = self
             .task_ctx
-            .spawn_by_name(name, task_name, params, durable::SpawnOptions::default())
+            .spawn_by_name(name, task_name, params, options)
             .await?;
         Ok(handle)
     }

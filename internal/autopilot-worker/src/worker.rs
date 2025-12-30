@@ -6,13 +6,14 @@ use anyhow::Result;
 use async_trait::async_trait;
 use autopilot_tools::ToolVisitor;
 use durable_tools::{
-    SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, WorkerOptions,
+    SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
 };
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-use crate::wrapper::{ClientSimpleToolWrapper, ClientToolWrapper};
+use crate::wrapper::ClientSimpleToolWrapper;
+use crate::wrapper::ClientTaskToolWrapper;
 
 /// Configuration for the autopilot worker.
 pub struct AutopilotWorkerConfig {
@@ -88,17 +89,33 @@ impl AutopilotWorker {
         self.executor.clone()
     }
 
-    /// Start the worker and run until cancellation.
-    pub async fn run(&self, cancel_token: CancellationToken) -> Result<()> {
-        let worker = self.executor.start_worker(WorkerOptions::default()).await?;
+    /// Start the durable worker.
+    ///
+    /// This is the fallible startup path that validates the durable configuration
+    /// (queue exists, migrations applied, etc.). Call this before spawning the
+    /// background task to ensure configuration errors are surfaced at startup.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the worker cannot be started (e.g., queue missing,
+    /// migrations not applied, database connection issues).
+    pub async fn start(&self) -> Result<Worker> {
+        self.executor
+            .start_worker(WorkerOptions::default())
+            .await
+            .map_err(Into::into)
+    }
 
+    /// Run the worker until cancellation.
+    ///
+    /// This should be called in a spawned task after `start()` succeeds.
+    pub async fn run_until_cancelled(worker: Worker, cancel_token: CancellationToken) {
         tokio::select! {
             () = cancel_token.cancelled() => {
                 tracing::info!("Autopilot worker received shutdown signal");
                 worker.shutdown().await;
             }
         }
-        Ok(())
     }
 }
 
@@ -118,9 +135,12 @@ struct LocalToolVisitor<'a> {
 impl ToolVisitor for LocalToolVisitor<'_> {
     type Error = ToolError;
 
-    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError> {
+    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError>
+    where
+        T::SideInfo: Default + PartialEq,
+    {
         self.executor
-            .register_task_tool::<ClientToolWrapper<T>>()
+            .register_task_tool::<ClientTaskToolWrapper<T>>()
             .await?;
         Ok(())
     }
@@ -163,7 +183,13 @@ impl AutopilotWorkerHandle {
 ///
 /// # Returns
 ///
-/// Returns `Ok(AutopilotWorkerHandle)` if the worker was successfully spawned,
+/// Returns `Ok(AutopilotWorkerHandle)` if the worker was successfully spawned.
+///
+/// # Errors
+///
+/// Returns an error if the worker cannot be started. This catches configuration
+/// errors (e.g., missing queue, migrations not applied) at startup rather than
+/// failing silently in the background.
 pub async fn spawn_autopilot_worker(
     deferred_tasks: &TaskTracker,
     cancel_token: CancellationToken,
@@ -172,10 +198,17 @@ pub async fn spawn_autopilot_worker(
     let worker = AutopilotWorker::new(config).await?;
     worker.register_tools().await?;
 
+    // Start the durable worker before spawning to catch configuration errors early.
+    // If durable is misconfigured (queue missing, migrations not applied), this will
+    // return an error instead of silently failing in the background.
+    let durable_worker = worker.start().await?;
+
     // Create the handle with a shared reference to the executor
     let handle = AutopilotWorkerHandle {
         executor: worker.executor(),
     };
-    deferred_tasks.spawn(async move { worker.run(cancel_token).await });
+    deferred_tasks.spawn(async move {
+        AutopilotWorker::run_until_cancelled(durable_worker, cancel_token).await;
+    });
     Ok(handle)
 }

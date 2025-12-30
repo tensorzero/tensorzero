@@ -1,9 +1,7 @@
-use schemars::{JsonSchema, Schema};
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::time::Duration;
-
-use crate::error::ToolResult;
 
 /// Marker trait for side information types.
 ///
@@ -29,10 +27,9 @@ impl SideInfo for () {}
 ///
 /// ```ignore
 /// use durable_tools::ToolMetadata;
-/// use schemars::{schema_for, JsonSchema, Schema};
+/// use schemars::JsonSchema;
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
-/// use std::time::Duration;
 ///
 /// #[derive(Serialize, Deserialize, JsonSchema)]
 /// struct MyToolParams {
@@ -42,6 +39,10 @@ impl SideInfo for () {}
 /// struct MyTool;
 ///
 /// impl ToolMetadata for MyTool {
+///     type SideInfo = ();
+///     type Output = String;
+///     type LlmParams = MyToolParams;
+///
 ///     fn name() -> Cow<'static, str> {
 ///         Cow::Borrowed("my_tool")
 ///     }
@@ -49,12 +50,7 @@ impl SideInfo for () {}
 ///     fn description() -> Cow<'static, str> {
 ///         Cow::Borrowed("A tool that does something")
 ///     }
-///
-///     fn parameters_schema() -> ToolResult<Schema> {
-///         Ok(schema_for!(MyToolParams))
-///     }
-///
-///     type LlmParams = MyToolParams;
+///     // parameters_schema() is automatically derived from LlmParams
 /// }
 /// ```
 pub trait ToolMetadata: Send + Sync + 'static {
@@ -75,9 +71,6 @@ pub trait ToolMetadata: Send + Sync + 'static {
     /// Used for generating LLM function definitions.
     fn description() -> Cow<'static, str>;
 
-    /// JSON Schema for the tool's LLM-visible parameters.
-    fn parameters_schema() -> ToolResult<Schema>;
-
     /// The LLM-visible parameter type.
     ///
     /// This is what the LLM sees and can fill in when calling the tool.
@@ -87,6 +80,14 @@ pub trait ToolMetadata: Send + Sync + 'static {
     /// - `JsonSchema` for schema generation
     /// - `Send + Sync + 'static` for thread-safety
     type LlmParams: Serialize + DeserializeOwned + JsonSchema + Send + Sync + 'static;
+
+    /// JSON Schema for the tool's LLM-visible parameters.
+    ///
+    /// By default, this is derived from the `LlmParams` type using `schemars`.
+    /// Override this if you need custom schema generation.
+    fn parameters_schema() -> Schema {
+        SchemaGenerator::default().into_root_schema_for::<Self::LlmParams>()
+    }
 
     /// Execution timeout for this tool.
     ///

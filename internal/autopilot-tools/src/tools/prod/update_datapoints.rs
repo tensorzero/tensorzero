@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero::{UpdateDatapointRequest, UpdateDatapointsResponse};
 
@@ -41,10 +41,6 @@ impl ToolMetadata for UpdateDatapointsTool {
              Can modify input, output, tags, and metadata. \
              Returns new IDs for the updated datapoints (versions are immutable).",
         )
-    }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(UpdateDatapointsToolParams))
     }
 }
 

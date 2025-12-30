@@ -34,7 +34,7 @@
 //!     ToolExecutor, ToolResult, async_trait, WorkerOptions,
 //!     http_gateway_client,
 //! };
-//! use schemars::{schema_for, JsonSchema, Schema};
+//! use schemars::JsonSchema;
 //! use serde::{Deserialize, Serialize};
 //! use std::borrow::Cow;
 //! use uuid::Uuid;
@@ -54,6 +54,10 @@
 //! struct SearchTool;
 //!
 //! impl ToolMetadata for SearchTool {
+//!     type SideInfo = ();
+//!     type Output = SearchResult;
+//!     type LlmParams = SearchParams;
+//!
 //!     fn name() -> Cow<'static, str> {
 //!         Cow::Borrowed("search")
 //!     }
@@ -61,14 +65,7 @@
 //!     fn description() -> Cow<'static, str> {
 //!         Cow::Borrowed("Search the web")
 //!     }
-//!
-//!     fn parameters_schema() -> ToolResult<Schema> {
-//!         Ok(schema_for!(SearchParams))
-//!     }
-//!
-//!     type LlmParams = SearchParams;
-//!     type SideInfo = ();
-//!     type Output = SearchResult;
+//!     // parameters_schema() is automatically derived from LlmParams
 //! }
 //!
 //! #[async_trait]
@@ -98,6 +95,10 @@
 //! struct ResearchTool;
 //!
 //! impl ToolMetadata for ResearchTool {
+//!     type SideInfo = ();
+//!     type Output = ResearchResult;
+//!     type LlmParams = ResearchParams;
+//!
 //!     fn name() -> Cow<'static, str> {
 //!         Cow::Borrowed("research")
 //!     }
@@ -105,14 +106,6 @@
 //!     fn description() -> Cow<'static, str> {
 //!         Cow::Borrowed("Research a topic")
 //!     }
-//!
-//!     fn parameters_schema() -> ToolResult<Schema> {
-//!         Ok(schema_for!(ResearchParams))
-//!     }
-//!
-//!     type LlmParams = ResearchParams;
-//!     type SideInfo = ();
-//!     type Output = ResearchResult;
 //! }
 //!
 //! #[async_trait]
@@ -221,11 +214,8 @@ pub use tensorzero_client::{
     UpdateDatapointsResponse,
 };
 
-// Re-export inference query types
-pub use tensorzero_client::{GetInferencesResponse, ListInferencesRequest};
-
 // Re-export inference query filter and ordering types
-pub use tensorzero_client::{
+pub use tensorzero::{
     BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
     InferenceOutputSource, OrderBy, OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter,
     TimeComparisonOperator, TimeFilter,
@@ -236,15 +226,16 @@ pub use tensorzero_client::SnapshotHash;
 
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
-    Client, ClientInferenceParams, InferenceParams, InferenceResponse, Input, InputMessage,
-    InputMessageContent, Role, TensorZeroError,
+    Client, ClientInferenceParams, DynamicToolParams, GetInferencesResponse, InferenceParams,
+    InferenceResponse, Input, InputMessage, InputMessageContent, ListInferencesRequest, Role,
+    TensorZeroError, Tool,
 };
 
 // Re-export async_trait for convenience
 pub use async_trait::async_trait;
 
 // Re-export durable types that tools may need
-pub use durable::{SpawnOptions, SpawnResult, TaskHandle, WorkerOptions};
+pub use durable::{SpawnOptions, SpawnResult, TaskHandle, Worker, WorkerOptions};
 
 // Re-export schemars for parameter schemas
 pub use schemars;

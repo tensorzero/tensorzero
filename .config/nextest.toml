@@ -15,6 +15,11 @@ default-filter = "not (test(no_aws_credentials) | test(export_bindings_) | test(
 filter = 'test(evaluations)'
 slow-timeout = { period = "20s", terminate-after = 3 }
 
+[[profile.default.overrides]]
+# Top-k evaluation integration tests involve durable task execution with multiple batches
+filter = 'binary(topk) and test(test_topk)'
+slow-timeout = { period = "60s", terminate-after = 3 }
+
 # Profiles config
 # We use these profiles to define our major test groups.
 # By using `default-filter` to specify our tests, we can further restrict the tests

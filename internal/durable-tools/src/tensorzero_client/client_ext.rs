@@ -5,6 +5,7 @@
 //! mode switching.
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotError;
 use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
@@ -13,6 +14,8 @@ use tensorzero::{
     UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
+use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use uuid::Uuid;
 
 use super::{
@@ -47,9 +50,7 @@ impl TensorZeroClient for Client {
                         "internal/autopilot/v1/sessions/{session_id}/events"
                     ))
                     .map_err(|e: url::ParseError| {
-                        TensorZeroClientError::Autopilot(
-                            autopilot_client::AutopilotError::InvalidUrl(e),
-                        )
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
 
                 let response = http
@@ -58,26 +59,21 @@ impl TensorZeroClient for Client {
                     .json(&request)
                     .send()
                     .await
-                    .map_err(|e| {
-                        TensorZeroClientError::Autopilot(autopilot_client::AutopilotError::Request(
-                            e,
-                        ))
-                    })?;
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))?;
 
                 if !response.status().is_success() {
                     let status = response.status().as_u16();
                     let text = response.text().await.unwrap_or_default();
-                    return Err(TensorZeroClientError::Autopilot(
-                        autopilot_client::AutopilotError::Http {
-                            status_code: status,
-                            message: text,
-                        },
-                    ));
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
                 }
 
-                response.json().await.map_err(|e| {
-                    TensorZeroClientError::Autopilot(autopilot_client::AutopilotError::Request(e))
-                })
+                response
+                    .json()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
             }
             ClientMode::EmbeddedGateway {
                 gateway,
@@ -117,9 +113,7 @@ impl TensorZeroClient for Client {
                         "internal/autopilot/v1/sessions/{session_id}/events"
                     ))
                     .map_err(|e: url::ParseError| {
-                        TensorZeroClientError::Autopilot(
-                            autopilot_client::AutopilotError::InvalidUrl(e),
-                        )
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
 
                 // Add query params
@@ -132,24 +126,24 @@ impl TensorZeroClient for Client {
                         .append_pair("before", &before.to_string());
                 }
 
-                let response = http.http_client.get(url).send().await.map_err(|e| {
-                    TensorZeroClientError::Autopilot(autopilot_client::AutopilotError::Request(e))
-                })?;
+                let response =
+                    http.http_client.get(url).send().await.map_err(|e| {
+                        TensorZeroClientError::Autopilot(AutopilotError::Request(e))
+                    })?;
 
                 if !response.status().is_success() {
                     let status = response.status().as_u16();
                     let text = response.text().await.unwrap_or_default();
-                    return Err(TensorZeroClientError::Autopilot(
-                        autopilot_client::AutopilotError::Http {
-                            status_code: status,
-                            message: text,
-                        },
-                    ));
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
                 }
 
-                response.json().await.map_err(|e| {
-                    TensorZeroClientError::Autopilot(autopilot_client::AutopilotError::Request(e))
-                })
+                response
+                    .json()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
             }
             ClientMode::EmbeddedGateway {
                 gateway,
@@ -185,9 +179,7 @@ impl TensorZeroClient for Client {
                     .base_url
                     .join("internal/autopilot/v1/sessions")
                     .map_err(|e: url::ParseError| {
-                        TensorZeroClientError::Autopilot(
-                            autopilot_client::AutopilotError::InvalidUrl(e),
-                        )
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
 
                 // Add query params
@@ -200,24 +192,24 @@ impl TensorZeroClient for Client {
                         .append_pair("offset", &offset.to_string());
                 }
 
-                let response = http.http_client.get(url).send().await.map_err(|e| {
-                    TensorZeroClientError::Autopilot(autopilot_client::AutopilotError::Request(e))
-                })?;
+                let response =
+                    http.http_client.get(url).send().await.map_err(|e| {
+                        TensorZeroClientError::Autopilot(AutopilotError::Request(e))
+                    })?;
 
                 if !response.status().is_success() {
                     let status = response.status().as_u16();
                     let text = response.text().await.unwrap_or_default();
-                    return Err(TensorZeroClientError::Autopilot(
-                        autopilot_client::AutopilotError::Http {
-                            status_code: status,
-                            message: text,
-                        },
-                    ));
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
                 }
 
-                response.json().await.map_err(|e| {
-                    TensorZeroClientError::Autopilot(autopilot_client::AutopilotError::Request(e))
-                })
+                response
+                    .json()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
             }
             ClientMode::EmbeddedGateway {
                 gateway,
@@ -230,12 +222,7 @@ impl TensorZeroClient for Client {
                     .as_ref()
                     .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
-                tensorzero_core::endpoints::internal::autopilot::list_sessions(
-                    autopilot_client,
-                    params,
-                )
-                .await
-                .map_err(|e| {
+                list_sessions(autopilot_client, params).await.map_err(|e| {
                     TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
                 })
             }
@@ -245,52 +232,38 @@ impl TensorZeroClient for Client {
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
-        params: ClientInferenceParams,
+        input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError> {
-        use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
-
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 let url = http
                     .base_url
                     .join("internal/action")
                     .map_err(|e: url::ParseError| {
-                        TensorZeroClientError::Autopilot(
-                            autopilot_client::AutopilotError::InvalidUrl(e),
-                        )
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
-
-                let action_input = ActionInputInfo {
-                    snapshot_hash,
-                    input: ActionInput::Inference(Box::new(params)),
-                };
 
                 let response = http
                     .http_client
                     .post(url)
-                    .json(&action_input)
+                    .json(&input)
                     .send()
                     .await
-                    .map_err(|e| {
-                        TensorZeroClientError::Autopilot(autopilot_client::AutopilotError::Request(
-                            e,
-                        ))
-                    })?;
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))?;
 
                 if !response.status().is_success() {
                     let status = response.status().as_u16();
                     let text = response.text().await.unwrap_or_default();
-                    return Err(TensorZeroClientError::Autopilot(
-                        autopilot_client::AutopilotError::Http {
-                            status_code: status,
-                            message: text,
-                        },
-                    ));
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
                 }
 
-                response.json().await.map_err(|e| {
-                    TensorZeroClientError::Autopilot(autopilot_client::AutopilotError::Request(e))
-                })
+                response
+                    .json()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
             }
             ClientMode::EmbeddedGateway {
                 gateway,
@@ -298,7 +271,7 @@ impl TensorZeroClient for Client {
             } => {
                 let action_input = ActionInputInfo {
                     snapshot_hash,
-                    input: ActionInput::Inference(Box::new(params)),
+                    input,
                 };
 
                 let result = tensorzero_core::endpoints::internal::action::action(

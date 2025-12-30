@@ -12,7 +12,7 @@ use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse,
     GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListInferencesRequest, Role,
-    UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
+    StoredChatInference, StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
@@ -21,7 +21,6 @@ use tensorzero_core::inference::types::{
     ContentBlockChatOutput, Input, InputMessage, StoredInput, StoredInputMessage,
     StoredInputMessageContent, Text,
 };
-use tensorzero_core::stored_inference::{StoredChatInference, StoredInference};
 use tensorzero_core::tool::DynamicToolParams;
 use uuid::Uuid;
 
@@ -56,7 +55,7 @@ mock! {
         async fn action(
             &self,
             snapshot_hash: SnapshotHash,
-            params: ClientInferenceParams,
+            input: tensorzero::ActionInput,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
 
         async fn create_datapoints(

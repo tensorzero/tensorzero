@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
 
@@ -40,10 +40,6 @@ impl ToolMetadata for ListDatapointsTool {
             "List datapoints in a dataset with optional filtering and pagination. \
              Can filter by function name, tags, time ranges, and order results.",
         )
-    }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(ListDatapointsToolParams))
     }
 }
 

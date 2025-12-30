@@ -77,6 +77,10 @@ use crate::task_tool::TaskTool;
 /// - `SimpleTool` registration requires `Default` for instantiation
 /// - Remote execution adapters (like `ClientToolTaskAdapter`) require `Default`
 ///
+/// The `Default + PartialEq` bounds on `SideInfo` are required for:
+/// - Wrapper types that need to construct default side info
+/// - Comparison operations during tool execution
+///
 /// # Implementors
 ///
 /// - **Local execution**: Call `register_task_tool`/`register_simple_tool` directly
@@ -91,7 +95,9 @@ pub trait ToolVisitor {
     ///
     /// For local execution, this typically calls `register_task_tool`.
     /// For remote execution, this wraps the tool in an adapter.
-    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), Self::Error>;
+    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), Self::Error>
+    where
+        T::SideInfo: Default + PartialEq;
 
     /// Visit a `SimpleTool`.
     ///
