@@ -17,16 +17,34 @@ from tensorzero import (
 from uuid_utils import uuid7
 
 
+def assert_openai_chat_usage_details(entry) -> None:
+    usage = entry.usage
+    assert usage is not None, "raw_usage entry should include usage for chat completions"
+    assert isinstance(usage, dict), "raw_usage entry usage should be a dict for chat completions"
+    assert "total_tokens" in usage, "raw_usage should include `total_tokens` for chat completions"
+    prompt_details = usage.get("prompt_tokens_details")
+    assert isinstance(prompt_details, dict), "raw_usage should include `prompt_tokens_details` for chat completions"
+    assert "cached_tokens" in prompt_details, (
+        "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
+    )
+    completion_details = usage.get("completion_tokens_details")
+    assert isinstance(completion_details, dict), (
+        "raw_usage should include `completion_tokens_details` for chat completions"
+    )
+    assert "reasoning_tokens" in completion_details, (
+        "raw_usage should include `completion_tokens_details.reasoning_tokens` for chat completions"
+    )
+
+
 @pytest.mark.asyncio
 async def test_async_raw_usage_non_streaming(async_client: AsyncTensorZeroGateway):
     """Test that include_raw_usage returns raw_usage in non-streaming response."""
     input_data = {
-        "system": {"assistant_name": "Alfred Pennyworth"},
         "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
     }
 
     result = await async_client.inference(
-        function_name="basic_test",
+        model_name="gpt-4o-mini-2024-07-18",
         input=input_data,
         episode_id=uuid7(),
         include_raw_usage=True,
@@ -43,18 +61,18 @@ async def test_async_raw_usage_non_streaming(async_client: AsyncTensorZeroGatewa
     assert entry.model_inference_id is not None, "Entry should have model_inference_id"
     assert entry.provider_type is not None, "Entry should have provider_type"
     assert entry.api_type is not None, "Entry should have api_type"
+    assert_openai_chat_usage_details(entry)
 
 
 @pytest.mark.asyncio
 async def test_async_raw_usage_not_requested(async_client: AsyncTensorZeroGateway):
     """Test that raw_usage is not present when include_raw_usage is False."""
     input_data = {
-        "system": {"assistant_name": "Alfred Pennyworth"},
         "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
     }
 
     result = await async_client.inference(
-        function_name="basic_test",
+        model_name="gpt-4o-mini-2024-07-18",
         input=input_data,
         episode_id=uuid7(),
         include_raw_usage=False,
@@ -69,12 +87,11 @@ async def test_async_raw_usage_not_requested(async_client: AsyncTensorZeroGatewa
 async def test_async_raw_usage_streaming(async_client: AsyncTensorZeroGateway):
     """Test that include_raw_usage returns raw_usage in streaming response."""
     input_data = {
-        "system": {"assistant_name": "Alfred Pennyworth"},
         "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
     }
 
     stream = await async_client.inference(
-        function_name="basic_test",
+        model_name="gpt-4o-mini-2024-07-18",
         input=input_data,
         episode_id=uuid7(),
         stream=True,
@@ -94,6 +111,7 @@ async def test_async_raw_usage_streaming(async_client: AsyncTensorZeroGateway):
             assert entry.model_inference_id is not None, "Entry should have model_inference_id"
             assert entry.provider_type is not None, "Entry should have provider_type"
             assert entry.api_type is not None, "Entry should have api_type"
+            assert_openai_chat_usage_details(entry)
 
     assert found_raw_usage, "Streaming response should include raw_usage in final chunk"
 
@@ -101,12 +119,11 @@ async def test_async_raw_usage_streaming(async_client: AsyncTensorZeroGateway):
 def test_sync_raw_usage_non_streaming(sync_client: TensorZeroGateway):
     """Test that include_raw_usage returns raw_usage in sync non-streaming response."""
     input_data = {
-        "system": {"assistant_name": "Alfred Pennyworth"},
         "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
     }
 
     result = sync_client.inference(
-        function_name="basic_test",
+        model_name="gpt-4o-mini-2024-07-18",
         input=input_data,
         episode_id=uuid7(),
         include_raw_usage=True,
@@ -123,17 +140,17 @@ def test_sync_raw_usage_non_streaming(sync_client: TensorZeroGateway):
     assert entry.model_inference_id is not None, "Entry should have model_inference_id"
     assert entry.provider_type is not None, "Entry should have provider_type"
     assert entry.api_type is not None, "Entry should have api_type"
+    assert_openai_chat_usage_details(entry)
 
 
 def test_sync_raw_usage_streaming(sync_client: TensorZeroGateway):
     """Test that include_raw_usage returns raw_usage in sync streaming response."""
     input_data = {
-        "system": {"assistant_name": "Alfred Pennyworth"},
         "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
     }
 
     stream = sync_client.inference(
-        function_name="basic_test",
+        model_name="gpt-4o-mini-2024-07-18",
         input=input_data,
         episode_id=uuid7(),
         stream=True,
@@ -153,5 +170,6 @@ def test_sync_raw_usage_streaming(sync_client: TensorZeroGateway):
             assert entry.model_inference_id is not None, "Entry should have model_inference_id"
             assert entry.provider_type is not None, "Entry should have provider_type"
             assert entry.api_type is not None, "Entry should have api_type"
+            assert_openai_chat_usage_details(entry)
 
     assert found_raw_usage, "Streaming response should include raw_usage in final chunk"

@@ -19,7 +19,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::usage::raw_usage_entries_from_usage;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -455,8 +455,8 @@ fn sglang_to_tensorzero_chunk(
         }
         .into());
     }
-    let raw_usage = chunk.usage.as_ref().and_then(|usage| {
-        raw_usage_entries_from_usage(
+    let raw_usage = sglang_usage_from_raw_response(&raw_message).map(|usage| {
+        raw_usage_entries_from_value(
             model_inference_id,
             provider_type,
             ApiType::ChatCompletions,
@@ -771,12 +771,14 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_usage = raw_usage_entries_from_usage(
-            model_inference_id,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-            &response.usage,
-        );
+        let raw_usage = sglang_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = UsageWithRaw {
             usage: response.usage.into(),
             raw_usage,
@@ -797,6 +799,12 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
             },
         ))
     }
+}
+
+fn sglang_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").cloned())
 }
 
 #[cfg(test)]

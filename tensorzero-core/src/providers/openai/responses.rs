@@ -22,7 +22,7 @@ use serde_json::{Value, json};
 use tokio::time::Instant;
 use url::Url;
 
-use crate::inference::types::usage::{raw_usage_entries_from_usage, raw_usage_entries_from_value};
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
     error::{Error, ErrorDetails, warn_discarded_thought_block},
     inference::types::{
@@ -245,8 +245,8 @@ impl OpenAIResponsesResponse<'_> {
             None => None,
         };
 
-        let raw_usage = self.usage.as_ref().and_then(|usage| {
-            raw_usage_entries_from_usage(
+        let raw_usage = openai_responses_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
                 model_inference_id,
                 PROVIDER_TYPE,
                 ApiType::Responses,
@@ -271,6 +271,12 @@ impl OpenAIResponsesResponse<'_> {
             },
         ))
     }
+}
+
+fn openai_responses_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").cloned())
 }
 
 pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {

@@ -10,10 +10,11 @@ use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
-use crate::inference::types::usage::raw_usage_entries_from_usage;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
@@ -773,12 +774,14 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_usage = raw_usage_entries_from_usage(
-            model_inference_id,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-            &response.usage,
-        );
+        let raw_usage = mistral_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = UsageWithRaw {
             usage: response.usage.into(),
             raw_usage,
@@ -858,8 +861,8 @@ fn mistral_to_tensorzero_chunk(
         }
         .into());
     }
-    let raw_usage = chunk.usage.as_ref().and_then(|usage| {
-        raw_usage_entries_from_usage(
+    let raw_usage = mistral_usage_from_raw_response(&raw_message).map(|usage| {
+        raw_usage_entries_from_value(
             model_inference_id,
             provider_type,
             ApiType::ChatCompletions,
@@ -905,6 +908,12 @@ fn mistral_to_tensorzero_chunk(
             ProviderInferenceResponseChunk::new(content, usage, raw_message, latency, finish_reason)
         }
     })
+}
+
+fn mistral_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").cloned())
 }
 
 #[cfg(test)]

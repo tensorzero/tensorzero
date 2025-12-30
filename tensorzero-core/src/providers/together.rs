@@ -18,7 +18,7 @@ use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
-use crate::inference::types::usage::raw_usage_entries_from_usage;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -662,12 +662,14 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_usage = raw_usage_entries_from_usage(
-            model_inference_id,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-            &response.usage,
-        );
+        let raw_usage = together_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = UsageWithRaw {
             usage: response.usage.into(),
             raw_usage,
@@ -776,8 +778,8 @@ fn together_to_tensorzero_chunk(
         }
         .into());
     }
-    let raw_usage = chunk.usage.as_ref().and_then(|usage| {
-        raw_usage_entries_from_usage(
+    let raw_usage = together_usage_from_raw_response(&raw_message).map(|usage| {
+        raw_usage_entries_from_value(
             model_inference_id,
             provider_type,
             ApiType::ChatCompletions,
@@ -864,6 +866,12 @@ fn together_to_tensorzero_chunk(
             ProviderInferenceResponseChunk::new(content, usage, raw_message, latency, finish_reason)
         }
     })
+}
+
+fn together_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").cloned())
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1593,8 +1601,22 @@ mod tests {
             usage: Some(usage.clone()),
         };
         let model_inference_id = Uuid::now_v7();
+        let raw_message = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+                "prompt_tokens_details": {
+                    "cached_tokens": 2
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1
+                }
+            }
+        })
+        .to_string();
         let message = together_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
+            raw_message,
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -1604,12 +1626,22 @@ mod tests {
             PROVIDER_TYPE,
         )
         .unwrap();
-        let expected_raw_usage = raw_usage_entries_from_usage(
+        let expected_raw_usage = Some(raw_usage_entries_from_value(
             model_inference_id,
             PROVIDER_TYPE,
             ApiType::ChatCompletions,
-            &usage,
-        );
+            serde_json::json!({
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+                "prompt_tokens_details": {
+                    "cached_tokens": 2
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1
+                }
+            }),
+        ));
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,

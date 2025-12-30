@@ -10,6 +10,34 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
+fn assert_openai_chat_usage_details(entry: &Value) {
+    let usage = entry.get("usage").unwrap_or_else(|| {
+        panic!("raw_usage entry should include usage for chat completions: {entry:?}")
+    });
+    assert!(
+        usage.is_object(),
+        "raw_usage entry usage should be an object for chat completions"
+    );
+    assert!(
+        usage.get("total_tokens").is_some(),
+        "raw_usage should include `total_tokens` for chat completions"
+    );
+    assert!(
+        usage
+            .get("prompt_tokens_details")
+            .and_then(|details| details.get("cached_tokens"))
+            .is_some(),
+        "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
+    );
+    assert!(
+        usage
+            .get("completion_tokens_details")
+            .and_then(|details| details.get("reasoning_tokens"))
+            .is_some(),
+        "raw_usage should include `completion_tokens_details.reasoning_tokens` for chat completions"
+    );
+}
+
 /// Makes an inference request and returns the raw_usage array (panics if not present)
 async fn make_request_and_get_raw_usage(
     function_name: &str,
@@ -94,7 +122,7 @@ async fn make_request_and_get_raw_usage(
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_cache_behavior_non_streaming() {
+async fn test_raw_usage_cache_behavior_non_streaming() {
     // Use a unique input to ensure cache miss on first request
     let unique_input = format!("What is 2+2? Cache test: {}", Uuid::now_v7());
 
@@ -106,6 +134,7 @@ async fn e2e_test_raw_usage_cache_behavior_non_streaming() {
         !first_raw_usage.is_empty(),
         "First request (cache miss) should have at least one raw_usage entry, got {first_raw_usage:?}"
     );
+    assert_openai_chat_usage_details(&first_raw_usage[0]);
 
     // Wait a moment for cache write to complete
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -122,7 +151,7 @@ async fn e2e_test_raw_usage_cache_behavior_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_cache_behavior_streaming() {
+async fn test_raw_usage_cache_behavior_streaming() {
     // Use a unique input to ensure cache miss on first request
     let unique_input = format!("What is 3+3? Cache streaming test: {}", Uuid::now_v7());
 
@@ -137,6 +166,7 @@ async fn e2e_test_raw_usage_cache_behavior_streaming() {
         !first_raw_usage.is_empty(),
         "First streaming request (cache miss) should have at least one raw_usage entry"
     );
+    assert_openai_chat_usage_details(&first_raw_usage[0]);
 
     // Wait for cache write
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -153,7 +183,7 @@ async fn e2e_test_raw_usage_cache_behavior_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_cache_disabled() {
+async fn test_raw_usage_cache_disabled() {
     // Use a unique input
     let unique_input = format!("What is 4+4? Cache disabled test: {}", Uuid::now_v7());
 
@@ -206,10 +236,11 @@ async fn e2e_test_raw_usage_cache_disabled() {
         !raw_usage_array.is_empty(),
         "raw_usage should have entries when cache is disabled (no cache hits possible)"
     );
+    assert_openai_chat_usage_details(&raw_usage_array[0]);
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_cache_disabled_streaming() {
+async fn test_raw_usage_cache_disabled_streaming() {
     // Use a unique input
     let unique_input = format!(
         "What is 5+5? Cache disabled streaming test: {}",
@@ -273,6 +304,7 @@ async fn e2e_test_raw_usage_cache_disabled_streaming() {
         !raw_usage.is_empty(),
         "raw_usage should have entries when cache is disabled (no cache hits possible)"
     );
+    assert_openai_chat_usage_details(&raw_usage[0]);
 }
 
 // ============================================================================
@@ -284,17 +316,18 @@ async fn make_openai_request_and_get_raw_usage(input_text: &str, stream: bool) -
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model": "tensorzero::function_name::basic_test",
+        "model": "tensorzero::model_name::openai::gpt-5-nano",
         "messages": [
-            {
-                "role": "system",
-                "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "TestBot"}}]
-            },
             {
                 "role": "user",
                 "content": input_text
             }
         ],
+        "params": {
+            "chat_completion": {
+                "reasoning_effort": "minimal"
+            }
+        },
         "stream": stream,
         "tensorzero::episode_id": episode_id,
         "tensorzero::include_raw_usage": true,
@@ -362,7 +395,7 @@ async fn make_openai_request_and_get_raw_usage(input_text: &str, stream: bool) -
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_cache_openai_compatible_non_streaming() {
+async fn test_raw_usage_cache_openai_compatible_non_streaming() {
     // Use a unique input to ensure cache miss on first request
     let unique_input = format!("What is 5+5? OpenAI cache test: {}", Uuid::now_v7());
 
@@ -373,6 +406,7 @@ async fn e2e_test_raw_usage_cache_openai_compatible_non_streaming() {
         !first_raw_usage.is_empty(),
         "First request (cache miss) should have at least one tensorzero_raw_usage entry"
     );
+    assert_openai_chat_usage_details(&first_raw_usage[0]);
 
     // Wait for cache write
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -388,7 +422,7 @@ async fn e2e_test_raw_usage_cache_openai_compatible_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_cache_openai_compatible_streaming() {
+async fn test_raw_usage_cache_openai_compatible_streaming() {
     // Use a unique input to ensure cache miss on first request
     let unique_input = format!(
         "What is 6+6? OpenAI streaming cache test: {}",
@@ -402,6 +436,7 @@ async fn e2e_test_raw_usage_cache_openai_compatible_streaming() {
         !first_raw_usage.is_empty(),
         "First streaming request (cache miss) should have at least one tensorzero_raw_usage entry"
     );
+    assert_openai_chat_usage_details(&first_raw_usage[0]);
 
     // Wait for cache write
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;

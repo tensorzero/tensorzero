@@ -25,7 +25,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
-use crate::inference::types::usage::raw_usage_entries_from_usage;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -1182,12 +1182,14 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             output
         };
 
-        let raw_usage = raw_usage_entries_from_usage(
-            model_inference_id,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-            &response.usage,
-        );
+        let raw_usage = anthropic_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = UsageWithRaw {
             usage: response.usage.into(),
             raw_usage,
@@ -1206,6 +1208,12 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             },
         ))
     }
+}
+
+fn anthropic_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").cloned())
 }
 
 pub(super) fn handle_anthropic_error(
@@ -1453,13 +1461,14 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
             usage,
             delta: FlattenUnknown::Normal(delta),
         } => {
-            let usage = parse_usage_info(&usage);
-            let raw_usage = raw_usage_entries_from_usage(
+            let usage_value = usage;
+            let usage = parse_usage_info(&usage_value);
+            let raw_usage = Some(raw_usage_entries_from_value(
                 model_inference_id,
                 provider_type,
                 ApiType::ChatCompletions,
-                &usage,
-            );
+                usage_value,
+            ));
             Ok(Some(match raw_usage {
                 Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
                     vec![],
@@ -1481,12 +1490,12 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::MessageStart { message } => {
             if let Some(usage_info) = message.get("usage") {
                 let usage = parse_usage_info(usage_info);
-                let raw_usage = raw_usage_entries_from_usage(
+                let raw_usage = Some(raw_usage_entries_from_value(
                     model_inference_id,
                     provider_type,
                     ApiType::ChatCompletions,
-                    &usage,
-                );
+                    usage_info.clone(),
+                ));
                 Ok(Some(match raw_usage {
                     Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
                         vec![],

@@ -13,20 +13,29 @@ from openai.types.chat import ChatCompletionMessageParam
 from uuid_utils.compat import uuid7
 
 
+def assert_openai_chat_usage_details(entry: dict) -> None:
+    usage = entry.get("usage")
+    assert usage is not None, "raw_usage entry should include usage for chat completions"
+    assert isinstance(usage, dict), "raw_usage entry usage should be a dict for chat completions"
+    assert "total_tokens" in usage, "raw_usage should include `total_tokens` for chat completions"
+    prompt_details = usage.get("prompt_tokens_details")
+    assert isinstance(prompt_details, dict), "raw_usage should include `prompt_tokens_details` for chat completions"
+    assert "cached_tokens" in prompt_details, (
+        "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
+    )
+    completion_details = usage.get("completion_tokens_details")
+    assert isinstance(completion_details, dict), (
+        "raw_usage should include `completion_tokens_details` for chat completions"
+    )
+    assert "reasoning_tokens" in completion_details, (
+        "raw_usage should include `completion_tokens_details.reasoning_tokens` for chat completions"
+    )
+
+
 @pytest.mark.asyncio
 async def test_async_raw_usage_non_streaming(async_openai_client: AsyncOpenAI):
     """Test that tensorzero::include_raw_usage returns tensorzero_raw_usage in non-streaming response."""
     messages = [
-        {
-            "role": "system",
-            "content": [
-                {
-                    "type": "tensorzero::template",
-                    "name": "system",
-                    "arguments": {"assistant_name": "Alfred Pennyworth"},
-                }
-            ],
-        },
         {"role": "user", "content": "Hello"},
     ]
 
@@ -35,8 +44,8 @@ async def test_async_raw_usage_non_streaming(async_openai_client: AsyncOpenAI):
             "tensorzero::episode_id": str(uuid7()),
             "tensorzero::include_raw_usage": True,
         },
-        messages=messages,  # type: ignore
-        model="tensorzero::function_name::basic_test",
+        messages=messages,
+        model="tensorzero::model_name::gpt-4o-mini-2024-07-18",
     )
 
     assert result.usage is not None, "Response should have usage"
@@ -50,22 +59,13 @@ async def test_async_raw_usage_non_streaming(async_openai_client: AsyncOpenAI):
     assert "model_inference_id" in entry, "Entry should have model_inference_id"
     assert "provider_type" in entry, "Entry should have provider_type"
     assert "api_type" in entry, "Entry should have api_type"
+    assert_openai_chat_usage_details(entry)
 
 
 @pytest.mark.asyncio
 async def test_async_raw_usage_not_requested(async_openai_client: AsyncOpenAI):
     """Test that tensorzero_raw_usage is not present when tensorzero::include_raw_usage is False."""
     messages = [
-        {
-            "role": "system",
-            "content": [
-                {
-                    "type": "tensorzero::template",
-                    "name": "system",
-                    "arguments": {"assistant_name": "Alfred Pennyworth"},
-                }
-            ],
-        },
         {"role": "user", "content": "Hello"},
     ]
 
@@ -74,8 +74,8 @@ async def test_async_raw_usage_not_requested(async_openai_client: AsyncOpenAI):
             "tensorzero::episode_id": str(uuid7()),
             "tensorzero::include_raw_usage": False,
         },
-        messages=messages,  # type: ignore
-        model="tensorzero::function_name::basic_test",
+        messages=messages,
+        model="tensorzero::model_name::gpt-4o-mini-2024-07-18",
     )
 
     assert result.usage is not None, "Response should have usage"
@@ -88,16 +88,6 @@ async def test_async_raw_usage_not_requested(async_openai_client: AsyncOpenAI):
 async def test_async_raw_usage_streaming(async_openai_client: AsyncOpenAI):
     """Test that tensorzero::include_raw_usage returns tensorzero_raw_usage in streaming response."""
     messages: List[ChatCompletionMessageParam] = [
-        {
-            "role": "system",
-            "content": [
-                {
-                    "type": "tensorzero::template",
-                    "name": "system",
-                    "arguments": {"assistant_name": "Alfred Pennyworth"},
-                }
-            ],
-        },
         {"role": "user", "content": "Hello"},
     ]
 
@@ -108,7 +98,7 @@ async def test_async_raw_usage_streaming(async_openai_client: AsyncOpenAI):
             "tensorzero::include_raw_usage": True,
         },
         messages=messages,
-        model="tensorzero::function_name::basic_test",
+        model="tensorzero::model_name::gpt-4o-mini-2024-07-18",
         stream=True,
     )
 
@@ -126,5 +116,6 @@ async def test_async_raw_usage_streaming(async_openai_client: AsyncOpenAI):
                 assert "model_inference_id" in entry, "Entry should have model_inference_id"
                 assert "provider_type" in entry, "Entry should have provider_type"
                 assert "api_type" in entry, "Entry should have api_type"
+                assert_openai_chat_usage_details(entry)
 
     assert found_raw_usage, "Streaming response should include tensorzero_raw_usage in final chunk"

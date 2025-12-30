@@ -21,7 +21,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::usage::raw_usage_entries_from_usage;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -40,6 +40,7 @@ use crate::providers::openai::{
     prepare_system_or_developer_message, tensorzero_to_openai_messages,
 };
 use crate::tool::ToolCallChunk;
+use serde_json::Value;
 use uuid::Uuid;
 
 lazy_static! {
@@ -584,8 +585,8 @@ fn deepseek_to_tensorzero_chunk(
         }
         .into());
     }
-    let raw_usage = chunk.usage.as_ref().and_then(|usage| {
-        raw_usage_entries_from_usage(
+    let raw_usage = deepseek_usage_from_raw_response(&raw_message).map(|usage| {
+        raw_usage_entries_from_value(
             model_inference_id,
             PROVIDER_TYPE,
             ApiType::ChatCompletions,
@@ -779,12 +780,14 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_usage = raw_usage_entries_from_usage(
-            model_inference_id,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-            &response.usage,
-        );
+        let raw_usage = deepseek_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = UsageWithRaw {
             usage: response.usage.into(),
             raw_usage,
@@ -805,6 +808,12 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
             },
         ))
     }
+}
+
+fn deepseek_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").cloned())
 }
 
 /// If a message is a system, user, or assistant message and the next message is the same type, coalesce them into a single message

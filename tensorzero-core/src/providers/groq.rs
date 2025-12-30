@@ -20,7 +20,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::usage::raw_usage_entries_from_usage;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
@@ -368,6 +368,7 @@ pub fn stream_groq(
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
                             groq_to_tensorzero_chunk(
+                                message.data.clone(),
                                 d,
                                 latency,
                                 &mut tool_call_ids,
@@ -1337,12 +1338,14 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         };
-        let raw_usage = raw_usage_entries_from_usage(
-            model_inference_id,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-            &response.usage,
-        );
+        let raw_usage = groq_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = UsageWithRaw {
             usage: response.usage.into(),
             raw_usage,
@@ -1431,33 +1434,23 @@ struct GroqChatChunk {
 
 /// Maps an Groq chunk to a TensorZero chunk for streaming inferences
 fn groq_to_tensorzero_chunk(
+    raw_message: String,
     mut chunk: GroqChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     model_inference_id: Uuid,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
-    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!(
-                "Error parsing response from Groq: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-            raw_request: None,
-            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
-            provider_type: PROVIDER_TYPE.to_string(),
-        })
-    })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
             raw_request: None,
-            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
+            raw_response: Some(raw_message.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
         }
         .into());
     }
-    let raw_usage = chunk.usage.as_ref().and_then(|usage| {
-        raw_usage_entries_from_usage(
+    let raw_usage = groq_usage_from_raw_response(&raw_message).map(|usage| {
+        raw_usage_entries_from_value(
             model_inference_id,
             PROVIDER_TYPE,
             ApiType::ChatCompletions,
@@ -1515,6 +1508,12 @@ fn groq_to_tensorzero_chunk(
         finish_reason,
         raw_usage,
     ))
+}
+
+fn groq_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").cloned())
 }
 #[cfg(test)]
 mod tests {
@@ -2385,7 +2384,9 @@ mod tests {
             usage: None,
         };
         let mut tool_call_ids = vec!["id1".to_string()];
+        let raw_message = serde_json::to_string(&chunk).unwrap_or_default();
         let message = groq_to_tensorzero_chunk(
+            raw_message,
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -2418,7 +2419,9 @@ mod tests {
             }],
             usage: None,
         };
+        let raw_message = serde_json::to_string(&chunk).unwrap_or_default();
         let message = groq_to_tensorzero_chunk(
+            raw_message,
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -2452,7 +2455,9 @@ mod tests {
             }],
             usage: None,
         };
+        let raw_message = serde_json::to_string(&chunk).unwrap_or_default();
         let error = groq_to_tensorzero_chunk(
+            raw_message,
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -2487,7 +2492,9 @@ mod tests {
             }],
             usage: None,
         };
+        let raw_message = serde_json::to_string(&chunk).unwrap_or_default();
         let message = groq_to_tensorzero_chunk(
+            raw_message,
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -2517,19 +2524,44 @@ mod tests {
             usage: Some(usage.clone()),
         };
         let model_inference_id = Uuid::now_v7();
+        let raw_message = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+                "prompt_tokens_details": {
+                    "cached_tokens": 2
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1
+                }
+            }
+        })
+        .to_string();
         let message = groq_to_tensorzero_chunk(
+            raw_message,
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
             model_inference_id,
         )
         .unwrap();
-        let expected_raw_usage = raw_usage_entries_from_usage(
+        let expected_raw_usage = Some(raw_usage_entries_from_value(
             model_inference_id,
             PROVIDER_TYPE,
             ApiType::ChatCompletions,
-            &usage,
-        );
+            serde_json::json!({
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+                "prompt_tokens_details": {
+                    "cached_tokens": 2
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1
+                }
+            }),
+        ));
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,

@@ -10,6 +10,36 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+fn assert_openai_chat_usage_details(entry: &Value) {
+    let usage = entry.get("usage").unwrap_or(&Value::Null);
+    assert!(
+        usage.is_object(),
+        "raw_usage entry should include usage for chat completions"
+    );
+    assert!(
+        usage.is_object(),
+        "raw_usage entry usage should be an object for chat completions"
+    );
+    assert!(
+        usage.get("total_tokens").is_some(),
+        "raw_usage should include `total_tokens` for chat completions"
+    );
+    assert!(
+        usage
+            .get("prompt_tokens_details")
+            .and_then(|details| details.get("cached_tokens"))
+            .is_some(),
+        "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
+    );
+    assert!(
+        usage
+            .get("completion_tokens_details")
+            .and_then(|details| details.get("reasoning_tokens"))
+            .is_some(),
+        "raw_usage should include `completion_tokens_details.reasoning_tokens` for chat completions"
+    );
+}
+
 /// Test that relay passthrough works for include_raw_usage (non-streaming)
 #[tokio::test]
 async fn test_relay_raw_usage_non_streaming() {
@@ -95,6 +125,7 @@ async fn test_relay_raw_usage_non_streaming() {
             entry.get("api_type").is_some(),
             "raw_usage entry should have api_type"
         );
+        assert_openai_chat_usage_details(entry);
     }
 }
 
@@ -179,6 +210,7 @@ async fn test_relay_raw_usage_streaming() {
                     entry.get("api_type").is_some(),
                     "raw_usage entry should have api_type"
                 );
+                assert_openai_chat_usage_details(entry);
             }
         }
     }

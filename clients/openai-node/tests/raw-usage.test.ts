@@ -19,28 +19,25 @@ beforeAll(() => {
 });
 
 describe("Raw Usage", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const assertOpenAIChatRawUsageFields = (entry: any) => {
+    expect(entry.usage).toBeDefined();
+    expect(entry.usage.total_tokens).toBeDefined();
+    expect(entry.usage.prompt_tokens_details?.cached_tokens).toBeDefined();
+    expect(
+      entry.usage.completion_tokens_details?.reasoning_tokens
+    ).toBeDefined();
+  };
+
   it("should return tensorzero_raw_usage in non-streaming response when requested", async () => {
     const messages: ChatCompletionMessageParam[] = [
-      {
-        role: "system",
-        content: [
-          {
-            // @ts-expect-error - custom TensorZero property
-            type: "tensorzero::template",
-            name: "system",
-            arguments: {
-              assistant_name: "Alfred Pennyworth",
-            },
-          },
-        ],
-      },
       { role: "user", content: "Hello" },
     ];
 
     const episodeId = uuidv7();
     const result = await client.chat.completions.create({
       messages,
-      model: "tensorzero::function_name::basic_test",
+      model: "tensorzero::model_name::gpt-4o-mini-2024-07-18",
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
       "tensorzero::include_raw_usage": true,
@@ -58,30 +55,18 @@ describe("Raw Usage", () => {
     expect(entry.model_inference_id).toBeDefined();
     expect(entry.provider_type).toBeDefined();
     expect(entry.api_type).toBeDefined();
+    assertOpenAIChatRawUsageFields(entry);
   });
 
   it("should not return tensorzero_raw_usage when not requested", async () => {
     const messages: ChatCompletionMessageParam[] = [
-      {
-        role: "system",
-        content: [
-          {
-            // @ts-expect-error - custom TensorZero property
-            type: "tensorzero::template",
-            name: "system",
-            arguments: {
-              assistant_name: "Alfred Pennyworth",
-            },
-          },
-        ],
-      },
       { role: "user", content: "Hello" },
     ];
 
     const episodeId = uuidv7();
     const result = await client.chat.completions.create({
       messages,
-      model: "tensorzero::function_name::basic_test",
+      model: "tensorzero::model_name::gpt-4o-mini-2024-07-18",
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
       "tensorzero::include_raw_usage": false,
@@ -95,19 +80,6 @@ describe("Raw Usage", () => {
 
   it("should return tensorzero_raw_usage in streaming response when requested", async () => {
     const messages: ChatCompletionMessageParam[] = [
-      {
-        role: "system",
-        content: [
-          {
-            // @ts-expect-error - custom TensorZero property
-            type: "tensorzero::template",
-            name: "system",
-            arguments: {
-              assistant_name: "Alfred Pennyworth",
-            },
-          },
-        ],
-      },
       { role: "user", content: "Hello" },
     ];
 
@@ -116,7 +88,7 @@ describe("Raw Usage", () => {
     // @ts-expect-error - custom TensorZero property
     const stream = await client.chat.completions.create({
       messages,
-      model: "tensorzero::function_name::basic_test",
+      model: "tensorzero::model_name::gpt-4o-mini-2024-07-18",
       stream: true,
       "tensorzero::episode_id": episodeId,
       "tensorzero::include_raw_usage": true,
@@ -137,6 +109,7 @@ describe("Raw Usage", () => {
           expect(entry.model_inference_id).toBeDefined();
           expect(entry.provider_type).toBeDefined();
           expect(entry.api_type).toBeDefined();
+          assertOpenAIChatRawUsageFields(entry);
         }
       }
     }

@@ -26,7 +26,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::usage::raw_usage_entries_from_usage;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency,
     ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
@@ -1335,12 +1335,14 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let raw_usage = raw_usage_entries_from_usage(
-            model_inference_id,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-            &usage_metadata,
-        );
+        let raw_usage = google_ai_studio_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = UsageWithRaw {
             usage: usage_metadata.into(),
             raw_usage,
@@ -1433,11 +1435,12 @@ fn convert_stream_response_with_metadata_to_chunk(
     // We only want to return the final usage metadata once the stream has ended.
     // So, we clear the usage metadata if the finish reason is not set.
     let usage_metadata = response.usage_metadata;
+    let raw_usage_value = google_ai_studio_usage_from_raw_response(&raw_response);
     let raw_usage = if first_candidate.finish_reason.as_ref().is_none() {
         None
     } else {
-        usage_metadata.as_ref().and_then(|usage| {
-            raw_usage_entries_from_usage(
+        raw_usage_value.map(|usage| {
+            raw_usage_entries_from_value(
                 model_inference_id,
                 PROVIDER_TYPE,
                 ApiType::ChatCompletions,
@@ -1458,6 +1461,12 @@ fn convert_stream_response_with_metadata_to_chunk(
         first_candidate.finish_reason.map(Into::into),
         raw_usage,
     ))
+}
+
+fn google_ai_studio_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usageMetadata").cloned())
 }
 
 fn handle_google_ai_studio_error(

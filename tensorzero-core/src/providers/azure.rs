@@ -22,7 +22,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::usage::raw_usage_entries_from_usage;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{ApiType, ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::inference::types::{
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -553,6 +553,7 @@ fn into_embedding_provider_response(
         .collect();
     let provider_usage = response.usage;
     let usage = provider_usage.clone().into();
+    let raw_usage_value = azure_usage_from_raw_response(&raw_response);
     let mut embedding_response = EmbeddingProviderResponse::new(
         embeddings,
         request_body.input.clone(),
@@ -562,12 +563,14 @@ fn into_embedding_provider_response(
         latency,
         None,
     );
-    embedding_response.raw_usage = raw_usage_entries_from_usage(
-        embedding_response.id,
-        PROVIDER_TYPE,
-        ApiType::Embeddings,
-        &provider_usage,
-    );
+    embedding_response.raw_usage = raw_usage_value.map(|usage| {
+        raw_usage_entries_from_value(
+            embedding_response.id,
+            PROVIDER_TYPE,
+            ApiType::Embeddings,
+            usage,
+        )
+    });
     Ok(embedding_response)
 }
 
@@ -807,12 +810,14 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        let raw_usage = raw_usage_entries_from_usage(
-            model_inference_id,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-            &response.usage,
-        );
+        let raw_usage = azure_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = UsageWithRaw {
             usage: response.usage.into(),
             raw_usage,
@@ -854,6 +859,12 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             },
         ))
     }
+}
+
+fn azure_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").cloned())
 }
 
 #[derive(Debug, Serialize)]

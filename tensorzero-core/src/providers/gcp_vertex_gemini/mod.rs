@@ -49,7 +49,7 @@ use crate::inference::types::batch::{
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::usage::raw_usage_entries_from_usage;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
     Latency, ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
@@ -2965,12 +2965,14 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             })
         })?;
 
-        let raw_usage = raw_usage_entries_from_usage(
-            model_inference_id,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-            &usage_metadata,
-        );
+        let raw_usage = gcp_vertex_gemini_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = UsageWithRaw {
             usage: Usage {
                 input_tokens: usage_metadata.prompt_token_count,
@@ -3071,13 +3073,16 @@ fn convert_stream_response_with_metadata_to_chunk(
             } else {
                 None
             };
+            let raw_usage_value = gcp_vertex_gemini_usage_from_raw_response(&raw_response);
             let raw_usage = usage.as_ref().and_then(|_| {
-                raw_usage_entries_from_usage(
-                    model_inference_id,
-                    PROVIDER_TYPE,
-                    ApiType::ChatCompletions,
-                    &metadata,
-                )
+                raw_usage_value.map(|usage| {
+                    raw_usage_entries_from_value(
+                        model_inference_id,
+                        PROVIDER_TYPE,
+                        ApiType::ChatCompletions,
+                        usage,
+                    )
+                })
             });
             (usage, raw_usage)
         }
@@ -3092,6 +3097,12 @@ fn convert_stream_response_with_metadata_to_chunk(
         first_candidate.finish_reason.map(Into::into),
         raw_usage,
     ))
+}
+
+fn gcp_vertex_gemini_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usageMetadata").cloned())
 }
 
 fn handle_gcp_vertex_gemini_error(

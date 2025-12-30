@@ -27,6 +27,80 @@ fn assert_raw_usage_entry(entry: &Value) {
     // usage can be null if provider doesn't return it, but field should exist or be omitted
 }
 
+fn assert_openai_chat_usage_details(entry: &Value) {
+    let usage = entry
+        .get("usage")
+        .expect("raw_usage entry should include usage for chat completions");
+    assert!(
+        usage.is_object(),
+        "raw_usage entry usage should be an object for chat completions"
+    );
+    assert!(
+        usage.get("total_tokens").is_some(),
+        "raw_usage should include `total_tokens` for chat completions"
+    );
+    assert!(
+        usage
+            .get("prompt_tokens_details")
+            .and_then(|details| details.get("cached_tokens"))
+            .is_some(),
+        "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
+    );
+    assert!(
+        usage
+            .get("completion_tokens_details")
+            .and_then(|details| details.get("reasoning_tokens"))
+            .is_some(),
+        "raw_usage should include `completion_tokens_details.reasoning_tokens` for chat completions"
+    );
+}
+
+fn assert_openai_responses_usage_details(entry: &Value) {
+    let usage = entry
+        .get("usage")
+        .expect("raw_usage entry should include usage for responses");
+    assert!(
+        usage.is_object(),
+        "raw_usage entry usage should be an object for responses"
+    );
+    assert!(
+        usage.get("total_tokens").is_some(),
+        "raw_usage should include `total_tokens` for responses"
+    );
+    assert!(
+        usage
+            .get("input_tokens_details")
+            .and_then(|details| details.get("cached_tokens"))
+            .is_some(),
+        "raw_usage should include `input_tokens_details.cached_tokens` for responses"
+    );
+    assert!(
+        usage
+            .get("output_tokens_details")
+            .and_then(|details| details.get("reasoning_tokens"))
+            .is_some(),
+        "raw_usage should include `output_tokens_details.reasoning_tokens` for responses"
+    );
+}
+
+fn assert_openai_embeddings_usage_details(entry: &Value) {
+    let usage = entry
+        .get("usage")
+        .expect("raw_usage entry should include usage for embeddings");
+    assert!(
+        usage.is_object(),
+        "raw_usage entry usage should be an object for embeddings"
+    );
+    assert!(
+        usage.get("prompt_tokens").is_some(),
+        "raw_usage should include `prompt_tokens` for embeddings"
+    );
+    assert!(
+        usage.get("total_tokens").is_some(),
+        "raw_usage should include `total_tokens` for embeddings"
+    );
+}
+
 // =============================================================================
 // Chat Completions API Tests (api_type = "chat_completions")
 // =============================================================================
@@ -97,6 +171,7 @@ async fn e2e_test_raw_usage_chat_completions_non_streaming() {
     // Validate first entry structure
     let first_entry = &raw_usage_array[0];
     assert_raw_usage_entry(first_entry);
+    assert_openai_chat_usage_details(first_entry);
 
     // For OpenAI chat completions, api_type should be "chat_completions"
     let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
@@ -192,12 +267,12 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
         .expect("raw_usage field missing from usage");
     assert!(raw_usage.is_array(), "raw_usage should be an array");
 
-    let _raw_usage_array = raw_usage.as_array().expect("raw_usage should be an array");
-    // Note: For streaming, raw_usage may come from previous_model_inference_results
-    // which excludes the current streaming inference. For a simple variant, this means
-    // raw_usage may be empty if there's only one model inference in progress.
-    // This is expected behavior - the current streaming inference's raw_usage
-    // would need to be collected from chunks.
+    let raw_usage_array = raw_usage.as_array().expect("raw_usage should be an array");
+    assert!(
+        !raw_usage_array.is_empty(),
+        "Streaming chat completions should include at least one raw_usage entry"
+    );
+    assert_openai_chat_usage_details(&raw_usage_array[0]);
 }
 
 // =============================================================================
@@ -260,6 +335,7 @@ async fn e2e_test_raw_usage_responses_api_non_streaming() {
     // For OpenAI Responses API, api_type should be "responses"
     let first_entry = &raw_usage_array[0];
     assert_raw_usage_entry(first_entry);
+    assert_openai_responses_usage_details(first_entry);
 
     let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
     assert_eq!(
@@ -297,6 +373,7 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
+    let mut last_chunk_with_usage: Option<Value> = None;
     let mut all_chunks: Vec<Value> = Vec::new();
 
     while let Some(chunk) = chunks.next().await {
@@ -318,6 +395,7 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
             && usage.get("raw_usage").is_some()
         {
             found_raw_usage = true;
+            last_chunk_with_usage = Some(chunk_json.clone());
         }
     }
 
@@ -329,6 +407,22 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
         all_chunks.len(),
         all_chunks.iter().rev().take(3).collect::<Vec<_>>()
     );
+
+    let final_chunk = last_chunk_with_usage
+        .expect("No chunk with raw_usage found despite found_raw_usage being true");
+    let usage = final_chunk
+        .get("usage")
+        .expect("usage field missing from final chunk");
+    let raw_usage = usage
+        .get("raw_usage")
+        .expect("raw_usage field missing from usage");
+    assert!(raw_usage.is_array(), "raw_usage should be an array");
+    let raw_usage_array = raw_usage.as_array().expect("raw_usage should be an array");
+    assert!(
+        !raw_usage_array.is_empty(),
+        "Streaming responses should include at least one raw_usage entry"
+    );
+    assert_openai_responses_usage_details(&raw_usage_array[0]);
 }
 
 // =============================================================================
@@ -438,7 +532,7 @@ async fn e2e_test_raw_usage_best_of_n_non_streaming() {
 
     let payload = json!({
         "function_name": "best_of_n",
-        "variant_name": "best_of_n_variant",
+        "variant_name": "best_of_n_variant_openai",
         "episode_id": episode_id,
         "input": {
             "system": {"assistant_name": "TestBot"},
@@ -481,7 +575,7 @@ async fn e2e_test_raw_usage_best_of_n_non_streaming() {
     let raw_usage_array = raw_usage.as_array().unwrap();
 
     // Best-of-N should have multiple entries:
-    // - 2 candidate inferences (variant0 and variant1)
+    // - 2 candidate inferences (openai_variant0 and openai_variant1)
     // - 1 evaluator/judge inference
     // Total: 3 model inferences
     assert!(
@@ -493,6 +587,7 @@ async fn e2e_test_raw_usage_best_of_n_non_streaming() {
     // Validate each entry has required fields
     for entry in raw_usage_array {
         assert_raw_usage_entry(entry);
+        assert_openai_chat_usage_details(entry);
     }
 
     // All entries should have api_type = "chat_completions" for this variant
@@ -512,7 +607,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
 
     let payload = json!({
         "function_name": "best_of_n",
-        "variant_name": "best_of_n_variant",
+        "variant_name": "best_of_n_variant_openai",
         "episode_id": episode_id,
         "input": {
             "system": {"assistant_name": "TestBot"},
@@ -559,6 +654,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
                 // Validate each entry has required fields
                 for entry in arr {
                     assert_raw_usage_entry(entry);
+                    assert_openai_chat_usage_details(entry);
                 }
             }
         }
@@ -570,7 +666,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
     );
 
     // Best-of-N should have multiple entries:
-    // - 2 candidate inferences (variant0 and variant1)
+    // - 2 candidate inferences (openai_variant0 and openai_variant1)
     // - 1 evaluator/judge inference
     // Total: 3 model inferences
     assert!(
@@ -644,6 +740,11 @@ async fn e2e_test_raw_usage_dicl_non_streaming() {
     // Validate each entry has required fields
     for entry in raw_usage_array {
         assert_raw_usage_entry(entry);
+        match entry.get("api_type").and_then(|v| v.as_str()) {
+            Some("embeddings") => assert_openai_embeddings_usage_details(entry),
+            Some("chat_completions") => assert_openai_chat_usage_details(entry),
+            _ => {}
+        }
     }
 
     // Check that we have both api_types
@@ -713,6 +814,11 @@ async fn e2e_test_raw_usage_dicl_streaming() {
             if let Some(arr) = raw_usage.as_array() {
                 for entry in arr {
                     assert_raw_usage_entry(entry);
+                    match entry.get("api_type").and_then(|v| v.as_str()) {
+                        Some("embeddings") => assert_openai_embeddings_usage_details(entry),
+                        Some("chat_completions") => assert_openai_chat_usage_details(entry),
+                        _ => {}
+                    }
                     if let Some(api_type) = entry.get("api_type").and_then(|v| v.as_str()) {
                         api_types.push(api_type.to_string());
                     }
@@ -836,6 +942,7 @@ async fn e2e_test_raw_usage_json_function_non_streaming() {
     // Validate entry structure
     let first_entry = &raw_usage_array[0];
     assert_raw_usage_entry(first_entry);
+    assert_openai_chat_usage_details(first_entry);
 
     // JSON functions should still have api_type = "chat_completions"
     let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
@@ -873,6 +980,7 @@ async fn e2e_test_raw_usage_json_function_streaming() {
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
+    let mut last_chunk_with_usage: Option<Value> = None;
 
     while let Some(chunk) = chunks.next().await {
         let chunk = chunk.expect("Failed to receive chunk from stream");
@@ -891,6 +999,7 @@ async fn e2e_test_raw_usage_json_function_streaming() {
             && usage.get("raw_usage").is_some()
         {
             found_raw_usage = true;
+            last_chunk_with_usage = Some(chunk_json.clone());
         }
     }
 
@@ -898,4 +1007,20 @@ async fn e2e_test_raw_usage_json_function_streaming() {
         found_raw_usage,
         "Streaming JSON function response should include raw_usage in final chunk"
     );
+
+    let final_chunk = last_chunk_with_usage
+        .expect("No chunk with raw_usage found despite found_raw_usage being true");
+    let usage = final_chunk
+        .get("usage")
+        .expect("usage field missing from final chunk");
+    let raw_usage = usage
+        .get("raw_usage")
+        .expect("raw_usage field missing from usage");
+    assert!(raw_usage.is_array(), "raw_usage should be an array");
+    let raw_usage_array = raw_usage.as_array().expect("raw_usage should be an array");
+    assert!(
+        !raw_usage_array.is_empty(),
+        "Streaming JSON function should include at least one raw_usage entry"
+    );
+    assert_openai_chat_usage_details(&raw_usage_array[0]);
 }

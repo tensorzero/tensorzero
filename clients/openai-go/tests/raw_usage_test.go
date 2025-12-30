@@ -18,20 +18,42 @@ import (
 )
 
 func TestRawUsage(t *testing.T) {
+	assertOpenAIChatRawUsageFields := func(t *testing.T, entry map[string]interface{}) {
+		t.Helper()
+
+		usageValue, ok := entry["usage"]
+		require.True(t, ok, "raw_usage entry should include usage")
+
+		usage, ok := usageValue.(map[string]interface{})
+		require.True(t, ok, "raw_usage entry usage should be an object")
+
+		_, ok = usage["total_tokens"]
+		assert.True(t, ok, "raw_usage usage should include total_tokens")
+
+		promptDetails, ok := usage["prompt_tokens_details"].(map[string]interface{})
+		require.True(t, ok, "raw_usage usage should include prompt_tokens_details")
+		_, ok = promptDetails["cached_tokens"]
+		assert.True(t, ok, "raw_usage usage should include prompt_tokens_details.cached_tokens")
+
+		completionDetails, ok := usage["completion_tokens_details"].(map[string]interface{})
+		require.True(t, ok, "raw_usage usage should include completion_tokens_details")
+		_, ok = completionDetails["reasoning_tokens"]
+		assert.True(t, ok, "raw_usage usage should include completion_tokens_details.reasoning_tokens")
+	}
+
 	t.Run("should return tensorzero_raw_usage in non-streaming response when requested", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
 		req := &openai.ChatCompletionNewParams{
-			Model:    "tensorzero::function_name::basic_test",
+			Model:    "tensorzero::model_name::gpt-4o-mini-2024-07-18",
 			Messages: messages,
 		}
 		req.SetExtraFields(map[string]any{
-			"tensorzero::episode_id":         episodeID.String(),
+			"tensorzero::episode_id":        episodeID.String(),
 			"tensorzero::include_raw_usage": true,
 		})
 
@@ -55,22 +77,22 @@ func TestRawUsage(t *testing.T) {
 		assert.NotNil(t, entry["model_inference_id"], "Entry should have model_inference_id")
 		assert.NotNil(t, entry["provider_type"], "Entry should have provider_type")
 		assert.NotNil(t, entry["api_type"], "Entry should have api_type")
+		assertOpenAIChatRawUsageFields(t, entry)
 	})
 
 	t.Run("should not return tensorzero_raw_usage when not requested", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
 		req := &openai.ChatCompletionNewParams{
-			Model:    "tensorzero::function_name::basic_test",
+			Model:    "tensorzero::model_name::gpt-4o-mini-2024-07-18",
 			Messages: messages,
 		}
 		req.SetExtraFields(map[string]any{
-			"tensorzero::episode_id":         episodeID.String(),
+			"tensorzero::episode_id":        episodeID.String(),
 			"tensorzero::include_raw_usage": false,
 		})
 
@@ -89,17 +111,16 @@ func TestRawUsage(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
 		// Note: tensorzero::include_raw_usage automatically enables include_usage for streaming
 		req := &openai.ChatCompletionNewParams{
-			Model:    "tensorzero::function_name::basic_test",
+			Model:    "tensorzero::model_name::gpt-4o-mini-2024-07-18",
 			Messages: messages,
 		}
 		req.SetExtraFields(map[string]any{
-			"tensorzero::episode_id":         episodeID.String(),
+			"tensorzero::episode_id":        episodeID.String(),
 			"tensorzero::include_raw_usage": true,
 		})
 
@@ -132,6 +153,7 @@ func TestRawUsage(t *testing.T) {
 					assert.NotNil(t, entry["model_inference_id"], "Entry should have model_inference_id")
 					assert.NotNil(t, entry["provider_type"], "Entry should have provider_type")
 					assert.NotNil(t, entry["api_type"], "Entry should have api_type")
+					assertOpenAIChatRawUsageFields(t, entry)
 				}
 			}
 		}
