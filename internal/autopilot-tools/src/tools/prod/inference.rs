@@ -1,7 +1,6 @@
 //! Inference tool for calling TensorZero inference endpoint.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{SideInfo, SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
@@ -13,7 +12,8 @@ use tensorzero::{
     Input,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
-use uuid::Uuid;
+
+use crate::types::AutopilotToolSideInfo;
 
 /// Parameters for the inference tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -43,14 +43,9 @@ pub struct InferenceToolParams {
 /// Side information for the inference tool (hidden from LLM).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InferenceToolSideInfo {
-    /// Episode ID to use for the inference (links to autopilot session).
-    pub episode_id: Uuid,
-    /// Session ID for tagging.
-    pub session_id: Uuid,
-    /// Tool call ID for tagging.
-    pub tool_call_id: Uuid,
-    /// Tool call event ID for tagging.
-    pub tool_call_event_id: Uuid,
+    /// Base autopilot side info (episode_id, session_id, tool_call_id, tool_call_event_id).
+    #[serde(flatten)]
+    pub base: AutopilotToolSideInfo,
     /// Optional config snapshot hash - if provided, uses action endpoint with historical config.
     #[serde(default)]
     pub config_snapshot_hash: Option<String>,
@@ -89,30 +84,15 @@ impl SimpleTool for InferenceTool {
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
-        // Build tags with useful metadata
-        let mut tags = HashMap::new();
-        tags.insert(
-            "autopilot_session_id".to_string(),
-            side_info.session_id.to_string(),
-        );
-        tags.insert(
-            "autopilot_tool_call_id".to_string(),
-            side_info.tool_call_id.to_string(),
-        );
-        tags.insert(
-            "autopilot_tool_call_event_id".to_string(),
-            side_info.tool_call_event_id.to_string(),
-        );
-
         let client_params = ClientInferenceParams {
             function_name: llm_params.function_name,
             model_name: llm_params.model_name,
             input: llm_params.input,
-            episode_id: Some(side_info.episode_id),
+            episode_id: Some(side_info.base.episode_id),
             params: llm_params.params,
             variant_name: llm_params.variant_name,
             dryrun: Some(false), // Always store
-            tags,
+            tags: side_info.base.to_tags(),
             dynamic_tool_params: llm_params.dynamic_tool_params,
             output_schema: llm_params.output_schema,
             stream: Some(false), // Never stream

@@ -11,6 +11,7 @@ use tensorzero::{ActionInput, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
+use autopilot_tools::AutopilotToolSideInfo;
 use autopilot_tools::tools::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
 use common::{MockTensorZeroClient, create_mock_chat_response};
 
@@ -46,10 +47,12 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
     };
 
     let side_info = InferenceToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
-        tool_call_event_id,
+        base: AutopilotToolSideInfo {
+            episode_id,
+            session_id,
+            tool_call_id,
+            tool_call_event_id,
+        },
         config_snapshot_hash: None,
     };
 
@@ -125,10 +128,12 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
     };
 
     let side_info = InferenceToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
-        tool_call_event_id,
+        base: AutopilotToolSideInfo {
+            episode_id,
+            session_id,
+            tool_call_id,
+            tool_call_event_id,
+        },
         config_snapshot_hash: Some(test_snapshot_hash.to_string()),
     };
 

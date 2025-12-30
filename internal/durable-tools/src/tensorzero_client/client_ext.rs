@@ -9,8 +9,8 @@ use autopilot_client::AutopilotError;
 use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    GetDatapointsResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    FeedbackParams, FeedbackResponse, GetDatapointsResponse, InferenceOutput, InferenceResponse,
+    ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::feedback::internal::{
@@ -36,6 +36,15 @@ impl TensorZeroClient for Client {
             InferenceOutput::NonStreaming(response) => Ok(response),
             InferenceOutput::Streaming(_) => Err(TensorZeroClientError::StreamingNotSupported),
         }
+    }
+
+    async fn feedback(
+        &self,
+        params: FeedbackParams,
+    ) -> Result<FeedbackResponse, TensorZeroClientError> {
+        Client::feedback(self, params)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
     }
 
     async fn create_autopilot_event(

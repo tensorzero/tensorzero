@@ -299,8 +299,9 @@ mod tests {
     use tensorzero::ActionInput;
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-        CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse,
-        InferenceResponse, ListDatapointsRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
+        CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
+        GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, UpdateDatapointRequest,
+        UpdateDatapointsResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
@@ -316,6 +317,11 @@ mod tests {
                 &self,
                 params: ClientInferenceParams,
             ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+            async fn feedback(
+                &self,
+                params: FeedbackParams,
+            ) -> Result<FeedbackResponse, TensorZeroClientError>;
 
             async fn create_autopilot_event(
                 &self,

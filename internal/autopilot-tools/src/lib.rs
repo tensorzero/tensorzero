@@ -11,6 +11,7 @@
 //! # Production Tools
 //!
 //! - `InferenceTool` - Calls TensorZero inference endpoint, optionally with a historical config snapshot
+//! - `FeedbackTool` - Submits feedback for inferences or episodes (comments, demonstrations, metrics)
 //! - `CreateDatapointsTool` - Creates datapoints in a dataset
 //! - `CreateDatapointsFromInferencesTool` - Creates datapoints from existing inferences
 //! - `ListDatapointsTool` - Lists datapoints with filtering and pagination
@@ -111,6 +112,8 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
     // Inference tool
     visitor.visit_simple_tool::<tools::InferenceTool>().await?;
 
+    // Feedback tool
+    visitor.visit_simple_tool::<tools::FeedbackTool>().await?;
     // Datapoint CRUD tools
     visitor
         .visit_simple_tool::<tools::CreateDatapointsTool>()
