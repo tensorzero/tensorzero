@@ -16,6 +16,7 @@ use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Input, InputMessage, Text};
+use tensorzero_core::optimization::OptimizationJobInfo;
 use tensorzero_core::tool::DynamicToolParams;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use uuid::Uuid;
@@ -94,6 +95,11 @@ mock! {
             &self,
             params: LaunchOptimizationWorkflowParams,
         ) -> Result<String, TensorZeroClientError>;
+
+        async fn poll_optimization(
+            &self,
+            job_handle: String,
+        ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
     }
 }
 

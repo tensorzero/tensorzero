@@ -303,6 +303,7 @@ mod tests {
         InferenceResponse, ListDatapointsRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
+    use tensorzero_core::optimization::OptimizationJobInfo;
     use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
     // Mock TensorZeroClient using mockall::mock! macro
@@ -380,6 +381,11 @@ mod tests {
                 &self,
                 params: LaunchOptimizationWorkflowParams,
             ) -> Result<String, TensorZeroClientError>;
+
+            async fn poll_optimization(
+                &self,
+                job_handle: String,
+            ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
         }
     }
 

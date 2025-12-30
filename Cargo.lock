@@ -334,6 +334,7 @@ dependencies = [
 name = "autopilot-tools"
 version = "2025.12.6"
 dependencies = [
+ "anyhow",
  "async-trait",
  "durable",
  "durable-tools",

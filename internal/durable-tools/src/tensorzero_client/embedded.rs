@@ -274,4 +274,26 @@ impl TensorZeroClient for EmbeddedClient {
             TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
         })
     }
+
+    async fn poll_optimization(
+        &self,
+        job_handle: String,
+    ) -> Result<super::OptimizationJobInfo, TensorZeroClientError> {
+        let job_handle =
+            tensorzero_core::optimization::OptimizationJobHandle::from_base64_urlencoded(
+                &job_handle,
+            )
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        tensorzero_optimizers::endpoints::poll_optimization(
+            &self.app_state.http_client,
+            &job_handle,
+            &self.app_state.config.models.default_credentials,
+            &self.app_state.config.provider_types,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
 }

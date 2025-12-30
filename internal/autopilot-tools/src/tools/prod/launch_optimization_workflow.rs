@@ -1,17 +1,16 @@
-//! Tool for launching optimization workflows.
+//! Tool for launching optimization workflows and polling until completion.
 
 use std::borrow::Cow;
+use std::time::Duration;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{SideInfo, TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::inferences::InferenceOutputSource;
 use tensorzero_core::endpoints::stored_inferences::v1::types::{InferenceFilter, OrderBy};
-use tensorzero_core::optimization::UninitializedOptimizerInfo;
+use tensorzero_core::optimization::{OptimizationJobInfo, UninitializedOptimizerInfo};
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
-
-use crate::types::AutopilotToolSideInfo;
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -44,23 +43,54 @@ pub struct LaunchOptimizationWorkflowToolParams {
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
-/// Response from launching an optimization workflow.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LaunchOptimizationWorkflowToolOutput {
-    /// The encoded job handle that can be used to poll optimization status.
-    pub job_handle: String,
+fn default_poll_interval_secs() -> u64 {
+    60
 }
 
-/// Tool for launching optimization workflows.
+fn default_max_wait_secs() -> u64 {
+    86400
+}
+
+/// Side info for optimization workflow tool (hidden from LLM).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OptimizationWorkflowSideInfo {
+    /// Polling interval in seconds (default: 60).
+    #[serde(default = "default_poll_interval_secs")]
+    pub poll_interval_secs: u64,
+
+    /// Maximum time to wait for completion in seconds (default: 86400 = 24 hours).
+    #[serde(default = "default_max_wait_secs")]
+    pub max_wait_secs: u64,
+}
+
+impl Default for OptimizationWorkflowSideInfo {
+    fn default() -> Self {
+        Self {
+            poll_interval_secs: default_poll_interval_secs(),
+            max_wait_secs: default_max_wait_secs(),
+        }
+    }
+}
+
+impl SideInfo for OptimizationWorkflowSideInfo {}
+
+/// Response from the optimization workflow tool.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LaunchOptimizationWorkflowToolOutput {
+    /// The final job info (Completed or Failed).
+    pub result: OptimizationJobInfo,
+}
+
+/// Tool for launching optimization workflows and polling until completion.
 ///
 /// This tool queries stored inferences, renders them with a template variant,
-/// and launches an optimization job (e.g., fine-tuning, prompt optimization).
-/// Returns a job handle that can be used to poll the optimization status.
+/// launches an optimization job (e.g., fine-tuning, prompt optimization),
+/// and polls until the job completes or fails.
 #[derive(Default)]
 pub struct LaunchOptimizationWorkflowTool;
 
 impl ToolMetadata for LaunchOptimizationWorkflowTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = OptimizationWorkflowSideInfo;
     type Output = LaunchOptimizationWorkflowToolOutput;
     type LlmParams = LaunchOptimizationWorkflowToolParams;
 
@@ -71,39 +101,93 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed(
             "Launch an optimization workflow (fine-tuning, prompt optimization, etc.) \
-             using stored inferences. Returns a job handle for polling status.",
+             using stored inferences and poll until completion.",
         )
+    }
+
+    fn timeout() -> Duration {
+        Duration::from_secs(86400) // 24 hours - fine-tuning can take a long time
     }
 }
 
 #[async_trait]
-impl SimpleTool for LaunchOptimizationWorkflowTool {
+impl TaskTool for LaunchOptimizationWorkflowTool {
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        _side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: SimpleToolContext<'_>,
-        _idempotency_key: &str,
+        side_info: <Self as ToolMetadata>::SideInfo,
+        ctx: &mut ToolContext<'_>,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
-        // Convert tool params to the endpoint params
-        let params = LaunchOptimizationWorkflowParams {
-            function_name: llm_params.function_name,
-            template_variant_name: llm_params.template_variant_name,
-            query_variant_name: llm_params.query_variant_name,
-            filters: llm_params.filters,
-            output_source: llm_params.output_source,
-            order_by: llm_params.order_by,
-            limit: llm_params.limit,
-            offset: llm_params.offset,
-            val_fraction: llm_params.val_fraction,
-            optimizer_config: llm_params.optimizer_config,
-        };
+        // Step 1: Launch the optimization workflow
+        let job_handle: String = ctx
+            .step("launch", llm_params.clone(), |params, state| async move {
+                let launch_params = LaunchOptimizationWorkflowParams {
+                    function_name: params.function_name,
+                    template_variant_name: params.template_variant_name,
+                    query_variant_name: params.query_variant_name,
+                    filters: params.filters,
+                    output_source: params.output_source,
+                    order_by: params.order_by,
+                    limit: params.limit,
+                    offset: params.offset,
+                    val_fraction: params.val_fraction,
+                    optimizer_config: params.optimizer_config,
+                };
 
-        let job_handle = ctx
-            .client()
-            .launch_optimization_workflow(params)
-            .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))?;
+                state
+                    .t0_client()
+                    .launch_optimization_workflow(launch_params)
+                    .await
+                    .map_err(|e| anyhow::Error::msg(e.to_string()))
+            })
+            .await?;
 
-        Ok(LaunchOptimizationWorkflowToolOutput { job_handle })
+        // Step 2: Poll until completion
+        let poll_interval = Duration::from_secs(side_info.poll_interval_secs);
+        let max_wait_secs = side_info.max_wait_secs as i64;
+        let start = ctx.now().await?;
+        let mut iteration = 0u32;
+
+        loop {
+            // Checkpointed poll
+            let status: OptimizationJobInfo = ctx
+                .step(
+                    &format!("poll_{iteration}"),
+                    job_handle.clone(),
+                    |handle, state| async move {
+                        state
+                            .t0_client()
+                            .poll_optimization(handle)
+                            .await
+                            .map_err(|e| anyhow::Error::msg(e.to_string()))
+                    },
+                )
+                .await?;
+
+            match &status {
+                OptimizationJobInfo::Completed { .. } => {
+                    return Ok(LaunchOptimizationWorkflowToolOutput { result: status });
+                }
+                OptimizationJobInfo::Failed { .. } => {
+                    return Ok(LaunchOptimizationWorkflowToolOutput { result: status });
+                }
+                OptimizationJobInfo::Pending { .. } => {
+                    // Check timeout
+                    let elapsed = ctx.now().await? - start;
+                    if elapsed.num_seconds() > max_wait_secs {
+                        return Err(ToolError::Validation {
+                            message: format!(
+                                "Optimization timed out after {max_wait_secs} seconds"
+                            ),
+                        });
+                    }
+
+                    // Durable sleep before next poll
+                    ctx.sleep_for(&format!("wait_{iteration}"), poll_interval)
+                        .await?;
+
+                    iteration += 1;
+                }
+            }
+        }
     }
 }

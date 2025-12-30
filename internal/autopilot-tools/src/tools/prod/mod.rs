@@ -21,7 +21,7 @@ pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
 pub use inference::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
 pub use launch_optimization_workflow::{
     LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolOutput,
-    LaunchOptimizationWorkflowToolParams,
+    LaunchOptimizationWorkflowToolParams, OptimizationWorkflowSideInfo,
 };
 pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};

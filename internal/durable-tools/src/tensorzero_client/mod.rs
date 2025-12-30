@@ -17,6 +17,7 @@ pub use tensorzero::{
     ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 pub use tensorzero_core::config::snapshot::SnapshotHash;
+pub use tensorzero_core::optimization::OptimizationJobInfo;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use url::Url;
 use uuid::Uuid;
@@ -159,6 +160,14 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         params: LaunchOptimizationWorkflowParams,
     ) -> Result<String, TensorZeroClientError>;
+
+    /// Poll an optimization workflow for its current status.
+    ///
+    /// Returns the current status of the optimization job (Pending, Completed, or Failed).
+    async fn poll_optimization(
+        &self,
+        job_handle: String,
+    ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.
