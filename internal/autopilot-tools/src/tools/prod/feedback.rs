@@ -1,7 +1,6 @@
 //! Feedback tool for calling TensorZero feedback endpoint.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
@@ -32,9 +31,6 @@ pub struct FeedbackToolParams {
     /// - float metric: number
     /// - boolean metric: boolean
     pub value: Value,
-    /// Optional tags to add to the feedback.
-    #[serde(default)]
-    pub tags: HashMap<String, String>,
     /// If true, the feedback will not be stored (useful for testing).
     #[serde(default)]
     pub dryrun: Option<bool>,
@@ -79,7 +75,7 @@ impl SimpleTool for FeedbackTool {
             metric_name: llm_params.metric_name,
             value: llm_params.value,
             internal: true, // Always internal for autopilot
-            tags: side_info.merge_into_tags(llm_params.tags),
+            tags: side_info.to_tags(),
             dryrun: llm_params.dryrun,
         };
 
