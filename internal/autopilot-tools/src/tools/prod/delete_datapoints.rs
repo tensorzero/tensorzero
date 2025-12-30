@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero::DeleteDatapointsResponse;
 use uuid::Uuid;
@@ -40,10 +40,6 @@ impl ToolMetadata for DeleteDatapointsTool {
             "Delete datapoints from a dataset by their IDs. \
              This is a soft delete - datapoints are marked as stale but not truly removed.",
         )
-    }
-
-    fn parameters_schema() -> Schema {
-        schema_for!(DeleteDatapointsToolParams)
     }
 }
 

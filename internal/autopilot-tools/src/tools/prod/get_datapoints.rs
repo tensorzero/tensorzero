@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero::GetDatapointsResponse;
 use uuid::Uuid;
@@ -41,10 +41,6 @@ impl ToolMetadata for GetDatapointsTool {
             "Get specific datapoints by their IDs. \
              Optionally provide dataset_name for better query performance.",
         )
-    }
-
-    fn parameters_schema() -> Schema {
-        schema_for!(GetDatapointsToolParams)
     }
 }
 
