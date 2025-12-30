@@ -15,6 +15,9 @@ use tensorzero::{
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
+use tensorzero_optimizers::endpoints::{
+    LaunchOptimizationWorkflowParams, launch_optimization_workflow,
+};
 use uuid::Uuid;
 
 use super::{
@@ -362,5 +365,65 @@ impl TensorZeroClient for Client {
         ClientExt::delete_datapoints(self, dataset_name, ids)
             .await
             .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    // ========== Optimization Operations ==========
+
+    async fn launch_optimization_workflow(
+        &self,
+        params: LaunchOptimizationWorkflowParams,
+    ) -> Result<String, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(http) => {
+                let url = http
+                    .base_url
+                    .join("experimental_optimization_workflow")
+                    .map_err(|e: url::ParseError| {
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
+                    })?;
+
+                let response = http
+                    .http_client
+                    .post(url)
+                    .json(&params)
+                    .send()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))?;
+
+                if !response.status().is_success() {
+                    let status = response.status().as_u16();
+                    let text = response.text().await.unwrap_or_default();
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
+                }
+
+                // The endpoint returns the base64-encoded job handle as plain text
+                response
+                    .text()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => {
+                let job_handle = launch_optimization_workflow(
+                    &gateway.handle.app_state.http_client,
+                    gateway.handle.app_state.config.clone(),
+                    &gateway.handle.app_state.clickhouse_connection_info,
+                    params,
+                )
+                .await
+                .map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })?;
+
+                job_handle.to_base64_urlencoded().map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })
+            }
+        }
     }
 }

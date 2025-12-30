@@ -17,6 +17,7 @@ use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Input, InputMessage, Text};
 use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use uuid::Uuid;
 
 // Generate mock using mockall's mock! macro
@@ -88,6 +89,11 @@ mock! {
             dataset_name: String,
             ids: Vec<Uuid>,
         ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+        async fn launch_optimization_workflow(
+            &self,
+            params: LaunchOptimizationWorkflowParams,
+        ) -> Result<String, TensorZeroClientError>;
     }
 }
 

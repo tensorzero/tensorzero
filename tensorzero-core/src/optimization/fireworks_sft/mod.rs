@@ -1,5 +1,6 @@
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -30,7 +31,7 @@ pub struct FireworksSFTConfig {
 /// Uninitialized Fireworks SFT Config (per-job settings only).
 /// Provider-level settings (account_id, credentials) come from
 /// `provider_types.fireworks.sft` in the gateway config.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
 pub struct UninitializedFireworksSFTConfig {

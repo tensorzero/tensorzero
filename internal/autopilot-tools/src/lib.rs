@@ -64,6 +64,9 @@ pub fn register_production_tools(registry: &mut ToolRegistry) -> ToolResult<()> 
     registry.register_simple_tool::<tools::UpdateDatapointsTool>()?;
     registry.register_simple_tool::<tools::DeleteDatapointsTool>()?;
 
+    // Optimization tools
+    registry.register_simple_tool::<tools::LaunchOptimizationWorkflowTool>()?;
+
     Ok(())
 }
 

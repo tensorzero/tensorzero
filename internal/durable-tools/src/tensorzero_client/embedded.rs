@@ -252,4 +252,26 @@ impl TensorZeroClient for EmbeddedClient {
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
+
+    // ========== Optimization Operations ==========
+
+    async fn launch_optimization_workflow(
+        &self,
+        params: tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams,
+    ) -> Result<String, TensorZeroClientError> {
+        let job_handle = tensorzero_optimizers::endpoints::launch_optimization_workflow(
+            &self.app_state.http_client,
+            self.app_state.config.clone(),
+            &self.app_state.clickhouse_connection_info,
+            params,
+        )
+        .await
+        .map_err(|e| {
+            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+        })?;
+
+        job_handle.to_base64_urlencoded().map_err(|e| {
+            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+        })
+    }
 }

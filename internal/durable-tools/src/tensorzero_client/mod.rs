@@ -17,6 +17,7 @@ use tensorzero::{
     ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use url::Url;
 use uuid::Uuid;
 
@@ -148,6 +149,16 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         dataset_name: String,
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+    // ========== Optimization Operations ==========
+
+    /// Launch an optimization workflow.
+    ///
+    /// Returns an encoded job handle that can be used to poll the optimization status.
+    async fn launch_optimization_workflow(
+        &self,
+        params: LaunchOptimizationWorkflowParams,
+    ) -> Result<String, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.

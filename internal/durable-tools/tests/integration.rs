@@ -27,6 +27,7 @@ use tensorzero::{
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -143,6 +144,13 @@ impl TensorZeroClient for MockTensorZeroClient {
         _dataset_name: String,
         _ids: Vec<Uuid>,
     ) -> Result<tensorzero::DeleteDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn launch_optimization_workflow(
+        &self,
+        _params: LaunchOptimizationWorkflowParams,
+    ) -> Result<String, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 }

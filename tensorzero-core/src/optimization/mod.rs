@@ -5,6 +5,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -238,7 +239,7 @@ impl OptimizationJobInfoPyClass {
     }
 }
 
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 pub struct UninitializedOptimizerInfo {
     #[serde(flatten)]
@@ -253,7 +254,7 @@ impl UninitializedOptimizerInfo {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedOptimizerConfig {
