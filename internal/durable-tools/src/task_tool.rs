@@ -68,7 +68,7 @@ use crate::tool_metadata::ToolMetadata;
 ///         ctx: &mut ToolContext<'_>,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Call other tools
-///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic})).await?;
+///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null)).await?;
 ///
 ///         // Use checkpointed steps
 ///         let analysis = ctx
