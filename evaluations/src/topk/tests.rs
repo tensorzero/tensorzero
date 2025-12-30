@@ -1671,6 +1671,40 @@ fn test_update_variant_statuses_failure_check_skipped() {
     }
 }
 
+/// Test that variants not in variant_failures map are not marked as failed.
+#[test]
+fn test_update_variant_statuses_missing_failure_cs() {
+    let mut variant_status: HashMap<String, VariantStatus> =
+        [("variant".to_string(), VariantStatus::Active)]
+            .into_iter()
+            .collect();
+
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_bounds("variant", 0.5, 0.7)]
+            .into_iter()
+            .collect();
+
+    // No failure CS for "variant"
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: 0.05,
+    };
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        &params,
+    );
+
+    // Without failure CS, failure check doesn't apply.
+    // Single variant with k_min=1 triggers inclusion
+    assert_eq!(variant_status["variant"], VariantStatus::Stopped);
+}
+
 /// Test that variants not in variant_performance map don't cause errors in early stopping.
 #[test]
 fn test_update_variant_statuses_missing_performance_cs() {

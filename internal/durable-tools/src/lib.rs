@@ -166,10 +166,10 @@
 mod context;
 mod error;
 mod executor;
-pub mod inference;
 mod registry;
 mod simple_tool;
 mod task_tool;
+pub mod tensorzero_client;
 mod tool_metadata;
 
 #[cfg(test)]
@@ -193,14 +193,14 @@ pub use simple_tool::SimpleTool;
 pub use task_tool::{TaskTool, TaskToolAdapter};
 pub use tool_metadata::{SideInfo, ToolMetadata};
 
-// Re-export inference trait and helpers
-pub use inference::{
-    EmbeddedInferenceClient, InferenceClient, InferenceError, embedded_gateway_client, from_client,
+// Re-export TensorZero client trait and helpers
+pub use tensorzero_client::{
+    EmbeddedClient, TensorZeroClient, TensorZeroClientError, embedded_gateway_client, from_client,
     http_gateway_client,
 };
 
 // Re-export autopilot types for use by tools
-pub use inference::{
+pub use tensorzero_client::{
     CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
     ListSessionsParams, ListSessionsResponse, ToolOutcome,
 };
