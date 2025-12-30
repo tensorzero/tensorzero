@@ -1190,7 +1190,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::ChatCompletions,
                 id: None,
-                downstream_raw_usage: None,
+                raw_usage_entries: None,
             },
         ))
     }
@@ -2747,8 +2747,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, Some(10));
-        assert_eq!(usage.output_tokens, Some(20));
+        assert_eq!(usage.usage.input_tokens, Some(10));
+        assert_eq!(usage.usage.output_tokens, Some(20));
         assert_eq!(chunk.latency, latency);
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
@@ -2773,8 +2773,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, Some(5));
-        assert_eq!(usage.output_tokens, Some(15));
+        assert_eq!(usage.usage.input_tokens, Some(5));
+        assert_eq!(usage.usage.output_tokens, Some(15));
         assert_eq!(chunk.latency, latency);
 
         // Test MessageStop
@@ -2970,7 +2970,6 @@ mod tests {
             raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
-            downstream_raw_usage: None,
         };
         let mut result = chunk.clone();
         prefill_json_chunk_response(&mut result);
@@ -2992,7 +2991,6 @@ mod tests {
                 text: "\"key\": \"value ".to_string(),
                 id: "0".to_string(),
             })],
-            downstream_raw_usage: None,
         };
         let mut result = chunk.clone();
         prefill_json_chunk_response(&mut result);
@@ -3021,7 +3019,6 @@ mod tests {
                     id: "test_id".to_string(),
                 }),
             ],
-            downstream_raw_usage: None,
         };
         let mut result = chunk.clone();
         prefill_json_chunk_response(&mut result);
@@ -3039,7 +3036,6 @@ mod tests {
                 raw_name: Some("test_tool".to_string()),
                 raw_arguments: "{}".to_string(),
             })],
-            downstream_raw_usage: None,
         };
         let mut result = chunk.clone();
         prefill_json_chunk_response(&mut result);

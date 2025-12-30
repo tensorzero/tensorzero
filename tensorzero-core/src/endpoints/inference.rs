@@ -918,34 +918,31 @@ fn create_stream(
                         && !metadata.cached
                         && chunk.usage().is_some()
                     {
-                        // For relay streaming, use downstream_raw_usage which already contains
-                        // the correct entries from downstream. For direct provider calls, parse
-                        // raw_response to extract the provider's usage object.
-                        if let Some(downstream_entries) = chunk.downstream_raw_usage() {
-                            // Relay case: use downstream entries directly
-                            match &mut extra_raw_usage {
-                                Some(entries) => entries.extend(downstream_entries.iter().cloned()),
-                                None => extra_raw_usage = Some(downstream_entries.clone()),
-                            }
-                        } else {
-                            // Direct provider case: extract from raw_response
-                            let raw_usage_json: Option<serde_json::Value> =
-                                serde_json::from_str::<serde_json::Value>(chunk.raw_response())
-                                    .ok()
-                                    .and_then(|v| v.get("usage").cloned());
-
-                            let current_entry = RawUsageEntry {
-                                model_inference_id: streaming_model_inference_id,
-                                provider_type: metadata.provider_type.clone(),
-                                api_type: metadata.api_type,
-                                usage: raw_usage_json,
-                            };
-
-                            match &mut extra_raw_usage {
-                                Some(entries) => entries.push(current_entry),
-                                None => extra_raw_usage = Some(vec![current_entry]),
-                            }
+                    // If the chunk already includes raw_usage (relay/synthetic), use it.
+                    // Otherwise, parse raw_response to extract the provider's usage object.
+                    if let Some(chunk_raw_usage) = chunk.raw_usage() {
+                        match &mut extra_raw_usage {
+                            Some(entries) => entries.extend(chunk_raw_usage.iter().cloned()),
+                            None => extra_raw_usage = Some(chunk_raw_usage.clone()),
                         }
+                    } else {
+                        let raw_usage_json: Option<serde_json::Value> =
+                            serde_json::from_str::<serde_json::Value>(chunk.raw_response())
+                                .ok()
+                                .and_then(|v| v.get("usage").cloned());
+
+                        let current_entry = RawUsageEntry {
+                            model_inference_id: streaming_model_inference_id,
+                            provider_type: metadata.provider_type.clone(),
+                            api_type: metadata.api_type,
+                            usage: raw_usage_json,
+                        };
+
+                        match &mut extra_raw_usage {
+                            Some(entries) => entries.push(current_entry),
+                            None => extra_raw_usage = Some(vec![current_entry]),
+                        }
+                    }
                         added_current_streaming_raw_usage = true;
                     }
 
@@ -965,23 +962,27 @@ fn create_stream(
                     InferenceResultChunk::Chat(ChatInferenceResultChunk {
                         created: 0,
                         content: vec![],
-                        usage: Some(extra_usage),
                         finish_reason: None,
                         latency: Duration::from_millis(0),
                         raw_response: String::new(),
-                        downstream_raw_usage: None,
+                        usage: Some(UsageWithRaw {
+                            usage: extra_usage,
+                            raw_usage: None,
+                        }),
                     })
                 }
                 FunctionConfig::Json(_) => {
                     InferenceResultChunk::Json(JsonInferenceResultChunk {
                         thought: None,
                         created: 0,
-                        usage: Some(extra_usage),
+                        usage: Some(UsageWithRaw {
+                            usage: extra_usage,
+                            raw_usage: None,
+                        }),
                         latency: Duration::from_millis(0),
                         raw: None,
                         raw_response: String::new(),
                         finish_reason: None,
-                        downstream_raw_usage: None,
                     })
                 }
             };
@@ -1776,7 +1777,6 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
             latency: Duration::from_millis(100),
-            downstream_raw_usage: None,
         });
         let raw_request = "raw request".to_string();
         let inference_metadata = InferenceMetadata {
@@ -1837,7 +1837,6 @@ mod tests {
             raw_response: String::new(),
             latency: Duration::from_millis(100),
             finish_reason: Some(FinishReason::Stop),
-            downstream_raw_usage: None,
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
@@ -2284,14 +2283,16 @@ mod tests {
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content,
             created: 0,
-            usage: Some(Usage {
-                input_tokens: Some(10),
-                output_tokens: Some(20),
-            }),
+            usage: Some(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                }
+                .into(),
+            ),
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
             latency: Duration::from_millis(100),
-            downstream_raw_usage: None,
         });
 
         // Create raw_usage entries to be emitted
@@ -2355,14 +2356,16 @@ mod tests {
                 id: "0".to_string(),
             })],
             created: 0,
-            usage: Some(Usage {
-                input_tokens: Some(5),
-                output_tokens: Some(5),
-            }),
+            usage: Some(
+                Usage {
+                    input_tokens: Some(5),
+                    output_tokens: Some(5),
+                }
+                .into(),
+            ),
             finish_reason: None,
             raw_response: String::new(),
             latency: Duration::from_millis(50),
-            downstream_raw_usage: None,
         });
 
         let result1 =
@@ -2381,14 +2384,16 @@ mod tests {
         let chunk2 = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content: vec![],
             created: 0,
-            usage: Some(Usage {
-                input_tokens: Some(5),
-                output_tokens: Some(5),
-            }),
+            usage: Some(
+                Usage {
+                    input_tokens: Some(5),
+                    output_tokens: Some(5),
+                }
+                .into(),
+            ),
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
             latency: Duration::from_millis(50),
-            downstream_raw_usage: None,
         });
 
         let result2 =
@@ -2421,14 +2426,16 @@ mod tests {
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content: vec![], // Empty content
             created: 0,
-            usage: Some(Usage {
-                input_tokens: Some(100),
-                output_tokens: Some(50),
-            }),
+            usage: Some(
+                Usage {
+                    input_tokens: Some(100),
+                    output_tokens: Some(50),
+                }
+                .into(),
+            ),
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
             latency: Duration::from_millis(100),
-            downstream_raw_usage: None,
         });
 
         let result =
@@ -2476,7 +2483,6 @@ mod tests {
             finish_reason: None,
             raw_response: String::new(),
             latency: Duration::from_millis(50),
-            downstream_raw_usage: None,
         });
 
         let result =
@@ -2517,14 +2523,16 @@ mod tests {
             raw: Some(r#"{"key": "value"}"#.to_string()), // Non-empty
             thought: None,
             created: 0,
-            usage: Some(Usage {
-                input_tokens: Some(30),
-                output_tokens: Some(20),
-            }),
+            usage: Some(
+                Usage {
+                    input_tokens: Some(30),
+                    output_tokens: Some(20),
+                }
+                .into(),
+            ),
             raw_response: String::new(),
             latency: Duration::from_millis(100),
             finish_reason: Some(FinishReason::Stop),
-            downstream_raw_usage: None,
         });
 
         let result =

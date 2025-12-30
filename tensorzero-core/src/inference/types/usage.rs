@@ -46,6 +46,15 @@ pub struct UsageWithRaw {
     pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
+impl From<Usage> for UsageWithRaw {
+    fn from(usage: Usage) -> Self {
+        Self {
+            usage,
+            raw_usage: None,
+        }
+    }
+}
+
 impl Usage {
     pub fn zero() -> Usage {
         Usage {

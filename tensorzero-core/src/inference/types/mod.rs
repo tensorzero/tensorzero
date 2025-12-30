@@ -1701,8 +1701,8 @@ pub struct ProviderInferenceResponseArgs {
     /// Pre-generated ID for streaming (to match raw_usage entries sent to client).
     /// If None, a new ID will be generated.
     pub id: Option<Uuid>,
-    /// Pre-processed raw_usage entries from downstream (for relay passthrough).
-    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Pre-processed raw_usage entries (relay or synthesized streams).
+    pub raw_usage_entries: Option<Vec<RawUsageEntry>>,
 }
 
 impl ProviderInferenceResponse {
@@ -1711,10 +1711,10 @@ impl ProviderInferenceResponse {
         let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
 
         // Construct raw_usage_entries immediately:
-        // - If downstream_raw_usage is present (relay), use those entries directly
+        // - If raw_usage_entries is present (relay/synthetic), use those entries directly
         // - Otherwise, construct a single entry from raw_usage_json
-        let raw_usage_entries = match args.downstream_raw_usage {
-            Some(downstream) => Some(downstream),
+        let raw_usage_entries = match args.raw_usage_entries {
+            Some(entries) => Some(entries),
             None => args.raw_usage_json.map(|usage| {
                 vec![RawUsageEntry {
                     model_inference_id: id,
@@ -2022,31 +2022,32 @@ impl ProviderInferenceResponseChunk {
         Self {
             content,
             created: current_timestamp(),
-            usage,
+            usage: usage.map(|usage| UsageWithRaw {
+                usage,
+                raw_usage: None,
+            }),
             raw_response,
             latency,
             finish_reason,
-            downstream_raw_usage: None,
         }
     }
 
-    /// Creates a new chunk with downstream raw_usage passthrough (for relay streaming)
-    pub fn new_with_downstream_raw_usage(
+    /// Creates a new chunk with raw_usage passthrough (relay or synthesized streams)
+    pub fn new_with_raw_usage(
         content: Vec<ContentBlockChunk>,
         usage: Option<Usage>,
         raw_response: String,
         latency: Duration,
         finish_reason: Option<FinishReason>,
-        downstream_raw_usage: Option<Vec<RawUsageEntry>>,
+        raw_usage: Option<Vec<RawUsageEntry>>,
     ) -> Self {
         Self {
             content,
             created: current_timestamp(),
-            usage,
+            usage: usage.map(|usage| UsageWithRaw { usage, raw_usage }),
             raw_response,
             latency,
             finish_reason,
-            downstream_raw_usage,
         }
     }
 }

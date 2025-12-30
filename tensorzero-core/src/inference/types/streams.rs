@@ -9,7 +9,7 @@ use crate::inference::types::{
     ApiType, ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType,
     InferenceConfig, Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, RawUsageEntry, RequestMessage, Text,
-    Thought, ThoughtSummaryBlock, ToolCall, Unknown, Usage,
+    Thought, ThoughtSummaryBlock, ToolCall, Unknown, Usage, UsageWithRaw,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -30,13 +30,10 @@ use super::InferenceResult;
 pub struct ProviderInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
-    pub usage: Option<Usage>,
+    pub usage: Option<UsageWithRaw>,
     pub raw_response: String,
     pub latency: Duration,
     pub finish_reason: Option<FinishReason>,
-    /// For relay streaming passthrough: raw_usage entries from downstream gateway
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -86,13 +83,10 @@ pub struct ChatInferenceResultChunk {
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<Usage>,
+    pub usage: Option<UsageWithRaw>,
     pub latency: Duration,
     pub raw_response: String,
     pub finish_reason: Option<FinishReason>,
-    /// For relay streaming passthrough: raw_usage entries from downstream gateway
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -101,13 +95,10 @@ pub struct JsonInferenceResultChunk {
     pub thought: Option<String>,
     pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<Usage>,
+    pub usage: Option<UsageWithRaw>,
     pub latency: Duration,
     pub raw_response: String,
     pub finish_reason: Option<FinishReason>,
-    /// For relay streaming passthrough: raw_usage entries from downstream gateway
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub downstream_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -127,8 +118,21 @@ impl InferenceResultChunk {
 
     pub fn usage(&self) -> Option<&Usage> {
         match self {
-            InferenceResultChunk::Chat(chunk) => chunk.usage.as_ref(),
-            InferenceResultChunk::Json(chunk) => chunk.usage.as_ref(),
+            InferenceResultChunk::Chat(chunk) => chunk.usage.as_ref().map(|usage| &usage.usage),
+            InferenceResultChunk::Json(chunk) => chunk.usage.as_ref().map(|usage| &usage.usage),
+        }
+    }
+
+    pub fn raw_usage(&self) -> Option<&Vec<RawUsageEntry>> {
+        match self {
+            InferenceResultChunk::Chat(chunk) => chunk
+                .usage
+                .as_ref()
+                .and_then(|usage| usage.raw_usage.as_ref()),
+            InferenceResultChunk::Json(chunk) => chunk
+                .usage
+                .as_ref()
+                .and_then(|usage| usage.raw_usage.as_ref()),
         }
     }
 
@@ -143,14 +147,6 @@ impl InferenceResultChunk {
         match self {
             InferenceResultChunk::Chat(chunk) => chunk.finish_reason.as_ref(),
             InferenceResultChunk::Json(chunk) => chunk.finish_reason.as_ref(),
-        }
-    }
-
-    /// Returns downstream raw_usage entries from relay streaming passthrough
-    pub fn downstream_raw_usage(&self) -> Option<&Vec<RawUsageEntry>> {
-        match self {
-            InferenceResultChunk::Chat(chunk) => chunk.downstream_raw_usage.as_ref(),
-            InferenceResultChunk::Json(chunk) => chunk.downstream_raw_usage.as_ref(),
         }
     }
 
@@ -171,7 +167,6 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
             latency: chunk.latency,
             finish_reason: chunk.finish_reason,
             raw_response: chunk.raw_response,
-            downstream_raw_usage: chunk.downstream_raw_usage,
         }
     }
 }
@@ -207,7 +202,6 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
             latency: chunk.latency,
             raw_response: chunk.raw_response,
             finish_reason: chunk.finish_reason,
-            downstream_raw_usage: chunk.downstream_raw_usage,
         }
     }
 }
@@ -299,8 +293,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     });
     // `usage` is `None` until we receive a chunk with usage information
     let mut usage: Option<Usage> = None;
-    // Collect downstream raw_usage entries from relay streaming passthrough
-    let mut downstream_raw_usage: Option<Vec<RawUsageEntry>> = None;
+    // Collect raw_usage entries from chunks (relay or synthesized streams)
+    let mut raw_usage_entries: Option<Vec<RawUsageEntry>> = None;
     // Track raw_usage JSON from chunk with usage (for direct provider streaming)
     let mut raw_usage_json: Option<serde_json::Value> = None;
     let response_time = value
@@ -342,18 +336,18 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                 u.sum_strict(chunk_usage);
             }
             // Extract raw_usage JSON from chunk with usage (for direct provider streaming)
-            // Only capture if we don't already have downstream_raw_usage (relay case)
-            if raw_usage_json.is_none() && downstream_raw_usage.is_none() {
+            // Only capture if we don't already have raw_usage entries (relay/synthetic case)
+            if raw_usage_json.is_none() && raw_usage_entries.is_none() {
                 raw_usage_json = serde_json::from_str::<serde_json::Value>(chunk.raw_response())
                     .ok()
                     .and_then(|v| v.get("usage").cloned());
             }
         }
-        // Accumulate downstream raw_usage entries from relay streaming passthrough
-        if let Some(chunk_downstream_raw_usage) = chunk.downstream_raw_usage() {
-            downstream_raw_usage
+        // Accumulate raw_usage entries from relay or synthesized streams
+        if let Some(chunk_raw_usage) = chunk.raw_usage() {
+            raw_usage_entries
                 .get_or_insert_with(Vec::new)
-                .extend(chunk_downstream_raw_usage.iter().cloned());
+                .extend(chunk_raw_usage.iter().cloned());
         }
         match chunk {
             InferenceResultChunk::Chat(chunk) => {
@@ -623,8 +617,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         api_type,
         // Use pre-generated ID if provided (for streaming raw_usage consistency)
         id: model_inference_id,
-        // Pass through accumulated downstream raw_usage from relay streaming
-        downstream_raw_usage,
+        // Pass through accumulated raw_usage from relay/synthetic streams
+        raw_usage_entries,
     });
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, cached);
@@ -919,7 +913,6 @@ mod tests {
                 raw_response: "{\"message\": \"Hello}".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::Text(TextChunk {
@@ -927,14 +920,16 @@ mod tests {
                     id: "0".to_string(),
                 })],
                 created,
-                usage: Some(Usage {
-                    input_tokens: Some(2),
-                    output_tokens: Some(4),
-                }),
+                usage: Some(
+                    Usage {
+                        input_tokens: Some(2),
+                        output_tokens: Some(4),
+                    }
+                    .into(),
+                ),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
-                downstream_raw_usage: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1023,21 +1018,19 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage1),
+                usage: Some(usage1.into()),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
                 finish_reason: Some(FinishReason::ToolCall),
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
                 created,
-                usage: Some(usage2),
+                usage: Some(usage2.into()),
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
-                downstream_raw_usage: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1109,11 +1102,10 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage),
+                usage: Some(usage.into()),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(100),
                 finish_reason: Some(FinishReason::ToolCall),
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\"}".to_string()),
@@ -1123,7 +1115,6 @@ mod tests {
                 raw_response: "\"John\"}".to_string(),
                 latency: Duration::from_millis(200),
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1194,11 +1185,10 @@ mod tests {
                 raw: Some("{\"name\":\"John\",".to_string()),
                 thought: None,
                 created,
-                usage: Some(usage),
+                usage: Some(usage.into()),
                 raw_response: "{\"name\":\"John\",".to_string(),
                 latency: Duration::from_millis(100),
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some(String::new()),
@@ -1208,7 +1198,6 @@ mod tests {
                 raw_response: String::new(),
                 latency: Duration::from_millis(200),
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"age\":30}".to_string()),
@@ -1218,7 +1207,6 @@ mod tests {
                 raw_response: "\"age\":30}".to_string(),
                 latency: Duration::from_millis(300),
                 finish_reason: Some(FinishReason::Stop),
-                downstream_raw_usage: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1325,21 +1313,19 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage1),
+                usage: Some(usage1.into()),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
                 finish_reason: Some(FinishReason::ToolCall),
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
                 created,
-                usage: Some(usage2),
+                usage: Some(usage2.into()),
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
-                downstream_raw_usage: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1440,21 +1426,19 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage1),
+                usage: Some(usage1.into()),
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
                 created,
-                usage: Some(usage2),
+                usage: Some(usage2.into()),
                 finish_reason: Some(FinishReason::ToolCall),
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
-                downstream_raw_usage: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1547,7 +1531,6 @@ mod tests {
                 raw_response: "{\"message\": \"Hello}".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -1605,7 +1588,6 @@ mod tests {
                 raw_response: "my raw thought".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::Text(TextChunk {
@@ -1613,14 +1595,16 @@ mod tests {
                     id: "0".to_string(),
                 })],
                 created,
-                usage: Some(Usage {
-                    input_tokens: Some(2),
-                    output_tokens: Some(4),
-                }),
+                usage: Some(
+                    Usage {
+                        input_tokens: Some(2),
+                        output_tokens: Some(4),
+                    }
+                    .into(),
+                ),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::Thought(ThoughtChunk {
@@ -1636,7 +1620,6 @@ mod tests {
                 raw_response: "my other raw thought".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1757,7 +1740,6 @@ mod tests {
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -1766,14 +1748,16 @@ mod tests {
                     raw_arguments: "tion\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
                 })],
                 created,
-                usage: Some(Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(20),
-                }),
+                usage: Some(
+                    Usage {
+                        input_tokens: Some(10),
+                        output_tokens: Some(20),
+                    }
+                    .into(),
+                ),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
-                downstream_raw_usage: None,
             }),
         ];
 
@@ -1842,7 +1826,6 @@ mod tests {
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -1858,14 +1841,16 @@ mod tests {
                     }),
                 ],
                 created,
-                usage: Some(Usage {
-                    input_tokens: Some(15),
-                    output_tokens: Some(25),
-                }),
+                usage: Some(
+                    Usage {
+                        input_tokens: Some(15),
+                        output_tokens: Some(25),
+                    }
+                    .into(),
+                ),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
-                downstream_raw_usage: None,
             }),
         ];
 
@@ -1932,7 +1917,6 @@ mod tests {
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -1941,14 +1925,16 @@ mod tests {
                     raw_arguments: " \"value\"}".to_string(),
                 })],
                 created,
-                usage: Some(Usage {
-                    input_tokens: Some(5),
-                    output_tokens: Some(10),
-                }),
+                usage: Some(
+                    Usage {
+                        input_tokens: Some(5),
+                        output_tokens: Some(10),
+                    }
+                    .into(),
+                ),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
-                downstream_raw_usage: None,
             }),
         ];
 
@@ -2013,7 +1999,6 @@ mod tests {
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -2028,14 +2013,16 @@ mod tests {
                     }),
                 ],
                 created,
-                usage: Some(Usage {
-                    input_tokens: Some(20),
-                    output_tokens: Some(15),
-                }),
+                usage: Some(
+                    Usage {
+                        input_tokens: Some(20),
+                        output_tokens: Some(15),
+                    }
+                    .into(),
+                ),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
-                downstream_raw_usage: None,
             }),
         ];
 
@@ -2099,14 +2086,16 @@ mod tests {
                 raw_arguments: "{\"test\": true}".to_string(),
             })],
             created,
-            usage: Some(Usage {
-                input_tokens: Some(5),
-                output_tokens: Some(5),
-            }),
+            usage: Some(
+                Usage {
+                    input_tokens: Some(5),
+                    output_tokens: Some(5),
+                }
+                .into(),
+            ),
             raw_response: "chunk1".to_string(),
             latency,
             finish_reason: Some(FinishReason::ToolCall),
-            downstream_raw_usage: None,
         })];
 
         let collect_chunks_args = CollectChunksArgs {
@@ -2176,7 +2165,6 @@ mod tests {
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -2201,7 +2189,6 @@ mod tests {
                 raw_response: "chunk2".to_string(),
                 latency,
                 finish_reason: None,
-                downstream_raw_usage: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -2222,14 +2209,16 @@ mod tests {
                     }),
                 ],
                 created,
-                usage: Some(Usage {
-                    input_tokens: Some(20),
-                    output_tokens: Some(30),
-                }),
+                usage: Some(
+                    Usage {
+                        input_tokens: Some(20),
+                        output_tokens: Some(30),
+                    }
+                    .into(),
+                ),
                 raw_response: "chunk3".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
-                downstream_raw_usage: None,
             }),
         ];
 
@@ -2304,14 +2293,16 @@ mod tests {
                 raw_name: Some("test_tool".to_string()),
             })],
             created: 1234567890,
-            usage: Some(Usage {
-                input_tokens: Some(10),
-                output_tokens: Some(20),
-            }),
+            usage: Some(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                }
+                .into(),
+            ),
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: Some(FinishReason::ToolCall),
-            downstream_raw_usage: None,
         };
 
         let result = JsonInferenceResultChunk::from(tool_chunk);
@@ -2322,10 +2313,13 @@ mod tests {
         assert_eq!(result.latency, Duration::from_secs(1));
         assert_eq!(
             result.usage,
-            Some(Usage {
-                input_tokens: Some(10),
-                output_tokens: Some(20),
-            })
+            Some(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                }
+                .into()
+            )
         );
         assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
         // Test case for Text content
@@ -2339,7 +2333,6 @@ mod tests {
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
-            downstream_raw_usage: None,
         };
 
         let result = JsonInferenceResultChunk::from(text_chunk);
@@ -2361,7 +2354,6 @@ mod tests {
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
-            downstream_raw_usage: None,
         };
 
         let result = JsonInferenceResultChunk::from(thought_chunk);
@@ -2394,7 +2386,6 @@ mod tests {
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
-            downstream_raw_usage: None,
         };
 
         let result = JsonInferenceResultChunk::from(mixed_chunk);
@@ -2409,7 +2400,6 @@ mod tests {
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
-            downstream_raw_usage: None,
         };
 
         let result = JsonInferenceResultChunk::from(empty_chunk);

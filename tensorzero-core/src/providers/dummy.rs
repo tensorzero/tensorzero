@@ -24,7 +24,7 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
-use crate::inference::types::usage::{ApiType, RawUsageEntry};
+use crate::inference::types::usage::{ApiType, RawUsageEntry, UsageWithRaw};
 use crate::inference::types::{ContentBlock, FinishReason};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -140,22 +140,23 @@ impl DummyProvider {
                     raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     finish_reason: None,
-                    downstream_raw_usage: None,
                 })
             })
             .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
                 created,
                 content: vec![],
-                usage: Some(self.get_model_usage(total_tokens)),
+                usage: Some(UsageWithRaw {
+                    usage: self.get_model_usage(total_tokens),
+                    raw_usage: Some(vec![RawUsageEntry {
+                        model_inference_id: Uuid::now_v7(),
+                        provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
+                        usage: None, // dummy provider doesn't have real raw usage
+                    }]),
+                }),
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: String::new(),
                 latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
-                downstream_raw_usage: Some(vec![RawUsageEntry {
-                    model_inference_id: Uuid::now_v7(),
-                    provider_type: "dummy".to_string(),
-                    api_type: ApiType::ChatCompletions,
-                    usage: None, // dummy provider doesn't have real raw usage
-                }]),
             })))
             .throttle(std::time::Duration::from_millis(10));
 
@@ -788,7 +789,6 @@ impl InferenceProvider for DummyProvider {
                     finish_reason: None,
                     raw_response: chunk.to_string(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
-                    downstream_raw_usage: None,
                 });
             }
         };
@@ -796,16 +796,18 @@ impl InferenceProvider for DummyProvider {
         let base_stream = stream.chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
             created,
             content: vec![],
-            usage: Some(self.get_model_usage(content_chunk_len as u32)),
+            usage: Some(UsageWithRaw {
+                usage: self.get_model_usage(content_chunk_len as u32),
+                raw_usage: Some(vec![RawUsageEntry {
+                    model_inference_id: Uuid::now_v7(),
+                    provider_type: "dummy".to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    usage: None, // dummy provider doesn't have real raw usage
+                }]),
+            }),
             finish_reason,
             raw_response: String::new(),
             latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
-            downstream_raw_usage: Some(vec![RawUsageEntry {
-                model_inference_id: Uuid::now_v7(),
-                provider_type: "dummy".to_string(),
-                api_type: ApiType::ChatCompletions,
-                usage: None, // dummy provider doesn't have real raw usage
-            }]),
         })));
 
         // We don't use the tokio `throttled` combinator, since we want to use `sleep_excluding_latency`

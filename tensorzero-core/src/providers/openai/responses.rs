@@ -259,7 +259,7 @@ impl OpenAIResponsesResponse<'_> {
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::Responses,
                 id: None,
-                downstream_raw_usage: None,
+                raw_usage_entries: None,
             },
         ))
     }
@@ -2145,10 +2145,13 @@ mod tests {
         assert_eq!(result.content.len(), 0); // No content, just metadata
         assert_eq!(
             result.usage,
-            Some(Usage {
-                input_tokens: Some(15),
-                output_tokens: Some(25),
-            })
+            Some(
+                Usage {
+                    input_tokens: Some(15),
+                    output_tokens: Some(25),
+                }
+                .into()
+            )
         );
         assert_eq!(result.finish_reason, Some(FinishReason::Stop));
     }
@@ -2191,10 +2194,13 @@ mod tests {
         assert_eq!(result.finish_reason, Some(FinishReason::Length));
         assert_eq!(
             result.usage,
-            Some(Usage {
-                input_tokens: Some(10),
-                output_tokens: Some(100),
-            })
+            Some(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(100),
+                }
+                .into()
+            )
         );
     }
 

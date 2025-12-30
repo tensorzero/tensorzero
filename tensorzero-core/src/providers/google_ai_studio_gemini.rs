@@ -1349,7 +1349,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::ChatCompletions,
                 id: None,
-                downstream_raw_usage: None,
+                raw_usage_entries: None,
             },
         ))
     }
@@ -2603,8 +2603,8 @@ mod tests {
         // Verify usage is included when finish_reason is set
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, Some(10));
-        assert_eq!(usage.output_tokens, Some(20));
+        assert_eq!(usage.usage.input_tokens, Some(10));
+        assert_eq!(usage.usage.output_tokens, Some(20));
 
         // Verify finish reason
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
@@ -2846,8 +2846,8 @@ mod tests {
         // Verify usage is included (with zero output tokens)
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, Some(8));
-        assert_eq!(usage.output_tokens, None);
+        assert_eq!(usage.usage.input_tokens, Some(8));
+        assert_eq!(usage.usage.output_tokens, None);
 
         // Verify finish reason for safety blocks
         assert_eq!(chunk.finish_reason, Some(FinishReason::ContentFilter));

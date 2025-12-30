@@ -242,14 +242,16 @@ async fn test_cache_stream_write_and_read() {
                 text: "test content".to_string(),
             })],
             created: 1234,
-            usage: Some(Usage {
-                input_tokens: Some(20),
-                output_tokens: Some(40),
-            }),
+            usage: Some(
+                Usage {
+                    input_tokens: Some(20),
+                    output_tokens: Some(40),
+                }
+                .into(),
+            ),
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(999),
             finish_reason: None,
-            downstream_raw_usage: None,
         },
         ProviderInferenceResponseChunk {
             content: vec![ContentBlockChunk::Text(TextChunk {
@@ -257,14 +259,16 @@ async fn test_cache_stream_write_and_read() {
                 text: "test content 2".to_string(),
             })],
             created: 5678,
-            usage: Some(Usage {
-                input_tokens: Some(100),
-                output_tokens: Some(200),
-            }),
+            usage: Some(
+                Usage {
+                    input_tokens: Some(100),
+                    output_tokens: Some(200),
+                }
+                .into(),
+            ),
             raw_response: "raw response 2".to_string(),
             latency: Duration::from_secs(999),
             finish_reason: Some(FinishReason::Stop),
-            downstream_raw_usage: None,
         },
     ];
 
@@ -313,18 +317,24 @@ async fn test_cache_stream_write_and_read() {
         if i == 0 {
             assert_eq!(
                 usage,
-                &Some(Usage {
-                    input_tokens: Some(20),
-                    output_tokens: Some(40),
-                })
+                &Some(
+                    Usage {
+                        input_tokens: Some(20),
+                        output_tokens: Some(40),
+                    }
+                    .into()
+                )
             );
         } else {
             assert_eq!(
                 usage,
-                &Some(Usage {
-                    input_tokens: Some(100),
-                    output_tokens: Some(200),
-                })
+                &Some(
+                    Usage {
+                        input_tokens: Some(100),
+                        output_tokens: Some(200),
+                    }
+                    .into()
+                )
             );
         };
         assert_eq!(raw_response, &initial_chunks[i].raw_response);

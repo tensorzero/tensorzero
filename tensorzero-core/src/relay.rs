@@ -231,42 +231,38 @@ impl TensorzeroRelay {
                     match chunk {
                         InferenceResponseChunk::Chat(c) => {
                             // Extract both usage and raw_usage from UsageWithRaw for passthrough
-                            let (usage, downstream_raw_usage) = c
+                            let (usage, raw_usage) = c
                                 .usage
                                 .map(|u| (Some(u.usage), u.raw_usage))
                                 .unwrap_or((None, None));
-                            Ok(
-                                ProviderInferenceResponseChunk::new_with_downstream_raw_usage(
-                                    c.content,
-                                    usage,
-                                    // TODO - get the original chunk as a string
-                                    raw_chunk,
-                                    start_time.elapsed(),
-                                    c.finish_reason,
-                                    downstream_raw_usage,
-                                ),
-                            )
+                            Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
+                                c.content,
+                                usage,
+                                // TODO - get the original chunk as a string
+                                raw_chunk,
+                                start_time.elapsed(),
+                                c.finish_reason,
+                                raw_usage,
+                            ))
                         }
                         InferenceResponseChunk::Json(c) => {
                             // Extract both usage and raw_usage from UsageWithRaw for passthrough
-                            let (usage, downstream_raw_usage) = c
+                            let (usage, raw_usage) = c
                                 .usage
                                 .map(|u| (Some(u.usage), u.raw_usage))
                                 .unwrap_or((None, None));
-                            Ok(
-                                ProviderInferenceResponseChunk::new_with_downstream_raw_usage(
-                                    vec![ContentBlockChunk::Text(TextChunk {
-                                        id: "0".to_string(),
-                                        text: c.raw,
-                                    })],
-                                    usage,
-                                    // TODO - get the original chunk as a string
-                                    raw_chunk,
-                                    start_time.elapsed(),
-                                    c.finish_reason,
-                                    downstream_raw_usage,
-                                ),
-                            )
+                            Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
+                                vec![ContentBlockChunk::Text(TextChunk {
+                                    id: "0".to_string(),
+                                    text: c.raw,
+                                })],
+                                usage,
+                                // TODO - get the original chunk as a string
+                                raw_chunk,
+                                start_time.elapsed(),
+                                c.finish_reason,
+                                raw_usage,
+                            ))
                         }
                     }
                 }
@@ -314,7 +310,7 @@ impl TensorzeroRelay {
         let usage = non_streaming.usage().to_owned();
         let finish_reason = non_streaming.finish_reason();
         // Extract raw_usage from downstream response for passthrough
-        let downstream_raw_usage = non_streaming.raw_usage().cloned();
+        let raw_usage_entries = non_streaming.raw_usage().cloned();
 
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
@@ -353,12 +349,12 @@ impl TensorzeroRelay {
                 usage,
                 latency,
                 finish_reason,
-                // Relay doesn't have its own raw_usage_json, passthrough is via downstream_raw_usage
+                // Relay doesn't have its own raw_usage_json, passthrough is via raw_usage_entries
                 raw_usage_json: None,
                 provider_type: "relay".to_string(),
                 api_type: ApiType::ChatCompletions,
                 id: None,
-                downstream_raw_usage,
+                raw_usage_entries,
             },
         ))
     }

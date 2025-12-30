@@ -1345,7 +1345,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::ChatCompletions,
                 id: None,
-                downstream_raw_usage: None,
+                raw_usage_entries: None,
             },
         ))
     }
@@ -2477,10 +2477,13 @@ mod tests {
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
-            Some(Usage {
-                input_tokens: Some(10),
-                output_tokens: Some(20),
-            })
+            Some(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                }
+                .into()
+            )
         );
     }
 

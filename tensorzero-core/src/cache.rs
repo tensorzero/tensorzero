@@ -362,9 +362,8 @@ pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     Ok(())
 }
 
-/// A subset of `ProviderInferenceResponseChunk` containing only the fields we want to cache
-/// For example, we exclude 'usage', and fill it in with 0 input/output tokens when we
-/// return a cached chunk.
+/// A subset of `ProviderInferenceResponseChunk` containing only the fields we want to cache.
+/// We persist normalized usage but intentionally drop any raw usage entries.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CachedProviderInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
@@ -398,7 +397,7 @@ pub fn start_cache_write_streaming(
             .into_iter()
             .map(|c| CachedProviderInferenceResponseChunk {
                 content: c.content,
-                usage: c.usage,
+                usage: c.usage.map(|usage| usage.usage),
                 raw_response: c.raw_response,
             })
             .collect(),

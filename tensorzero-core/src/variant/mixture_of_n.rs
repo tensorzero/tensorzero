@@ -21,7 +21,7 @@ use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{
     ApiType, ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk,
     InferenceResultChunk, JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk,
-    ThoughtChunk, Usage,
+    ThoughtChunk, Usage, UsageWithRaw,
 };
 use crate::inference::types::{
     ModelInferenceRequest, RequestMessage, Role, System,
@@ -347,11 +347,11 @@ pub fn stream_inference_from_non_stream(
     // We set the 'cached' flag on the 'ModelUsedInfo, which will adjust the usage as needed when producing
     // the HTTP response stream.
     let usage = model_inference_result.usage;
-    // Get raw_usage_entries for relay passthrough - this ensures raw_usage entries
+    // Get raw_usage_entries for passthrough - this ensures raw_usage entries
     // from downstream are correctly attributed when converting non-streaming to fake streaming
     let raw_usage_entries = model_inference_result.raw_usage.clone();
     // Extract provider_type and api_type from raw_usage_entries if available.
-    // These won't be used for raw_usage construction because the fake stream sets downstream_raw_usage,
+    // These won't be used for raw_usage construction because the fake stream carries raw_usage,
     // but ModelUsedInfo requires these fields to be present.
     let (provider_type, api_type) = raw_usage_entries
         .as_ref()
@@ -438,22 +438,26 @@ fn make_stream_from_non_stream(
             Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: content_blocks,
                 created: chat.created,
-                usage,
                 latency: tokio::time::Duration::from_secs(0),
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
-                downstream_raw_usage: raw_usage_entries.clone(),
+                usage: usage.map(|usage| UsageWithRaw {
+                    usage,
+                    raw_usage: raw_usage_entries.clone(),
+                }),
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: json.output.raw,
             thought: None,
             created: json.created,
-            usage,
+            usage: usage.map(|usage| UsageWithRaw {
+                usage,
+                raw_usage: raw_usage_entries,
+            }),
             latency: tokio::time::Duration::from_secs(0),
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
-            downstream_raw_usage: raw_usage_entries,
         })),
     };
     Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
@@ -1788,7 +1792,7 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
             }),
-            None, // downstream_raw_usage
+            None, // raw_usage_entries
         )
         .unwrap();
 
@@ -1833,14 +1837,16 @@ mod tests {
                     }),
                 ],
                 created: 123456,
-                usage: Some(Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(20),
-                }),
+                usage: Some(
+                    Usage {
+                        input_tokens: Some(10),
+                        output_tokens: Some(20),
+                    }
+                    .into()
+                ),
                 latency: std::time::Duration::from_secs(0),
                 raw_response: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),
-                downstream_raw_usage: None,
             })),]
         );
     }

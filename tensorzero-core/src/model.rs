@@ -189,7 +189,7 @@ impl StreamResponse {
                         created: current_timestamp(),
                         // Use the real usage (so that the `ModelInference` row we write is accurate)
                         // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
-                        usage: c.usage,
+                        usage: c.usage.map(Into::into),
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
@@ -199,8 +199,6 @@ impl StreamResponse {
                         } else {
                             None
                         },
-                        // Cache hits don't have downstream raw_usage from relay
-                        downstream_raw_usage: None,
                     })
                 },
             ))) as ProviderInferenceResponseStreamInner)
@@ -751,13 +749,13 @@ async fn wrap_provider_stream(
         let mut total_usage: Option<Usage> = None;
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref()
-                && let Some(chunk_usage) = &chunk.usage {
-                    // `total_usage` will be `None` if this is the first chunk with usage information....
-                    if total_usage.is_none() {
-                        // ... so initialize it to zero ...
-                        total_usage = Some(Usage::zero());
-                    }
-                    // ...and then add the chunk usage to it (handling `None` fields)
+                && let Some(chunk_usage) = chunk.usage.as_ref().map(|usage| &usage.usage) {
+                // `total_usage` will be `None` if this is the first chunk with usage information....
+                if total_usage.is_none() {
+                    // ... so initialize it to zero ...
+                    total_usage = Some(Usage::zero());
+                }
+                // ...and then add the chunk usage to it (handling `None` fields)
                     if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
                 }
             // We can skip cloning the chunk if we know we're not going to write to the cache
