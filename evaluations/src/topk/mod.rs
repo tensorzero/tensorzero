@@ -1077,6 +1077,7 @@ async fn process_batch_step(
     let datapoints = get_datapoints(&state.clients.clickhouse_client, None, request)
         .await?
         .datapoints;
+    let num_datapoints_fetched = datapoints.len();
 
     // Process the batch if we have datapoints and active variants
     let results: BatchResultsByDatapoint = if datapoints.is_empty() {
@@ -1174,7 +1175,8 @@ async fn process_batch_step(
         &mut current_state.evaluator_failures,
     )?;
 
-    current_state.num_datapoints_processed += params.batch_ids.len();
+    // Update number of datapoints processed and batch index
+    current_state.num_datapoints_processed += num_datapoints_fetched;
     current_state.batch_index = params.batch_idx + 1;
 
     // Update variant statuses (failure detection + early inclusion/exclusion)
