@@ -7,8 +7,7 @@ use async_trait::async_trait;
 use autopilot_client::ToolResult as AutopilotToolResult;
 use durable_tools::{
     CreateEventRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient,
-    ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
-    ToolResult as DurableToolResult,
+    ToolAppState, ToolContext, ToolMetadata, ToolOutcome, ToolResult as DurableToolResult,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -71,7 +70,9 @@ impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
 
     type LlmParams = T::LlmParams;
     type SideInfo = AutopilotSideInfo<T::SideInfo>;
-    type Output = T::Output;
+    /// The wrapped tool "returns" by writing to the autopilot API
+    /// so for our purposes the output of the tool is ()
+    type Output = ();
 }
 
 #[async_trait]
@@ -113,7 +114,7 @@ impl<T: TaskTool> TaskTool for ClientToolWrapper<T> {
         ctx.step("publish_result", publish_params, publish_result_step)
             .await?;
 
-        result
+        Ok(())
     }
 }
 
@@ -189,7 +190,9 @@ impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T> {
 
     type LlmParams = T::LlmParams;
     type SideInfo = AutopilotSideInfo<T::SideInfo>;
-    type Output = T::Output;
+    /// The wrapped tool "returns" by writing to the autopilot API
+    /// so for our purposes the output of the tool is ()
+    type Output = ();
 }
 
 /// Parameters for executing a simple tool within a checkpointed step.
@@ -213,7 +216,7 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
         // Execute the underlying simple tool within a checkpointed step.
         // The step returns Ok(Result<output, error_string>) so tool errors are
         // checkpointed, not retried.
-        let step_result: Result<Self::Output, String> = ctx
+        let step_result: Result<T::Output, String> = ctx
             .step(
                 "execute_simple_tool",
                 SimpleToolStepParams {
@@ -254,8 +257,7 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
         ctx.step("publish_result", publish_params, publish_result_step)
             .await?;
 
-        // Convert Result<Output, String> back to DurableToolResult<Output>
-        step_result.map_err(|msg| ToolError::Validation { message: msg })
+        Ok(())
     }
 }
 
