@@ -376,7 +376,7 @@ impl TensorZeroClient for Client {
     async fn launch_optimization_workflow(
         &self,
         params: LaunchOptimizationWorkflowParams,
-    ) -> Result<String, TensorZeroClientError> {
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 let url = http
@@ -386,105 +386,64 @@ impl TensorZeroClient for Client {
                         TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
 
-                let response = http
-                    .http_client
-                    .post(url)
-                    .json(&params)
-                    .send()
-                    .await
-                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))?;
-
-                if !response.status().is_success() {
-                    let status = response.status().as_u16();
-                    let text = response.text().await.unwrap_or_default();
-                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
-                        status_code: status,
-                        message: text,
-                    }));
-                }
+                let builder = http.http_client.post(url).json(&params);
+                let response_text = http.send_request(builder).await?;
 
                 // The endpoint returns the base64-encoded job handle as plain text
-                response
-                    .text()
-                    .await
-                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
+                OptimizationJobHandle::from_base64_urlencoded(&response_text).map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })
             }
             ClientMode::EmbeddedGateway {
                 gateway,
                 timeout: _,
-            } => {
-                let job_handle = launch_optimization_workflow(
-                    &gateway.handle.app_state.http_client,
-                    gateway.handle.app_state.config.clone(),
-                    &gateway.handle.app_state.clickhouse_connection_info,
-                    params,
-                )
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-                })?;
-
-                job_handle.to_base64_urlencoded().map_err(|e| {
-                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-                })
-            }
+            } => launch_optimization_workflow(
+                &gateway.handle.app_state.http_client,
+                gateway.handle.app_state.config.clone(),
+                &gateway.handle.app_state.clickhouse_connection_info,
+                params,
+            )
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            }),
         }
     }
 
     async fn poll_optimization(
         &self,
-        job_handle: String,
+        job_handle: &OptimizationJobHandle,
     ) -> Result<OptimizationJobInfo, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
+                let encoded_handle = job_handle.to_base64_urlencoded().map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })?;
+
                 let url = http
                     .base_url
-                    .join(&format!("experimental_optimization/{job_handle}"))
+                    .join(&format!("experimental_optimization/{encoded_handle}"))
                     .map_err(|e: url::ParseError| {
                         TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
 
-                let response =
-                    http.http_client.get(url).send().await.map_err(|e| {
-                        TensorZeroClientError::Autopilot(AutopilotError::Request(e))
-                    })?;
-
-                if !response.status().is_success() {
-                    let status = response.status().as_u16();
-                    let text = response.text().await.unwrap_or_default();
-                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
-                        status_code: status,
-                        message: text,
-                    }));
-                }
-
-                response
-                    .json()
-                    .await
-                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
+                let builder = http.http_client.get(url);
+                let (response, _) = http.send_and_parse_http_response(builder).await?;
+                Ok(response)
             }
             ClientMode::EmbeddedGateway {
                 gateway,
                 timeout: _,
-            } => {
-                let job_handle = OptimizationJobHandle::from_base64_urlencoded(&job_handle)
-                    .map_err(|e| {
-                        TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                            source: e.into(),
-                        })
-                    })?;
-
-                poll_optimization(
-                    &gateway.handle.app_state.http_client,
-                    &job_handle,
-                    &gateway.handle.app_state.config.models.default_credentials,
-                    &gateway.handle.app_state.config.provider_types,
-                )
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-                })
-            }
+            } => poll_optimization(
+                &gateway.handle.app_state.http_client,
+                job_handle,
+                &gateway.handle.app_state.config.models.default_credentials,
+                &gateway.handle.app_state.config.provider_types,
+            )
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            }),
         }
     }
 

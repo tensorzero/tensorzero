@@ -9,7 +9,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::inferences::InferenceOutputSource;
 use tensorzero_core::endpoints::stored_inferences::v1::types::{InferenceFilter, OrderBy};
-use tensorzero_core::optimization::{OptimizationJobInfo, UninitializedOptimizerInfo};
+use tensorzero_core::optimization::{
+    OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo,
+};
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
@@ -106,7 +108,7 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
     }
 
     fn timeout() -> Duration {
-        Duration::from_secs(86400) // 24 hours - fine-tuning can take a long time
+        Duration::from_secs(default_max_wait_secs())
     }
 }
 
@@ -118,7 +120,7 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
         ctx: &mut ToolContext<'_>,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Step 1: Launch the optimization workflow
-        let job_handle: String = ctx
+        let job_handle: OptimizationJobHandle = ctx
             .step("launch", llm_params.clone(), |params, state| async move {
                 let launch_params = LaunchOptimizationWorkflowParams {
                     function_name: params.function_name,
@@ -156,7 +158,7 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
                     |handle, state| async move {
                         state
                             .t0_client()
-                            .poll_optimization(handle)
+                            .poll_optimization(&handle)
                             .await
                             .map_err(|e| anyhow::Error::msg(e.to_string()))
                     },

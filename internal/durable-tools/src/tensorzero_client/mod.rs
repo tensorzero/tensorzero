@@ -18,6 +18,7 @@ pub use tensorzero::{
 };
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+pub use tensorzero_core::optimization::OptimizationJobHandle;
 pub use tensorzero_core::optimization::OptimizationJobInfo;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use url::Url;
@@ -156,18 +157,18 @@ pub trait TensorZeroClient: Send + Sync + 'static {
 
     /// Launch an optimization workflow.
     ///
-    /// Returns an encoded job handle that can be used to poll the optimization status.
+    /// Returns a job handle that can be used to poll the optimization status.
     async fn launch_optimization_workflow(
         &self,
         params: LaunchOptimizationWorkflowParams,
-    ) -> Result<String, TensorZeroClientError>;
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
 
     /// Poll an optimization workflow for its current status.
     ///
     /// Returns the current status of the optimization job (Pending, Completed, or Failed).
     async fn poll_optimization(
         &self,
-        job_handle: String,
+        job_handle: &OptimizationJobHandle,
     ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
 
     /// Get the latest feedback ID for each metric for a target.

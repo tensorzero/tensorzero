@@ -20,13 +20,24 @@ use durable_tools::{
 };
 use sqlx::PgPool;
 use tensorzero_core::db::inferences::InferenceOutputSource;
-use tensorzero_core::optimization::dicl::UninitializedDiclOptimizationConfig;
+use tensorzero_core::optimization::dicl::{
+    DiclOptimizationJobHandle, UninitializedDiclOptimizationConfig,
+};
 use tensorzero_core::optimization::{
-    OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+    OptimizationJobHandle, OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerConfig,
+    UninitializedOptimizerInfo,
 };
 use uuid::Uuid;
 
 // ===== Test Helpers =====
+
+fn create_test_job_handle() -> OptimizationJobHandle {
+    OptimizationJobHandle::Dicl(DiclOptimizationJobHandle {
+        embedding_model: "test-embedding".to_string(),
+        k: 5,
+        model: "test-model".to_string(),
+    })
+}
 
 fn create_test_params() -> LaunchOptimizationWorkflowToolParams {
     LaunchOptimizationWorkflowToolParams {
@@ -91,7 +102,7 @@ async fn test_launch_optimization_workflow_tool_immediate_completion(
     mock_client
         .expect_launch_optimization_workflow()
         .times(1)
-        .returning(|_| Ok("test_job_handle".to_string()));
+        .returning(|_| Ok(create_test_job_handle()));
 
     // Expect poll to be called once and return Completed
     mock_client
@@ -163,7 +174,7 @@ async fn test_launch_optimization_workflow_tool_multiple_polls(pool: PgPool) -> 
     mock_client
         .expect_launch_optimization_workflow()
         .times(1)
-        .returning(|_| Ok("test_job_handle".to_string()));
+        .returning(|_| Ok(create_test_job_handle()));
 
     // Return Pending twice, then Completed
     mock_client
@@ -239,7 +250,7 @@ async fn test_launch_optimization_workflow_tool_failed(pool: PgPool) -> sqlx::Re
     mock_client
         .expect_launch_optimization_workflow()
         .times(1)
-        .returning(|_| Ok("test_job_handle".to_string()));
+        .returning(|_| Ok(create_test_job_handle()));
 
     mock_client
         .expect_poll_optimization()

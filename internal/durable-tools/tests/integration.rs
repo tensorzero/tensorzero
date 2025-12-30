@@ -29,7 +29,7 @@ use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
-use tensorzero_core::optimization::OptimizationJobInfo;
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -153,13 +153,13 @@ impl TensorZeroClient for MockTensorZeroClient {
     async fn launch_optimization_workflow(
         &self,
         _params: LaunchOptimizationWorkflowParams,
-    ) -> Result<String, TensorZeroClientError> {
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn poll_optimization(
         &self,
-        _job_handle: String,
+        _job_handle: &OptimizationJobHandle,
     ) -> Result<OptimizationJobInfo, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }

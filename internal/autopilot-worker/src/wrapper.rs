@@ -304,7 +304,7 @@ mod tests {
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
-    use tensorzero_core::optimization::OptimizationJobInfo;
+    use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
     use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
     // Mock TensorZeroClient using mockall::mock! macro
@@ -381,11 +381,11 @@ mod tests {
             async fn launch_optimization_workflow(
                 &self,
                 params: LaunchOptimizationWorkflowParams,
-            ) -> Result<String, TensorZeroClientError>;
+            ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
 
             async fn poll_optimization(
                 &self,
-                job_handle: String,
+                job_handle: &OptimizationJobHandle,
             ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
 
             async fn get_latest_feedback_id_by_metric(

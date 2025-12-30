@@ -259,38 +259,24 @@ impl TensorZeroClient for EmbeddedClient {
     async fn launch_optimization_workflow(
         &self,
         params: tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams,
-    ) -> Result<String, TensorZeroClientError> {
-        let job_handle = tensorzero_optimizers::endpoints::launch_optimization_workflow(
+    ) -> Result<super::OptimizationJobHandle, TensorZeroClientError> {
+        tensorzero_optimizers::endpoints::launch_optimization_workflow(
             &self.app_state.http_client,
             self.app_state.config.clone(),
             &self.app_state.clickhouse_connection_info,
             params,
         )
         .await
-        .map_err(|e| {
-            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-        })?;
-
-        job_handle.to_base64_urlencoded().map_err(|e| {
-            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-        })
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
     async fn poll_optimization(
         &self,
-        job_handle: String,
+        job_handle: &super::OptimizationJobHandle,
     ) -> Result<super::OptimizationJobInfo, TensorZeroClientError> {
-        let job_handle =
-            tensorzero_core::optimization::OptimizationJobHandle::from_base64_urlencoded(
-                &job_handle,
-            )
-            .map_err(|e| {
-                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            })?;
-
         tensorzero_optimizers::endpoints::poll_optimization(
             &self.app_state.http_client,
-            &job_handle,
+            job_handle,
             &self.app_state.config.models.default_credentials,
             &self.app_state.config.provider_types,
         )
