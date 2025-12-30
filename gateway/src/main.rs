@@ -45,10 +45,10 @@ async fn handle_create_api_key(
 
     let now = Utc::now();
 
-    if let Some(expiration_datetime) = expiration {
-        if expiration_datetime < now {
-            return Err("Expiration datetime needs to be in the future".into());
-        }
+    if let Some(expiration_datetime) = expiration
+        && expiration_datetime < now
+    {
+        return Err("Expiration datetime needs to be in the future".into());
     }
 
     // Create connection pool (alpha version for tensorzero-auth)
