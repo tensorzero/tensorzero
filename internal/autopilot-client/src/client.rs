@@ -249,13 +249,13 @@ impl AutopilotClient {
     /// Spawns a durable task to execute an approved tool call.
     ///
     /// This is called after a `ToolCallAuthorization` event with `Approved` status
-    /// is successfully created. It retrieves the original tool call details from
-    /// the cache and spawns the corresponding durable task for execution.
+    /// is successfully created. It retrieves the original tool call details and
+    /// spawns the corresponding durable task for execution.
     ///
     /// # Tool Call Lookup
     ///
-    /// The tool call must already be in the local cache. The `create_event` method
-    /// pre-fetches and caches tool calls before creating authorization events.
+    /// The function first checks the local cache for the tool call. If not found,
+    /// it fetches the tool call event directly from the API using `get_event`.
     ///
     /// # Side Info
     ///
@@ -269,7 +269,8 @@ impl AutopilotClient {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - The tool call is not found in the cache
+    /// - Fetching the tool call event fails
+    /// - The event is not a tool call
     /// - Tool call arguments cannot be parsed as JSON
     /// - Spawning the durable task fails
     async fn handle_tool_call_authorization(
@@ -278,11 +279,17 @@ impl AutopilotClient {
         deployment_id: Uuid,
         tool_call_event_id: Uuid,
     ) -> Result<(), AutopilotError> {
-        // The tool call should already be cached by create_event before the authorization was created
-        let tool_call = self
-            .tool_call_cache
-            .get(&tool_call_event_id)
-            .ok_or(AutopilotError::ToolCallNotFound(tool_call_event_id))?;
+        // Check cache first, otherwise fetch the tool call event directly
+        let tool_call = match self.tool_call_cache.get(&tool_call_event_id) {
+            Some(tc) => tc,
+            None => {
+                let event = self.get_event(session_id, tool_call_event_id).await?;
+                match event.payload {
+                    EventPayload::ToolCall(tc) => tc,
+                    _ => return Err(AutopilotError::ToolCallNotFound(tool_call_event_id)),
+                }
+            }
+        };
 
         let tool_call_id = tool_call.id.clone();
         let tool_name = tool_call.name.clone();
@@ -380,6 +387,27 @@ impl AutopilotClient {
         Ok(body)
     }
 
+    /// Gets a single event by ID.
+    pub async fn get_event(
+        &self,
+        session_id: Uuid,
+        event_id: Uuid,
+    ) -> Result<Event, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/events/{event_id}"))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let event: Event = response.json().await?;
+        self.cache_tool_call_event(&event);
+        Ok(event)
+    }
+
     /// Creates an event in a session.
     ///
     /// Use `Uuid::nil()` as the `session_id` to create a new session.
@@ -397,22 +425,6 @@ impl AutopilotClient {
             _ => None,
         };
         let deployment_id = request.deployment_id;
-
-        // Pre-fetch and cache the tool call BEFORE creating the authorization.
-        // This avoids a race where the authorization is committed but pending_tool_calls
-        // no longer includes the tool call (since it now has an authorization).
-        if let Some(tool_call_event_id) = tool_call_event_id
-            && self.tool_call_cache.get(&tool_call_event_id).is_none()
-        {
-            let response = self
-                .list_events(session_id, ListEventsParams::default())
-                .await?;
-            for event in response.pending_tool_calls {
-                if let EventPayload::ToolCall(tc) = &event.payload {
-                    self.tool_call_cache.insert(event.id, tc.clone());
-                }
-            }
-        }
 
         let url = self
             .base_url
