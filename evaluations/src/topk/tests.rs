@@ -2082,10 +2082,6 @@ fn mock_cs_with_count_and_mean(
     )
 }
 
-// ----------------------------------------------------------------------------
-// get_rank_based_hedge_weight tests
-// ----------------------------------------------------------------------------
-
 /// Test get_rank_based_hedge_weight assigns correct weights based on rank relative to k_min/k_max.
 #[test]
 fn test_get_rank_based_hedge_weight() {
@@ -2102,10 +2098,6 @@ fn test_get_rank_based_hedge_weight() {
     assert_eq!(get_rank_based_hedge_weight(2, 2, 2), 0.8);
     assert_eq!(get_rank_based_hedge_weight(3, 2, 2), 0.2);
 }
-
-// ----------------------------------------------------------------------------
-// compute_hedge_weights tests
-// ----------------------------------------------------------------------------
 
 /// Test that compute_hedge_weights returns None when any variant is below MIN_SAMPLES_FOR_REBALANCING.
 #[test]
