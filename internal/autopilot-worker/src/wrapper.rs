@@ -210,7 +210,7 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
         let tool_name = T::name().to_string();
 
         // Execute the underlying simple tool within a checkpointed step
-        let output: Self::Output = ctx
+        let result: DurableToolResult<Self::Output> = ctx
             .step(
                 "execute_simple_tool",
                 SimpleToolStepParams {
@@ -221,17 +221,22 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
                 },
                 execute_simple_tool_step::<T>,
             )
-            .await?;
-
-        // Serialize output before the next await point
-        let result_json = serde_json::to_string(&output)?;
+            .await;
 
         // Prepare the outcome for the autopilot API
-        let outcome = ToolOutcome::Success(AutopilotToolResult {
-            name: tool_name.clone(),
-            result: result_json,
-            id: side_info.tool_call_id.clone(),
-        });
+        let outcome = match &result {
+            Ok(output) => {
+                let result_json = serde_json::to_string(output)?;
+                ToolOutcome::Success(AutopilotToolResult {
+                    name: tool_name.clone(),
+                    result: result_json,
+                    id: side_info.tool_call_id.clone(),
+                })
+            }
+            Err(e) => ToolOutcome::Failure {
+                message: e.to_string(),
+            },
+        };
 
         // Publish result to autopilot API (checkpointed)
         let publish_params = PublishResultParams {
@@ -246,7 +251,7 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
         ctx.step("publish_result", publish_params, publish_result_step)
             .await?;
 
-        Ok(output)
+        result
     }
 }
 
