@@ -65,7 +65,7 @@ async fn test_get_config_tool_with_hash(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
-async fn test_write_config_tool_merges_tags(pool: PgPool) {
+async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
     let session_id = Uuid::now_v7();
     let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -77,20 +77,12 @@ async fn test_write_config_tool_merges_tags(pool: PgPool) {
         tool_call_event_id,
     };
 
-    let mut user_tags = HashMap::new();
-    user_tags.insert(
-        "autopilot_session_id".to_string(),
-        "user_override".to_string(),
-    );
-    user_tags.insert("custom_tag".to_string(), "custom_value".to_string());
-
     let mut extra_templates = HashMap::new();
     extra_templates.insert("template_a".to_string(), "content".to_string());
 
     let llm_params = WriteConfigToolParams {
         config: serde_json::json!({}),
         extra_templates,
-        tags: user_tags,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -100,7 +92,6 @@ async fn test_write_config_tool_merges_tags(pool: PgPool) {
             request.config.functions.is_empty()
                 && request.extra_templates.get("template_a") == Some(&"content".to_string())
                 && request.tags.get("autopilot_session_id") == Some(&session_id.to_string())
-                && request.tags.get("custom_tag") == Some(&"custom_value".to_string())
                 && request.tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
                 && request.tags.get("autopilot_tool_call_event_id")
                     == Some(&tool_call_event_id.to_string())

@@ -42,13 +42,4 @@ impl AutopilotToolSideInfo {
         );
         tags
     }
-
-    /// Build autopilot tracking tags, merging with existing tags.
-    ///
-    /// Autopilot tags take precedence over existing tags if there are conflicts.
-    pub fn merge_into_tags(&self, existing: HashMap<String, String>) -> HashMap<String, String> {
-        let mut tags = existing;
-        tags.extend(self.to_tags());
-        tags
-    }
 }

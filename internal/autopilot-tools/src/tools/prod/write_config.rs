@@ -21,9 +21,6 @@ pub struct WriteConfigToolParams {
     /// Templates that should be stored with the config.
     #[serde(default)]
     pub extra_templates: HashMap<String, String>,
-    /// User-defined tags for categorizing this config snapshot.
-    #[serde(default)]
-    pub tags: HashMap<String, String>,
 }
 
 /// Tool for writing config snapshots.
@@ -63,7 +60,7 @@ impl SimpleTool for WriteConfigTool {
         let request = WriteConfigRequest {
             config,
             extra_templates: llm_params.extra_templates,
-            tags: side_info.merge_into_tags(llm_params.tags),
+            tags: side_info.to_tags(),
         };
 
         ctx.client()
