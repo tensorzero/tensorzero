@@ -11,6 +11,7 @@
 //! # Production Tools
 //!
 //! - `InferenceTool` - Calls TensorZero inference endpoint, optionally with a historical config snapshot
+//! - `FeedbackTool` - Submits feedback for inferences or episodes (comments, demonstrations, metrics)
 //! - `CreateDatapointsTool` - Creates datapoints in a dataset
 //! - `CreateDatapointsFromInferencesTool` - Creates datapoints from existing inferences
 //! - `ListDatapointsTool` - Lists datapoints with filtering and pagination
@@ -53,8 +54,9 @@ pub use durable_tools::{
 ///
 /// Returns an error if any tool registration fails.
 pub fn register_production_tools(registry: &mut ToolRegistry) -> ToolResult<()> {
-    // Inference tool
+    // Inference and feedback tools
     registry.register_simple_tool::<tools::InferenceTool>()?;
+    registry.register_simple_tool::<tools::FeedbackTool>()?;
 
     // Datapoint CRUD tools
     registry.register_simple_tool::<tools::CreateDatapointsTool>()?;
