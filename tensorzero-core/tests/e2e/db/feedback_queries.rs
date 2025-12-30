@@ -485,6 +485,7 @@ async fn test_get_variant_performances_inference_level_cumulative() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     let params = GetVariantPerformanceParams {
@@ -522,6 +523,7 @@ async fn test_get_variant_performances_inference_level_week() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     let params = GetVariantPerformanceParams {
@@ -560,6 +562,7 @@ async fn test_get_variant_performances_episode_level_cumulative() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Episode,
+        description: None,
     };
 
     let params = GetVariantPerformanceParams {
@@ -596,6 +599,7 @@ async fn test_get_variant_performances_with_variant_filter() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     // First get all variants
@@ -650,6 +654,7 @@ async fn test_get_variant_performances_empty_for_nonexistent_function() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     let params = GetVariantPerformanceParams {
@@ -677,6 +682,7 @@ async fn test_get_variant_performances_different_time_windows() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     // Test each time window type (excluding cumulative which is tested separately)
@@ -720,6 +726,7 @@ async fn test_get_variant_performances_boolean_metric() {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     let params = GetVariantPerformanceParams {
@@ -753,6 +760,7 @@ async fn test_get_variant_performances_ask_question_solved_with_variant() {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Episode,
+        description: None,
     };
 
     let params = GetVariantPerformanceParams {
@@ -844,6 +852,7 @@ async fn test_get_variant_performances_ask_question_num_questions_with_variant()
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Min,
         level: MetricConfigLevel::Episode,
+        description: None,
     };
 
     let params = GetVariantPerformanceParams {
@@ -904,6 +913,7 @@ async fn test_get_variant_performances_empty_for_nonexistent_metric() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     let params = GetVariantPerformanceParams {
