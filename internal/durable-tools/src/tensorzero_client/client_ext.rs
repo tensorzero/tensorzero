@@ -13,6 +13,9 @@ use tensorzero::{
     ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::feedback::internal::{
+    LatestFeedbackIdByMetricResponse, get_latest_feedback_id_by_metric,
+};
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use uuid::Uuid;
@@ -371,5 +374,53 @@ impl TensorZeroClient for Client {
         ClientExt::delete_datapoints(self, dataset_name, ids)
             .await
             .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(http) => {
+                let url = http
+                    .base_url
+                    .join(&format!(
+                        "internal/feedback/{target_id}/latest_id_by_metric"
+                    ))
+                    .map_err(|e: url::ParseError| {
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
+                    })?;
+
+                let response =
+                    http.http_client.get(url).send().await.map_err(|e| {
+                        TensorZeroClientError::Autopilot(AutopilotError::Request(e))
+                    })?;
+
+                if !response.status().is_success() {
+                    let status = response.status().as_u16();
+                    let text = response.text().await.unwrap_or_default();
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
+                }
+
+                response
+                    .json()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => get_latest_feedback_id_by_metric(
+                &gateway.handle.app_state.clickhouse_connection_info,
+                target_id,
+            )
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            }),
+        }
     }
 }
