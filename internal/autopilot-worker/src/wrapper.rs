@@ -303,6 +303,7 @@ mod tests {
         InferenceResponse, ListDatapointsRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
+    use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 
     // Mock TensorZeroClient using mockall::mock! macro
     // (same pattern as autopilot-tools/tests/common/mod.rs)
@@ -374,6 +375,11 @@ mod tests {
                 dataset_name: String,
                 ids: Vec<Uuid>,
             ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+            async fn get_latest_feedback_id_by_metric(
+                &self,
+                target_id: Uuid,
+            ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
         }
     }
 

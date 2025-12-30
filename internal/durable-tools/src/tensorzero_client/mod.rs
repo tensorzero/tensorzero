@@ -17,6 +17,7 @@ pub use tensorzero::{
     ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 pub use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use url::Url;
 use uuid::Uuid;
 
@@ -148,6 +149,12 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         dataset_name: String,
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+    /// Get the latest feedback ID for each metric for a target.
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.
