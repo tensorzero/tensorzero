@@ -320,7 +320,7 @@ impl AutopilotClient {
 
         let episode_id = Uuid::now_v7();
         self.spawn_client
-            .spawn_tool_by_name_with_side_info(&tool_name, llm_params, side_info, episode_id)
+            .spawn_tool_by_name(&tool_name, llm_params, side_info, episode_id)
             .await?;
 
         Ok(())

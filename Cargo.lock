@@ -357,10 +357,12 @@ dependencies = [
  "autopilot-client",
  "autopilot-tools",
  "durable-tools",
+ "mockall",
  "schemars 1.2.0",
  "serde",
  "serde_json",
  "sqlx",
+ "tensorzero",
  "tensorzero-core",
  "thiserror 2.0.17",
  "tokio",
@@ -1819,7 +1821,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?branch=viraj%2Fspawn-unchecked#9860f359d05c4a15e52dc33dbbf5aa96639c2295"
+source = "git+https://github.com/tensorzero/durable?rev=161e9e5479c1ba87d6310fcd8b276f4b9f7444d6#161e9e5479c1ba87d6310fcd8b276f4b9f7444d6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7768,9 +7770,9 @@ dependencies = [
 
 [[package]]
 name = "zmij"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f4a4e8e9dc5c62d159f04fcdbe07f4c3fb710415aab4754bf11505501e3251d"
+checksum = "e9747e91771f56fd7893e1164abd78febd14a670ceec257caad15e051de35f06"
 
 [[package]]
 name = "zstd"

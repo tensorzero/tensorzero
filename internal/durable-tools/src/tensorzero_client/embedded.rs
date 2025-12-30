@@ -7,14 +7,16 @@ use async_trait::async_trait;
 use tensorzero::{
     ActionResponse, ClientInferenceParams, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    GetDatapointsResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    FeedbackParams, FeedbackResponse, GetDatapointsResponse, InferenceOutput, InferenceResponse,
+    ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsRequest, DeleteDatapointsRequest,
     GetDatapointsRequest, UpdateDatapointsRequest,
 };
+use tensorzero_core::endpoints::feedback::feedback;
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, action};
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
@@ -71,6 +73,17 @@ impl TensorZeroClient for EmbeddedClient {
             InferenceOutput::NonStreaming(response) => Ok(response),
             InferenceOutput::Streaming(_) => Err(TensorZeroClientError::StreamingNotSupported),
         }
+    }
+
+    async fn feedback(
+        &self,
+        params: FeedbackParams,
+    ) -> Result<FeedbackResponse, TensorZeroClientError> {
+        feedback(self.app_state.clone(), params, None)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
     }
 
     async fn create_autopilot_event(
@@ -248,6 +261,18 @@ impl TensorZeroClient for EmbeddedClient {
             &self.app_state.clickhouse_connection_info,
             &dataset_name,
             request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::feedback::internal::get_latest_feedback_id_by_metric(
+            &self.app_state.clickhouse_connection_info,
+            target_id,
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))

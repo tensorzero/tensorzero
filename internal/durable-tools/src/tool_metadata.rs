@@ -3,6 +3,8 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::time::Duration;
 
+use crate::ToolResult;
+
 /// Marker trait for side information types.
 ///
 /// Types implementing this can be used as side information for tools.
@@ -60,7 +62,7 @@ pub trait ToolMetadata: Send + Sync + 'static {
     type SideInfo: SideInfo;
 
     /// The output type for this tool (must be JSON-serializable).
-    type Output: Serialize + DeserializeOwned + Send + 'static;
+    type Output: Serialize + DeserializeOwned + Send + Sync + 'static;
     /// Unique name for this tool.
     ///
     /// This is used for registration, invocation, and as an identifier in the LLM.
@@ -85,8 +87,8 @@ pub trait ToolMetadata: Send + Sync + 'static {
     ///
     /// By default, this is derived from the `LlmParams` type using `schemars`.
     /// Override this if you need custom schema generation.
-    fn parameters_schema() -> Schema {
-        SchemaGenerator::default().into_root_schema_for::<Self::LlmParams>()
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(SchemaGenerator::default().into_root_schema_for::<Self::LlmParams>())
     }
 
     /// Execution timeout for this tool.

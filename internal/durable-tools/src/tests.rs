@@ -486,7 +486,7 @@ mod erasure_tests {
     #[test]
     fn erased_task_tool_wrapper_parameters_schema_has_message_field() {
         let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
-        let schema = wrapper.parameters_schema();
+        let schema = wrapper.parameters_schema().unwrap();
 
         // The schema should be an object with a "message" property
         let schema_json = serde_json::to_value(&schema).unwrap();
