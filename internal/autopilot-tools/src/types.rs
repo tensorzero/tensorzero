@@ -1,5 +1,7 @@
 //! Shared types for TensorZero Autopilot tools.
 
+use std::collections::HashMap;
+
 use durable_tools::SideInfo;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -21,3 +23,32 @@ pub struct AutopilotToolSideInfo {
 }
 
 impl SideInfo for AutopilotToolSideInfo {}
+
+impl AutopilotToolSideInfo {
+    /// Build autopilot tracking tags from this side info.
+    pub fn to_tags(&self) -> HashMap<String, String> {
+        let mut tags = HashMap::new();
+        tags.insert(
+            "autopilot_session_id".to_string(),
+            self.session_id.to_string(),
+        );
+        tags.insert(
+            "autopilot_tool_call_id".to_string(),
+            self.tool_call_id.to_string(),
+        );
+        tags.insert(
+            "autopilot_tool_call_event_id".to_string(),
+            self.tool_call_event_id.to_string(),
+        );
+        tags
+    }
+
+    /// Build autopilot tracking tags, merging with existing tags.
+    ///
+    /// Existing tags take precedence over autopilot tags if there are conflicts.
+    pub fn merge_into_tags(&self, existing: HashMap<String, String>) -> HashMap<String, String> {
+        let mut tags = self.to_tags();
+        tags.extend(existing);
+        tags
+    }
+}

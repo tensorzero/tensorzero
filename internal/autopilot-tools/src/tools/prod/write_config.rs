@@ -11,7 +11,7 @@ use serde_json::Value;
 use tensorzero::{WriteConfigRequest, WriteConfigResponse};
 use tensorzero_core::config::UninitializedConfig;
 
-use crate::types::AutopilotToolSideInfo;
+use crate::AutopilotToolSideInfo;
 
 /// Parameters for the write_config tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -47,23 +47,6 @@ impl ToolMetadata for WriteConfigTool {
     }
 }
 
-fn build_autopilot_tags(side_info: &AutopilotToolSideInfo) -> HashMap<String, String> {
-    let mut tags = HashMap::new();
-    tags.insert(
-        "autopilot_session_id".to_string(),
-        side_info.session_id.to_string(),
-    );
-    tags.insert(
-        "autopilot_tool_call_id".to_string(),
-        side_info.tool_call_id.to_string(),
-    );
-    tags.insert(
-        "autopilot_tool_call_event_id".to_string(),
-        side_info.tool_call_event_id.to_string(),
-    );
-    tags
-}
-
 #[async_trait]
 impl SimpleTool for WriteConfigTool {
     async fn execute(
@@ -77,13 +60,10 @@ impl SimpleTool for WriteConfigTool {
                 message: format!("Invalid `config`: {e}"),
             })?;
 
-        let mut tags = build_autopilot_tags(&side_info);
-        tags.extend(llm_params.tags);
-
         let request = WriteConfigRequest {
             config,
             extra_templates: llm_params.extra_templates,
-            tags,
+            tags: side_info.merge_into_tags(llm_params.tags),
         };
 
         ctx.client()
