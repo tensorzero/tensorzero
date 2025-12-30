@@ -82,7 +82,7 @@
               {
                 "group": "Guides",
                 "expanded": true,
-                "pages": ["optimization/gepa"]
+                "pages": ["optimization/gepa", "optimization/dicl"]
               }
             ]
           },
