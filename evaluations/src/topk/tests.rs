@@ -193,6 +193,7 @@ fn test_compute_updates_empty_results() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -296,6 +297,7 @@ fn test_compute_updates_variant_failures() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -340,6 +342,7 @@ fn test_compute_updates_missing_variant_in_map() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -409,6 +412,7 @@ fn test_compute_updates_successful_evaluations() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -530,6 +534,7 @@ fn test_compute_updates_evaluator_failures() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -600,6 +605,7 @@ fn test_compute_updates_mixed_success_and_failure() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
