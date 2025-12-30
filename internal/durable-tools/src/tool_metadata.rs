@@ -60,7 +60,7 @@ pub trait ToolMetadata: Send + Sync + 'static {
     type SideInfo: SideInfo;
 
     /// The output type for this tool (must be JSON-serializable).
-    type Output: Serialize + DeserializeOwned + Send + 'static;
+    type Output: Serialize + DeserializeOwned + Send + Sync + 'static;
     /// Unique name for this tool.
     ///
     /// This is used for registration, invocation, and as an identifier in the LLM.

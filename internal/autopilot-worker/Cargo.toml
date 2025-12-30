@@ -35,5 +35,10 @@ tracing.workspace = true
 url.workspace = true
 schemars.workspace = true
 
+[dev-dependencies]
+mockall = "0.14"
+tensorzero = { path = "../../clients/rust" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
 [lints]
 workspace = true
