@@ -241,10 +241,13 @@ pub fn assert_evaluation_results_valid(
     evaluation_results: &EvaluationResults,
     expected_count: usize,
 ) {
-    let expected_evaluators = ["happy_bool", "sad_bool", "zero", "one"];
+    // These evaluators should be present in all test evaluations
+    let base_evaluators = ["happy_bool", "sad_bool", "zero", "one"];
+    // The "error" evaluator intentionally always fails, so we skip count validation for it
+    let always_failing_evaluators = ["error"];
 
-    // Verify we have stats for all 4 evaluators
-    for evaluator_name in &expected_evaluators {
+    // Verify we have stats for all base evaluators
+    for evaluator_name in &base_evaluators {
         assert!(
             evaluation_results
                 .evaluation_stats
@@ -255,6 +258,10 @@ pub fn assert_evaluation_results_valid(
 
     // Verify each evaluator has valid stats
     for (evaluator_name, stats) in &evaluation_results.evaluation_stats {
+        // Skip count validation for evaluators that intentionally always fail
+        if always_failing_evaluators.contains(&evaluator_name.as_str()) {
+            continue;
+        }
         assert_eq!(
             stats.count, expected_count,
             "Expected count of {} for {}, got {}",
@@ -278,9 +285,9 @@ pub fn assert_evaluation_results_valid(
         per_datapoint_scores.len()
     );
 
-    // Verify each datapoint has scores for all evaluators
+    // Verify each datapoint has scores for all base evaluators
     for (datapoint_id, scores) in &per_datapoint_scores {
-        for evaluator_name in &expected_evaluators {
+        for evaluator_name in &base_evaluators {
             assert!(
                 scores.contains_key(*evaluator_name),
                 "Datapoint {datapoint_id} missing {evaluator_name} score"

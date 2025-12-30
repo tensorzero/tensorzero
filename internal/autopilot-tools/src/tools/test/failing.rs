@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the failing tool (visible to LLM).
@@ -22,6 +22,7 @@ pub struct FailingTool;
 impl ToolMetadata for FailingTool {
     type SideInfo = ();
     type Output = ();
+    type LlmParams = FailingToolParams;
 
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("failing")
@@ -32,12 +33,6 @@ impl ToolMetadata for FailingTool {
             "Always returns an error with the specified message. Used for testing error propagation.",
         )
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(FailingToolParams))
-    }
-
-    type LlmParams = FailingToolParams;
 }
 
 #[async_trait]

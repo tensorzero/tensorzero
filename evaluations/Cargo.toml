@@ -25,6 +25,8 @@ uuid = { workspace = true }
 futures = { workspace = true }
 indicatif = "0.18.2"
 durable = { workspace = true }
+rand = { workspace = true }
+sqlx.workspace = true
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }

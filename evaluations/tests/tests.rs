@@ -10,8 +10,12 @@ use evaluations::stopping::MIN_DATAPOINTS;
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{Input, InputMessage, InputMessageContent};
+use tensorzero_core::db::clickhouse::TableName;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
+};
+use tensorzero_core::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
 };
 use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
@@ -22,14 +26,14 @@ use tensorzero_core::inference::types::Text;
 use tokio::time::sleep;
 use url::Url;
 
-use crate::common::write_json_fixture_to_dataset;
-use common::{get_config, get_tensorzero_client, write_chat_fixture_to_dataset};
+use common::{get_config, get_tensorzero_client, init_tracing_for_tests};
 use evaluations::{
     Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
     EvaluationVariant, OutputFormat, run_evaluation, run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
 };
 use std::collections::HashMap;
+use std::path::Path;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 use tensorzero_core::client::{
@@ -52,8 +56,55 @@ use tensorzero_core::{
 };
 use uuid::Uuid;
 
-pub fn init_tracing_for_tests() {
-    tracing_subscriber::fmt().init();
+/// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
+/// To avoid trampling between tests, we use a mapping from the fixture dataset names to the actual dataset names
+/// that are inserted. This way, we can have multiple tests reading the same fixtures, using the same database,
+/// but run independently.
+async fn write_chat_fixture_to_dataset(
+    fixture_path: &Path,
+    dataset_name_mapping: &HashMap<String, String>,
+) {
+    let fixture = std::fs::read_to_string(fixture_path).unwrap();
+    let fixture = fixture.trim();
+    let mut datapoints: Vec<StoredChatInferenceDatapoint> = Vec::new();
+    // Iterate over the lines in the string
+    for line in fixture.lines() {
+        let mut datapoint: StoredChatInferenceDatapoint = serde_json::from_str(line).unwrap();
+        datapoint.id = Uuid::now_v7();
+        if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
+            datapoint.dataset_name = dataset_name.to_string();
+        }
+        datapoints.push(datapoint);
+    }
+    let clickhouse = get_clickhouse().await;
+    clickhouse
+        .write_batched(&datapoints, TableName::ChatInferenceDatapoint)
+        .await
+        .unwrap();
+}
+
+/// Takes a JSON fixture as a path to a JSONL file and writes the fixture to the dataset.
+async fn write_json_fixture_to_dataset(
+    fixture_path: &Path,
+    dataset_name_mapping: &HashMap<String, String>,
+) {
+    let fixture = std::fs::read_to_string(fixture_path).unwrap();
+    let fixture = fixture.trim();
+    let mut datapoints: Vec<StoredJsonInferenceDatapoint> = Vec::new();
+    // Iterate over the lines in the string
+    for line in fixture.lines() {
+        let mut datapoint: StoredJsonInferenceDatapoint = serde_json::from_str(line).unwrap();
+        datapoint.id = Uuid::now_v7();
+        if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
+            datapoint.dataset_name = dataset_name.to_string();
+        }
+        datapoints.push(datapoint);
+    }
+    let clickhouse = get_clickhouse().await;
+    clickhouse
+        .write_batched(&datapoints, TableName::JsonInferenceDatapoint)
+        .await
+        .unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]

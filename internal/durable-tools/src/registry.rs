@@ -7,8 +7,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{FunctionTool, Tool};
 
+use crate::ToolResult;
 use crate::context::SimpleToolContext;
-use crate::error::{ToolError, ToolResult};
+use crate::error::ToolError;
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
 use crate::tool_metadata::ToolMetadata;
@@ -179,15 +180,11 @@ impl ToolRegistry {
     /// # Errors
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
     pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
             return Err(ToolError::DuplicateToolName(name.into_owned()));
         }
-
-        // Validate schema generation succeeds
-        <T as ToolMetadata>::parameters_schema()?;
 
         let wrapper = Arc::new(ErasedTaskToolWrapper::<T>::new());
         self.tools.insert(name.into_owned(), wrapper);
@@ -199,7 +196,6 @@ impl ToolRegistry {
     /// # Errors
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
     pub fn register_simple_tool<T: SimpleTool + Default>(
         &mut self,
     ) -> Result<&mut Self, ToolError> {
@@ -207,9 +203,6 @@ impl ToolRegistry {
         if self.tools.contains_key(name.as_ref()) {
             return Err(ToolError::DuplicateToolName(name.into_owned()));
         }
-
-        // Validate schema generation succeeds
-        <T as ToolMetadata>::parameters_schema()?;
 
         let tool = Arc::new(T::default());
         self.tools

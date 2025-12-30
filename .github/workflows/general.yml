@@ -728,6 +728,9 @@ jobs:
       - name: Run cargo-deny
         run: cargo deny check
 
+      - name: Check durable dependencies
+        run: ./ci/check-durable-deps.sh
+
       - name: Run cargo fmt
         run: cargo fmt --all --check
 
