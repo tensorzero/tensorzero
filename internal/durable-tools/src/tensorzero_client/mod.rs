@@ -13,8 +13,9 @@ use std::sync::Arc;
 use tensorzero::{
     ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
-    ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
+    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, TensorZeroError,
+    UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use url::Url;
@@ -68,6 +69,15 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         params: ClientInferenceParams,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+    /// Submit feedback for an inference or episode.
+    ///
+    /// Feedback can be a comment, demonstration, or a metric value (float or boolean).
+    /// The `metric_name` field in `FeedbackParams` determines the feedback type.
+    async fn feedback(
+        &self,
+        params: FeedbackParams,
+    ) -> Result<FeedbackResponse, TensorZeroClientError>;
 
     /// Create an event in an autopilot session.
     ///
