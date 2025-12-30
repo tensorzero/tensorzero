@@ -11,7 +11,7 @@ use serde_json::Value;
 use tensorzero::{FeedbackParams, FeedbackResponse};
 use uuid::Uuid;
 
-use crate::types::AutopilotToolSideInfo;
+use crate::AutopilotToolSideInfo;
 
 /// Parameters for the feedback tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -65,35 +65,6 @@ impl ToolMetadata for FeedbackTool {
     }
 }
 
-/// Build autopilot tags from side info.
-fn build_autopilot_tags(side_info: &AutopilotToolSideInfo) -> HashMap<String, String> {
-    let mut tags = HashMap::new();
-    tags.insert(
-        "autopilot_session_id".to_string(),
-        side_info.session_id.to_string(),
-    );
-    tags.insert(
-        "autopilot_tool_call_id".to_string(),
-        side_info.tool_call_id.to_string(),
-    );
-    tags.insert(
-        "autopilot_tool_call_event_id".to_string(),
-        side_info.tool_call_event_id.to_string(),
-    );
-    tags
-}
-
-/// Merge autopilot tags into existing tags, preserving user-provided tags.
-fn merge_tags(
-    existing: HashMap<String, String>,
-    autopilot_tags: &HashMap<String, String>,
-) -> HashMap<String, String> {
-    let mut merged = autopilot_tags.clone();
-    // User-provided tags take precedence over autopilot tags
-    merged.extend(existing);
-    merged
-}
-
 #[async_trait]
 impl SimpleTool for FeedbackTool {
     async fn execute(
@@ -102,17 +73,13 @@ impl SimpleTool for FeedbackTool {
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
-        // Build autopilot tags and merge with user-provided tags
-        let autopilot_tags = build_autopilot_tags(&side_info);
-        let tags = merge_tags(llm_params.tags, &autopilot_tags);
-
         let params = FeedbackParams {
             episode_id: llm_params.episode_id,
             inference_id: llm_params.inference_id,
             metric_name: llm_params.metric_name,
             value: llm_params.value,
             internal: true, // Always internal for autopilot
-            tags,
+            tags: side_info.merge_into_tags(llm_params.tags),
             dryrun: llm_params.dryrun,
         };
 
