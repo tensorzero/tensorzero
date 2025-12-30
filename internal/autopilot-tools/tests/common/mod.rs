@@ -9,8 +9,9 @@ use durable_tools::{TensorZeroClient, TensorZeroClientError};
 use mockall::mock;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
-    ListDatapointsRequest, Role, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
+    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
+    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, Role, UpdateDatapointRequest,
+    UpdateDatapointsResponse, Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
@@ -32,6 +33,11 @@ mock! {
             &self,
             params: ClientInferenceParams,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+        async fn feedback(
+            &self,
+            params: FeedbackParams,
+        ) -> Result<FeedbackResponse, TensorZeroClientError>;
 
         async fn create_autopilot_event(
             &self,
@@ -107,6 +113,11 @@ mock! {
             target_id: Uuid,
         ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
     }
+}
+
+/// Create a mock feedback response with the given ID.
+pub fn create_mock_feedback_response(feedback_id: Uuid) -> FeedbackResponse {
+    FeedbackResponse { feedback_id }
 }
 
 /// Create a mock chat inference response with the given text content.

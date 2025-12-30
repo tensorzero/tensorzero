@@ -6,6 +6,7 @@
 mod create_datapoints;
 mod create_datapoints_from_inferences;
 mod delete_datapoints;
+mod feedback;
 mod get_datapoints;
 mod get_latest_feedback_by_metric;
 mod inference;
@@ -18,6 +19,7 @@ pub use create_datapoints_from_inferences::{
     CreateDatapointsFromInferencesTool, CreateDatapointsFromInferencesToolParams,
 };
 pub use delete_datapoints::{DeleteDatapointsTool, DeleteDatapointsToolParams};
+pub use feedback::{FeedbackTool, FeedbackToolParams};
 pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
 pub use get_latest_feedback_by_metric::{
     GetLatestFeedbackByMetricTool, GetLatestFeedbackByMetricToolParams,

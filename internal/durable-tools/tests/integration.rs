@@ -68,6 +68,13 @@ impl TensorZeroClient for MockTensorZeroClient {
             .ok_or(TensorZeroClientError::StreamingNotSupported)
     }
 
+    async fn feedback(
+        &self,
+        _params: tensorzero::FeedbackParams,
+    ) -> Result<tensorzero::FeedbackResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
     async fn create_autopilot_event(
         &self,
         _session_id: Uuid,
