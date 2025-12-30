@@ -85,9 +85,9 @@ const MIN_SAMPLES_FOR_REBALANCING: u64 = 20;
 /// # Returns
 /// Hedge weight for the upper wealth process (in [0, 1]).
 fn get_rank_based_hedge_weight(rank: usize, k_min: u32, k_max: u32) -> f64 {
-    if rank <= k_min as usize {
+    if rank < k_min as usize {
         0.8 // Boost lower bounds to certify inclusion sooner
-    } else if rank > k_max as usize {
+    } else if rank >= k_max as usize {
         0.2 // Shrink upper bounds to certify exclusion sooner
     } else {
         0.5 // Middle variants keep symmetric hedge
