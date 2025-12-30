@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use durable::MIGRATOR;
+use durable::SpawnOptions;
 use durable::WorkerOptions;
 use durable_tools::{
     ErasedSimpleTool, SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient,
@@ -492,6 +493,7 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
             },
             (), // No side info
             episode_id,
+            SpawnOptions::default(),
         )
         .await;
 
@@ -615,6 +617,7 @@ impl TaskTool for MultiCallTaskTool {
             "key_capturing_tool",
             serde_json::json!({"message": "first"}),
             serde_json::json!(null),
+            SpawnOptions::default(),
         )
         .await?;
 
@@ -622,6 +625,7 @@ impl TaskTool for MultiCallTaskTool {
             "key_capturing_tool",
             serde_json::json!({"message": "second"}),
             serde_json::json!(null),
+            SpawnOptions::default(),
         )
         .await?;
 
@@ -629,6 +633,7 @@ impl TaskTool for MultiCallTaskTool {
             "key_capturing_tool",
             serde_json::json!({"message": "third"}),
             serde_json::json!(null),
+            SpawnOptions::default(),
         )
         .await?;
 
@@ -681,6 +686,7 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
             },
             (),
             episode_id,
+            SpawnOptions::default(),
         )
         .await
         .expect("Failed to spawn task");
@@ -833,6 +839,7 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
             },
             (), // No side info
             episode_id,
+            SpawnOptions::default(),
         )
         .await;
 

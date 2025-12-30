@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use durable::{Durable, TaskContext, TaskHandle};
+use durable::{Durable, SpawnOptions, TaskContext, TaskHandle};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
@@ -210,8 +210,11 @@ impl<'a> ToolContext<'a> {
         tool_name: &str,
         llm_params: JsonValue,
         side_info: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<JsonValue> {
-        let handle = self.spawn_tool(tool_name, llm_params, side_info).await?;
+        let handle = self
+            .spawn_tool(tool_name, llm_params, side_info, options)
+            .await?;
         self.join_tool(handle).await
     }
 
@@ -250,6 +253,7 @@ impl<'a> ToolContext<'a> {
         tool_name: &str,
         llm_params: JsonValue,
         side_info: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<ToolHandle> {
         let is_durable = {
             let registry = self.app_state.tool_registry.read().await;
@@ -269,7 +273,7 @@ impl<'a> ToolContext<'a> {
             let wrapped_params = serde_json::to_value(wrapped_params)?;
             let spawn_name = format!("spawn:{tool_name}:{call_id}");
             let handle: TaskHandle<JsonValue> = self
-                .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params)
+                .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params, options)
                 .await?;
             Ok(ToolHandle::Async(handle))
         } else {
@@ -305,10 +309,11 @@ impl<'a> ToolContext<'a> {
         name: &str,
         task_name: &str,
         params: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<TaskHandle<T>> {
         let handle: TaskHandle<T> = self
             .task_ctx
-            .spawn_by_name(name, task_name, params, durable::SpawnOptions::default())
+            .spawn_by_name(name, task_name, params, options)
             .await?;
         Ok(handle)
     }

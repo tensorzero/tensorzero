@@ -121,6 +121,7 @@ where
 }
 
 /// Step function to publish the tool result to the autopilot API.
+/// This is a helper that gives the signature expected by `ToolContext::step`.
 async fn publish_result_step(
     params: PublishResultParams,
     state: ToolAppState,
