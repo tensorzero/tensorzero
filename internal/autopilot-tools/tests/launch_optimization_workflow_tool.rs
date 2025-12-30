@@ -80,7 +80,9 @@ fn create_failed_job_info() -> OptimizationJobInfo {
 
 /// Test that the tool completes successfully when poll returns Completed immediately.
 #[sqlx::test(migrator = "MIGRATOR")]
-async fn test_immediate_completion(pool: PgPool) -> sqlx::Result<()> {
+async fn test_launch_optimization_workflow_tool_immediate_completion(
+    pool: PgPool,
+) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -149,7 +151,7 @@ async fn test_immediate_completion(pool: PgPool) -> sqlx::Result<()> {
 
 /// Test that the tool polls multiple times before completion.
 #[sqlx::test(migrator = "MIGRATOR")]
-async fn test_completion_after_multiple_polls(pool: PgPool) -> sqlx::Result<()> {
+async fn test_launch_optimization_workflow_tool_multiple_polls(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
 
     // Use atomic counter to track poll calls
@@ -229,7 +231,7 @@ async fn test_completion_after_multiple_polls(pool: PgPool) -> sqlx::Result<()> 
 
 /// Test that the tool returns Failed status when poll returns Failed.
 #[sqlx::test(migrator = "MIGRATOR")]
-async fn test_failed_optimization(pool: PgPool) -> sqlx::Result<()> {
+async fn test_launch_optimization_workflow_tool_failed(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -294,7 +296,7 @@ async fn test_failed_optimization(pool: PgPool) -> sqlx::Result<()> {
 
 /// Test that launch errors are handled.
 #[sqlx::test(migrator = "MIGRATOR")]
-async fn test_launch_error(pool: PgPool) -> sqlx::Result<()> {
+async fn test_launch_optimization_workflow_tool_launch_error(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
 
     let mut mock_client = MockTensorZeroClient::new();
