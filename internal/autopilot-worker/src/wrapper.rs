@@ -41,13 +41,13 @@ struct PublishResultParams {
 ///
 /// ```ignore
 /// // Register a wrapped tool
-/// executor.register_task_tool::<ClientToolWrapper<MyTool>>().await;
+/// executor.register_task_tool::<ClientTaskToolWrapper<MyTool>>().await;
 /// ```
-pub struct ClientToolWrapper<T: TaskTool> {
+pub struct ClientTaskToolWrapper<T: TaskTool> {
     _marker: PhantomData<T>,
 }
 
-impl<T: TaskTool> Default for ClientToolWrapper<T> {
+impl<T: TaskTool> Default for ClientTaskToolWrapper<T> {
     fn default() -> Self {
         Self {
             _marker: PhantomData,
@@ -55,7 +55,7 @@ impl<T: TaskTool> Default for ClientToolWrapper<T> {
     }
 }
 
-impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
+impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
     fn name() -> Cow<'static, str> {
         T::name()
     }
@@ -64,7 +64,7 @@ impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
         T::description()
     }
 
-    fn parameters_schema() -> DurableToolResult<Schema> {
+    fn parameters_schema() -> Schema {
         T::parameters_schema()
     }
 
@@ -74,7 +74,11 @@ impl<T: TaskTool> ToolMetadata for ClientToolWrapper<T> {
 }
 
 #[async_trait]
-impl<T: TaskTool> TaskTool for ClientToolWrapper<T> {
+impl<T> TaskTool for ClientTaskToolWrapper<T>
+where
+    T: TaskTool,
+    T::SideInfo: Default + PartialEq,
+{
     async fn execute(
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
@@ -182,10 +186,6 @@ impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T> {
         T::description()
     }
 
-    fn parameters_schema() -> DurableToolResult<Schema> {
-        T::parameters_schema()
-    }
-
     type LlmParams = T::LlmParams;
     type SideInfo = AutopilotSideInfo<T::SideInfo>;
     type Output = T::Output;
@@ -277,7 +277,7 @@ mod tests {
     use durable_tools::{CreateEventResponse, TensorZeroClientError};
     use mockall::mock;
     use schemars::JsonSchema;
-    use schemars::schema_for;
+    use tensorzero::ActionInput;
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
         CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse,
@@ -317,7 +317,7 @@ mod tests {
             async fn action(
                 &self,
                 snapshot_hash: SnapshotHash,
-                params: ClientInferenceParams,
+                params: ActionInput,
             ) -> Result<InferenceResponse, TensorZeroClientError>;
 
             async fn create_datapoints(
@@ -382,10 +382,6 @@ mod tests {
             Cow::Borrowed("A test task tool for unit testing")
         }
 
-        fn parameters_schema() -> DurableToolResult<Schema> {
-            Ok(schema_for!(TestTaskToolParams))
-        }
-
         type LlmParams = TestTaskToolParams;
         type SideInfo = ();
         type Output = TestTaskToolOutput;
@@ -426,10 +422,6 @@ mod tests {
 
         fn description() -> Cow<'static, str> {
             Cow::Borrowed("A test simple tool for unit testing")
-        }
-
-        fn parameters_schema() -> DurableToolResult<Schema> {
-            Ok(schema_for!(TestSimpleToolParams))
         }
 
         type LlmParams = TestSimpleToolParams;
@@ -583,15 +575,14 @@ mod tests {
 
     #[test]
     fn test_client_tool_wrapper_metadata_delegation() {
-        assert_eq!(ClientToolWrapper::<TestTaskTool>::name(), "test_task_tool");
         assert_eq!(
-            ClientToolWrapper::<TestTaskTool>::description(),
+            ClientTaskToolWrapper::<TestTaskTool>::name(),
+            "test_task_tool"
+        );
+        assert_eq!(
+            ClientTaskToolWrapper::<TestTaskTool>::description(),
             "A test task tool for unit testing"
         );
-
-        // Verify schema can be generated
-        let schema = ClientToolWrapper::<TestTaskTool>::parameters_schema();
-        assert!(schema.is_ok());
     }
 
     #[test]
@@ -604,10 +595,6 @@ mod tests {
             ClientSimpleToolWrapper::<TestSimpleTool>::description(),
             "A test simple tool for unit testing"
         );
-
-        // Verify schema can be generated
-        let schema = ClientSimpleToolWrapper::<TestSimpleTool>::parameters_schema();
-        assert!(schema.is_ok());
     }
 
     #[test]
@@ -615,7 +602,7 @@ mod tests {
         // Verify that the wrapper wraps the SideInfo with AutopilotSideInfo
         // This is a compile-time check - if it compiles, the types are correct
         fn assert_side_info_type<T: ToolMetadata<SideInfo = AutopilotSideInfo<()>>>() {}
-        assert_side_info_type::<ClientToolWrapper<TestTaskTool>>();
+        assert_side_info_type::<ClientTaskToolWrapper<TestTaskTool>>();
     }
 
     #[test]

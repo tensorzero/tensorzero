@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the flaky tool (visible to LLM).
@@ -45,10 +45,6 @@ impl ToolMetadata for FlakyTool {
         Cow::Borrowed(
             "Fails when attempt_number % fail_on_attempt == 0. Used for testing deterministic failures.",
         )
-    }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(FlakyToolParams))
     }
 }
 

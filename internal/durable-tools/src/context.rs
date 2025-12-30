@@ -151,7 +151,7 @@ impl<'a> ToolContext<'a> {
     ///     .map(Tool::try_from)
     ///     .collect();
     /// ```
-    pub async fn registry(&self) -> RwLockReadGuard<'_, ToolRegistry> {
+    pub async fn registry_read_lock(&self) -> RwLockReadGuard<'_, ToolRegistry> {
         self.app_state.tool_registry.read().await
     }
 

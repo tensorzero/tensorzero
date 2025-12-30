@@ -7,12 +7,11 @@ use std::sync::Arc;
 use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext};
 use sqlx::PgPool;
-use tensorzero::{Input, InputMessage, InputMessageContent, Role};
+use tensorzero::{ActionInput, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
-use autopilot_tools::AutopilotToolSideInfo;
-use autopilot_tools::tools::{InferenceTool, InferenceToolParams};
+use autopilot_tools::tools::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
 use common::{MockTensorZeroClient, create_mock_chat_response};
 
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -44,14 +43,14 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
         variant_name: None,
         dynamic_tool_params: Default::default(),
         output_schema: None,
-        config_snapshot_hash: None, // Testing the non-hash path
     };
 
-    let side_info = AutopilotToolSideInfo {
+    let side_info = InferenceToolSideInfo {
         episode_id,
         session_id,
         tool_call_id,
         tool_call_event_id,
+        config_snapshot_hash: None,
     };
 
     // Create mock client with expectations
@@ -123,21 +122,24 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
         variant_name: None,
         dynamic_tool_params: Default::default(),
         output_schema: None,
-        config_snapshot_hash: Some(test_snapshot_hash.to_string()), // Testing the action path
     };
 
-    let side_info = AutopilotToolSideInfo {
+    let side_info = InferenceToolSideInfo {
         episode_id,
         session_id,
         tool_call_id,
         tool_call_event_id,
+        config_snapshot_hash: Some(test_snapshot_hash.to_string()),
     };
 
     // Create mock client with expectations for action()
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
         .expect_action()
-        .withf(move |snapshot_hash, params| {
+        .withf(move |snapshot_hash, input| {
+            let ActionInput::Inference(params) = input else {
+                return false;
+            };
             snapshot_hash.to_string() == test_snapshot_hash
                 && params.function_name == Some("test_function".to_string())
                 && params.episode_id == Some(episode_id)

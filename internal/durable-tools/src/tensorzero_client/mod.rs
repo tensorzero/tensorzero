@@ -10,16 +10,12 @@ mod embedded;
 use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tensorzero::{Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, TensorZeroError};
-
-// Re-export datapoint and inference types needed for TensorZeroClient trait methods
 pub use tensorzero::{
+    ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
-    ListDatapointsRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
+    ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
-
-// Re-export config snapshot types for historical inference
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use url::Url;
 use uuid::Uuid;
@@ -106,7 +102,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
-        params: ClientInferenceParams,
+        input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
 
     // ========== Datapoint CRUD Operations ==========

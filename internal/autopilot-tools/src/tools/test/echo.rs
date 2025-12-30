@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the echo tool (visible to LLM).
@@ -28,6 +28,10 @@ pub struct EchoOutput {
 pub struct EchoTool;
 
 impl ToolMetadata for EchoTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo")
     }
@@ -35,14 +39,6 @@ impl ToolMetadata for EchoTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Echoes back the input message. Used for testing the autopilot worker.")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]

@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
 
@@ -42,10 +42,6 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
              Specify either specific inference IDs or a query to find inferences. \
              Tags are inherited from the source inferences.",
         )
-    }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(CreateDatapointsFromInferencesToolParams))
     }
 }
 

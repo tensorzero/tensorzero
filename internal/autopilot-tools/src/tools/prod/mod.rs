@@ -17,6 +17,6 @@ pub use create_datapoints_from_inferences::{
 };
 pub use delete_datapoints::{DeleteDatapointsTool, DeleteDatapointsToolParams};
 pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
-pub use inference::{InferenceTool, InferenceToolParams};
+pub use inference::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
 pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};

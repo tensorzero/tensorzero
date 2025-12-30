@@ -12,7 +12,8 @@ use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-use crate::wrapper::{ClientSimpleToolWrapper, ClientToolWrapper};
+use crate::wrapper::ClientSimpleToolWrapper;
+use crate::wrapper::ClientTaskToolWrapper;
 
 /// Configuration for the autopilot worker.
 pub struct AutopilotWorkerConfig {
@@ -134,9 +135,12 @@ struct LocalToolVisitor<'a> {
 impl ToolVisitor for LocalToolVisitor<'_> {
     type Error = ToolError;
 
-    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError> {
+    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError>
+    where
+        T::SideInfo: Default + PartialEq,
+    {
         self.executor
-            .register_task_tool::<ClientToolWrapper<T>>()
+            .register_task_tool::<ClientTaskToolWrapper<T>>()
             .await?;
         Ok(())
     }
