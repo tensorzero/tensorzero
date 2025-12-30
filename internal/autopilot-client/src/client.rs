@@ -249,14 +249,13 @@ impl AutopilotClient {
     /// Spawns a durable task to execute an approved tool call.
     ///
     /// This is called after a `ToolCallAuthorization` event with `Approved` status
-    /// is successfully created. It retrieves the original tool call details and
-    /// spawns the corresponding durable task for execution.
+    /// is successfully created. It retrieves the original tool call details from
+    /// the cache and spawns the corresponding durable task for execution.
     ///
     /// # Tool Call Lookup
     ///
-    /// The function first checks the local cache for the tool call. If not found
-    /// (e.g., client was restarted), it fetches the session events from the API
-    /// to retrieve the tool call details.
+    /// The tool call must already be in the local cache. The `create_event` method
+    /// pre-fetches and caches tool calls before creating authorization events.
     ///
     /// # Side Info
     ///
@@ -270,8 +269,7 @@ impl AutopilotClient {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - Fetching session events fails
-    /// - The tool call is not found in cache or pending events
+    /// - The tool call is not found in the cache
     /// - Tool call arguments cannot be parsed as JSON
     /// - Spawning the durable task fails
     async fn handle_tool_call_authorization(
@@ -280,29 +278,11 @@ impl AutopilotClient {
         deployment_id: Uuid,
         tool_call_event_id: Uuid,
     ) -> Result<(), AutopilotError> {
-        let mut tool_call = self.tool_call_cache.get(&tool_call_event_id);
-
-        if tool_call.is_none() {
-            let response = self
-                .list_events(session_id, ListEventsParams::default())
-                .await?;
-
-            tool_call = response.pending_tool_calls.iter().find_map(|event| {
-                if event.id == tool_call_event_id {
-                    match &event.payload {
-                        EventPayload::ToolCall(tool_call) => {
-                            self.tool_call_cache.insert(event.id, tool_call.clone());
-                            Some(tool_call.clone())
-                        }
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            });
-        }
-
-        let tool_call = tool_call.ok_or(AutopilotError::ToolCallNotFound(tool_call_event_id))?;
+        // The tool call should already be cached by create_event before the authorization was created
+        let tool_call = self
+            .tool_call_cache
+            .get(&tool_call_event_id)
+            .ok_or(AutopilotError::ToolCallNotFound(tool_call_event_id))?;
 
         let tool_call_id = tool_call.id.clone();
         let tool_name = tool_call.name.clone();
@@ -417,6 +397,22 @@ impl AutopilotClient {
             _ => None,
         };
         let deployment_id = request.deployment_id;
+
+        // Pre-fetch and cache the tool call BEFORE creating the authorization.
+        // This avoids a race where the authorization is committed but pending_tool_calls
+        // no longer includes the tool call (since it now has an authorization).
+        if let Some(tool_call_event_id) = tool_call_event_id
+            && self.tool_call_cache.get(&tool_call_event_id).is_none()
+        {
+            let response = self
+                .list_events(session_id, ListEventsParams::default())
+                .await?;
+            for event in response.pending_tool_calls {
+                if let EventPayload::ToolCall(tc) = &event.payload {
+                    self.tool_call_cache.insert(event.id, tc.clone());
+                }
+            }
+        }
 
         let url = self
             .base_url
