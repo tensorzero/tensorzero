@@ -108,6 +108,7 @@ impl DummyProvider {
         &self,
         thinking_chunks: Vec<&'static str>,
         response_chunks: Vec<&'static str>,
+        model_inference_id: Uuid,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let thinking_chunks = thinking_chunks.into_iter().map(|chunk| {
             ContentBlockChunk::Thought(ThoughtChunk {
@@ -148,7 +149,7 @@ impl DummyProvider {
                 usage: Some(UsageWithRaw {
                     usage: self.get_model_usage(total_tokens),
                     raw_usage: Some(vec![RawUsageEntry {
-                        model_inference_id: Uuid::now_v7(),
+                        model_inference_id,
                         provider_type: "dummy".to_string(),
                         api_type: ApiType::ChatCompletions,
                         usage: None, // dummy provider doesn't have real raw usage
@@ -666,7 +667,7 @@ impl InferenceProvider for DummyProvider {
             provider_name: _,
             model_name: _,
             otlp_config: _,
-            model_inference_id: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
@@ -706,6 +707,7 @@ impl InferenceProvider for DummyProvider {
                 .create_streaming_reasoning_response(
                     DUMMY_STREAMING_THINKING.to_vec(),
                     DUMMY_STREAMING_RESPONSE.to_vec(),
+                    model_inference_id,
                 )
                 .await;
         }
@@ -714,12 +716,17 @@ impl InferenceProvider for DummyProvider {
                 .create_streaming_reasoning_response(
                     DUMMY_STREAMING_THINKING.to_vec(),
                     DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
+                    model_inference_id,
                 )
                 .await;
         }
         if self.model_name == "json" {
             return self
-                .create_streaming_reasoning_response(vec![], DUMMY_STREAMING_JSON_RESPONSE.to_vec())
+                .create_streaming_reasoning_response(
+                    vec![],
+                    DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
+                    model_inference_id,
+                )
                 .await;
         }
 
@@ -824,7 +831,7 @@ impl InferenceProvider for DummyProvider {
             usage: Some(UsageWithRaw {
                 usage: self.get_model_usage(content_chunk_len as u32),
                 raw_usage: Some(vec![RawUsageEntry {
-                    model_inference_id: Uuid::now_v7(),
+                    model_inference_id,
                     provider_type: "dummy".to_string(),
                     api_type: ApiType::ChatCompletions,
                     usage: None, // dummy provider doesn't have real raw usage
