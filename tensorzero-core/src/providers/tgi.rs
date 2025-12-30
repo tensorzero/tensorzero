@@ -42,11 +42,12 @@ use crate::inference::types::batch::{
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::usage::raw_usage_entries_from_usage;
 use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, Usage,
+    ProviderInferenceResponseStreamInner, TextChunk, Usage, UsageWithRaw,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
@@ -56,6 +57,7 @@ use crate::providers::helpers::{
 };
 use crate::providers::openai::{OpenAIMessagesConfig, check_api_base_suffix};
 use crate::tool::ToolCall;
+use uuid::Uuid;
 
 const PROVIDER_NAME: &str = "TGI";
 pub const PROVIDER_TYPE: &str = "tgi";
@@ -158,6 +160,7 @@ impl WrappedProvider for TGIProvider {
             provider_name: _,
             model_name: _,
             otlp_config: _,
+            model_inference_id: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
         // TGI doesn't care about the `model_name` field, so we can hardcode it to "tgi"
@@ -180,6 +183,7 @@ impl WrappedProvider for TGIProvider {
         latency: Latency,
         _model_name: &str,
         _provider_name: &str,
+        model_inference_id: Uuid,
     ) -> Result<ProviderInferenceResponse, Error> {
         let response = serde_json::from_str(&raw_response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
@@ -199,6 +203,7 @@ impl WrappedProvider for TGIProvider {
             raw_response,
             raw_request,
             generic_request: request,
+            model_inference_id,
         }
         .try_into()
     }
@@ -210,8 +215,9 @@ impl WrappedProvider for TGIProvider {
         >,
         start_time: Instant,
         raw_request: &str,
+        model_inference_id: Uuid,
     ) -> ProviderInferenceResponseStreamInner {
-        stream_tgi(event_source, start_time, raw_request)
+        stream_tgi(event_source, start_time, raw_request, model_inference_id)
     }
 }
 
@@ -271,6 +277,7 @@ impl InferenceProvider for TGIProvider {
                 latency,
                 model_provider_request.model_name,
                 model_provider_request.provider_name,
+                model_provider_request.model_inference_id,
             )
         } else {
             Err(handle_tgi_error(
@@ -297,6 +304,7 @@ impl InferenceProvider for TGIProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -344,6 +352,7 @@ impl InferenceProvider for TGIProvider {
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
             &raw_request,
+            model_inference_id,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -378,6 +387,7 @@ fn stream_tgi(
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
     raw_request: &str,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
     Box::pin(async_stream::stream! {
@@ -412,7 +422,7 @@ fn stream_tgi(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            tgi_to_tensorzero_chunk(message.data, d, latency)
+                            tgi_to_tensorzero_chunk(message.data, d, latency, model_inference_id)
                         });
                         yield stream_message;
                     }
@@ -556,6 +566,7 @@ struct TGIResponseWithMetadata<'a> {
     raw_response: String,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -567,6 +578,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             raw_response,
             raw_request,
             generic_request,
+            model_inference_id,
         } = value;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -580,7 +592,6 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let usage = response.usage.into();
         let TGIResponseChoice {
             message,
             finish_reason,
@@ -603,12 +614,18 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
+        let raw_usage = raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            &response.usage,
+        );
+        let usage = UsageWithRaw {
+            usage: response.usage.into(),
+            raw_usage,
+        };
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        // Extract raw usage JSON from raw_response for include_raw_usage feature
-        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
-            .ok()
-            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -619,11 +636,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
                 latency,
                 finish_reason: finish_reason.map(Into::into),
-                raw_usage_json,
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
-                id: None,
-                raw_usage_entries: None,
+                id: model_inference_id,
             },
         ))
     }
@@ -788,6 +801,7 @@ fn tgi_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: TGIChatChunk,
     latency: Duration,
+    model_inference_id: Uuid,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -798,6 +812,14 @@ fn tgi_to_tensorzero_chunk(
         }
         .into());
     }
+    let raw_usage = chunk.usage.as_ref().and_then(|usage| {
+        raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            usage,
+        )
+    });
     let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
@@ -823,12 +845,13 @@ fn tgi_to_tensorzero_chunk(
         }
     }
 
-    Ok(ProviderInferenceResponseChunk::new(
+    Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
         content,
         usage,
         raw_message,
         latency,
         finish_reason,
+        raw_usage,
     ))
 }
 
@@ -1042,6 +1065,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
+            Uuid::now_v7(),
         )
         .unwrap();
         assert_eq!(
@@ -1104,6 +1128,7 @@ mod tests {
             .unwrap()
             .to_string(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response: ProviderInferenceResponse =
             tgi_response_with_metadata.try_into().unwrap();

@@ -15,6 +15,7 @@ use tracing::{Level, Span, span};
 use tracing_futures::{Instrument, Instrumented};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
+use uuid::Uuid;
 
 use crate::cache::{
     CacheData, CacheValidationInfo, ModelProviderRequest, NonStreamingCacheData,
@@ -163,16 +164,14 @@ pub struct StreamResponse {
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
     pub cached: bool,
-    pub provider_type: String,
-    pub api_type: ApiType,
+    pub model_inference_id: Uuid,
 }
 
 impl StreamResponse {
     pub fn from_cache(
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
-        provider_type: String,
-        api_type: ApiType,
+        model_inference_id: Uuid,
     ) -> Self {
         let chunks = cache_lookup.output.chunks;
         let chunks_len = chunks.len();
@@ -210,8 +209,7 @@ impl StreamResponse {
             raw_request: cache_lookup.raw_request,
             model_provider_name,
             cached: true,
-            provider_type,
-            api_type,
+            model_inference_id,
         }
     }
 }
@@ -392,8 +390,6 @@ impl ModelConfig {
                 &clients.clickhouse_connection_info,
                 model_provider_request,
                 clients.cache_options.max_age_s,
-                provider.provider_type().to_string(),
-                provider.api_type(),
             )
             .await
             .ok()
@@ -443,8 +439,7 @@ impl ModelConfig {
                 raw_request,
                 model_provider_name: model_provider_request.provider_name.into(),
                 cached: false,
-                provider_type: provider.provider_type().to_string(),
-                api_type: provider.api_type(),
+                model_inference_id: model_provider_request.model_inference_id,
             },
             messages: model_provider_request.request.messages.clone(),
         })
@@ -491,6 +486,7 @@ impl ModelConfig {
                     model_name,
                     provider_name,
                     otlp_config: &clients.otlp_config,
+                    model_inference_id: Uuid::now_v7(),
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
 
@@ -603,8 +599,7 @@ impl ModelConfig {
                         raw_request,
                         model_provider_name: "tensorzero::relay".into(),
                         cached: false,
-                        provider_type: "relay".to_string(),
-                        api_type: ApiType::ChatCompletions,
+                        model_inference_id: Uuid::now_v7(),
                     },
                     messages: request.messages.clone(),
                 });
@@ -621,6 +616,7 @@ impl ModelConfig {
                     model_name,
                     provider_name,
                     otlp_config: &clients.otlp_config,
+                    model_inference_id: Uuid::now_v7(),
                 };
 
                 // This future includes a call to `peek_first_chunk`, so applying
@@ -2788,6 +2784,7 @@ mod tests {
             model_name: "test",
             provider_name: "test_provider",
             otlp_config: &Default::default(),
+            model_inference_id: Uuid::now_v7(),
         };
 
         // Should fail with RateLimitMissingMaxTokens
@@ -2815,6 +2812,7 @@ mod tests {
             model_name: "test",
             provider_name: "test_provider",
             otlp_config: &Default::default(),
+            model_inference_id: Uuid::now_v7(),
         };
 
         let result = provider
@@ -2994,8 +2992,7 @@ mod tests {
                     raw_request,
                     model_provider_name,
                     cached: _,
-                    provider_type: _,
-                    api_type: _,
+                    model_inference_id: _,
                 },
             messages: _input,
         } = model_config
@@ -3195,8 +3192,7 @@ mod tests {
                     raw_request,
                     model_provider_name,
                     cached: _,
-                    provider_type: _,
-                    api_type: _,
+                    model_inference_id: _,
                 },
             messages: _,
         } = model_config

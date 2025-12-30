@@ -14,10 +14,12 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::InferenceProvider;
+use crate::inference::types::UsageWithRaw;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::usage::raw_usage_entries_from_usage;
 use crate::inference::types::{
     ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -33,6 +35,7 @@ use crate::providers::helpers::{
 };
 use crate::providers::openai::{OpenAIMessagesConfig, check_api_base_suffix};
 use crate::tool::ToolCallChunk;
+use uuid::Uuid;
 
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
@@ -142,6 +145,7 @@ impl InferenceProvider for SGLangProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -212,6 +216,7 @@ impl InferenceProvider for SGLangProvider {
                 raw_response,
                 raw_request,
                 generic_request: request,
+                model_inference_id,
             }
             .try_into()?)
         } else {
@@ -242,6 +247,7 @@ impl InferenceProvider for SGLangProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -280,7 +286,7 @@ impl InferenceProvider for SGLangProvider {
         )
         .await?;
 
-        let stream = stream_sglang(event_source, start_time).peekable();
+        let stream = stream_sglang(event_source, start_time, model_inference_id).peekable();
         Ok((stream, raw_request))
     }
 
@@ -376,6 +382,7 @@ struct SGLangChatChunk {
 fn stream_sglang(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
     Box::pin(async_stream::stream! {
@@ -410,7 +417,14 @@ fn stream_sglang(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            sglang_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
+                            sglang_to_tensorzero_chunk(
+                                message.data,
+                                d,
+                                latency,
+                                &mut tool_call_ids,
+                                model_inference_id,
+                                PROVIDER_TYPE,
+                            )
                         });
                         yield stream_message;
                     }
@@ -429,6 +443,8 @@ fn sglang_to_tensorzero_chunk(
     mut chunk: SGLangChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
+    model_inference_id: Uuid,
+    provider_type: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -439,6 +455,14 @@ fn sglang_to_tensorzero_chunk(
         }
         .into());
     }
+    let raw_usage = chunk.usage.as_ref().and_then(|usage| {
+        raw_usage_entries_from_usage(
+            model_inference_id,
+            provider_type,
+            ApiType::ChatCompletions,
+            usage,
+        )
+    });
     let usage = chunk.usage.map(Into::into);
     let mut finish_reason = None;
     let mut content = vec![];
@@ -484,13 +508,19 @@ fn sglang_to_tensorzero_chunk(
         }
     }
 
-    Ok(ProviderInferenceResponseChunk::new(
-        content,
-        usage,
-        raw_message,
-        latency,
-        finish_reason,
-    ))
+    Ok(match raw_usage {
+        Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
+            content,
+            usage,
+            raw_message,
+            latency,
+            finish_reason,
+            Some(entries),
+        ),
+        None => {
+            ProviderInferenceResponseChunk::new(content, usage, raw_message, latency, finish_reason)
+        }
+    })
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -693,6 +723,7 @@ struct SGLangResponseWithMetadata<'a> {
     raw_response: String,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -704,6 +735,7 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
             raw_response,
             raw_request,
             generic_request,
+            model_inference_id,
         } = value;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -717,7 +749,6 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let usage = response.usage.into();
         let OpenAIResponseChoice {
             message,
             finish_reason,
@@ -740,12 +771,18 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
+        let raw_usage = raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            &response.usage,
+        );
+        let usage = UsageWithRaw {
+            usage: response.usage.into(),
+            raw_usage,
+        };
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        // Extract raw usage JSON from raw_response for include_raw_usage feature
-        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
-            .ok()
-            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -756,11 +793,7 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
-                raw_usage_json,
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
-                id: None,
-                raw_usage_entries: None,
+                id: model_inference_id,
             },
         ))
     }
@@ -977,6 +1010,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response: ProviderInferenceResponse =
             sglang_response_with_metadata.try_into().unwrap();

@@ -290,6 +290,7 @@ impl InferenceProvider for DummyProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id: _,
         }: ModelProviderRequest<'a>,
         _http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -642,6 +643,7 @@ impl InferenceProvider for DummyProvider {
             provider_name: _,
             model_name: _,
             otlp_config: _,
+            model_inference_id: _,
         }: ModelProviderRequest<'a>,
         _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
@@ -927,6 +929,7 @@ impl EmbeddingProvider for DummyProvider {
             raw_response,
             usage,
             latency,
+            raw_usage: None,
         })
     }
 }

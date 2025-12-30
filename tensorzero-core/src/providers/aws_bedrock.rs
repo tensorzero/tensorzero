@@ -36,17 +36,16 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::{
-    ApiType, FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk,
-};
-use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
     ModelInferenceRequest, ModelInferenceRequestJsonMode, ObjectStorageFile,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Role,
-    Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
+    Text, TextChunk, Usage, UsageWithRaw, batch::StartBatchProviderInferenceResponse,
 };
+use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use uuid::Uuid;
 
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
@@ -198,6 +197,7 @@ impl InferenceProvider for AWSBedrockProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         // We've already taken in this client when the provider was constructed
         _http_client: &'a TensorzeroHttpClient,
@@ -328,6 +328,7 @@ impl InferenceProvider for AWSBedrockProvider {
             model_id: &self.model_id,
             function_type: &request.function_type,
             json_mode: &request.json_mode,
+            model_inference_id,
         }
         .try_into()
     }
@@ -339,6 +340,7 @@ impl InferenceProvider for AWSBedrockProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id: _,
         }: ModelProviderRequest<'a>,
         // We've already taken in this client when the provider was constructed
         _http_client: &'a TensorzeroHttpClient,
@@ -974,6 +976,7 @@ struct ConverseOutputWithMetadata<'a> {
     model_id: &'a str,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
+    model_inference_id: Uuid,
 }
 
 #[expect(clippy::unnecessary_wraps)]
@@ -1003,6 +1006,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             model_id,
             function_type,
             json_mode,
+            model_inference_id,
         } = value;
         let message = match output.output {
             Some(ConverseOutputType::Message(message)) => Some(message),
@@ -1056,6 +1060,10 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
                 })
             })?;
 
+        let usage = UsageWithRaw {
+            usage,
+            raw_usage: None,
+        };
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -1066,12 +1074,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
                 usage,
                 latency,
                 finish_reason: aws_stop_reason_to_tensorzero_finish_reason(output.stop_reason),
-                // AWS SDK doesn't serialize to JSON, so we can't extract raw usage
-                raw_usage_json: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
-                id: None,
-                raw_usage_entries: None,
+                id: model_inference_id,
             },
         ))
     }

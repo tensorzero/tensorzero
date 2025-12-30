@@ -33,7 +33,7 @@ use crate::inference::types::extra_headers::{
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    ApiType, FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
+    FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -203,8 +203,7 @@ pub struct ModelUsedInfo {
     pub cached: bool,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
-    pub provider_type: String,
-    pub api_type: ApiType,
+    pub model_inference_id: Uuid,
 }
 
 pub trait Variant {
@@ -813,8 +812,7 @@ async fn infer_model_request_stream<'request>(
                 raw_request,
                 model_provider_name,
                 cached,
-                provider_type,
-                api_type,
+                model_inference_id,
             },
         messages: input_messages,
     } = retry_config
@@ -835,8 +833,7 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
         cached,
-        provider_type,
-        api_type,
+        model_inference_id,
     };
     let config_type = function.config_type();
     let stream =

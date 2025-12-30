@@ -18,10 +18,12 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::Thought;
+use crate::inference::types::UsageWithRaw;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::usage::raw_usage_entries_from_usage;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -33,6 +35,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::{OpenAIMessagesConfig, check_api_base_suffix};
+use uuid::Uuid;
 
 const PROVIDER_NAME: &str = "vLLM";
 pub const PROVIDER_TYPE: &str = "vllm";
@@ -139,6 +142,7 @@ impl InferenceProvider for VLLMProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -200,6 +204,7 @@ impl InferenceProvider for VLLMProvider {
                 raw_response,
                 raw_request,
                 generic_request: request,
+                model_inference_id,
             }
             .try_into()?)
         } else {
@@ -232,6 +237,7 @@ impl InferenceProvider for VLLMProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -269,6 +275,7 @@ impl InferenceProvider for VLLMProvider {
         .await?;
         let stream = stream_openai(
             PROVIDER_TYPE.to_string(),
+            model_inference_id,
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
             None,
@@ -461,6 +468,7 @@ struct VLLMResponseWithMetadata<'a> {
     raw_response: String,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -472,6 +480,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             raw_response,
             raw_request,
             generic_request,
+            model_inference_id,
         } = value;
 
         if response.choices.len() != 1 {
@@ -486,7 +495,6 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let usage = response.usage.into();
         let OpenAIResponseChoice {
             message,
             finish_reason,
@@ -517,12 +525,18 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
+        let raw_usage = raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            &response.usage,
+        );
+        let usage = UsageWithRaw {
+            usage: response.usage.into(),
+            raw_usage,
+        };
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        // Extract raw usage JSON from raw_response for include_raw_usage feature
-        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
-            .ok()
-            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -533,11 +547,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
-                raw_usage_json,
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
-                id: None,
-                raw_usage_entries: None,
+                id: model_inference_id,
             },
         ))
     }
@@ -762,6 +772,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response: ProviderInferenceResponse =
             vllm_response_with_metadata.try_into().unwrap();

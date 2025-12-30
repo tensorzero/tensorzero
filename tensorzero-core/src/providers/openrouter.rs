@@ -13,8 +13,6 @@ use crate::http::TensorzeroHttpClient;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
-#[cfg(test)]
-use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
 use crate::embeddings::EmbeddingEncodingFormat;
@@ -34,6 +32,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext};
+use crate::inference::types::usage::raw_usage_entries_from_usage;
 use crate::inference::types::{
     ApiType, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
@@ -41,11 +40,12 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Unknown, Usage,
+    TextChunk, Unknown, Usage, UsageWithRaw,
     resolved_input::{FileUrl, LazyFile},
 };
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use uuid::Uuid;
 
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
@@ -250,6 +250,7 @@ impl InferenceProvider for OpenRouterProvider {
                 latency,
                 raw_request: raw_request.clone(),
                 generic_request: request.request,
+                model_inference_id: request.model_inference_id,
             }
             .try_into()?)
         } else {
@@ -279,6 +280,7 @@ impl InferenceProvider for OpenRouterProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -324,6 +326,7 @@ impl InferenceProvider for OpenRouterProvider {
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
             &raw_request,
+            model_inference_id,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -462,6 +465,7 @@ pub fn stream_openrouter(
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
     raw_request: &str,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
     let mut tool_call_ids = Vec::new();
@@ -497,7 +501,14 @@ pub fn stream_openrouter(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openrouter_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
+                            openrouter_to_tensorzero_chunk(
+                                message.data,
+                                d,
+                                latency,
+                                &mut tool_call_ids,
+                                model_inference_id,
+                                &provider_type,
+                            )
                         });
                         yield stream_message;
                     }
@@ -647,15 +658,26 @@ impl<'a> TryFrom<OpenRouterEmbeddingResponseWithMetadata<'a>> for EmbeddingProvi
             .into_iter()
             .map(|embedding| embedding.embedding)
             .collect();
-
-        Ok(EmbeddingProviderResponse::new(
+        let provider_usage = response.usage;
+        let usage = provider_usage.clone().map(Into::into).unwrap_or_default();
+        let mut embedding_response = EmbeddingProviderResponse::new(
             embeddings,
             request.input.clone(),
             raw_request,
             raw_response,
-            response.usage.map(|usage| usage.into()).unwrap_or_default(),
+            usage,
             latency,
-        ))
+            None,
+        );
+        embedding_response.raw_usage = provider_usage.as_ref().and_then(|usage| {
+            raw_usage_entries_from_usage(
+                embedding_response.id,
+                PROVIDER_TYPE,
+                ApiType::Embeddings,
+                usage,
+            )
+        });
+        Ok(embedding_response)
     }
 }
 
@@ -1607,6 +1629,7 @@ struct OpenRouterResponseWithMetadata<'a> {
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     raw_response: String,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -1618,6 +1641,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
             raw_request,
             raw_response,
             generic_request,
+            model_inference_id,
         } = value;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -1653,13 +1677,18 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         };
-        let usage = response.usage.into();
+        let raw_usage = raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            &response.usage,
+        );
+        let usage = UsageWithRaw {
+            usage: response.usage.into(),
+            raw_usage,
+        };
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
-        // Extract raw usage JSON from raw_response for include_raw_usage feature
-        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
-            .ok()
-            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -1670,11 +1699,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
-                raw_usage_json,
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
-                id: None,
-                raw_usage_entries: None,
+                id: model_inference_id,
             },
         ))
     }
@@ -1750,6 +1775,8 @@ fn openrouter_to_tensorzero_chunk(
     mut chunk: OpenRouterChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
+    model_inference_id: Uuid,
+    provider_type: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -1760,6 +1787,14 @@ fn openrouter_to_tensorzero_chunk(
         }
         .into());
     }
+    let raw_usage = chunk.usage.as_ref().and_then(|usage| {
+        raw_usage_entries_from_usage(
+            model_inference_id,
+            provider_type,
+            ApiType::ChatCompletions,
+            usage,
+        )
+    });
     let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
@@ -1803,12 +1838,13 @@ fn openrouter_to_tensorzero_chunk(
         }
     }
 
-    Ok(ProviderInferenceResponseChunk::new(
+    Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
         content,
         usage,
         raw_message,
         latency,
         finish_reason,
+        raw_usage,
     ))
 }
 
@@ -2303,6 +2339,7 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -2401,6 +2438,7 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -2469,6 +2507,7 @@ mod tests {
             raw_request: serde_json::to_string(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -2528,6 +2567,7 @@ mod tests {
             raw_request: serde_json::to_string(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -2703,6 +2743,8 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -2736,6 +2778,8 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -2770,6 +2814,8 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap_err();
         let details = error.get_details();
@@ -2805,6 +2851,8 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -2821,30 +2869,41 @@ mod tests {
 
         // Check a chunk with no choices and only usage
         // Test a correct new tool chunk
+        let usage = OpenRouterUsage {
+            prompt_tokens: Some(10),
+            completion_tokens: Some(20),
+        };
         let chunk = OpenRouterChatChunk {
             choices: vec![],
-            usage: Some(OpenRouterUsage {
-                prompt_tokens: Some(10),
-                completion_tokens: Some(20),
-            }),
+            usage: Some(usage.clone()),
         };
+        let model_inference_id = Uuid::now_v7();
         let message = openrouter_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            model_inference_id,
+            PROVIDER_TYPE,
         )
         .unwrap();
+        let expected_raw_usage = raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            &usage,
+        );
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
-            Some(
-                Usage {
+            Some(UsageWithRaw {
+                usage: Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
-                }
-                .into()
-            )
+                },
+                raw_usage: expected_raw_usage,
+            }),
+            "expected usage to include provider raw_usage entries"
         );
     }
 

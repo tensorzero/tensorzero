@@ -28,8 +28,8 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     inference::types::{
-        ApiType, Latency, ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, Role,
-        Usage, current_timestamp,
+        Latency, ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, Role, Usage,
+        current_timestamp,
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
@@ -183,6 +183,7 @@ impl EmbeddingModelConfig {
                     model_name,
                     provider_name,
                     otlp_config: &clients.otlp_config,
+                    model_inference_id: Uuid::now_v7(),
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -376,6 +377,7 @@ pub struct EmbeddingProviderResponse {
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
@@ -406,6 +408,7 @@ pub struct EmbeddingModelResponse {
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
     pub cached: bool,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl EmbeddingModelResponse {
@@ -429,6 +432,7 @@ impl EmbeddingModelResponse {
             },
             embedding_provider_name: Arc::from(request.provider_name),
             cached: true,
+            raw_usage: None,
         }
     }
 
@@ -459,6 +463,7 @@ pub struct EmbeddingResponseWithMetadata {
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
     pub embedding_model_name: Arc<str>,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl EmbeddingModelResponse {
@@ -477,6 +482,7 @@ impl EmbeddingModelResponse {
             latency: embedding_provider_response.latency,
             embedding_provider_name,
             cached: false,
+            raw_usage: embedding_provider_response.raw_usage,
         }
     }
 }
@@ -494,6 +500,7 @@ impl EmbeddingResponseWithMetadata {
             latency: embedding_response.latency,
             embedding_provider_name: embedding_response.embedding_provider_name,
             embedding_model_name,
+            raw_usage: embedding_response.raw_usage,
         }
     }
 }
@@ -527,20 +534,7 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             model_name: response.embedding_model_name,
             cached: false,
             finish_reason: None,
-            raw_usage: {
-                let raw_usage_json =
-                    serde_json::from_str::<serde_json::Value>(&response.raw_response)
-                        .ok()
-                        .and_then(|v| v.get("usage").cloned());
-                raw_usage_json.map(|usage| {
-                    vec![RawUsageEntry {
-                        model_inference_id: response.id,
-                        provider_type: response.embedding_provider_name.to_string(),
-                        api_type: ApiType::Embeddings,
-                        usage: Some(usage),
-                    }]
-                })
-            },
+            raw_usage: response.raw_usage,
         })
     }
 }
@@ -761,6 +755,7 @@ impl EmbeddingProviderResponse {
         raw_response: String,
         usage: Usage,
         latency: Latency,
+        raw_usage: Option<Vec<RawUsageEntry>>,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -771,6 +766,7 @@ impl EmbeddingProviderResponse {
             raw_response,
             usage,
             latency,
+            raw_usage,
         }
     }
 }

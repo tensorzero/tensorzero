@@ -22,10 +22,12 @@ use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::usage::raw_usage_entries_from_usage;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Thought, Unknown, Usage,
+    UsageWithRaw,
 };
 use crate::inference::types::{
     FunctionType, Latency, ModelInferenceRequestJsonMode,
@@ -40,6 +42,7 @@ use crate::providers::anthropic::{
 };
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
 use crate::tool::{ToolCall, ToolChoice};
+use uuid::Uuid;
 
 use super::anthropic::{
     AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig, AnthropicRole,
@@ -193,6 +196,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             provider_name,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -265,6 +269,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 generic_request: request,
                 model_name,
                 provider_name,
+                model_inference_id,
             };
 
             Ok(response_with_latency.try_into()?)
@@ -281,6 +286,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             provider_name,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -323,6 +329,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             model_name,
             provider_name,
             &raw_request,
+            model_inference_id,
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
@@ -371,6 +378,7 @@ fn stream_anthropic(
     model_name: &str,
     provider_name: &str,
     raw_request: &str,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
@@ -413,6 +421,7 @@ fn stream_anthropic(
                                 &model_name,
                                 &provider_name,
                                 PROVIDER_TYPE,
+                                model_inference_id,
                             )
                         });
 
@@ -731,6 +740,7 @@ struct GCPVertexAnthropicResponseWithMetadata<'a> {
     generic_request: &'a ModelInferenceRequest<'a>,
     model_name: &'a str,
     provider_name: &'a str,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -746,6 +756,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             generic_request,
             model_name,
             provider_name,
+            model_inference_id,
         } = value;
 
         let content: Vec<ContentBlockOutput> = response
@@ -764,13 +775,18 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             content
         };
 
+        let raw_usage = raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            &response.usage,
+        );
+        let usage = UsageWithRaw {
+            usage: response.usage.into(),
+            raw_usage,
+        };
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-
-        // Extract raw usage JSON from raw_response for include_raw_usage feature
-        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
-            .ok()
-            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -778,14 +794,10 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 input_messages,
                 raw_request,
                 raw_response,
-                usage: response.usage.into(),
+                usage,
                 latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
-                raw_usage_json,
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
-                id: None,
-                raw_usage_entries: None,
+                id: model_inference_id,
             },
         ))
     }
@@ -1330,6 +1342,7 @@ mod tests {
             generic_request: &generic_request,
             model_name: "my-model",
             provider_name: "my-provider",
+            model_inference_id: Uuid::now_v7(),
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -1416,6 +1429,7 @@ mod tests {
             generic_request: &generic_request,
             model_name: "model-name",
             provider_name: "provider-name",
+            model_inference_id: Uuid::now_v7(),
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -1503,6 +1517,7 @@ mod tests {
             generic_request: &generic_request,
             model_name: "model-name",
             provider_name: "provider-name",
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(

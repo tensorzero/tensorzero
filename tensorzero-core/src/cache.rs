@@ -7,7 +7,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
 use crate::inference::types::{
-    ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
+    ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
@@ -19,6 +19,7 @@ use clap::ValueEnum;
 use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use uuid::Uuid;
 
 #[derive(
     Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, ValueEnum, ts_rs::TS,
@@ -82,6 +83,7 @@ pub struct BaseModelProviderRequest<'request, T> {
     pub model_name: &'request str,
     pub provider_name: &'request str,
     pub otlp_config: &'request OtlpConfig,
+    pub model_inference_id: Uuid,
 }
 
 // We need a manual impl to avoid adding a 'T: Copy' bound
@@ -130,6 +132,7 @@ impl EmbeddingModelProviderRequest<'_> {
             // The OTLP config is deliberately not included in the cache key,
             // since it's only used to construct the OTEL span.
             otlp_config: _,
+            model_inference_id: _,
         } = self;
         let mut hasher = blake3::Hasher::new();
         hasher.update(model_name.as_bytes());
@@ -159,6 +162,7 @@ impl ModelProviderRequest<'_> {
             // The OTLP config is deliberately not included in the cache key,
             // since it's only used to construct the OTEL span.
             otlp_config: _,
+            model_inference_id: _,
         } = self;
         let mut hasher = blake3::Hasher::new();
         hasher.update(model_name.as_bytes());
@@ -457,8 +461,6 @@ pub async fn cache_lookup_streaming(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
-    provider_type: String,
-    api_type: ApiType,
 ) -> Result<Option<StreamResponse>, Error> {
     let result = cache_lookup_inner(
         clickhouse_connection_info,
@@ -470,8 +472,7 @@ pub async fn cache_lookup_streaming(
         StreamResponse::from_cache(
             result,
             Arc::from(request.provider_name),
-            provider_type,
-            api_type,
+            request.model_inference_id,
         )
     }))
 }
@@ -583,6 +584,7 @@ mod tests {
             model_name: "test_model",
             provider_name: "test_provider",
             otlp_config: &Default::default(),
+            model_inference_id: Uuid::now_v7(),
         };
         let cache_key = model_provider_request.get_cache_key().unwrap();
         let model_inference_request = ModelInferenceRequest {
@@ -612,6 +614,7 @@ mod tests {
             model_name: "test_model",
             provider_name: "test_provider",
             otlp_config: &Default::default(),
+            model_inference_id: Uuid::now_v7(),
         };
         let new_cache_key = model_provider_request.get_cache_key().unwrap();
         // Make sure the first two get the same cache key (and that we ignore the inference_id)
@@ -643,6 +646,7 @@ mod tests {
             model_name: "test_model",
             provider_name: "test_provider",
             otlp_config: &Default::default(),
+            model_inference_id: Uuid::now_v7(),
         };
         let streaming_cache_key = model_provider_request.get_cache_key().unwrap();
         assert_ne!(cache_key, streaming_cache_key);

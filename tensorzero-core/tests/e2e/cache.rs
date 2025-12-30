@@ -26,7 +26,6 @@ use tensorzero_core::cache::CacheValidationInfo;
 use tensorzero_core::cache::NonStreamingCacheData;
 use tensorzero_core::cache::cache_lookup_streaming;
 use tensorzero_core::cache::start_cache_write_streaming;
-use tensorzero_core::inference::types::ApiType;
 use tensorzero_core::inference::types::ContentBlock;
 use tensorzero_core::inference::types::ContentBlockChatOutput;
 use tensorzero_core::inference::types::ContentBlockOutput;
@@ -91,6 +90,7 @@ async fn test_cache_write_and_read() {
         model_name: "test_model",
         provider_name: "test_provider",
         otlp_config: &Default::default(),
+        model_inference_id: Uuid::now_v7(),
     };
 
     // Read (should be None)
@@ -221,6 +221,7 @@ async fn test_cache_stream_write_and_read() {
         model_name: "test_model",
         provider_name: "test_provider",
         otlp_config: &Default::default(),
+        model_inference_id: Uuid::now_v7(),
     };
 
     // Read (should be None)
@@ -228,8 +229,6 @@ async fn test_cache_stream_write_and_read() {
         &clickhouse_connection_info,
         model_provider_request,
         Some(max_age_s),
-        "test_provider".to_string(),
-        ApiType::ChatCompletions,
     )
     .await
     .unwrap();
@@ -292,8 +291,6 @@ async fn test_cache_stream_write_and_read() {
         &clickhouse_connection_info,
         model_provider_request,
         Some(max_age_s),
-        "test_provider".to_string(),
-        ApiType::ChatCompletions,
     )
     .await
     .unwrap();
@@ -348,15 +345,10 @@ async fn test_cache_stream_write_and_read() {
 
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
-    let result = cache_lookup_streaming(
-        &clickhouse_connection_info,
-        model_provider_request,
-        Some(0),
-        "test_provider".to_string(),
-        ApiType::ChatCompletions,
-    )
-    .await
-    .unwrap();
+    let result =
+        cache_lookup_streaming(&clickhouse_connection_info, model_provider_request, Some(0))
+            .await
+            .unwrap();
     assert!(result.is_none());
 }
 #[tokio::test]

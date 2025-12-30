@@ -22,6 +22,8 @@ use url::Url;
 use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
+use crate::inference::types::UsageWithRaw;
+use crate::inference::types::usage::raw_usage_entries_from_usage;
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
@@ -43,6 +45,7 @@ use crate::{
     model::{Credential, ModelProvider},
     tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
 };
+use uuid::Uuid;
 
 use super::{
     helpers_thinking_block::{ThinkingState, process_think_blocks},
@@ -180,6 +183,7 @@ impl InferenceProvider for FireworksProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
@@ -244,6 +248,7 @@ impl InferenceProvider for FireworksProvider {
                 generic_request: request,
                 raw_response,
                 parse_think_blocks: self.parse_think_blocks,
+                model_inference_id,
             }
             .try_into()?)
         } else {
@@ -274,6 +279,7 @@ impl InferenceProvider for FireworksProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
@@ -307,7 +313,13 @@ impl InferenceProvider for FireworksProvider {
         )
         .await?;
         // Use our own stream implementation to handle thinking blocks
-        let stream = stream_fireworks(event_source, start_time, self.parse_think_blocks).peekable();
+        let stream = stream_fireworks(
+            event_source,
+            start_time,
+            self.parse_think_blocks,
+            model_inference_id,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -669,6 +681,7 @@ fn stream_fireworks(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     parse_think_blocks: bool,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
     let mut thinking_state = ThinkingState::Normal;
@@ -704,7 +717,16 @@ fn stream_fireworks(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            fireworks_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut thinking_state, parse_think_blocks)
+                            fireworks_to_tensorzero_chunk(
+                                message.data,
+                                d,
+                                latency,
+                                &mut tool_call_ids,
+                                &mut thinking_state,
+                                parse_think_blocks,
+                                model_inference_id,
+                                PROVIDER_TYPE,
+                            )
                         });
                         yield stream_message;
                     }
@@ -719,6 +741,7 @@ fn stream_fireworks(
 /// This function handles the conversion of Fireworks chat chunks into TensorZero chunks.
 /// It processes the content and tool calls from the Fireworks response, updating the tool call IDs and names.
 /// If parsing think blocks is enabled, it also processes the thinking state and extracts reasoning.
+#[expect(clippy::too_many_arguments)]
 fn fireworks_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: FireworksChatChunk,
@@ -726,6 +749,8 @@ fn fireworks_to_tensorzero_chunk(
     tool_call_ids: &mut Vec<String>,
     thinking_state: &mut ThinkingState,
     parse_think_blocks: bool,
+    model_inference_id: Uuid,
+    provider_type: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -736,6 +761,14 @@ fn fireworks_to_tensorzero_chunk(
         }
         .into());
     }
+    let raw_usage = chunk.usage.as_ref().and_then(|usage| {
+        raw_usage_entries_from_usage(
+            model_inference_id,
+            provider_type,
+            ApiType::ChatCompletions,
+            usage,
+        )
+    });
     let usage = chunk.usage.map(OpenAIUsage::into);
     let mut finish_reason = None;
     let mut content = vec![];
@@ -813,13 +846,19 @@ fn fireworks_to_tensorzero_chunk(
         }
     }
 
-    Ok(ProviderInferenceResponseChunk::new(
-        content,
-        usage,
-        raw_message,
-        latency,
-        finish_reason,
-    ))
+    Ok(match raw_usage {
+        Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
+            content,
+            usage,
+            raw_message,
+            latency,
+            finish_reason,
+            Some(entries),
+        ),
+        None => {
+            ProviderInferenceResponseChunk::new(content, usage, raw_message, latency, finish_reason)
+        }
+    })
 }
 
 struct FireworksResponseWithMetadata<'a> {
@@ -829,6 +868,7 @@ struct FireworksResponseWithMetadata<'a> {
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     parse_think_blocks: bool,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -841,6 +881,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             generic_request,
             raw_response,
             parse_think_blocks,
+            model_inference_id,
         } = value;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -854,7 +895,6 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             }
             .into());
         }
-        let usage = response.usage.into();
         let FireworksResponseChoice {
             message,
             finish_reason,
@@ -898,12 +938,18 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
+        let raw_usage = raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            &response.usage,
+        );
+        let usage = UsageWithRaw {
+            usage: response.usage.into(),
+            raw_usage,
+        };
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        // Extract raw usage JSON from raw_response for include_raw_usage feature
-        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
-            .ok()
-            .and_then(|v| v.get("usage").cloned());
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -914,11 +960,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 usage,
                 latency,
                 finish_reason: finish_reason.map(FireworksFinishReason::into),
-                raw_usage_json,
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
-                id: None,
-                raw_usage_entries: None,
+                id: model_inference_id,
             },
         ))
     }
@@ -994,6 +1036,7 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             parse_think_blocks: true,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let inference_response: ProviderInferenceResponse =
@@ -1034,6 +1077,7 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             parse_think_blocks: false,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let inference_response: ProviderInferenceResponse =
@@ -1200,6 +1244,7 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             parse_think_blocks: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response: ProviderInferenceResponse =
             fireworks_response_with_metadata.try_into().unwrap();
@@ -1242,6 +1287,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1280,6 +1327,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1294,13 +1343,15 @@ mod tests {
         assert_eq!(message.finish_reason, Some(FinishReason::ToolCall));
 
         // Test a chunk with no choices and only usage
+        let usage = OpenAIUsage {
+            prompt_tokens: Some(10),
+            completion_tokens: Some(20),
+        };
         let chunk = FireworksChatChunk {
             choices: vec![],
-            usage: Some(OpenAIUsage {
-                prompt_tokens: Some(10),
-                completion_tokens: Some(20),
-            }),
+            usage: Some(usage.clone()),
         };
+        let model_inference_id = Uuid::now_v7();
         let message = fireworks_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
@@ -1308,19 +1359,28 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            model_inference_id,
+            PROVIDER_TYPE,
         )
         .unwrap();
 
+        let expected_raw_usage = raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            &usage,
+        );
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
-            Some(
-                Usage {
+            Some(UsageWithRaw {
+                usage: Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
-                }
-                .into()
-            )
+                },
+                raw_usage: expected_raw_usage,
+            }),
+            "expected usage to include provider raw_usage entries"
         );
     }
 
@@ -1350,6 +1410,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1378,6 +1440,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1411,6 +1475,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1439,6 +1505,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1475,6 +1543,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             false,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -1518,6 +1588,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1560,6 +1632,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 

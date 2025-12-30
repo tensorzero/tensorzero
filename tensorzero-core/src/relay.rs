@@ -20,8 +20,8 @@ use crate::endpoints::openai_compatible::types::embeddings::{
 use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
 use crate::inference::types::{
-    ApiType, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponseChunk, TextChunk, Usage,
+    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
+    TextChunk, Usage, UsageWithRaw,
 };
 use crate::model::Credential;
 use crate::{
@@ -41,6 +41,7 @@ use crate::{
     tool::{DynamicToolParams, FunctionTool, Tool, ToolCall, ToolCallWrapper, ToolConfigRef},
     variant::JsonMode,
 };
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub enum RelayCredentials {
@@ -346,15 +347,13 @@ impl TensorzeroRelay {
                 input_messages: request.messages.clone(),
                 raw_request: http_data.raw_request,
                 raw_response: http_data.raw_response.unwrap_or_default(),
-                usage,
+                usage: UsageWithRaw {
+                    usage,
+                    raw_usage: raw_usage_entries,
+                },
                 latency,
                 finish_reason,
-                // Relay doesn't have its own raw_usage_json, passthrough is via raw_usage_entries
-                raw_usage_json: None,
-                provider_type: "relay".to_string(),
-                api_type: ApiType::ChatCompletions,
-                id: None,
-                raw_usage_entries,
+                id: Uuid::now_v7(),
             },
         ))
     }

@@ -1178,7 +1178,7 @@ pub struct ProviderInferenceResponse {
     pub latency: Latency,
     pub finish_reason: Option<FinishReason>,
     /// Raw usage entries for `include_raw_usage` feature.
-    /// Constructed from provider's raw_usage_json or passed through from relay.
+    /// Constructed from provider raw usage entries or passed through from relay.
     pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
@@ -1689,54 +1689,28 @@ pub struct ProviderInferenceResponseArgs {
     pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
-    pub usage: Usage,
+    pub usage: UsageWithRaw,
     pub latency: Latency,
     pub finish_reason: Option<FinishReason>,
-    /// Raw provider-specific usage JSON for `include_raw_usage` feature.
-    pub raw_usage_json: Option<serde_json::Value>,
-    /// Provider type name (e.g., "openai", "anthropic").
-    pub provider_type: String,
-    /// The type of API used (chat_completions, responses, embeddings).
-    pub api_type: ApiType,
-    /// Pre-generated ID for streaming (to match raw_usage entries sent to client).
-    /// If None, a new ID will be generated.
-    pub id: Option<Uuid>,
-    /// Pre-processed raw_usage entries (relay or synthesized streams).
-    pub raw_usage_entries: Option<Vec<RawUsageEntry>>,
+    pub id: Uuid,
 }
 
 impl ProviderInferenceResponse {
     pub fn new(args: ProviderInferenceResponseArgs) -> Self {
-        let id = args.id.unwrap_or_else(Uuid::now_v7);
         let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
 
-        // Construct raw_usage_entries immediately:
-        // - If raw_usage_entries is present (relay/synthetic), use those entries directly
-        // - Otherwise, construct a single entry from raw_usage_json
-        let raw_usage_entries = match args.raw_usage_entries {
-            Some(entries) => Some(entries),
-            None => args.raw_usage_json.map(|usage| {
-                vec![RawUsageEntry {
-                    model_inference_id: id,
-                    provider_type: args.provider_type,
-                    api_type: args.api_type,
-                    usage: Some(usage),
-                }]
-            }),
-        };
-
         Self {
-            id,
+            id: args.id,
             created: current_timestamp(),
             output: args.output,
             system: args.system,
             input_messages: args.input_messages,
             raw_request: sanitized_raw_request,
             raw_response: args.raw_response,
-            usage: args.usage,
+            usage: args.usage.usage,
             latency: args.latency,
             finish_reason: args.finish_reason,
-            raw_usage: raw_usage_entries,
+            raw_usage: args.usage.raw_usage,
         }
     }
 }

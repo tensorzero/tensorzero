@@ -25,12 +25,13 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
+use crate::inference::types::usage::raw_usage_entries_from_usage;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk,
-    UnknownChunk, Usage,
+    UnknownChunk, Usage, UsageWithRaw,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, FinishReason, FunctionType, Latency,
@@ -42,6 +43,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
+use uuid::Uuid;
 
 use super::helpers::convert_stream_error;
 use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_type};
@@ -170,6 +172,7 @@ impl InferenceProvider for AnthropicProvider {
             provider_name: _,
             model_name: tensorzero_model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -249,6 +252,7 @@ impl InferenceProvider for AnthropicProvider {
                 model_name: tensorzero_model_name,
                 provider_name: &model_provider.name,
                 beta_structured_outputs: self.beta_structured_outputs,
+                model_inference_id,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -273,6 +277,7 @@ impl InferenceProvider for AnthropicProvider {
             provider_name,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
@@ -318,6 +323,7 @@ impl InferenceProvider for AnthropicProvider {
             model_name,
             provider_name,
             &raw_request,
+            model_inference_id,
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
@@ -362,6 +368,7 @@ fn stream_anthropic(
     model_name: &str,
     provider_name: &str,
     raw_request: &str,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
@@ -405,6 +412,7 @@ fn stream_anthropic(
                                 &model_name,
                                 &provider_name,
                                 PROVIDER_TYPE,
+                                model_inference_id,
                             )
                         });
 
@@ -1145,6 +1153,7 @@ struct AnthropicResponseWithMetadata<'a> {
     model_name: &'a str,
     provider_name: &'a str,
     beta_structured_outputs: bool,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -1160,6 +1169,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             model_name,
             provider_name,
             beta_structured_outputs,
+            model_inference_id,
         } = value;
         let output: Vec<ContentBlockOutput> = response
             .content
@@ -1172,10 +1182,16 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             output
         };
 
-        // Extract raw usage JSON from raw_response for include_raw_usage feature
-        let raw_usage_json = serde_json::from_str::<serde_json::Value>(&raw_response)
-            .ok()
-            .and_then(|v| v.get("usage").cloned());
+        let raw_usage = raw_usage_entries_from_usage(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            &response.usage,
+        );
+        let usage = UsageWithRaw {
+            usage: response.usage.into(),
+            raw_usage,
+        };
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -1183,14 +1199,10 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 input_messages,
                 raw_request,
                 raw_response,
-                usage: response.usage.into(),
+                usage,
                 latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
-                raw_usage_json,
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
-                id: None,
-                raw_usage_entries: None,
+                id: model_inference_id,
             },
         ))
     }
@@ -1288,6 +1300,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
     model_name: &str,
     provider_name: &str,
     provider_type: &str,
+    model_inference_id: Uuid,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
         AnthropicStreamMessage::ContentBlockDelta {
@@ -1441,24 +1454,56 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
             delta: FlattenUnknown::Normal(delta),
         } => {
             let usage = parse_usage_info(&usage);
-            Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![],
-                Some(usage.into()),
-                raw_message,
-                message_latency,
-                delta.stop_reason.map(AnthropicStopReason::into),
-            )))
-        }
-        AnthropicStreamMessage::MessageStart { message } => {
-            if let Some(usage_info) = message.get("usage") {
-                let usage = parse_usage_info(usage_info);
-                Ok(Some(ProviderInferenceResponseChunk::new(
+            let raw_usage = raw_usage_entries_from_usage(
+                model_inference_id,
+                provider_type,
+                ApiType::ChatCompletions,
+                &usage,
+            );
+            Ok(Some(match raw_usage {
+                Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
                     vec![],
                     Some(usage.into()),
                     raw_message,
                     message_latency,
-                    None,
-                )))
+                    delta.stop_reason.map(AnthropicStopReason::into),
+                    Some(entries),
+                ),
+                None => ProviderInferenceResponseChunk::new(
+                    vec![],
+                    Some(usage.into()),
+                    raw_message,
+                    message_latency,
+                    delta.stop_reason.map(AnthropicStopReason::into),
+                ),
+            }))
+        }
+        AnthropicStreamMessage::MessageStart { message } => {
+            if let Some(usage_info) = message.get("usage") {
+                let usage = parse_usage_info(usage_info);
+                let raw_usage = raw_usage_entries_from_usage(
+                    model_inference_id,
+                    provider_type,
+                    ApiType::ChatCompletions,
+                    &usage,
+                );
+                Ok(Some(match raw_usage {
+                    Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
+                        vec![],
+                        Some(usage.into()),
+                        raw_message,
+                        message_latency,
+                        None,
+                        Some(entries),
+                    ),
+                    None => ProviderInferenceResponseChunk::new(
+                        vec![],
+                        Some(usage.into()),
+                        raw_message,
+                        message_latency,
+                        None,
+                    ),
+                }))
             } else {
                 Ok(None)
             }
@@ -2351,6 +2396,7 @@ mod tests {
             model_name: "model-name",
             provider_name: "dummy",
             beta_structured_outputs: false,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -2408,6 +2454,7 @@ mod tests {
             model_name: "model-name",
             provider_name: "dummy",
             beta_structured_outputs: false,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -2478,6 +2525,7 @@ mod tests {
             model_name: "model-name",
             provider_name: "dummy",
             beta_structured_outputs: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
@@ -2528,6 +2576,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2561,6 +2610,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2594,6 +2644,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2629,6 +2680,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         )
         .unwrap();
         let chunk = result.unwrap();
@@ -2665,6 +2717,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2690,6 +2743,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2709,6 +2763,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2741,6 +2796,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2767,6 +2823,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2790,6 +2847,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2807,6 +2865,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -3086,6 +3145,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         )
         .unwrap()
         .unwrap();
@@ -3121,6 +3181,7 @@ mod tests {
             "test_model",
             "test_provider",
             PROVIDER_TYPE,
+            Uuid::now_v7(),
         )
         .unwrap();
         assert_eq!(res, None);

@@ -26,6 +26,31 @@ pub struct RawUsageEntry {
     pub usage: Option<serde_json::Value>,
 }
 
+pub fn raw_usage_entries_from_value(
+    model_inference_id: Uuid,
+    provider_type: &str,
+    api_type: ApiType,
+    usage: serde_json::Value,
+) -> Vec<RawUsageEntry> {
+    vec![RawUsageEntry {
+        model_inference_id,
+        provider_type: provider_type.to_string(),
+        api_type,
+        usage: Some(usage),
+    }]
+}
+
+pub fn raw_usage_entries_from_usage<T: Serialize>(
+    model_inference_id: Uuid,
+    provider_type: &str,
+    api_type: ApiType,
+    usage: &T,
+) -> Option<Vec<RawUsageEntry>> {
+    serde_json::to_value(usage).ok().map(|usage| {
+        raw_usage_entries_from_value(model_inference_id, provider_type, api_type, usage)
+    })
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct Usage {
