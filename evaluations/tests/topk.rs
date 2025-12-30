@@ -1244,7 +1244,7 @@ async fn test_topk_variant_failure_threshold() {
 /// Test that top-k evaluation emits progress events via durable's emit_event.
 ///
 /// This test verifies that:
-/// 1. Progress events are emitted after each batch via `topk_progress:{task_id}`
+/// 1. Progress events are emitted after each batch via `topk_progress:{task_id}:{batch_idx}`
 /// 2. Completion events are emitted at the end via `topk_completed:{task_id}`
 /// 3. The event payloads contain correct data (variant summaries, statuses, etc.)
 ///
@@ -1374,52 +1374,73 @@ async fn test_topk_emit_event_streaming() {
 
     // === Verify emitted events by querying the events table ===
 
-    // 1. Query the progress event (first-writer-wins, so we get the first batch)
-    let progress_event_name = format!("topk_progress:{task_id}");
-    let query = format!("SELECT payload FROM durable.e_{queue_name} WHERE event_name = $1");
-    let progress_result: Option<(serde_json::Value,)> = query_as(AssertSqlSafe(query))
-        .bind(&progress_event_name)
-        .fetch_optional(&pg_pool)
+    // 1. Query all progress events (one per batch) and verify multiple batches were emitted
+    let progress_event_prefix = format!("topk_progress:{task_id}:");
+    let query = format!(
+        "SELECT event_name, payload FROM durable.e_{queue_name} WHERE event_name LIKE $1 ORDER BY event_name"
+    );
+    let progress_results: Vec<(String, serde_json::Value)> = query_as(AssertSqlSafe(query))
+        .bind(format!("{progress_event_prefix}%"))
+        .fetch_all(&pg_pool)
         .await
-        .expect("Failed to query progress event");
+        .expect("Failed to query progress events");
 
-    let progress_payload = progress_result.expect("Progress event should have been emitted");
-    let progress_update: TopKUpdate =
-        serde_json::from_value(progress_payload.0).expect("Failed to deserialize progress event");
+    // Verify we got at least 2 batches (this catches the first-writer-wins regression)
+    assert!(
+        progress_results.len() >= 2,
+        "Expected at least 2 progress events (one per batch), got {}. \
+         This may indicate the first-writer-wins regression where only the first batch is emitted.",
+        progress_results.len()
+    );
 
-    match progress_update {
-        TopKUpdate::BatchProgress(batch) => {
-            // The event payload contains evaluation_run_id (generated inside the task),
-            // not task_id. We just verify it's a valid UUID.
-            assert_ne!(
-                batch.evaluation_run_id,
-                uuid::Uuid::nil(),
-                "Progress event should have a valid evaluation_run_id"
-            );
-            assert_eq!(
-                batch.total_datapoints, 25,
-                "Progress event should have correct total_datapoints"
-            );
-            assert!(
-                batch.num_datapoints_processed > 0,
-                "Should have processed some datapoints"
-            );
-            assert_eq!(
-                batch.variant_summaries.len(),
-                3,
-                "Should have 3 variant summaries"
-            );
-            assert!(
-                batch.variant_summaries.contains_key("echo"),
-                "Should have echo variant summary"
-            );
-            assert_eq!(
-                batch.variant_statuses.len(),
-                3,
-                "Should have 3 variant statuses"
-            );
+    // Verify each batch has valid data and num_datapoints_processed increases
+    let mut prev_datapoints_processed = 0;
+    for (idx, (event_name, payload)) in progress_results.iter().enumerate() {
+        // Verify event name has correct batch index
+        let expected_event_name = format!("{progress_event_prefix}{idx}");
+        assert_eq!(
+            event_name, &expected_event_name,
+            "Event name mismatch at index {idx}"
+        );
+
+        let progress_update: TopKUpdate =
+            serde_json::from_value(payload.clone()).expect("Failed to deserialize progress event");
+
+        match progress_update {
+            TopKUpdate::BatchProgress(batch) => {
+                assert_ne!(
+                    batch.evaluation_run_id,
+                    uuid::Uuid::nil(),
+                    "Progress event should have a valid evaluation_run_id"
+                );
+                assert_eq!(
+                    batch.total_datapoints, 25,
+                    "Progress event should have correct total_datapoints"
+                );
+                assert!(
+                    batch.num_datapoints_processed > prev_datapoints_processed,
+                    "num_datapoints_processed should increase: batch {idx} has {} but previous was {}",
+                    batch.num_datapoints_processed,
+                    prev_datapoints_processed
+                );
+                prev_datapoints_processed = batch.num_datapoints_processed;
+                assert_eq!(
+                    batch.variant_summaries.len(),
+                    3,
+                    "Should have 3 variant summaries"
+                );
+                assert!(
+                    batch.variant_summaries.contains_key("echo"),
+                    "Should have echo variant summary"
+                );
+                assert_eq!(
+                    batch.variant_statuses.len(),
+                    3,
+                    "Should have 3 variant statuses"
+                );
+            }
+            TopKUpdate::Completed(_) => panic!("Expected BatchProgress event, got Completed"),
         }
-        TopKUpdate::Completed(_) => panic!("Expected BatchProgress event, got Completed"),
     }
 
     // 2. Query the completion event

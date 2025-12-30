@@ -1452,8 +1452,9 @@ impl Task<TopKTaskState> for TopKTask {
                     .filter(|s| **s == VariantStatus::Active)
                     .count(),
             };
+            // Use per-batch event name since emit_event is first-writer-wins
             ctx.emit_event(
-                &format!("topk_progress:{}", ctx.task_id),
+                &format!("topk_progress:{}:{batch_idx}", ctx.task_id),
                 &TopKUpdate::BatchProgress(batch_update),
             )
             .await?;
