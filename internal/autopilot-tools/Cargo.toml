@@ -22,6 +22,7 @@ uuid.workspace = true
 [dev-dependencies]
 sqlx = { workspace = true, features = ["runtime-tokio", "postgres"] }
 durable = { workspace = true }
+mockall = "0.14"
 
 [lints]
 workspace = true

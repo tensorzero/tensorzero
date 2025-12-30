@@ -1,6 +1,6 @@
 //! Tool definitions for TensorZero Autopilot.
 //!
-//! This crate provides tool traits and implementations.
+//! This crate provides tool traits and implementations for the autopilot system.
 //!
 //! # Overview
 //!
@@ -11,6 +11,12 @@
 //! # Production Tools
 //!
 //! - `InferenceTool` - Calls TensorZero inference endpoint, optionally with a historical config snapshot
+//! - `CreateDatapointsTool` - Creates datapoints in a dataset
+//! - `CreateDatapointsFromInferencesTool` - Creates datapoints from existing inferences
+//! - `ListDatapointsTool` - Lists datapoints with filtering and pagination
+//! - `GetDatapointsTool` - Gets specific datapoints by ID
+//! - `UpdateDatapointsTool` - Updates existing datapoints
+//! - `DeleteDatapointsTool` - Deletes datapoints by ID
 //!
 //! # Test Tools (e2e_tests feature)
 //!
@@ -29,6 +35,9 @@
 //! - `SlowSimpleTool` - Sleeps for configurable duration
 
 pub mod tools;
+pub mod types;
+
+pub use types::AutopilotToolSideInfo;
 
 // Re-export from durable-tools
 pub use durable_tools::{
@@ -38,13 +47,23 @@ pub use durable_tools::{
 
 /// Register production tools with the given registry.
 ///
-/// This registers the `InferenceTool` for calling TensorZero inference.
+/// This registers all production tools for autopilot operations.
 ///
 /// # Errors
 ///
 /// Returns an error if any tool registration fails.
 pub fn register_production_tools(registry: &mut ToolRegistry) -> ToolResult<()> {
+    // Inference tool
     registry.register_simple_tool::<tools::InferenceTool>()?;
+
+    // Datapoint CRUD tools
+    registry.register_simple_tool::<tools::CreateDatapointsTool>()?;
+    registry.register_simple_tool::<tools::CreateDatapointsFromInferencesTool>()?;
+    registry.register_simple_tool::<tools::ListDatapointsTool>()?;
+    registry.register_simple_tool::<tools::GetDatapointsTool>()?;
+    registry.register_simple_tool::<tools::UpdateDatapointsTool>()?;
+    registry.register_simple_tool::<tools::DeleteDatapointsTool>()?;
+
     Ok(())
 }
 

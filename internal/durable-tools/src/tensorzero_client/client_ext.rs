@@ -7,7 +7,10 @@
 use async_trait::async_trait;
 use autopilot_client::AutopilotError;
 use tensorzero::{
-    Client, ClientInferenceParams, ClientMode, InferenceOutput, InferenceResponse, TensorZeroError,
+    Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
+    GetDatapointsResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
@@ -297,5 +300,67 @@ impl TensorZeroClient for Client {
                 }
             }
         }
+    }
+
+    // ========== Datapoint CRUD Operations ==========
+
+    async fn create_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<CreateDatapointRequest>,
+    ) -> Result<CreateDatapointsResponse, TensorZeroClientError> {
+        ClientExt::create_datapoints(self, dataset_name, datapoints)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn create_datapoints_from_inferences(
+        &self,
+        dataset_name: String,
+        params: CreateDatapointsFromInferenceRequestParams,
+    ) -> Result<CreateDatapointsResponse, TensorZeroClientError> {
+        ClientExt::create_datapoints_from_inferences(self, dataset_name, params)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn list_datapoints(
+        &self,
+        dataset_name: String,
+        request: ListDatapointsRequest,
+    ) -> Result<GetDatapointsResponse, TensorZeroClientError> {
+        ClientExt::list_datapoints(self, dataset_name, request)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn get_datapoints(
+        &self,
+        dataset_name: Option<String>,
+        ids: Vec<Uuid>,
+    ) -> Result<GetDatapointsResponse, TensorZeroClientError> {
+        ClientExt::get_datapoints(self, dataset_name, ids)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn update_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<UpdateDatapointRequest>,
+    ) -> Result<UpdateDatapointsResponse, TensorZeroClientError> {
+        ClientExt::update_datapoints(self, dataset_name, datapoints)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn delete_datapoints(
+        &self,
+        dataset_name: String,
+        ids: Vec<Uuid>,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroClientError> {
+        ClientExt::delete_datapoints(self, dataset_name, ids)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
     }
 }
