@@ -48,6 +48,9 @@ use crate::{
 /// Default batch size for top-k evaluation
 const DEFAULT_BATCH_SIZE: usize = 20;
 
+/// Maximum allowed concurrency to prevent accidental resource exhaustion
+const MAX_CONCURRENCY: usize = 1000;
+
 /// Default confidence sequence resolution (grid points for mean estimation)
 const DEFAULT_CS_RESOLUTION: usize = 1001;
 
@@ -1265,6 +1268,19 @@ impl Task<TopKTaskState> for TopKTask {
         if params.batch_size == Some(0) {
             return Err(durable::TaskError::Validation {
                 message: "batch_size must be > 0".to_string(),
+            });
+        }
+        if params.concurrency == 0 {
+            return Err(durable::TaskError::Validation {
+                message: "concurrency must be > 0".to_string(),
+            });
+        }
+        if params.concurrency > MAX_CONCURRENCY {
+            return Err(durable::TaskError::Validation {
+                message: format!(
+                    "concurrency ({}) must be <= {MAX_CONCURRENCY}",
+                    params.concurrency
+                ),
             });
         }
 
