@@ -16,6 +16,7 @@ use tensorzero::{
     UpdateDatapointsResponse, Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
@@ -122,6 +123,13 @@ mock! {
             &self,
             target_id: Uuid,
         ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+        async fn get_feedback_by_variant(
+            &self,
+            metric_name: String,
+            function_name: String,
+            variant_names: Option<Vec<String>>,
+        ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
     }
 }
 
@@ -220,8 +228,6 @@ pub fn create_test_input(text: &str) -> Input {
     }
 }
 
-// ===== Inference Mock Response Factories =====
-
 /// Create a mock stored chat inference for testing.
 pub fn create_mock_stored_chat_inference(
     inference_id: Uuid,
@@ -254,4 +260,18 @@ pub fn create_mock_stored_chat_inference(
         processing_time_ms: Some(100),
         ttft_ms: Some(50),
     })
+}
+
+/// Create a mock FeedbackByVariant response for testing.
+pub fn create_mock_feedback_by_variant(
+    variant_name: &str,
+    mean: f32,
+    count: u64,
+) -> FeedbackByVariant {
+    FeedbackByVariant {
+        variant_name: variant_name.to_string(),
+        mean,
+        variance: if count > 1 { Some(0.1) } else { None },
+        count,
+    }
 }

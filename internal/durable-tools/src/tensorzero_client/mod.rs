@@ -19,6 +19,7 @@ pub use tensorzero::{
 };
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 pub use tensorzero_core::optimization::OptimizationJobHandle;
 pub use tensorzero_core::optimization::OptimizationJobInfo;
@@ -56,6 +57,10 @@ pub enum TensorZeroClientError {
     /// Error from the Autopilot API.
     #[error("Autopilot error: {0}")]
     Autopilot(#[from] autopilot_client::AutopilotError),
+
+    /// Operation not supported in this client mode.
+    #[error("Operation not supported: {0}")]
+    NotSupported(String),
 }
 
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
@@ -195,6 +200,19 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         target_id: Uuid,
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+    /// Get feedback statistics by variant for a function and metric.
+    ///
+    /// Returns mean, variance, and count for each variant. This is useful for
+    /// analyzing variant performance without requiring an HTTP endpoint.
+    ///
+    /// Note: This method only works in embedded mode (no HTTP endpoint available).
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: String,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.

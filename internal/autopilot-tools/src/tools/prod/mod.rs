@@ -8,6 +8,7 @@ mod create_datapoints_from_inferences;
 mod delete_datapoints;
 mod feedback;
 mod get_datapoints;
+mod get_feedback_by_variant;
 mod get_latest_feedback_by_metric;
 mod inference;
 mod launch_optimization_workflow;
@@ -22,6 +23,7 @@ pub use create_datapoints_from_inferences::{
 pub use delete_datapoints::{DeleteDatapointsTool, DeleteDatapointsToolParams};
 pub use feedback::{FeedbackTool, FeedbackToolParams};
 pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
+pub use get_feedback_by_variant::{GetFeedbackByVariantTool, GetFeedbackByVariantToolParams};
 pub use get_latest_feedback_by_metric::{
     GetLatestFeedbackByMetricTool, GetLatestFeedbackByMetricToolParams,
 };
