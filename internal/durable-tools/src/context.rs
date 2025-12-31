@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use durable::{Durable, TaskContext, TaskHandle};
-use serde::{Serialize, de::DeserializeOwned};
+use durable::{Durable, SpawnOptions, TaskContext, TaskHandle};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -9,9 +9,23 @@ use tensorzero::{ClientInferenceParams, InferenceResponse};
 use uuid::Uuid;
 
 use crate::error::{ToolError, ToolResult};
-use crate::inference::{InferenceClient, InferenceError};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
+use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
+use tokio::sync::RwLockReadGuard;
+
+/// Handle returned by `spawn_tool`, can be joined later with `join_tool`.
+///
+/// This enum allows a uniform API for both `TaskTool` and `SimpleTool`:
+/// - `TaskTool`: spawns as a background subtask, `join_tool` waits for completion
+/// - `SimpleTool`: executes immediately (still checkpointed), `join_tool` returns stored result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ToolHandle {
+    /// TaskTool - runs in background, join waits for completion
+    Async(TaskHandle<JsonValue>),
+    /// SimpleTool - already executed, result stored inline
+    Sync(JsonValue),
+}
 
 /// Type alias for the Durable client with `ToolAppState`.
 pub type DurableClient = Durable<ToolAppState>;
@@ -25,8 +39,8 @@ pub struct ToolAppState {
     pool: PgPool,
     /// Tool registry for looking up and calling other tools.
     tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
-    /// Inference client for calling TensorZero inference.
-    inference_client: Arc<dyn InferenceClient>,
+    /// TensorZero client for calling inference and autopilot operations.
+    t0_client: Arc<dyn TensorZeroClient>,
 }
 
 impl ToolAppState {
@@ -34,12 +48,12 @@ impl ToolAppState {
     pub fn new(
         pool: PgPool,
         tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
-        inference_client: Arc<dyn InferenceClient>,
+        t0_client: Arc<dyn TensorZeroClient>,
     ) -> Self {
         Self {
             pool,
             tool_registry,
-            inference_client,
+            t0_client,
         }
     }
 
@@ -48,11 +62,11 @@ impl ToolAppState {
         &self.pool
     }
 
-    /// Get the inference client.
+    /// Get the TensorZero client.
     ///
     /// This provides access to inference, autopilot events, and other client operations.
-    pub fn inference_client(&self) -> &Arc<dyn InferenceClient> {
-        &self.inference_client
+    pub fn t0_client(&self) -> &Arc<dyn TensorZeroClient> {
+        &self.t0_client
     }
 }
 
@@ -114,14 +128,31 @@ impl<'a> ToolContext<'a> {
     /// ```ignore
     /// // Send a tool result to autopilot (checkpointed)
     /// ctx.step("send_result", params, |params, state| async move {
-    ///     state.inference_client()
+    ///     state.t0_client()
     ///         .create_autopilot_event(session_id, request)
     ///         .await
     ///         .map_err(|e| anyhow::anyhow!("{e}"))
     /// }).await?;
     /// ```
-    pub fn client(&self) -> Arc<dyn InferenceClient> {
-        self.app_state.inference_client.clone()
+    pub fn client(&self) -> Arc<dyn TensorZeroClient> {
+        self.app_state.t0_client.clone()
+    }
+
+    /// Get a read lock on the tool registry.
+    ///
+    /// Use this to iterate over tools and convert them to TensorZero tool definitions.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let registry = ctx.registry().await;
+    /// let tools: Result<Vec<Tool>, _> = registry.iter()
+    ///     .filter(|t| !t.is_durable())
+    ///     .map(Tool::try_from)
+    ///     .collect();
+    /// ```
+    pub async fn registry_read_lock(&self) -> RwLockReadGuard<'_, ToolRegistry> {
+        self.app_state.tool_registry.read().await
     }
 
     /// Get mutable access to the underlying durable `TaskContext`.
@@ -157,12 +188,19 @@ impl<'a> ToolContext<'a> {
             .map_err(Into::into)
     }
 
-    /// Call another tool by name with JSON params.
+    /// Call another tool by name and wait for its result.
     ///
-    /// Side info defaults to `null` (compatible with `SideInfo = ()`).
+    /// This is a convenience method that spawns and immediately joins.
+    /// For more control, use `spawn_tool` and `join_tool` separately.
     ///
     /// - For `TaskTool`: spawns as a subtask and joins to wait for completion
     /// - For `SimpleTool`: executes within a checkpointed step
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The registered name of the tool to call
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
     ///
     /// # Errors
     ///
@@ -171,25 +209,52 @@ impl<'a> ToolContext<'a> {
         &mut self,
         tool_name: &str,
         llm_params: JsonValue,
+        side_info: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<JsonValue> {
-        self.call_tool_with_side_info(tool_name, llm_params, serde_json::json!(null))
-            .await
+        let handle = self
+            .spawn_tool(tool_name, llm_params, side_info, options)
+            .await?;
+        self.join_tool(handle).await
     }
 
-    /// Call another tool by name with JSON params and explicit side info.
+    /// Spawn a tool without waiting for completion.
     ///
-    /// - For `TaskTool`: spawns as a subtask and joins to wait for completion
-    /// - For `SimpleTool`: executes within a checkpointed step
+    /// Returns a `ToolHandle` that can be joined later with `join_tool`.
+    ///
+    /// - For `TaskTool`: spawns as a background subtask
+    /// - For `SimpleTool`: executes immediately (still checkpointed), returns completed handle
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Spawn multiple tools
+    /// let h1 = ctx.spawn_tool("research", json!({"topic": "rust"}), json!(null)).await?;
+    /// let h2 = ctx.spawn_tool("search", json!({"query": "async"}), json!(null)).await?;
+    ///
+    /// // Do other work while TaskTools run in background...
+    ///
+    /// // Join to get results
+    /// let r1 = ctx.join_tool(h1).await?;
+    /// let r2 = ctx.join_tool(h2).await?;
+    /// ```
     ///
     /// # Errors
     ///
-    /// Returns an error if the tool is not found or execution fails.
-    pub async fn call_tool_with_side_info(
+    /// Returns an error if the tool is not found or spawning fails.
+    pub async fn spawn_tool(
         &mut self,
         tool_name: &str,
         llm_params: JsonValue,
         side_info: JsonValue,
-    ) -> ToolResult<JsonValue> {
+        options: SpawnOptions,
+    ) -> ToolResult<ToolHandle> {
         let is_durable = {
             let registry = self.app_state.tool_registry.read().await;
             registry
@@ -198,42 +263,41 @@ impl<'a> ToolContext<'a> {
         };
 
         if is_durable {
-            self.call_task_tool(tool_name, llm_params, side_info).await
+            // TaskTool: spawn as subtask
+            let call_id = self.next_tool_call_id();
+            let wrapped_params = TaskToolParams {
+                llm_params,
+                side_info,
+                episode_id: self.episode_id,
+            };
+            let wrapped_params = serde_json::to_value(wrapped_params)?;
+            let spawn_name = format!("spawn:{tool_name}:{call_id}");
+            let handle: TaskHandle<JsonValue> = self
+                .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params, options)
+                .await?;
+            Ok(ToolHandle::Async(handle))
         } else {
-            self.call_simple_tool(tool_name, llm_params, side_info)
-                .await
+            // SimpleTool: execute immediately (still checkpointed via step)
+            let result = self
+                .call_simple_tool(tool_name, llm_params, side_info)
+                .await?;
+            Ok(ToolHandle::Sync(result))
         }
     }
 
-    /// Call a `TaskTool` (spawns as subtask and waits for completion).
-    async fn call_task_tool(
-        &mut self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        side_info: JsonValue,
-    ) -> ToolResult<JsonValue> {
-        // Get a unique ID for this tool call to ensure each invocation
-        // spawns a new subtask, even when calling the same tool multiple times.
-        let call_id = self.next_tool_call_id();
-
-        // Wrap params with side_info and episode_id for the TaskToolAdapter
-        let wrapped_params = TaskToolParams {
-            llm_params,
-            side_info,
-            episode_id: self.episode_id,
-        };
-        let wrapped_params = serde_json::to_value(wrapped_params)?;
-
-        // Spawn the tool as a subtask using spawn_subtask_by_name
-        let spawn_name = format!("spawn:{tool_name}:{call_id}");
-        let handle: TaskHandle<JsonValue> = self
-            .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params)
-            .await?;
-
-        // Join and wait for result
-        let result: JsonValue = self.task_ctx.join(handle).await?;
-
-        Ok(result)
+    /// Wait for a spawned tool to complete and return its result.
+    ///
+    /// - For `Async` handles (TaskTool): waits for the subtask to complete
+    /// - For `Sync` handles (SimpleTool): returns the stored result immediately
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if joining fails or the tool execution failed.
+    pub async fn join_tool(&mut self, handle: ToolHandle) -> ToolResult<JsonValue> {
+        match handle {
+            ToolHandle::Async(h) => self.task_ctx.join(h).await.map_err(Into::into),
+            ToolHandle::Sync(result) => Ok(result),
+        }
     }
 
     /// Spawn a subtask by task name (for dynamic tool invocation).
@@ -245,10 +309,11 @@ impl<'a> ToolContext<'a> {
         name: &str,
         task_name: &str,
         params: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<TaskHandle<T>> {
         let handle: TaskHandle<T> = self
             .task_ctx
-            .spawn_by_name(name, task_name, params, durable::SpawnOptions::default())
+            .spawn_by_name(name, task_name, params, options)
             .await?;
         Ok(handle)
     }
@@ -275,7 +340,7 @@ impl<'a> ToolContext<'a> {
             (tool_name, task_id, call_id, llm_params, side_info),
             |(tool_name, task_id, call_id, llm_params, side_info), state| async move {
                 // Create SimpleToolContext
-                let simple_ctx = SimpleToolContext::new(&state.pool, &state.inference_client);
+                let simple_ctx = SimpleToolContext::new(&state.pool, &state.t0_client);
 
                 // Generate idempotency key using task_id and call_id
                 let idempotency_key = format!("{task_id}:{tool_name}:{call_id}");
@@ -398,7 +463,7 @@ impl<'a> ToolContext<'a> {
 
         self.step(&step_name, params, |params, state| async move {
             state
-                .inference_client
+                .t0_client
                 .inference(params)
                 .await
                 .map_err(|e| anyhow::anyhow!("{e}"))
@@ -411,19 +476,16 @@ impl<'a> ToolContext<'a> {
 ///
 /// `SimpleTools` run inside a `TaskTool`'s `step()` checkpoint, so they don't
 /// have access to checkpointing operations themselves. They can access the
-/// database pool for queries and the inference client for TensorZero calls.
+/// database pool for queries and the TensorZero client for inference calls.
 pub struct SimpleToolContext<'a> {
     pool: &'a PgPool,
-    inference_client: &'a Arc<dyn InferenceClient>,
+    t0_client: &'a Arc<dyn TensorZeroClient>,
 }
 
 impl<'a> SimpleToolContext<'a> {
     /// Create a new simple tool context.
-    pub fn new(pool: &'a PgPool, inference_client: &'a Arc<dyn InferenceClient>) -> Self {
-        Self {
-            pool,
-            inference_client,
-        }
+    pub fn new(pool: &'a PgPool, t0_client: &'a Arc<dyn TensorZeroClient>) -> Self {
+        Self { pool, t0_client }
     }
 
     /// Get a reference to the database pool.
@@ -431,13 +493,13 @@ impl<'a> SimpleToolContext<'a> {
         self.pool
     }
 
-    /// Get the inference client for direct access to all client operations.
+    /// Get the TensorZero client for direct access to all client operations.
     ///
     /// This provides access to inference, autopilot events, and other client operations.
     /// Note: `SimpleTools` run inside a `TaskTool`'s `step()`, so client calls
     /// are already checkpointed by the outer step.
-    pub fn client(&self) -> &Arc<dyn InferenceClient> {
-        self.inference_client
+    pub fn client(&self) -> &Arc<dyn TensorZeroClient> {
+        self.t0_client
     }
 
     /// Call TensorZero inference.
@@ -451,7 +513,7 @@ impl<'a> SimpleToolContext<'a> {
     pub async fn inference(
         &self,
         params: ClientInferenceParams,
-    ) -> Result<InferenceResponse, InferenceError> {
-        self.inference_client.inference(params).await
+    ) -> Result<InferenceResponse, TensorZeroClientError> {
+        self.t0_client.inference(params).await
     }
 }

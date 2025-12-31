@@ -22,4 +22,5 @@ export type UninitializedFireworksSFTConfig = {
   mtp_enabled?: boolean;
   mtp_num_draft_tokens?: number;
   mtp_freeze_base_model?: boolean;
+  deploy_after_training?: boolean;
 };

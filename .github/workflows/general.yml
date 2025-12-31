@@ -122,6 +122,14 @@ jobs:
           ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           ANTHROPIC_API_KEY=dummy docker compose down
 
+      - name: Apply Postgres migrations for the centralize-auth-rate-limits-and-more/auth example
+        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/docs/guides/operations/centralize-auth-rate-limits-and-more/auth
+          OPENAI_API_KEY=dummy docker compose run --rm relay-gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose down
+
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
 
@@ -191,6 +199,14 @@ jobs:
           cd examples/blog/bandits-in-your-llm-gateway
           ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           ANTHROPIC_API_KEY=dummy docker compose down
+
+      - name: Apply Postgres migrations for the centralize-auth-rate-limits-and-more/auth example
+        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/docs/guides/operations/centralize-auth-rate-limits-and-more/auth
+          OPENAI_API_KEY=dummy docker compose run --rm relay-gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose down
 
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
@@ -712,6 +728,9 @@ jobs:
       - name: Run cargo-deny
         run: cargo deny check
 
+      - name: Check durable dependencies
+        run: ./ci/check-durable-deps.sh
+
       - name: Run cargo fmt
         run: cargo fmt --all --check
 
@@ -1031,7 +1050,7 @@ jobs:
 
   build-gateway-e2e-container:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
-    if: github.repository == 'tensorzero/tensorzero'
+    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
       contents: read

@@ -11,7 +11,6 @@ use reqwest_eventsource::{Event as SseEvent, EventSource};
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
-use tracing::warn;
 use url::Url;
 use uuid::Uuid;
 
@@ -247,52 +246,48 @@ impl AutopilotClient {
         }
     }
 
-    async fn handle_tool_call_approval(
+    /// Spawns a durable task to execute an approved tool call.
+    ///
+    /// This is called after a `ToolCallAuthorization` event with `Approved` status
+    /// is successfully created. It retrieves the original tool call details and
+    /// spawns the corresponding durable task for execution.
+    ///
+    /// # Tool Call Lookup
+    ///
+    /// The function first checks the local cache for the tool call. If not found,
+    /// it fetches the tool call event directly from the API using `get_event`.
+    ///
+    /// # Side Info
+    ///
+    /// The spawned task receives side info containing:
+    /// - `tool_call_event_id`: The event ID of the original tool call
+    /// - `tool_call_id`: The tool call ID from the LLM response
+    /// - `session_id`: The session this tool call belongs to
+    /// - `deployment_id`: The deployment that generated this tool call
+    /// - `inner`: Reserved for user-provided side info (currently `null`)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Fetching the tool call event fails
+    /// - The event is not a tool call
+    /// - Tool call arguments cannot be parsed as JSON
+    /// - Spawning the durable task fails
+    async fn handle_tool_call_authorization(
         &self,
         session_id: Uuid,
         deployment_id: Uuid,
         tool_call_event_id: Uuid,
-    ) {
-        let mut tool_call = self.tool_call_cache.get(&tool_call_event_id);
-
-        if tool_call.is_none() {
-            match self
-                .list_events(session_id, ListEventsParams::default())
-                .await
-            {
-                Ok(response) => {
-                    tool_call = response.pending_tool_calls.iter().find_map(|event| {
-                        if event.id == tool_call_event_id {
-                            match &event.payload {
-                                EventPayload::ToolCall(tool_call) => {
-                                    self.tool_call_cache.insert(event.id, tool_call.clone());
-                                    Some(tool_call.clone())
-                                }
-                                _ => None,
-                            }
-                        } else {
-                            None
-                        }
-                    });
-                }
-                Err(err) => {
-                    warn!(
-                        tool_call_event_id = %tool_call_event_id,
-                        "Failed to fetch tool call approval details: {err}"
-                    );
-                    return;
-                }
-            }
-        }
-
-        let tool_call = match tool_call {
-            Some(tool_call) => tool_call,
+    ) -> Result<(), AutopilotError> {
+        // Check cache first, otherwise fetch the tool call event directly
+        let tool_call = match self.tool_call_cache.get(&tool_call_event_id) {
+            Some(tc) => tc,
             None => {
-                warn!(
-                    tool_call_event_id = %tool_call_event_id,
-                    "Tool call approval received without matching pending tool call"
-                );
-                return;
+                let event = self.get_event(session_id, tool_call_event_id).await?;
+                match event.payload {
+                    EventPayload::ToolCall(tc) => tc,
+                    _ => return Err(AutopilotError::ToolCallNotFound(tool_call_event_id)),
+                }
             }
         };
 
@@ -300,17 +295,7 @@ impl AutopilotClient {
         let tool_name = tool_call.name.clone();
         let tool_arguments = tool_call.arguments.clone();
 
-        let llm_params = match serde_json::from_str::<JsonValue>(&tool_arguments) {
-            Ok(value) => value,
-            Err(err) => {
-                warn!(
-                    tool_call_event_id = %tool_call_event_id,
-                    tool_name = %tool_name,
-                    "Failed to parse tool call arguments as JSON: {err}"
-                );
-                JsonValue::String(tool_arguments.clone())
-            }
-        };
+        let llm_params = serde_json::from_str::<JsonValue>(&tool_arguments)?;
 
         let side_info = serde_json::json!({
             "tool_call_event_id": tool_call_event_id,
@@ -321,17 +306,11 @@ impl AutopilotClient {
         });
 
         let episode_id = Uuid::now_v7();
-        if let Err(err) = self
-            .spawn_client
-            .spawn_tool_by_name_with_side_info(&tool_name, llm_params, side_info, episode_id)
-            .await
-        {
-            warn!(
-                tool_call_event_id = %tool_call_event_id,
-                tool_name = %tool_name,
-                "Failed to spawn tool call: {err}"
-            );
-        }
+        self.spawn_client
+            .spawn_tool_by_name(&tool_name, llm_params, side_info, episode_id)
+            .await?;
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
@@ -408,6 +387,27 @@ impl AutopilotClient {
         Ok(body)
     }
 
+    /// Gets a single event by ID.
+    pub async fn get_event(
+        &self,
+        session_id: Uuid,
+        event_id: Uuid,
+    ) -> Result<Event, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/events/{event_id}"))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let event: Event = response.json().await?;
+        self.cache_tool_call_event(&event);
+        Ok(event)
+    }
+
     /// Creates an event in a session.
     ///
     /// Use `Uuid::nil()` as the `session_id` to create a new session.
@@ -440,8 +440,8 @@ impl AutopilotClient {
         let body: CreateEventResponse = response.json().await?;
 
         if let Some(tool_call_event_id) = tool_call_event_id {
-            self.handle_tool_call_approval(session_id, deployment_id, tool_call_event_id)
-                .await;
+            self.handle_tool_call_authorization(session_id, deployment_id, tool_call_event_id)
+                .await?;
         }
 
         Ok(body)

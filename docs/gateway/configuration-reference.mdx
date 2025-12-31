@@ -178,6 +178,21 @@ Setting this value too low may cause legitimate requests to timeout before recei
 
 </Warning>
 
+### `metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`
+
+- **Type:** array of floats
+- **Required:** no (default: disabled)
+
+Enable the `tensorzero_inference_latency_overhead_seconds_histogram` Prometheus metric with the specified histogram buckets.
+This metric tracks the latency overhead introduced by TensorZero on HTTP requests.
+
+The buckets must be in strictly ascending order and contain at least one value.
+
+```toml title="tensorzero.toml"
+[gateway.metrics]
+tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
+```
+
 ### `observability.async_writes`
 
 - **Type:** boolean
@@ -256,22 +271,47 @@ If `true`, then the migrations are not applied upon launch and must instead be a
 by running `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations` or `docker compose run --rm gateway --run-clickhouse-migrations`.
 If `false`, then the migrations are run automatically upon launch.
 
-### `metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`
+See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
 
-- **Type:** array of floats
-- **Required:** no (default: disabled)
+### `relay`
 
-Enable the `tensorzero_inference_latency_overhead_seconds_histogram` Prometheus metric with the specified histogram buckets.
-This metric tracks the latency overhead introduced by TensorZero on HTTP requests.
+Configure gateway relay to forward inference requests through another TensorZero Gateway.
+See [Centralize auth, rate limits, and more](/operations/centralize-auth-rate-limits-and-more) for a complete guide.
 
-The buckets must be in strictly ascending order and contain at least one value.
+#### `api_key_location`
+
+- **Type:** string or object
+- **Required:** no
+
+Defines the location of the API key for authenticating with the relay gateway.
+If unset, no API key will be sent.
+
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none`.
+
+See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
-[gateway.metrics]
-tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
+[gateway.relay]
+gateway_url = "http://relay-gateway:3000"
+api_key_location = "env::TENSORZERO_RELAY_API_KEY"
+# api_key_location = "dynamic::relay_api_key"
+# api_key_location = { default = "dynamic::relay_api_key", fallback = "env::TENSORZERO_RELAY_API_KEY" }
 ```
 
-See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
+#### `gateway_url`
+
+- **Type:** string (URL)
+- **Required:** no
+
+The base URL of the relay gateway to forward inference requests to.
+When set, all model inference requests will be forwarded to this gateway URL instead of calling the model providers directly.
+
+```toml title="tensorzero.toml"
+[gateway.relay]
+gateway_url = "http://relay-gateway:3000"
+```
 
 ### `template_filesystem_access.base_path`
 
@@ -327,6 +367,27 @@ routing = ["openai", "azure"]
 [models.gpt-4o.providers.azure]
 # ...
 ```
+
+### `skip_relay`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+When set to `true`, this model will bypass the [relay gateway](/operations/centralize-auth-rate-limits-and-more) and call its providers directly.
+This is useful when you want certain models to skip centralized controls like rate limits or credential management.
+
+```toml title="tensorzero.toml"
+[models.gpt-4o-edge]
+routing = ["openai"]
+skip_relay = true
+
+[models.gpt-4o-edge.providers.openai]
+type = "openai"
+model_name = "gpt-4o"
+```
+
+Models that skip the relay won't benefit from centralized rate limits, auth policies, or credential management enforced by the relay gateway.
+The edge gateway must have the necessary provider credentials configured to make direct requests.
 
 ### `timeouts`
 
@@ -564,7 +625,7 @@ model_name = "claude-3-haiku-20240307"
 
 Defines the location of the API key for the Anthropic provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none`.
 
@@ -754,7 +815,7 @@ You only need to set the `deployment_id` and `endpoint` fields.
 
 Defines the location of the API key for the Azure OpenAI provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none`.
 
@@ -816,7 +877,7 @@ If the endpoint starts with `dynamic::`, the succeeding value will be treated as
 
 Defines the location of the API key for the DeepSeek provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -857,7 +918,7 @@ model_name = "deepseek-chat"
 
 Defines the location of the API key for the Fireworks provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -900,7 +961,7 @@ model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 
 Defines the location of the credentials for the GCP Vertex Anthropic provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `path_from_env::ENVIRONMENT_VARIABLE`, `dynamic::CREDENTIALS_ARGUMENT_NAME`, `path::PATH_TO_CREDENTIALS_FILE`, and `sdk` (use Google Cloud SDK to auto-discover credentials).
 
@@ -987,7 +1048,7 @@ project_id = "your-project-id"
 
 Defines the location of the credentials for the GCP Vertex Gemini provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `path_from_env::ENVIRONMENT_VARIABLE`, `dynamic::CREDENTIALS_ARGUMENT_NAME`, `path::PATH_TO_CREDENTIALS_FILE`, and `sdk` (use Google Cloud SDK to auto-discover credentials).
 
@@ -1072,7 +1133,7 @@ project_id = "your-project-id"
 
 Defines the location of the API key for the Google AI Studio Gemini provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1114,7 +1175,7 @@ model_name = "gemini-1.5-flash-001"
 
 Defines the location of the API key for the Groq provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1156,7 +1217,7 @@ model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 Defines the location of the API key for the Hyperbolic provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1198,7 +1259,7 @@ model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
 
 Defines the location of the API key for the Mistral provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1258,7 +1319,7 @@ api_base = "https://api.openai.com/v1/"
 
 Defines the location of the API key for the OpenAI provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1360,7 +1421,7 @@ provider_tools = [{type = "web_search"}]  # Enable OpenAI's built-in web search 
 
 Defines the location of the API key for the OpenRouter provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1417,7 +1478,7 @@ api_base = "http://localhost:8080/v1/"
 
 Defines the location of the API key for the SGLang provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1443,7 +1504,7 @@ api_key_location = "dynamic::sglang_api_key"
 
 Defines the location of the API key for the Together AI provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1517,7 +1578,7 @@ model_name = "microsoft/Phi-3.5-mini-instruct"
 
 Defines the location of the API key for the vLLM provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1543,7 +1604,7 @@ api_key_location = "dynamic::vllm_api_key"
 
 Defines the location of the API key for the xAI provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1600,7 +1661,7 @@ api_base = "http://localhost:8080/v1/"
 
 Defines the location of the API key for the TGI provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1791,7 +1852,7 @@ api_base = "https://api.openai.com/v1/"
 
 Defines the location of the API key for the OpenAI provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1838,7 +1899,7 @@ The `provider_types` section of the configuration allows users to specify global
 
 Defines the default location of the API key for Anthropic models.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1862,7 +1923,7 @@ api_key_location = "dynamic::anthropic_api_key"
 
 Defines the default location of the API key for Azure models.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1885,7 +1946,7 @@ api_key_location = "dynamic::azure_openai_api_key"
 
 Defines the location of the API key for the DeepSeek provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1908,7 +1969,7 @@ api_key_location = "dynamic::deepseek_api_key"
 
 Defines the location of the API key for the Fireworks provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -1945,7 +2006,7 @@ Your Fireworks account ID, used for fine-tuning job management.
 
 Defines the location of the credentials for the GCP Vertex Anthropic provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME`, `path::PATH_TO_CREDENTIALS_FILE`, and `path_from_env::ENVIRONMENT_VARIABLE` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -2057,7 +2118,7 @@ Optional service account email for fine-tuning operations.
 
 Defines the location of the credentials for the GCP Vertex Gemini provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME`, `path::PATH_TO_CREDENTIALS_FILE`, and `path_from_env::ENVIRONMENT_VARIABLE` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -2081,7 +2142,7 @@ credential_location = "dynamic::gcp_credentials_path"
 
 Defines the location of the API key for the Google AI Studio provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -2104,7 +2165,7 @@ api_key_location = "dynamic::google_ai_studio_api_key"
 
 Defines the location of the API key for the Groq provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -2127,7 +2188,7 @@ api_key_location = "dynamic::groq_api_key"
 
 Defines the location of the API key for the Hyperbolic provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -2150,7 +2211,7 @@ api_key_location = "dynamic::hyperbolic_api_key"
 
 Defines the location of the API key for the Mistral provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -2173,7 +2234,7 @@ api_key_location = "dynamic::mistral_api_key"
 
 Defines the location of the API key for the OpenAI provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -2196,7 +2257,7 @@ api_key_location = "dynamic::openai_api_key"
 
 Defines the location of the API key for the OpenRouter provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -2219,7 +2280,7 @@ api_key_location = "dynamic::openrouter_api_key"
 
 Defines the location of the API key for the Together provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
@@ -2277,7 +2338,7 @@ Weights & Biases project name for organizing fine-tuning experiments.
 
 Defines the location of the API key for the xAI provider.
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 

@@ -3,7 +3,7 @@
 use durable::{Durable, DurableBuilder, SpawnOptions, SpawnResult};
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value as JsonValue;
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool, Postgres};
 use uuid::Uuid;
 
 use crate::error::SpawnError;
@@ -32,6 +32,7 @@ use crate::params::TaskToolParams;
 /// client.spawn_tool_by_name(
 ///     "research",
 ///     serde_json::json!({"topic": "rust"}),
+///     serde_json::json!(null),  // side_info
 ///     episode_id,
 /// ).await?;
 /// ```
@@ -47,32 +48,17 @@ impl SpawnClient {
 
     /// Spawn a task by name with JSON parameters.
     ///
-    /// Side info defaults to `null` (compatible with `SideInfo = ()`).
+    /// # Arguments
+    ///
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    /// * `episode_id` - The episode ID for this execution
     ///
     /// # Errors
     ///
     /// Returns an error if spawning the task fails.
     pub async fn spawn_tool_by_name(
-        &self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        episode_id: Uuid,
-    ) -> Result<SpawnResult, SpawnError> {
-        self.spawn_tool_by_name_with_side_info(
-            tool_name,
-            llm_params,
-            serde_json::json!(null),
-            episode_id,
-        )
-        .await
-    }
-
-    /// Spawn a task by name with JSON parameters and explicit side info.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the task fails.
-    pub async fn spawn_tool_by_name_with_side_info(
         &self,
         tool_name: &str,
         llm_params: JsonValue,
@@ -109,7 +95,99 @@ impl SpawnClient {
         };
 
         self.durable
-            .spawn_by_name(tool_name, serde_json::to_value(wrapped_params)?, options)
+            .spawn_by_name_unchecked(tool_name, serde_json::to_value(wrapped_params)?, options)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Spawn a task by name using a custom executor (e.g., a transaction).
+    ///
+    /// This allows you to atomically enqueue a task as part of a larger transaction.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut tx = client.pool().begin().await?;
+    ///
+    /// sqlx::query("INSERT INTO orders (id) VALUES ($1)")
+    ///     .bind(order_id)
+    ///     .execute(&mut *tx)
+    ///     .await?;
+    ///
+    /// client.spawn_tool_by_name_with(
+    ///     &mut *tx,
+    ///     "process_order",
+    ///     serde_json::json!({"order_id": order_id}),
+    ///     serde_json::json!(null),
+    ///     episode_id,
+    /// ).await?;
+    ///
+    /// tx.commit().await?;
+    /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `executor` - The executor to use (e.g., `&mut *tx` for a transaction)
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    /// * `episode_id` - The episode ID for this execution
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if spawning the task fails.
+    pub async fn spawn_tool_by_name_with<'e, E>(
+        &self,
+        executor: E,
+        tool_name: &str,
+        llm_params: JsonValue,
+        side_info: JsonValue,
+        episode_id: Uuid,
+    ) -> Result<SpawnResult, SpawnError>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
+        self.spawn_tool_by_name_with_options_with(
+            executor,
+            tool_name,
+            llm_params,
+            side_info,
+            episode_id,
+            SpawnOptions::default(),
+        )
+        .await
+    }
+
+    /// Spawn a task by name with custom spawn options using a custom executor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if spawning the task fails.
+    pub async fn spawn_tool_by_name_with_options_with<'e, E>(
+        &self,
+        executor: E,
+        tool_name: &str,
+        llm_params: JsonValue,
+        side_info: JsonValue,
+        episode_id: Uuid,
+        options: SpawnOptions,
+    ) -> Result<SpawnResult, SpawnError>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
+        let wrapped_params = TaskToolParams {
+            llm_params,
+            side_info,
+            episode_id,
+        };
+
+        self.durable
+            .spawn_by_name_unchecked_with(
+                executor,
+                tool_name,
+                serde_json::to_value(wrapped_params)?,
+                options,
+            )
             .await
             .map_err(Into::into)
     }
