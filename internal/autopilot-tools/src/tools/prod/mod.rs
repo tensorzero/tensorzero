@@ -10,6 +10,7 @@ mod feedback;
 mod get_datapoints;
 mod get_latest_feedback_by_metric;
 mod inference;
+mod launch_optimization_workflow;
 mod list_datapoints;
 mod update_datapoints;
 
@@ -24,5 +25,9 @@ pub use get_latest_feedback_by_metric::{
     GetLatestFeedbackByMetricTool, GetLatestFeedbackByMetricToolParams,
 };
 pub use inference::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
+pub use launch_optimization_workflow::{
+    LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolOutput,
+    LaunchOptimizationWorkflowToolParams, OptimizationWorkflowSideInfo,
+};
 pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};

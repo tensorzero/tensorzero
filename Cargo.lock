@@ -334,6 +334,7 @@ dependencies = [
 name = "autopilot-tools"
 version = "2025.12.6"
 dependencies = [
+ "anyhow",
  "async-trait",
  "durable",
  "durable-tools",
@@ -344,6 +345,7 @@ dependencies = [
  "sqlx",
  "tensorzero",
  "tensorzero-core",
+ "tensorzero-optimizers",
  "tokio",
  "uuid",
 ]
@@ -364,6 +366,7 @@ dependencies = [
  "sqlx",
  "tensorzero",
  "tensorzero-core",
+ "tensorzero-optimizers",
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
@@ -1859,6 +1862,7 @@ dependencies = [
  "sqlx",
  "tensorzero",
  "tensorzero-core",
+ "tensorzero-optimizers",
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",

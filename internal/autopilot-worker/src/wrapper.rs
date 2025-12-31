@@ -305,6 +305,8 @@ mod tests {
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+    use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
+    use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
     // Mock TensorZeroClient using mockall::mock! macro
     // (same pattern as autopilot-tools/tests/common/mod.rs)
@@ -381,6 +383,16 @@ mod tests {
                 dataset_name: String,
                 ids: Vec<Uuid>,
             ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+            async fn launch_optimization_workflow(
+                &self,
+                params: LaunchOptimizationWorkflowParams,
+            ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
+
+            async fn poll_optimization(
+                &self,
+                job_handle: &OptimizationJobHandle,
+            ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
 
             async fn get_latest_feedback_id_by_metric(
                 &self,

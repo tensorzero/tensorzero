@@ -18,7 +18,9 @@ use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Input, InputMessage, Text};
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use uuid::Uuid;
 
 // Generate mock using mockall's mock! macro
@@ -95,6 +97,16 @@ mock! {
             dataset_name: String,
             ids: Vec<Uuid>,
         ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+        async fn launch_optimization_workflow(
+            &self,
+            params: LaunchOptimizationWorkflowParams,
+        ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
+
+        async fn poll_optimization(
+            &self,
+            job_handle: &OptimizationJobHandle,
+        ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
 
         async fn get_latest_feedback_id_by_metric(
             &self,
