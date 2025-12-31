@@ -1,4 +1,4 @@
-import { Link, type RouteHandle, Await } from "react-router";
+import { Link, type RouteHandle, Await, useAsyncError } from "react-router";
 import * as React from "react";
 import { Card } from "~/components/ui/card";
 import { PageLayout } from "~/components/layout/PageLayout";
@@ -19,14 +19,15 @@ import {
   Playground,
   Model,
 } from "~/components/icons/Icons";
-import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
 import type { Route } from "./+types/index";
-import {
-  countWorkflowEvaluationProjects,
-  countWorkflowEvaluationRuns,
-} from "~/utils/clickhouse/workflow_evaluations.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { getErrorDetails } from "~/utils/tensorzero/errors";
 
 export const handle: RouteHandle = {
   hideBreadcrumbs: true,
@@ -67,7 +68,10 @@ function DirectoryCard({
                   <span className="bg-bg-tertiary inline-block h-3 w-16 animate-pulse rounded"></span>
                 }
               >
-                <Await resolve={description}>
+                <Await
+                  resolve={description}
+                  errorElement={<DirectoryCardDescriptionError />}
+                >
                   {(resolvedDescription) => resolvedDescription}
                 </Await>
               </React.Suspense>
@@ -76,6 +80,25 @@ function DirectoryCard({
         </div>
       </Card>
     </Link>
+  );
+}
+
+function DirectoryCardDescriptionError() {
+  const error = useAsyncError();
+  const { message, status } = getErrorDetails(error);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help text-red-600 underline decoration-dotted">
+          Error
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {message}
+        {status && ` (${status})`}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -105,13 +128,14 @@ export async function loader() {
   const httpClient = getTensorZeroClient();
 
   // Create the promises
-  const countsInfoPromise = countInferencesByFunction();
+  const countsInfoPromise = httpClient.listFunctionsWithInferenceCount();
   const episodesPromise = httpClient.queryEpisodeTableBounds();
   const datasetMetadataPromise = httpClient.listDatasets({});
   const numEvaluationRunsPromise = httpClient.countEvaluationRuns();
-  const numWorkflowEvaluationRunsPromise = countWorkflowEvaluationRuns();
+  const numWorkflowEvaluationRunsPromise =
+    httpClient.countWorkflowEvaluationRuns();
   const numWorkflowEvaluationRunProjectsPromise =
-    countWorkflowEvaluationProjects();
+    httpClient.countWorkflowEvaluationProjects();
   const configPromise = getConfig();
   const functionConfigsPromise = getAllFunctionConfigs();
   const numModelsUsedPromise = httpClient
@@ -120,7 +144,10 @@ export async function loader() {
 
   // Create derived promises - these will be stable references
   const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
-    const total = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+    const total = countsInfo.reduce(
+      (acc, curr) => acc + curr.inference_count,
+      0,
+    );
     return `${total.toLocaleString()} inferences`;
   });
 

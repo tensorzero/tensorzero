@@ -1,4 +1,4 @@
-use crate::common::{OptimizationTestCase, mock_inference_provider_base};
+use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
     UninitializedOptimizerConfig, UninitializedOptimizerInfo,
     together_sft::{
@@ -18,17 +18,12 @@ impl OptimizationTestCase for TogetherSFTTestCase {
         false
     }
 
-    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
+    fn get_optimizer_info(&self) -> UninitializedOptimizerInfo {
+        // Note: mock mode is configured via provider_types.together.sft in the test config file
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::TogetherSFT(Box::new(
                 UninitializedTogetherSFTConfig {
                     model: "meta-llama/Meta-Llama-3.1-8B-Instruct-Reference".to_string(),
-                    credentials: None,
-                    api_base: if use_mock_inference_provider {
-                        Some(mock_inference_provider_base().join("together/").unwrap())
-                    } else {
-                        None
-                    },
                     // Minimal hyperparameters for economical testing
                     n_epochs: 1,
                     n_checkpoints: 1,
@@ -41,10 +36,7 @@ impl OptimizationTestCase for TogetherSFTTestCase {
                     suffix: None,
                     // Learning rate scheduler
                     lr_scheduler: TogetherLRScheduler::default(),
-                    // Weights & Biases integration
-                    wandb_api_key: None,
-                    wandb_base_url: None,
-                    wandb_project_name: None,
+                    // Per-job wandb name (provider-level wandb settings come from config)
                     wandb_name: None,
                     // Training method
                     training_method: TogetherTrainingMethod::default(),
@@ -54,7 +46,6 @@ impl OptimizationTestCase for TogetherSFTTestCase {
                     from_checkpoint: None,
                     from_hf_model: None,
                     hf_model_revision: None,
-                    hf_api_token: None,
                     hf_output_repo_name: None,
                 },
             )),

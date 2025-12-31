@@ -172,7 +172,7 @@ impl HttpConnector for ReqwestConnector {
             let reqwest_response = req_builder.send().await.map_err(CallError::from)?;
 
             // Converts from a reqwest Response into an http::Response<SdkBody>.
-            let (parts, body) = http::Response::from(reqwest_response).into_parts();
+            let (parts, body) = reqwest_response.into_http_response().into_parts();
             let http_response = http::Response::from_parts(parts, SdkBody::from_body_1_x(body));
 
             Ok(

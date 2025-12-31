@@ -175,7 +175,7 @@ async fn test_log_early_drop_non_streaming() {
 
     // Cancel the request early, and verify that the gateway logs a warning,
     // even though we aren't logging the request start/stop
-    let _elapsed = tokio::time::timeout(Duration::from_millis(500), response_fut)
+    let _elapsed = tokio::time::timeout(Duration::from_millis(200), response_fut)
         .await
         .unwrap_err();
 
@@ -189,10 +189,12 @@ async fn test_log_early_drop_non_streaming() {
         "Unexpected log line: {next_line}"
     );
     assert!(
-        next_line.contains(
-            r#""method":"POST","uri":"/inference","version":"HTTP/1.1","name":"request""#
-        ),
+        next_line.contains(r#""uri":"/inference","version":"HTTP/1.1","name":"request""#),
         "Log line missing request information: {next_line}"
+    );
+    assert!(
+        !next_line.contains("overhead"),
+        "Tensorzero overhead attributes should not be logged to console: {next_line}"
     );
     assert!(
         next_line.contains("WARN"),

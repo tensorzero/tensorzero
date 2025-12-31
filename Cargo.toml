@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "tensorzero-core",
-    "tensorzero-core/tests/mock-inference-provider",
+    "tensorzero-core/tests/mock-provider-api",
     "tensorzero-core/tests/load/rate-limit-load-test",
     "tensorzero-core/tests/load/feedback",
     "gateway",
@@ -15,18 +15,23 @@ members = [
     "internal/tensorzero-auth",
     "internal/tensorzero-unsafe-helpers",
     "internal/minijinja-utils",
-    "examples/integrations/cursor/feedback",
+    "internal/autopilot-client",
+    "internal/autopilot-tools",
+    "internal/durable-tools-spawn",
+    "internal/durable-tools",
+    "internal/tensorzero-types",
+    "internal/autopilot-worker",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2025.12.3"
+version = "2025.12.6"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 edition = "2024"
 
 [workspace.dependencies]
-reqwest = { version = "0.12.26", features = [
+reqwest = { version = "0.12.28", features = [
     "json",
     "multipart",
     "rustls-tls",
@@ -42,6 +47,7 @@ reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 async-trait = "0.1.89"
 http = "1.4.0"
+infer = "0.19.0"
 tokio-stream = "0.1.15"
 tokio = { version = "1.48.0", features = ["full"] }
 tracing = { version = "0.1.43", features = ["log"] }
@@ -51,6 +57,7 @@ anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
 clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.30"
+thiserror = "2.0.17"
 lazy_static = { version = "1.5.0" }
 minijinja = { version = "2.14.0", features = [
     "loader",
@@ -83,13 +90,14 @@ tower-http = { version = "0.6.7", features = ["trace"] }
 mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
     "serde1",
 ] }
-sqlx = { version = "0.8.6", features = [
+sqlx = { version = "0.9.0-alpha.1", features = [
     "runtime-tokio",
     "tls-rustls",
     "postgres",
     "migrate",
     "chrono",
     "uuid",
+    "sqlx-toml",
 ] }
 rlt = "0.2.1"
 metrics-exporter-prometheus = { version = "0.18.1", features = [
@@ -98,6 +106,11 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 blake3 = "1.8.2"
 moka = { version = "0.12.10", features = ["sync"] }
+durable = { git = "https://github.com/tensorzero/durable", rev = "161e9e5479c1ba87d6310fcd8b276f4b9f7444d6" }
+durable-tools-spawn = { path = "internal/durable-tools-spawn" }
+tensorzero = { path = "clients/rust" }
+tensorzero-core = { path = "tensorzero-core" }
+regex = "1.12.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -134,6 +147,12 @@ unused_self = "deny"
 unwrap_used = "deny"
 large_futures = "deny"
 explicit_into_iter_loop = "deny"
+cloned_instead_of_copied = "deny"
+inefficient_to_string = "deny"
+assigning_clones = "deny"
+stable_sort_primitive = "deny"
+ref_option = "deny"
+unnecessary_literal_bound = "deny"
 
 # The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
 default_trait_access = "allow"

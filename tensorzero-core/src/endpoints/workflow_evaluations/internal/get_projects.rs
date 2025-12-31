@@ -2,17 +2,25 @@
 
 use axum::Json;
 use axum::extract::{Query, State};
+use serde::Deserialize;
 use tracing::instrument;
 
-use super::types::{
-    GetWorkflowEvaluationProjectsParams, GetWorkflowEvaluationProjectsResponse,
-    WorkflowEvaluationProject,
-};
+use super::types::{GetWorkflowEvaluationProjectsResponse, WorkflowEvaluationProject};
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
-/// Handler for `GET /internal/workflow-evaluations/projects`
+/// Query parameters for getting workflow evaluation projects.
+#[derive(Debug, Deserialize)]
+pub struct GetWorkflowEvaluationProjectsParams {
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
+
+const DEFAULT_GET_WORKFLOW_EVALUATION_PROJECTS_LIMIT: u32 = 100;
+const DEFAULT_GET_WORKFLOW_EVALUATION_PROJECTS_OFFSET: u32 = 0;
+
+/// Handler for `GET /internal/workflow_evaluations/projects`
 ///
 /// Returns a paginated list of workflow evaluation projects.
 #[axum::debug_handler(state = AppStateData)]
@@ -23,8 +31,12 @@ pub async fn get_workflow_evaluation_projects_handler(
 ) -> Result<Json<GetWorkflowEvaluationProjectsResponse>, Error> {
     let response = get_workflow_evaluation_projects(
         &app_state.clickhouse_connection_info,
-        params.limit,
-        params.offset,
+        params
+            .limit
+            .unwrap_or(DEFAULT_GET_WORKFLOW_EVALUATION_PROJECTS_LIMIT),
+        params
+            .offset
+            .unwrap_or(DEFAULT_GET_WORKFLOW_EVALUATION_PROJECTS_OFFSET),
     )
     .await?;
 

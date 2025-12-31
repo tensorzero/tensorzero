@@ -33,6 +33,11 @@ from tensorzero import (
 )
 from tensorzero.util import uuid7
 
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "mock: tests that require the mock provider API")
+
+
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",

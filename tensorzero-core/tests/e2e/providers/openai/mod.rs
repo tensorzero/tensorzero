@@ -181,13 +181,6 @@ async fn get_providers() -> E2ETestProviders {
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            supports_batch_inference: true,
-            variant_name: "openai-cot".to_string(),
-            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
-            model_provider_name: "openai".into(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "openai-responses".to_string(),
             model_name: "responses-gpt-4o-mini-2024-07-18".into(),
@@ -727,6 +720,86 @@ async fn test_default_function_invalid_model_name() {
         "Unexpected error: {text}"
     );
     assert_eq!(status, StatusCode::BAD_GATEWAY);
+}
+
+/// Test that OpenAI errors include the request_id in the error message (non-streaming)
+#[tokio::test]
+async fn test_openai_error_includes_request_id() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "openai::my-invalid-model-for-request-id-test",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "This should fail with a request ID in the error"
+                }
+            ]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // OpenAI returns 404 for invalid model, gateway returns 502 Bad Gateway
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+    let response_json = response.json::<Value>().await.unwrap();
+    let error = response_json["error"].as_str().unwrap();
+
+    // OpenAI request IDs always start with "req_"
+    assert!(
+        error.contains("[request_id: req_"),
+        "Error should contain request_id: {error}"
+    );
+}
+
+/// Test that OpenAI errors include the request_id in the error message (streaming)
+#[tokio::test]
+async fn test_openai_streaming_error_includes_request_id() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "openai::my-invalid-model-for-request-id-test",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "This should fail with a request ID in the error"
+                }
+            ]
+        },
+        "stream": true,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Streaming errors for invalid model fail upfront before the stream starts
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+    let response_json = response.json::<Value>().await.unwrap();
+    let error = response_json["error"].as_str().unwrap();
+
+    // OpenAI request IDs always start with "req_"
+    assert!(
+        error.contains("[request_id: req_"),
+        "Streaming error should contain request_id: {error}"
+    );
 }
 
 #[tokio::test]

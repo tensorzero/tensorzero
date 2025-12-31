@@ -6,6 +6,8 @@ use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
+use crate::variant::chain_of_thought::ChainOfThoughtConfig;
+
 use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
 use crate::experimentation::ExperimentationConfig;
 use crate::utils::retries::RetryConfig;
@@ -29,7 +31,6 @@ use crate::{
         best_of_n_sampling::{
             UninitializedBestOfNEvaluatorConfig, UninitializedBestOfNSamplingConfig,
         },
-        chain_of_thought::ChainOfThoughtConfig,
         chat_completion::ChatCompletionConfig,
         dicl::UninitializedDiclConfig,
         mixture_of_n::{UninitializedFuserConfig, UninitializedMixtureOfNConfig},
@@ -689,17 +690,14 @@ fn convert_chat_completion_judge_to_variant(
     )
 }
 
-fn default_timeout() -> f64 {
-    300.0
-}
-
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedLLMJudgeBestOfNVariantConfig {
     #[serde(default)]
     pub active: Option<bool>,
-    #[serde(default = "default_timeout")]
-    pub timeout_s: f64,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
     #[serde(default)]
     pub candidates: Vec<String>,
     pub evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
@@ -710,8 +708,9 @@ pub struct UninitializedLLMJudgeBestOfNVariantConfig {
 pub struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
     pub active: Option<bool>,
-    #[serde(default = "default_timeout")]
-    pub timeout_s: f64,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
     #[serde(default)]
     pub candidates: Vec<String>,
     pub fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
@@ -822,6 +821,7 @@ impl UninitializedLLMJudgeVariantInfo {
                     }
                     LLMJudgeInputFormat::Messages => None,
                 };
+                #[expect(deprecated)]
                 VariantConfig::BestOfNSampling(
                     UninitializedBestOfNSamplingConfig {
                         weight: get_weight(params.active),
@@ -894,6 +894,7 @@ impl UninitializedLLMJudgeVariantInfo {
                     }
                     LLMJudgeInputFormat::Messages => None,
                 };
+                #[expect(deprecated)]
                 VariantConfig::MixtureOfN(
                     UninitializedMixtureOfNConfig {
                         weight: get_weight(params.active),
@@ -977,6 +978,9 @@ impl UninitializedLLMJudgeVariantInfo {
                 VariantConfig::Dicl(uninitialized_config.load()?)
             }
             UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
+                tracing::warn!(
+                    "Deprecation Warning (#5298 / 2026.2+): We are deprecating `experimental_chain_of_thought` now that reasoning models are prevalent. Please use a different variant type (e.g. `chat_completion` with reasoning)."
+                );
                 VariantConfig::ChainOfThought(ChainOfThoughtConfig {
                     inner: convert_chat_completion_judge_to_variant(
                         evaluation_name,
@@ -1034,10 +1038,11 @@ fn check_convert_variant_to_llm_judge_variant(
             ))
         }
         VariantConfig::BestOfNSampling(variant) => {
+            #[expect(deprecated)]
             Ok(UninitializedLLMJudgeVariantConfig::BestOfNSampling(
                 UninitializedLLMJudgeBestOfNVariantConfig {
                     active: Some(false),
-                    timeout_s: variant.timeout_s(),
+                    timeout_s: None, // Deprecated field
                     candidates: variant.candidates().clone(),
                     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
@@ -1066,10 +1071,11 @@ fn check_convert_variant_to_llm_judge_variant(
             ))
         }
         VariantConfig::MixtureOfN(variant) => {
+            #[expect(deprecated)]
             Ok(UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(
                 UninitializedLLMJudgeMixtureOfNVariantConfig {
                     active: Some(false),
-                    timeout_s: variant.timeout_s(),
+                    timeout_s: None, // Deprecated field
                     candidates: variant.candidates().clone(),
                     fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
@@ -1124,7 +1130,7 @@ fn check_convert_variant_to_llm_judge_variant(
                 frequency_penalty: variant.frequency_penalty(),
                 max_tokens: variant.max_tokens(),
                 seed: variant.seed(),
-                json_mode: variant.json_mode().cloned(),
+                json_mode: variant.json_mode().copied(),
                 extra_body: variant.extra_body().cloned(),
                 extra_headers: variant.extra_headers().cloned(),
                 retries: *variant.retries(),

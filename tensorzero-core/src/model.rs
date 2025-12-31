@@ -21,6 +21,7 @@ use crate::cache::{
     StreamingCacheData, cache_lookup, cache_lookup_streaming, start_cache_write,
     start_cache_write_streaming,
 };
+use crate::config::with_skip_credential_validation;
 use crate::config::{
     OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
@@ -56,6 +57,7 @@ use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
 use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
+use crate::utils::mock::get_mock_provider_api_base;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -103,30 +105,39 @@ impl UninitializedModelConfig {
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
         http_client: TensorzeroHttpClient,
+        relay_mode: bool,
     ) -> Result<ModelConfig, Error> {
+        let skip_relay = self.skip_relay.unwrap_or(false);
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
         let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
             let http_client = http_client.clone();
             async move {
+                let load_future = provider.config.load(
+                    provider_types,
+                    provider_type_default_credentials,
+                    http_client,
+                );
+
+                // In relay mode, don't run credential validation for providers,
+                // since requests to the parent model get redirected to the downstream gateway.
+                // The exception is `skip_relay` models - we'll still use their providers,
+                // so we want to run credential validation for them.
+                let config = if relay_mode && !skip_relay {
+                    Box::pin(with_skip_credential_validation(load_future)).await
+                } else {
+                    load_future.await
+                };
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
                         name: name.clone(),
-                        config: provider
-                            .config
-                            .load(
-                                provider_types,
-                                provider_type_default_credentials,
-                                http_client,
-                            )
-                            .await
-                            .map_err(|e| {
-                                Error::new(ErrorDetails::Config {
-                                    message: format!("models.{model_name}.providers.{name}: {e}"),
-                                })
-                            })?,
+                        config: config.map_err(|e| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!("models.{model_name}.providers.{name}: {e}"),
+                            })
+                        })?,
                         extra_body: provider.extra_body,
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
@@ -142,7 +153,7 @@ impl UninitializedModelConfig {
             routing: self.routing,
             providers,
             timeouts: self.timeouts,
-            skip_relay: self.skip_relay.unwrap_or(false),
+            skip_relay,
         })
     }
 }
@@ -210,8 +221,8 @@ impl ModelConfig {
     /// Checks if an Unknown content block should be filtered out based on model_name and provider_name.
     /// Returns true if the block should be filtered (removed), false if it should be kept.
     fn should_filter_unknown_block(
-        block_model_name: &Option<String>,
-        block_provider_name: &Option<String>,
+        block_model_name: Option<&String>,
+        block_provider_name: Option<&String>,
         target_model_name: &str,
         target_provider_name: &str,
     ) -> bool {
@@ -244,8 +255,8 @@ impl ModelConfig {
                     provider_name: block_provider_name,
                     data: _,
                 }) => Self::should_filter_unknown_block(
-                    block_model_name,
-                    block_provider_name,
+                    block_model_name.as_ref(),
+                    block_provider_name.as_ref(),
                     model_name,
                     provider_name,
                 ),
@@ -275,8 +286,8 @@ impl ModelConfig {
                                 data: _,
                             }) => {
                                 if Self::should_filter_unknown_block(
-                                    block_model_name,
-                                    block_provider_name,
+                                    block_model_name.as_ref(),
+                                    block_provider_name.as_ref(),
                                     model_name,
                                     provider_name,
                                 ) {
@@ -718,6 +729,7 @@ async fn wrap_provider_stream(
     let otlp_config = clients.otlp_config.clone();
     let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
+    let span_clone = span.clone();
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
@@ -759,7 +771,7 @@ async fn wrap_provider_stream(
         // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
         let total_usage = total_usage.unwrap_or_default();
 
-        otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
+        otlp_config.apply_usage_to_model_provider_span(&span_clone, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
             let usage = match (total_usage.total_tokens(), errored) {
@@ -783,7 +795,7 @@ async fn wrap_provider_stream(
             {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
-        }.instrument(span));
+        }.instrument(span_clone.clone()));
 
 
         if write_to_cache && !errored {
@@ -796,7 +808,7 @@ async fn wrap_provider_stream(
                 tool_config
             );
         }
-    };
+    }.instrument(span);
     // We unconditionally create a stream, and forward items into it from a separate task
     // This ensures that we keep processing chunks (and call `return_tickets` to update rate-limiting information)
     // even if the top-level HTTP request is later dropped.
@@ -1394,13 +1406,8 @@ impl UninitializedProviderConfig {
                 include_encrypted_reasoning,
                 provider_tools,
             } => {
-                // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
-                #[cfg(feature = "e2e_tests")]
-                let api_base = provider_types
-                    .openai
-                    .batch_inference_api_base
-                    .clone()
-                    .or(api_base);
+                // Use mock API base for testing if set, otherwise defer to the API base set
+                let api_base = get_mock_provider_api_base("openai").or(api_base);
 
                 ProviderConfig::OpenAI(OpenAIProvider::new(
                     model_name,
@@ -2530,7 +2537,7 @@ mod tests {
     use std::borrow::Cow;
 
     use crate::cache::CacheEnabledMode;
-    use crate::config::SKIP_CREDENTIAL_VALIDATION;
+    use crate::config::with_skip_credential_validation;
     use crate::rate_limiting::ScopeInfo;
     use crate::tool::ToolCallConfig;
     use crate::{
@@ -3466,7 +3473,7 @@ mod tests {
         // Shorthand models are not added to the model table
         assert_eq!(model_table.static_model_len(), 0);
         let model_config = model_table
-            .get("dummy::gpt-4o")
+            .get("dummy::gpt-4o", None)
             .await
             .unwrap()
             .expect("Missing dummy model");
@@ -3488,14 +3495,15 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
+        let anthropic_provider_config = with_skip_credential_validation(async {
             ProviderConfig::Anthropic(AnthropicProvider::new(
                 "claude".to_string(),
                 None,
                 AnthropicCredentials::None,
                 false,
             ))
-        });
+        })
+        .await;
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".into()],
             providers: HashMap::from([(

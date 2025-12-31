@@ -360,7 +360,7 @@ async fn test_read_old_write_new() {
     assert_eq!(second_local_response_body, third_local_response_body);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_dropped_stream_body() {
     let (server_started_tx, server_started_rx) = oneshot::channel();
 
@@ -387,9 +387,46 @@ async fn test_dropped_stream_body() {
         shutdown_rx.await.unwrap();
     };
 
+    let proxy_addr = server_started_rx.await.unwrap();
+
     let (target_server_addr, _target_server_handle) = start_target_server(shutdown_fut).await;
 
-    let proxy_addr = server_started_rx.await.unwrap();
+    {
+        let good_client = reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all(format!("http://{proxy_addr}")).unwrap())
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap();
+
+        let mut good_stream = good_client
+            .post(format!("http://{target_server_addr}/slow"))
+            .eventsource()
+            .unwrap();
+        // Read the entire stream, so that we're sure that provider-proxy will write the file to disk
+        while let Some(event) = good_stream.next().await {
+            match event {
+                Err(reqwest_eventsource::Error::StreamEnded) => break,
+                Err(e) => panic!("Unexpected error: {e:?}"),
+                Ok(_) => continue,
+            }
+        }
+    }
+
+    // Check that the file is on disk
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let mut files = std::fs::read_dir(temp_dir.path())
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert!(files.len() == 1);
+    let file = files.pop().unwrap().unwrap();
+    let file_content = std::fs::read_to_string(file.path()).unwrap();
+    let file_json = serde_json::from_str::<Value>(&file_content).unwrap();
+    assert_eq!(
+        file_json["body"],
+        "data: Hello\n\ndata: World\n\ndata: [DONE]\n\n"
+    );
+
+    // Now, make the same request, but drop the stream (due to a timeout) before it's done
 
     let client = reqwest::Client::builder()
         .proxy(reqwest::Proxy::all(format!("http://{proxy_addr}")).unwrap())
@@ -419,7 +456,9 @@ async fn test_dropped_stream_body() {
     );
 
     drop(first_stream);
-    // Nothing should get written to disk
+    // Nothing should be on disk
+    // The previous cache file should have been *deleted* at the start of the second request,
+    // and no new file should have been written (because the stream was dropped before it was done)
     let files = std::fs::read_dir(temp_dir.path()).unwrap();
     assert!(files.count() == 0);
 }

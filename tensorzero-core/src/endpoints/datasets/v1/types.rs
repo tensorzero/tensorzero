@@ -9,7 +9,9 @@ use uuid::Uuid;
 pub use crate::db::clickhouse::query_builder::{
     DatapointFilter, InferenceFilter, OrderBy, OrderByTerm, OrderDirection, TagFilter, TimeFilter,
 };
+use crate::db::inferences::InferenceOutputSource;
 use crate::endpoints::datasets::Datapoint;
+use crate::endpoints::stored_inferences::v1::types::ListInferencesRequest;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
 use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
@@ -141,6 +143,8 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
             #[serde(default)]
             input: Option<Input>,
             #[serde(default, deserialize_with = "deserialize_double_option")]
+            // Expect to distinguish between an omitted field, JSON null, and a concrete value.
+            #[expect(clippy::option_option)]
             output: Option<Option<Vec<ContentBlockChatOutput>>>,
             #[serde(flatten)]
             tool_params_new: UpdateDynamicToolParamsRequest,
@@ -327,6 +331,8 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
             #[serde(default)]
             input: Option<Input>,
             #[serde(default, deserialize_with = "deserialize_double_option")]
+            // Expect to distinguish between an omitted field, JSON null, and a concrete value.
+            #[expect(clippy::option_option)]
             output: Option<Option<JsonDatapointOutputUpdate>>,
             #[serde(default)]
             output_schema: Option<Value>,
@@ -502,34 +508,12 @@ pub struct GetDatapointsResponse {
     pub datapoints: Vec<Datapoint>,
 }
 
-/// Specifies the source of the output for the datapoint when creating datapoints from inferences.
-/// - `None`: Do not include any output in the datapoint.
-/// - `Inference`: Include the original inference output in the datapoint.
-/// - `Demonstration`: Include the latest demonstration feedback as output in the datapoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
-#[export_schema]
-#[ts(export)]
-#[serde(rename_all = "snake_case")]
-pub enum CreateDatapointsFromInferenceOutputSource {
-    /// Do not include any output in the datapoint.
-    None,
-    /// Include the original inference output in the datapoint.
-    Inference,
-    /// Include the latest demonstration feedback as output in the datapoint.
-    Demonstration,
-}
-
 /// Request to create datapoints from inferences.
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct CreateDatapointsFromInferenceRequest {
     #[serde(flatten)]
     pub params: CreateDatapointsFromInferenceRequestParams,
-
-    /// When creating the datapoint, this specifies the source of the output for the datapoint.
-    /// If not provided, by default we will use the original inference output as the datapoint's output
-    /// (equivalent to `inference`).
-    pub output_source: Option<CreateDatapointsFromInferenceOutputSource>,
 }
 
 /// Parameters for creating datapoints from inferences.
@@ -544,21 +528,20 @@ pub enum CreateDatapointsFromInferenceRequestParams {
     InferenceIds {
         /// The inference IDs to create datapoints from.
         inference_ids: Vec<Uuid>,
+
+        /// When creating the datapoint, this specifies the source of the output for the datapoint.
+        /// If not provided, by default we will use the original inference output as the datapoint's output
+        /// (equivalent to `inference`).
+        #[ts(optional)]
+        output_source: Option<InferenceOutputSource>,
     },
 
     /// Create datapoints from an inference query.
     #[schemars(title = "CreateDatapointsFromInferenceRequestParamsInferenceQuery")]
     InferenceQuery {
-        /// The function name to filter inferences by.
-        function_name: String,
-
-        /// Variant name to filter inferences by, optional.
-        #[ts(optional)]
-        variant_name: Option<String>,
-
-        /// Filters to apply when querying inferences, optional.
-        #[ts(optional)]
-        filters: Option<InferenceFilter>,
+        /// Flattened inference query parameters.
+        #[serde(flatten)]
+        query: Box<ListInferencesRequest>,
     },
 }
 

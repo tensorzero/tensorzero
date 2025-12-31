@@ -30,7 +30,7 @@ pub struct ActionInputInfo {
 }
 
 /// The specific action type to execute.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ActionInput {
     Inference(Box<ClientInferenceParams>),
@@ -77,7 +77,7 @@ pub async fn action(
                 }));
             }
 
-            let output = Box::pin(inference(
+            let data = Box::pin(inference(
                 config,
                 &app_state.http_client,
                 app_state.clickhouse_connection_info.clone(),
@@ -88,7 +88,7 @@ pub async fn action(
             ))
             .await?;
 
-            match output {
+            match data.output {
                 InferenceOutput::NonStreaming(response) => Ok(ActionResponse::Inference(response)),
                 InferenceOutput::Streaming(_) => {
                     // Should not happen since we checked stream=false above

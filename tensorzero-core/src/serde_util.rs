@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::de::IntoDeserializer;
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -258,6 +259,7 @@ where
 /// #[derive(Deserialize)]
 /// struct ParamsStruct {
 ///     #[serde(default, deserialize_with = "deserialize_double_option")]
+///     #[expect(clippy::option_option)]
 ///     maybe_null_field: Option<Option<String>>,
 /// }
 /// ```
@@ -470,6 +472,19 @@ where
             map.end()
         }
     }
+}
+
+/// Serializes a DateTime<Utc> with milliseconds in RFC 3339 format.
+/// This ensures the output format is always `YYYY-MM-DDTHH:MM:SS.sssZ` with exactly 3 decimal places.
+pub fn serialize_utc_datetime_rfc_3339_with_millis<S>(
+    dt: &DateTime<Utc>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let formatted = dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    serializer.serialize_str(&formatted)
 }
 
 #[cfg(test)]
@@ -783,6 +798,8 @@ mod tests {
     #[derive(Debug, Deserialize, PartialEq)]
     struct TestDoubleOptionStruct<T: for<'a> Deserialize<'a>> {
         #[serde(default, deserialize_with = "deserialize_double_option")]
+        // Expect to distinguish between an omitted field, JSON null, and a concrete value.
+        #[expect(clippy::option_option)]
         maybe_null_field: Option<Option<T>>,
     }
 
@@ -913,5 +930,43 @@ mod tests {
         };
         let json = serde_json::to_string(&obj).unwrap();
         assert_eq!(json, r#"{"field":{}}"#);
+    }
+
+    // Tests for serialize_utc_datetime_rfc_3339_with_millis
+    #[derive(Debug, Serialize)]
+    struct TestSerializeUtcDateTimeRfc3339WithMillis {
+        #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
+        timestamp: DateTime<Utc>,
+    }
+
+    #[test]
+    fn test_serialize_utc_datetime_rfc_3339_with_millis_zero_millis() {
+        use chrono::TimeZone;
+        let dt = Utc.with_ymd_and_hms(2024, 12, 25, 10, 30, 0).unwrap();
+        let obj = TestSerializeUtcDateTimeRfc3339WithMillis { timestamp: dt };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"timestamp":"2024-12-25T10:30:00.000Z"}"#);
+    }
+
+    #[test]
+    fn test_serialize_utc_datetime_rfc_3339_with_millis_non_zero_millis() {
+        use chrono::NaiveDate;
+        let naive_dt = NaiveDate::from_ymd_opt(2024, 12, 25)
+            .unwrap()
+            .and_hms_milli_opt(10, 30, 45, 123)
+            .unwrap();
+        let dt = DateTime::<Utc>::from_naive_utc_and_offset(naive_dt, Utc);
+        let obj = TestSerializeUtcDateTimeRfc3339WithMillis { timestamp: dt };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"timestamp":"2024-12-25T10:30:45.123Z"}"#);
+    }
+
+    #[test]
+    fn test_serialize_utc_datetime_rfc_3339_with_millis_epoch() {
+        use chrono::TimeZone;
+        let dt = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
+        let obj = TestSerializeUtcDateTimeRfc3339WithMillis { timestamp: dt };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"timestamp":"1970-01-01T00:00:00.000Z"}"#);
     }
 }

@@ -10,9 +10,9 @@ exclude = ["tests/", "fixtures/"]
 [features]
 # Forward this feature to the Rust client, so that the embedded gateway
 # has the `e2e_tests` feature enabled when we run our e2e tests
-e2e_tests = ["tensorzero/e2e_tests"]
+e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests"]
 optimization_tests = ["e2e_tests"]
-pyo3 = ["dep:pyo3"]
+pyo3 = ["dep:pyo3", "tensorzero-types/pyo3"]
 git = ["dep:git2"]
 
 [[test]]
@@ -44,6 +44,7 @@ blake3 = { workspace = true }
 bytes = "1.6.1"
 chrono = { workspace = true }
 derive_builder = "0.20.0"
+durable = { workspace = true }
 futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
@@ -79,6 +80,7 @@ tracing-subscriber = { version = "0.3.22", features = [
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../internal/tensorzero-derive" }
+tensorzero-types = { path = "../internal/tensorzero-types" }
 minijinja-utils = { path = "../internal/minijinja-utils" }
 clap = { workspace = true }
 aws-sdk-sagemakerruntime = { version = "1.93.0", features = [
@@ -108,7 +110,7 @@ mime = { workspace = true }
 mime_guess = "2.0.5"
 indexmap = { version = "2.12.1", features = ["serde"] }
 base64 = "0.22.1"
-thiserror = "2.0.16"
+thiserror = { workspace = true }
 globset = "0.4.18"
 walkdir = "2.5.0"
 enum-map = "2.7.3"
@@ -117,23 +119,20 @@ ts-rs = { workspace = true }
 moka = { workspace = true }
 tonic = { version = "0.14.2", default-features = false }
 sqlx = { workspace = true }
-sqlx_alpha = { package = "sqlx", version = "0.9.0-alpha.1", features = [
-    "sqlx-toml",
-    "postgres",
-    "runtime-tokio",
-    "chrono",
-] }
 pin-project = { workspace = true }
 once_cell = "1.21.3"
 clarabel = { version = "0", default-features = false, features = ["serde"] }
 arc-swap = "1.7.1"
-infer = "0.19.0"
+infer.workspace = true
 urlencoding = "2.1.3"
 http-body = "1.0.1"
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
+autopilot-client = { path = "../internal/autopilot-client" }
 git2 = { workspace = true, optional = true }
 schemars = { workspace = true, features = ["uuid1"] }
 opentelemetry-http = "0.31.0"
+# durable.workspace = true
+regex = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.21.0"

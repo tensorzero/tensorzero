@@ -12,7 +12,7 @@ use crate::inference::types::{
 };
 use crate::model::StreamResponse;
 use crate::serde_util::{deserialize_json_string, serialize_json_string};
-use crate::tool::{InferenceResponseToolCall, ToolCallConfig};
+use crate::tool::{InferenceResponseToolCall, InferenceResponseToolCallExt, ToolCallConfig};
 use crate::utils::spawn_ignoring_shutdown;
 use blake3::Hash;
 use clap::ValueEnum;
@@ -246,7 +246,7 @@ impl CacheOutput for NonStreamingCacheData {
             if let ContentBlockOutput::ToolCall(tool_call) = block {
                 if cache_validation_info.tool_config.is_some() {
                     // If we have a tool config, validate against the schema
-                    let output = InferenceResponseToolCall::new(
+                    let output = InferenceResponseToolCall::new_from_tool_call(
                         tool_call.clone(),
                         cache_validation_info.tool_config.as_ref(),
                     )
@@ -392,7 +392,7 @@ pub fn start_cache_write_streaming(
             finish_reason = Some(chunk_finish_reason);
         }
     }
-    let finish_reason = finish_reason.cloned();
+    let finish_reason = finish_reason.copied();
     let output = StreamingCacheData {
         chunks: chunks
             .into_iter()

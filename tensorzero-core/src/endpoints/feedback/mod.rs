@@ -33,7 +33,9 @@ use tensorzero_auth::middleware::RequestApiKeyExtension;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;
+
 pub mod human_feedback;
+pub mod internal;
 
 /// There is a potential issue here where if we write an inference and then immediately write feedback for it,
 /// we might not be able to find the inference in the database because it hasn't been written yet.
@@ -51,7 +53,7 @@ const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1000);
 const FEEDBACK_TARGET_POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)

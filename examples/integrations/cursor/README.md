@@ -1,5 +1,10 @@
 # Example: Integrating Cursor with TensorZero
 
+> [!CAUTION]
+>
+> This example is deprecated and unmaintained.
+> Use at your own risk.
+
 > [!NOTE]
 >
 > Read more about this integration on our blog: [Reverse Engineering Cursor's LLM Client](https://tensorzero.com/blog/reverse-engineering-cursors-llm-client/)

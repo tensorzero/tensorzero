@@ -1,4 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
+use tensorzero_core::config::snapshot::ConfigSnapshot;
+use tensorzero_core::config::write_config_snapshot;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
@@ -45,8 +47,7 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
-    DatasetQueries, DatasetQueryParams, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams,
+    DatasetQueries, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::db::stored_datapoint::{
@@ -54,13 +55,13 @@ pub use tensorzero_core::db::stored_datapoint::{
 };
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
 pub use tensorzero_core::endpoints::datasets::v1::types::{
-    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
-    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsRequest, CreateDatapointsResponse, CreateJsonDatapointRequest,
-    DeleteDatapointsRequest, DeleteDatapointsResponse, GetDatapointsRequest, GetDatapointsResponse,
-    JsonDatapointOutputUpdate, ListDatapointsRequest, UpdateChatDatapointRequest,
-    UpdateDatapointMetadataRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
-    UpdateDatapointsRequest, UpdateDatapointsResponse, UpdateJsonDatapointRequest,
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsRequest, CreateDatapointsResponse,
+    CreateJsonDatapointRequest, DeleteDatapointsRequest, DeleteDatapointsResponse,
+    GetDatapointsRequest, GetDatapointsResponse, JsonDatapointOutputUpdate, ListDatapointsRequest,
+    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
+    UpdateDatapointsMetadataRequest, UpdateDatapointsRequest, UpdateDatapointsResponse,
+    UpdateJsonDatapointRequest,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
@@ -74,7 +75,9 @@ pub use tensorzero_core::endpoints::inference::{
 pub use tensorzero_core::endpoints::internal::action::{
     ActionInput, ActionInputInfo, ActionResponse,
 };
-pub use tensorzero_core::endpoints::internal::config::GetConfigResponse;
+pub use tensorzero_core::endpoints::internal::config::{
+    GetConfigResponse, WriteConfigRequest, WriteConfigResponse,
+};
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_core::endpoints::stored_inferences::v1::types::{
     GetInferencesRequest, GetInferencesResponse, ListInferencesRequest,
@@ -359,7 +362,6 @@ pub trait ClientExt {
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
-        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError>;
 
     // ================================================================
@@ -441,6 +443,7 @@ pub trait ClientExt {
         &self,
         stored_samples: Vec<T>,
         variants: HashMap<String, String>,
+        concurrency: Option<usize>,
     ) -> Result<Vec<RenderedSample>, TensorZeroError>;
 
     async fn experimental_launch_optimization(
@@ -512,6 +515,27 @@ pub trait ClientExt {
         &self,
         hash: Option<&str>,
     ) -> Result<GetConfigResponse, TensorZeroError>;
+
+    /// Writes a config snapshot to the database.
+    ///
+    /// If a config with the same hash already exists, tags are merged
+    /// (new tags override existing keys) and `created_at` is preserved.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The config to write, including optional extra_templates and tags.
+    ///
+    /// # Returns
+    ///
+    /// A `WriteConfigResponse` containing the computed hash of the config.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData>;
@@ -589,14 +613,14 @@ impl ClientExt for Client {
                 Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                Ok(Box::pin(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::internal::action::action(
                         &gateway.handle.app_state,
                         params,
                     )
                     .await
                     .map_err(err_to_http)
-                })
+                }))
                 .await?)
             }
         }
@@ -1101,12 +1125,8 @@ impl ClientExt for Client {
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
-        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError> {
-        let request = CreateDatapointsFromInferenceRequest {
-            params,
-            output_source,
-        };
+        let request = CreateDatapointsFromInferenceRequest { params };
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/from_inferences")).map_err(|e| TensorZeroError::Other {
@@ -1257,6 +1277,7 @@ impl ClientExt for Client {
         &self,
         stored_samples: Vec<T>,
         variants: HashMap<String, String>, // Map from function name to variant name
+        concurrency: Option<usize>,
     ) -> Result<Vec<RenderedSample>, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, .. } = self.mode() else {
             return Err(TensorZeroError::Other {
@@ -1271,6 +1292,7 @@ impl ClientExt for Client {
             gateway.handle.app_state.config.clone(),
             stored_samples,
             variants,
+            concurrency,
         )
         .await
         .map_err(err_to_http)
@@ -1358,6 +1380,7 @@ impl ClientExt for Client {
                         &gateway.handle.app_state.http_client,
                         job_handle,
                         &gateway.handle.app_state.config.models.default_credentials,
+                        &gateway.handle.app_state.config.provider_types,
                     )
                     .await
                     .map_err(err_to_http)
@@ -1444,11 +1467,52 @@ impl ClientExt for Client {
                         .map_err(err_to_http)?;
                     Ok(GetConfigResponse {
                         hash: snapshot.hash.to_string(),
-                        config: snapshot.config,
+                        config: snapshot.config.into(),
                         extra_templates: snapshot.extra_templates,
                         tags: snapshot.tags,
                     })
                 })
+                .await
+            }
+        }
+    }
+
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("internal/config").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/config endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Box::pin(with_embedded_timeout(*timeout, async {
+                    let mut snapshot = ConfigSnapshot::new(request.config, request.extra_templates)
+                        .map_err(err_to_http)?;
+                    snapshot.tags = request.tags;
+
+                    let hash = snapshot.hash.to_string();
+
+                    write_config_snapshot(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        snapshot,
+                    )
+                    .await
+                    .map_err(err_to_http)?;
+
+                    Ok(WriteConfigResponse { hash })
+                }))
                 .await
             }
         }
