@@ -16,8 +16,8 @@ use tensorzero::{
     Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams, ClientMode,
     CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
     DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetDatapointsResponse,
-    InferenceOutput, InferenceResponse, ListDatapointsRequest, TensorZeroError,
-    UpdateDatapointRequest, UpdateDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -387,6 +387,17 @@ impl TensorZeroClient for Client {
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError> {
         ClientExt::delete_datapoints(self, dataset_name, ids)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    // ========== Inference Query Operations ==========
+
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        ClientExt::list_inferences(self, request)
             .await
             .map_err(TensorZeroClientError::TensorZero)
     }

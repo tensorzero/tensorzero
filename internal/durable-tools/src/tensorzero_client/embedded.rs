@@ -14,8 +14,8 @@ use tensorzero::{
     ActionResponse, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
     CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
     DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetDatapointsResponse,
-    InferenceOutput, InferenceResponse, ListDatapointsRequest, TensorZeroError,
-    UpdateDatapointRequest, UpdateDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -271,6 +271,21 @@ impl TensorZeroClient for EmbeddedClient {
         tensorzero_core::endpoints::datasets::v1::delete_datapoints(
             &self.app_state.clickhouse_connection_info,
             &dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    // ========== Inference Query Operations ==========
+
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
+            &self.app_state.config,
+            &self.app_state.clickhouse_connection_info,
             request,
         )
         .await

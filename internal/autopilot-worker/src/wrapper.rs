@@ -300,8 +300,8 @@ mod tests {
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
         CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-        GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, UpdateDatapointRequest,
-        UpdateDatapointsResponse,
+        GetDatapointsResponse, GetInferencesResponse, InferenceResponse, ListDatapointsRequest,
+        ListInferencesRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -384,6 +384,12 @@ mod tests {
                 dataset_name: String,
                 ids: Vec<Uuid>,
             ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+            /// List inferences with filtering and pagination.
+            async fn list_inferences(
+                &self,
+                request: ListInferencesRequest,
+            ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
             async fn launch_optimization_workflow(
                 &self,

@@ -3,7 +3,7 @@
 use std::fmt;
 use std::time::Duration;
 
-use durable_tools_spawn::SpawnClient;
+use durable_tools_spawn::{SpawnClient, SpawnOptions};
 use futures::stream::{Stream, StreamExt};
 use moka::sync::Cache;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
@@ -307,7 +307,13 @@ impl AutopilotClient {
 
         let episode_id = Uuid::now_v7();
         self.spawn_client
-            .spawn_tool_by_name(&tool_name, llm_params, side_info, episode_id)
+            .spawn_tool_by_name(
+                &tool_name,
+                llm_params,
+                side_info,
+                episode_id,
+                SpawnOptions::default(),
+            )
             .await?;
 
         Ok(())
