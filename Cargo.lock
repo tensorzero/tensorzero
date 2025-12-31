@@ -2015,6 +2015,7 @@ name = "evaluations"
 version = "2025.12.6"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap",
  "durable",
  "futures",
@@ -2367,6 +2368,7 @@ version = "2025.12.6"
 dependencies = [
  "anyhow",
  "async-stream",
+ "async-trait",
  "autopilot-worker",
  "axum",
  "brotli",

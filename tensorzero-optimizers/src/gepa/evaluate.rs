@@ -21,8 +21,9 @@ use tensorzero_core::{
 };
 
 use evaluations::{
-    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationStats,
-    EvaluationVariant, EvaluatorStats, OutputFormat, stats::EvaluationInfo,
+    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationFunctionConfig,
+    EvaluationFunctionConfigTable, EvaluationStats, EvaluationVariant, EvaluatorStats,
+    OutputFormat, stats::EvaluationInfo,
 };
 
 // Type aliases for score map signatures used for pareto filtering
@@ -170,9 +171,12 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the gateway client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(params.gateway_client));
+
     // Create EvaluationCoreArgs
     let core_args = EvaluationCoreArgs {
-        tensorzero_client: params.gateway_client.clone(),
+        inference_executor,
         clickhouse_client: params.clickhouse_connection_info.clone(),
         evaluation_config: params.evaluation_config.clone(),
         function_configs,

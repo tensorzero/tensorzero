@@ -150,7 +150,7 @@ pub(crate) async fn evaluate_inference(
                             // Dynamic variants have send_feedback=false and skip feedback persistence
                             if send_feedback {
                                 match clients
-                                    .tensorzero_client
+                                    .inference_executor
                                     .feedback(FeedbackParams {
                                         metric_name: get_evaluator_metric_name(
                                             &evaluation_name,

@@ -9,6 +9,7 @@ license.workspace = true
 tensorzero-core = { path = "../tensorzero-core" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 evaluations = { path = "../evaluations" }
+async-trait = { workspace = true }
 axum = { workspace = true }
 tracing = { version = "0.1.43", features = ["log", "release_max_level_debug"] }
 tokio = { workspace = true }

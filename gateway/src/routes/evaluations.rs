@@ -1,33 +1,104 @@
 //! Evaluation streaming endpoint.
 //!
 //! This module provides an SSE endpoint for running evaluations and streaming results.
-//!
-//! TODO(#5399): This is a hack to get around the fact that `evaluations` crate depends
-//! on `tensorzero-core`. Ideally these routes should belong to `tensorzero-core`, but
-//! we need to rethink the dependency structure and evaluation execution design.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tensorzero_core::http::DEFAULT_HTTP_CLIENT_TIMEOUT_STD;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use evaluations::stats::{EvaluationError, EvaluationInfo, EvaluationUpdate};
-use evaluations::{EvaluationCoreArgs, EvaluationVariant, run_evaluation_core_streaming};
+use evaluations::{
+    EvaluationCoreArgs, EvaluationVariant, EvaluationsInferenceExecutor,
+    run_evaluation_core_streaming,
+};
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::client::{ClientBuilder, ClientBuilderMode};
+use tensorzero_core::client::{
+    ClientInferenceParams, FeedbackParams, FeedbackResponse, InferenceOutput,
+};
 use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
+use tensorzero_core::inference::types::storage::StoragePath;
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
+
+// =============================================================================
+// GatewayInferenceExecutor
+// =============================================================================
+
+/// Executor that calls gateway handlers directly without HTTP overhead.
+/// This is used when running evaluations from within the gateway.
+pub struct GatewayInferenceExecutor {
+    app_state: AppStateData,
+}
+
+impl GatewayInferenceExecutor {
+    pub fn new(app_state: AppStateData) -> Self {
+        Self { app_state }
+    }
+}
+
+#[async_trait]
+impl EvaluationsInferenceExecutor for GatewayInferenceExecutor {
+    async fn inference(
+        &self,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceOutput, tensorzero_core::client::TensorZeroError> {
+        use tensorzero_core::client::TensorZeroError;
+        use tensorzero_core::endpoints::inference::Params as InferenceParams;
+
+        // Convert ClientInferenceParams to endpoint Params
+        let endpoint_params: InferenceParams = params
+            .try_into()
+            .map_err(|e: Error| TensorZeroError::Other { source: e.into() })?;
+
+        // Call the inference endpoint directly
+        let result = Box::pin(tensorzero_core::endpoints::inference::inference(
+            self.app_state.config.clone(),
+            &self.app_state.http_client,
+            self.app_state.clickhouse_connection_info.clone(),
+            self.app_state.postgres_connection_info.clone(),
+            self.app_state.deferred_tasks.clone(),
+            endpoint_params,
+            None, // No API key for internal calls
+        ))
+        .await
+        .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+
+        Ok(result.output)
+    }
+
+    async fn feedback(
+        &self,
+        params: FeedbackParams,
+    ) -> Result<FeedbackResponse, tensorzero_core::client::TensorZeroError> {
+        use tensorzero_core::client::TensorZeroError;
+
+        // Call the feedback endpoint directly
+        tensorzero_core::endpoints::feedback::feedback(self.app_state.clone(), params, None)
+            .await
+            .map_err(|e| TensorZeroError::Other { source: e.into() })
+    }
+
+    async fn resolve_storage_path(&self, storage_path: StoragePath) -> Result<String, Error> {
+        // Use the object storage endpoint directly
+        let response = tensorzero_core::endpoints::object_storage::get_object(
+            self.app_state.config.object_store_info.as_ref(),
+            storage_path,
+        )
+        .await?;
+        Ok(response.data)
+    }
+}
 
 // =============================================================================
 // Request/Response Types
@@ -342,28 +413,8 @@ pub async fn run_evaluation_handler(
             })
         })?;
 
-    // Create TensorZero client using FromComponents mode with app_state's config
-    let tensorzero_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
-        config: app_state.config.clone(),
-        clickhouse_connection_info: app_state.clickhouse_connection_info.clone(),
-        postgres_connection_info: app_state.postgres_connection_info.clone(),
-        http_client: app_state.http_client.clone(),
-        timeout: Some(
-            app_state
-                .config
-                .gateway
-                .global_outbound_http_timeout
-                .to_std()
-                .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT_STD),
-        ),
-    })
-    .build()
-    .await
-    .map_err(|e| {
-        Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Failed to build TensorZero client: {e}"),
-        })
-    })?;
+    // Create GatewayInferenceExecutor to call handlers directly without HTTP overhead
+    let inference_executor = Arc::new(GatewayInferenceExecutor::new(app_state.clone()));
 
     // Extract function name from evaluation config
     let EvaluationConfig::Inference(ref inference_eval_config) = request.evaluation_config;
@@ -396,7 +447,7 @@ pub async fn run_evaluation_handler(
 
     // Build the core args
     let core_args = EvaluationCoreArgs {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse_client.clone(),
         evaluation_config: Arc::new(request.evaluation_config),
         function_configs,
