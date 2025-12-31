@@ -171,6 +171,78 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
+async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool) {
+    // Create mock response
+    let mock_response = create_mock_run_evaluation_response();
+
+    // Prepare test data
+    let episode_id = Uuid::now_v7();
+    let session_id = Uuid::now_v7();
+    let tool_call_id = Uuid::now_v7();
+    let tool_call_event_id = Uuid::now_v7();
+
+    // Set up non-default precision_targets and inference_cache
+    let mut precision_targets = HashMap::new();
+    precision_targets.insert("accuracy".to_string(), 0.05);
+    precision_targets.insert("f1_score".to_string(), 0.03);
+    let expected_precision_targets = precision_targets.clone();
+
+    let llm_params = RunEvaluationToolParams {
+        evaluation_name: "test_evaluation".to_string(),
+        dataset_name: Some("test_dataset".to_string()),
+        datapoint_ids: None,
+        variant_name: "test_variant".to_string(),
+        concurrency: 10,
+        max_datapoints: Some(200),
+        precision_targets,
+        inference_cache: CacheEnabledMode::ReadOnly,
+    };
+
+    let side_info = AutopilotToolSideInfo {
+        episode_id,
+        session_id,
+        tool_call_id,
+        tool_call_event_id,
+    };
+
+    // Create mock client with expectations that verify precision_targets and inference_cache
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_run_evaluation()
+        .withf(move |params| {
+            params.evaluation_name == "test_evaluation"
+                && params.dataset_name == Some("test_dataset".to_string())
+                && params.variant_name == "test_variant"
+                && params.concurrency == 10
+                && params.max_datapoints == Some(200)
+                // Verify precision_targets are passed through correctly
+                && params.precision_targets == expected_precision_targets
+                // Verify inference_cache is passed through correctly
+                && params.inference_cache == CacheEnabledMode::ReadOnly
+        })
+        .returning(move |_| Ok(mock_response.clone()));
+
+    // Create the tool and context
+    let tool = RunEvaluationTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    // Execute the tool
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("RunEvaluationTool execution should succeed");
+
+    // The result should be a JSON object
+    assert!(result.is_object(), "Result should be a JSON object");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
 async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     // Prepare test data
     let episode_id = Uuid::now_v7();
