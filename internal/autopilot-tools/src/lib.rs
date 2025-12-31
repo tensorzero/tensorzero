@@ -139,6 +139,9 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
     visitor
         .visit_simple_tool::<tools::GetLatestFeedbackByMetricTool>()
         .await?;
+    visitor
+        .visit_simple_tool::<tools::GetFeedbackByVariantTool>()
+        .await?;
 
     // Test tools (e2e_tests feature)
     // ------------------------------
