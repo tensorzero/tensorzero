@@ -11,13 +11,14 @@ import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
+    RawUsageEntry,
     TensorZeroGateway,
     Text,
 )
 from uuid_utils import uuid7
 
 
-def assert_openai_chat_usage_details(entry) -> None:
+def assert_openai_chat_usage_details(entry: RawUsageEntry) -> None:
     usage = entry.usage
     assert usage is not None, "raw_usage entry should include usage for chat completions"
     assert isinstance(usage, dict), "raw_usage entry usage should be a dict for chat completions"

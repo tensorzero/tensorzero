@@ -5,7 +5,7 @@ These tests verify that raw provider-specific usage data is correctly returned
 when tensorzero::include_raw_usage is set to True via the OpenAI-compatible API.
 """
 
-from typing import List
+from typing import Any, List, cast
 
 import pytest
 from openai import AsyncOpenAI
@@ -13,17 +13,17 @@ from openai.types.chat import ChatCompletionMessageParam
 from uuid_utils.compat import uuid7
 
 
-def assert_openai_chat_usage_details(entry: dict) -> None:
-    usage = entry.get("usage")
+def assert_openai_chat_usage_details(entry: dict[str, Any]) -> None:
+    usage: dict[str, Any] | None = entry.get("usage")
     assert usage is not None, "raw_usage entry should include usage for chat completions"
     assert isinstance(usage, dict), "raw_usage entry usage should be a dict for chat completions"
     assert "total_tokens" in usage, "raw_usage should include `total_tokens` for chat completions"
-    prompt_details = usage.get("prompt_tokens_details")
+    prompt_details: dict[str, Any] | None = usage.get("prompt_tokens_details")
     assert isinstance(prompt_details, dict), "raw_usage should include `prompt_tokens_details` for chat completions"
     assert "cached_tokens" in prompt_details, (
         "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
     )
-    completion_details = usage.get("completion_tokens_details")
+    completion_details: dict[str, Any] | None = usage.get("completion_tokens_details")
     assert isinstance(completion_details, dict), (
         "raw_usage should include `completion_tokens_details` for chat completions"
     )
@@ -35,7 +35,7 @@ def assert_openai_chat_usage_details(entry: dict) -> None:
 @pytest.mark.asyncio
 async def test_async_raw_usage_non_streaming(async_openai_client: AsyncOpenAI):
     """Test that tensorzero::include_raw_usage returns tensorzero_raw_usage in non-streaming response."""
-    messages = [
+    messages: List[ChatCompletionMessageParam] = [
         {"role": "user", "content": "Hello"},
     ]
 
@@ -55,7 +55,7 @@ async def test_async_raw_usage_non_streaming(async_openai_client: AsyncOpenAI):
     assert len(result.usage.tensorzero_raw_usage) > 0, "tensorzero_raw_usage should have at least one entry"  # type: ignore
 
     # Verify structure of first entry
-    entry = result.usage.tensorzero_raw_usage[0]  # type: ignore
+    entry = cast(dict[str, Any], result.usage.tensorzero_raw_usage[0])  # type: ignore[attr-defined]
     assert "model_inference_id" in entry, "Entry should have model_inference_id"
     assert "provider_type" in entry, "Entry should have provider_type"
     assert "api_type" in entry, "Entry should have api_type"
@@ -65,7 +65,7 @@ async def test_async_raw_usage_non_streaming(async_openai_client: AsyncOpenAI):
 @pytest.mark.asyncio
 async def test_async_raw_usage_not_requested(async_openai_client: AsyncOpenAI):
     """Test that tensorzero_raw_usage is not present when tensorzero::include_raw_usage is False."""
-    messages = [
+    messages: List[ChatCompletionMessageParam] = [
         {"role": "user", "content": "Hello"},
     ]
 
@@ -112,7 +112,7 @@ async def test_async_raw_usage_streaming(async_openai_client: AsyncOpenAI):
                 assert isinstance(raw_usage, list), "tensorzero_raw_usage should be a list"
                 assert len(raw_usage) > 0, "tensorzero_raw_usage should have at least one entry"  # type: ignore
 
-                entry = raw_usage[0]  # type: ignore
+                entry = cast(dict[str, Any], raw_usage[0])
                 assert "model_inference_id" in entry, "Entry should have model_inference_id"
                 assert "provider_type" in entry, "Entry should have provider_type"
                 assert "api_type" in entry, "Entry should have api_type"
