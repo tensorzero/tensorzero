@@ -11,6 +11,7 @@ mod get_datapoints;
 mod get_latest_feedback_by_metric;
 mod inference;
 mod list_datapoints;
+mod run_evaluation;
 mod update_datapoints;
 
 pub use create_datapoints::{CreateDatapointsTool, CreateDatapointsToolParams};
@@ -25,4 +26,5 @@ pub use get_latest_feedback_by_metric::{
 };
 pub use inference::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
 pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
+pub use run_evaluation::{RunEvaluationTool, RunEvaluationToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};

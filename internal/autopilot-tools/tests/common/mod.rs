@@ -100,6 +100,11 @@ mock! {
             &self,
             target_id: Uuid,
         ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+        async fn run_evaluation(
+            &self,
+            params: durable_tools::RunEvaluationParams,
+        ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
     }
 }
 

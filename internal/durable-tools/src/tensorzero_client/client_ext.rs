@@ -423,4 +423,13 @@ impl TensorZeroClient for Client {
             }),
         }
     }
+
+    async fn run_evaluation(
+        &self,
+        _params: super::RunEvaluationParams,
+    ) -> Result<super::RunEvaluationResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "run_evaluation is only supported via EmbeddedClient".to_string(),
+        ))
+    }
 }

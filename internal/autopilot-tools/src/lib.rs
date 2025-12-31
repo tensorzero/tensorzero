@@ -19,6 +19,7 @@
 //! - `UpdateDatapointsTool` - Updates existing datapoints
 //! - `DeleteDatapointsTool` - Deletes datapoints by ID
 //! - `GetLatestFeedbackByMetricTool` - Gets the latest feedback ID for each metric for a target
+//! - `RunEvaluationTool` - Runs an evaluation on a dataset and returns statistics
 //!
 //! # Test Tools (e2e_tests feature)
 //!
@@ -135,6 +136,11 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .await?;
     visitor
         .visit_simple_tool::<tools::GetLatestFeedbackByMetricTool>()
+        .await?;
+
+    // Evaluation tool
+    visitor
+        .visit_simple_tool::<tools::RunEvaluationTool>()
         .await?;
 
     // Test tools (e2e_tests feature)

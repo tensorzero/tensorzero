@@ -7,9 +7,12 @@
 mod client_ext;
 mod embedded;
 
-use async_trait::async_trait;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 pub use tensorzero::{
     ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
@@ -17,6 +20,7 @@ pub use tensorzero::{
     GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, TensorZeroError,
     UpdateDatapointRequest, UpdateDatapointsResponse,
 };
+pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use url::Url;
@@ -52,6 +56,61 @@ pub enum TensorZeroClientError {
     /// Error from the Autopilot API.
     #[error("Autopilot error: {0}")]
     Autopilot(#[from] autopilot_client::AutopilotError),
+
+    /// Operation not supported in this client mode.
+    #[error("Operation not supported: {0}")]
+    NotSupported(String),
+
+    /// Evaluation error.
+    #[error("Evaluation error: {0}")]
+    Evaluation(String),
+}
+
+/// Parameters for running an evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunEvaluationParams {
+    /// Name of the evaluation to run.
+    pub evaluation_name: String,
+    /// Name of the dataset to run on.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub dataset_name: Option<String>,
+    /// Specific datapoint IDs to evaluate.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub datapoint_ids: Option<Vec<Uuid>>,
+    /// Name of the variant to evaluate.
+    pub variant_name: String,
+    /// Number of concurrent requests to make.
+    pub concurrency: usize,
+    /// Cache configuration for inference requests.
+    pub inference_cache: CacheEnabledMode,
+    /// Maximum number of datapoints to evaluate from the dataset.
+    pub max_datapoints: Option<u32>,
+}
+
+/// Statistics for a single evaluator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvaluatorStatsResponse {
+    /// Mean value of the evaluator.
+    pub mean: f32,
+    /// Standard error of the evaluator.
+    pub stderr: f32,
+    /// Number of samples.
+    pub count: usize,
+}
+
+/// Response from running an evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunEvaluationResponse {
+    /// Unique identifier for this evaluation run.
+    pub evaluation_run_id: Uuid,
+    /// Number of datapoints evaluated.
+    pub num_datapoints: usize,
+    /// Number of successful evaluations.
+    pub num_successes: usize,
+    /// Number of errors.
+    pub num_errors: usize,
+    /// Per-evaluator statistics.
+    pub stats: HashMap<String, EvaluatorStatsResponse>,
 }
 
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
@@ -165,6 +224,22 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         target_id: Uuid,
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+    // ========== Evaluation Operations ==========
+
+    /// Run an evaluation on a dataset or set of datapoints.
+    ///
+    /// This runs inference on each datapoint using the specified variant,
+    /// then runs the configured evaluators on the results.
+    ///
+    /// Returns summary statistics for each evaluator.
+    ///
+    /// Note: This operation is only supported in embedded gateway mode.
+    /// HTTP gateway mode will return a `NotSupported` error.
+    async fn run_evaluation(
+        &self,
+        params: RunEvaluationParams,
+    ) -> Result<RunEvaluationResponse, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.

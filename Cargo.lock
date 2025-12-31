@@ -1850,6 +1850,7 @@ dependencies = [
  "chrono",
  "durable",
  "durable-tools-spawn",
+ "evaluations",
  "mockall",
  "moka",
  "schemars 1.2.0",

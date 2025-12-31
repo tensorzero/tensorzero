@@ -161,6 +161,15 @@ impl TensorZeroClient for MockTensorZeroClient {
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
+
+    async fn run_evaluation(
+        &self,
+        _params: durable_tools::RunEvaluationParams,
+    ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "run_evaluation not supported in mock client".to_string(),
+        ))
+    }
 }
 
 /// Create a mock chat inference response with the given text content.
