@@ -25,6 +25,7 @@ use tensorzero::{
     InputMessageContent, Role, Tool, Usage, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
 use tokio::sync::Mutex;
@@ -62,6 +63,13 @@ impl TensorZeroClient for MockTensorZeroClient {
         self.response
             .clone()
             .ok_or(TensorZeroClientError::StreamingNotSupported)
+    }
+
+    async fn feedback(
+        &self,
+        _params: tensorzero::FeedbackParams,
+    ) -> Result<tensorzero::FeedbackResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn create_autopilot_event(
@@ -157,6 +165,13 @@ impl TensorZeroClient for MockTensorZeroClient {
         _dataset_name: String,
         _ids: Vec<Uuid>,
     ) -> Result<tensorzero::DeleteDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 }
