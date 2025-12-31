@@ -113,7 +113,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     : Promise.resolve(undefined);
 
   // Get variant sampling probabilities from the gateway
+  // Skip for default function - it has no configured variants
   const variantSamplingProbabilitiesPromise = (async () => {
+    if (function_name === DEFAULT_FUNCTION) {
+      return {};
+    }
     try {
       const tensorZeroClient = await getNativeTensorZeroClient();
       return await tensorZeroClient.getVariantSamplingProbabilities(
