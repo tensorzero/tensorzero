@@ -66,6 +66,10 @@ pub enum TensorZeroClientError {
     Evaluation(String),
 }
 
+// TODO: These evaluation types are defined here temporarily because there is no HTTP
+// endpoint for evaluations yet. Once an HTTP endpoint is added, these should be replaced
+// with the wire types from tensorzero-core (re-exported through the SDK).
+
 /// Parameters for running an evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEvaluationParams {
