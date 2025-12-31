@@ -31,7 +31,9 @@ use evaluations::topk::{
     GlobalStoppingReason, ScoringFunctionType, TopKTaskOutput, TopKTaskParams, TopKTaskState,
     VariantStatus, create_client,
 };
-use evaluations::{Clients, EvaluationFunctionConfig, EvaluationFunctionConfigTable};
+use evaluations::{
+    ClientInferenceExecutor, Clients, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
+};
 use serde_json::Map;
 use sqlx::{AssertSqlSafe, PgPool, query_as};
 use std::sync::Arc;
@@ -203,8 +205,9 @@ async fn test_topk_found_topk() {
     ];
 
     // Create clients
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
     });
 
@@ -694,8 +697,9 @@ async fn test_topk_dataset_exhaustion() {
         "empty2".to_string(),
     ];
 
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
     });
 
@@ -856,8 +860,9 @@ async fn test_topk_evaluator_failure_threshold() {
     // Each datapoint produces 2 observations per evaluator
     let variant_names = vec!["test".to_string(), "test2".to_string()];
 
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
     });
 
@@ -1064,8 +1069,9 @@ async fn test_topk_variant_failure_threshold() {
         "error2".to_string(),
     ];
 
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
     });
 
