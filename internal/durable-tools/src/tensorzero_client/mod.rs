@@ -17,6 +17,7 @@ pub use tensorzero::{
     GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, TensorZeroError,
     UpdateDatapointRequest, UpdateDatapointsResponse,
 };
+use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
@@ -167,6 +168,14 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         dataset_name: String,
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+    // ========== Inference Query Operations ==========
+
+    /// List inferences with filtering and pagination.
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
     // ========== Optimization Operations ==========
 
