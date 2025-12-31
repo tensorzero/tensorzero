@@ -666,6 +666,9 @@ jobs:
       - name: Run cargo-deny
         run: cargo deny check
 
+      - name: Check durable dependencies
+        run: ./ci/check-durable-deps.sh
+
       - name: Run cargo fmt
         run: cargo fmt --all --check
 
@@ -985,7 +988,7 @@ jobs:
 
   build-gateway-e2e-container:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
-    if: github.repository == 'tensorzero/tensorzero'
+    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
       contents: read

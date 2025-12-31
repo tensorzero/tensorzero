@@ -29,6 +29,21 @@ export function isGatewayConnectionError(
   );
 }
 
+export function isAuthenticationError(error: unknown): boolean {
+  if (error instanceof TensorZeroServerError) {
+    return error.status === 401;
+  }
+  // Check serialized object properties (works if thrown from server loader)
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "TensorZeroServerError" &&
+    "status" in error &&
+    error.status === 401
+  );
+}
+
 export class TensorZeroServerError extends Error {
   readonly status: number;
   readonly statusText: string | null;
@@ -510,4 +525,24 @@ export function isTensorZeroServerError(
   error: unknown,
 ): error is TensorZeroServerError {
   return isErrorLike(error) && error.name === "TensorZeroServerError";
+}
+
+/**
+ * Extracts error details from an unknown error in a type-safe way.
+ * Useful for displaying error information in UI components.
+ */
+export function getErrorDetails(error: unknown): {
+  message: string;
+  status?: number;
+} {
+  if (error instanceof TensorZeroServerError) {
+    return { message: error.message, status: error.status };
+  }
+  if (error instanceof GatewayConnectionError) {
+    return { message: error.message };
+  }
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  return { message: String(error) };
 }

@@ -1,5 +1,6 @@
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -21,7 +22,7 @@ pub struct GCPVertexGeminiSFTConfig {
 /// Uninitialized GCP Vertex Gemini SFT Config (per-job settings only).
 /// Provider-level settings (project_id, region, bucket_name, credentials, etc.)
 /// come from `provider_types.gcp_vertex_gemini.sft` in the gateway config.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "GCPVertexGeminiSFTConfig"))]
 pub struct UninitializedGCPVertexGeminiSFTConfig {
