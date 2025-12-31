@@ -512,19 +512,19 @@ impl TensorZeroClient for Client {
                 let mut receiver = result.receiver;
                 let num_datapoints = result.run_info.num_datapoints;
 
-                // Collect results - we use a dummy writer since we don't need CLI output
+                // Collect evaluation results from the channel.
+                // We skip RunInfo since we already have that data from result.run_info.
+                // Success and Error updates are accumulated in evaluation_stats for
+                // computing final statistics. The dummy_writer discards serialized output
+                // since we only need the in-memory statistics, not CLI output.
                 let mut evaluation_stats =
                     EvaluationStats::new(OutputFormat::Jsonl, num_datapoints);
                 let mut dummy_writer = std::io::sink();
 
                 while let Some(update) = receiver.recv().await {
                     match update {
-                        EvaluationUpdate::RunInfo(_) => {
-                            // Skip RunInfo
-                            continue;
-                        }
+                        EvaluationUpdate::RunInfo(_) => continue,
                         update => {
-                            // Ignore write errors to the dummy sink
                             let _ = evaluation_stats.push(update, &mut dummy_writer);
                         }
                     }
