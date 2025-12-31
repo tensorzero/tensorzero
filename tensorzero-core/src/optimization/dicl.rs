@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -42,7 +43,7 @@ pub struct DiclOptimizationConfig {
 
 /// Uninitialized DICL optimization configuration (per-job settings only).
 /// Credentials come from `provider_types.openai.defaults` in the gateway configuration.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "DICLOptimizationConfig"))]
 pub struct UninitializedDiclOptimizationConfig {

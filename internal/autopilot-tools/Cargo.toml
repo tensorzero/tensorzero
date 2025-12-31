@@ -12,6 +12,8 @@ e2e_tests = []
 durable-tools = { path = "../durable-tools" }
 tensorzero = { path = "../../clients/rust" }
 tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
+anyhow.workspace = true
 async-trait.workspace = true
 schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }

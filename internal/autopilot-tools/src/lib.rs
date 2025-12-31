@@ -134,6 +134,9 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .visit_simple_tool::<tools::DeleteDatapointsTool>()
         .await?;
     visitor
+        .visit_task_tool::<tools::LaunchOptimizationWorkflowTool>()
+        .await?;
+    visitor
         .visit_simple_tool::<tools::GetLatestFeedbackByMetricTool>()
         .await?;
 
