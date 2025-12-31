@@ -14,6 +14,8 @@ use tensorzero::{
     UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
+use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::feedback::internal::{
     LatestFeedbackIdByMetricResponse, get_latest_feedback_id_by_metric,
 };
@@ -520,6 +522,31 @@ impl TensorZeroClient for Client {
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
             }),
+        }
+    }
+
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: String,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(_) => Err(TensorZeroClientError::NotSupported(
+                "get_feedback_by_variant is only available in embedded mode".to_string(),
+            )),
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => gateway
+                .handle
+                .app_state
+                .clickhouse_connection_info
+                .get_feedback_by_variant(&metric_name, &function_name, variant_names.as_ref())
+                .await
+                .map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                }),
         }
     }
 }
