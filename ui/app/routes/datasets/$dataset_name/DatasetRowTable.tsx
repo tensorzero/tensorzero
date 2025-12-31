@@ -1,4 +1,5 @@
 import type { Datapoint, DatapointFilter } from "~/types/tensorzero";
+import type { FunctionDatapointCount } from "~/types/tensorzero";
 import {
   Table,
   TableBody,
@@ -18,7 +19,7 @@ import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter, Trash } from "lucide-react";
-import { Suspense, use, useState, useEffect } from "react";
+import { Suspense, use, useState, useEffect, useMemo } from "react";
 import { useFetcher, useNavigate, useLocation } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
@@ -182,6 +183,7 @@ function PaginationContent({
 
 export default function DatasetRowTable({
   data,
+  functionCountsPromise,
   dataset_name,
   limit,
   offset,
@@ -190,6 +192,7 @@ export default function DatasetRowTable({
   filter,
 }: {
   data: Promise<DatasetRowsData>;
+  functionCountsPromise: Promise<FunctionDatapointCount[]>;
   dataset_name: string;
   limit: number;
   offset: number;
@@ -200,7 +203,28 @@ export default function DatasetRowTable({
   const activeFetcher = useFetcher();
   const navigate = useNavigate();
   const location = useLocation();
-  const functions = useAllFunctionConfigs();
+  const allFunctions = useAllFunctionConfigs();
+
+  // Resolve function counts from promise
+  const functionCounts = use(functionCountsPromise);
+
+  // Filter and order functions based on datapoint counts
+  const functions = useMemo(() => {
+    if (!functionCounts || functionCounts.length === 0) {
+      return allFunctions;
+    }
+
+    // Create a map of function configs ordered by count (DESC)
+    const orderedFunctions: { [key: string]: (typeof allFunctions)[string] } =
+      {};
+    for (const { function_name } of functionCounts) {
+      const config = allFunctions[function_name];
+      if (config) {
+        orderedFunctions[function_name] = config;
+      }
+    }
+    return orderedFunctions;
+  }, [functionCounts, allFunctions]);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);

@@ -10,6 +10,7 @@ use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOpera
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::endpoints::datasets::v1::types::DatapointOrderBy;
 use crate::error::Error;
+use crate::serde_util::deserialize_u64;
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
@@ -51,6 +52,15 @@ pub struct DatasetMetadata {
     pub dataset_name: String,
     pub count: u32,
     pub last_updated: String,
+}
+
+/// A function name and its datapoint count within a dataset.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
+#[ts(export)]
+pub struct FunctionDatapointCount {
+    pub function_name: String,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub datapoint_count: u64,
 }
 
 #[derive(Deserialize, ts_rs::TS)]
@@ -123,6 +133,13 @@ pub trait DatasetQueries {
         dataset_name: &str,
         function_name: Option<&str>,
     ) -> Result<u64, Error>;
+
+    /// Counts datapoints by function for a dataset.
+    /// Returns a list of function names with their datapoint counts, ordered by count DESC.
+    async fn count_datapoints_by_function(
+        &self,
+        dataset_name: &str,
+    ) -> Result<Vec<FunctionDatapointCount>, Error>;
 
     /// Gets a single datapoint by dataset name and ID
     /// TODO(shuyangli): To deprecate in favor of `get_datapoints`
