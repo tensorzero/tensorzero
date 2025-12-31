@@ -10,21 +10,68 @@ It's not meant to replace TensorZero's observability features.
 
 You can access the metrics by scraping the `/metrics` endpoint.
 
-The gateway currently exports the following metrics:
+## `tensorzero_inference_latency_overhead_seconds`
 
-- `tensorzero_requests_total`
-- `tensorzero_inferences_total`
+This metric tracks the latency overhead introduced by TensorZero on inference requests.
+It measures the total request duration minus the time spent waiting for external model provider HTTP requests.
+This is useful for understanding how much latency TensorZero adds to your inference requests, independently of model provider latency.
 
-The metrics include relevant labels such as `endpoint`, `function_name`, `model_name`, and `metric_name`.
-For example:
+This metric is reported as a summary with quantiles (e.g. p50, p90, p99).
+
+```txt title="GET /metrics"
+# HELP tensorzero_inference_latency_overhead_seconds Overhead of TensorZero on HTTP requests
+# TYPE tensorzero_inference_latency_overhead_seconds summary
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0"} 0.087712334
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.5"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.9"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.95"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.99"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="0.999"} 0.08771169702129712
+tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="openai::gpt-5-mini",quantile="1"} 0.087712334
+tensorzero_inference_latency_overhead_seconds_sum{function_name="tensorzero::default",variant_name="openai::gpt-5-mini"} 0.087712334
+tensorzero_inference_latency_overhead_seconds_count{function_name="tensorzero::default",variant_name="openai::gpt-5-mini"} 1
+```
+
+## `tensorzero_inference_latency_overhead_seconds_histogram`
+
+This metric is an optional histogram variant of `tensorzero_inference_latency_overhead_seconds` (see above).
+It provides traditional histogram buckets instead of pre-computed quantiles, which is useful if you want to compute custom quantiles or aggregate across multiple instances.
+
+To enable it, configure the histogram buckets in your configuration file:
+
+```toml title="tensorzero.toml"
+[gateway.metrics]
+tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
+```
+
+```txt title="GET /metrics"
+# HELP tensorzero_inference_latency_overhead_seconds_histogram Overhead of TensorZero on HTTP requests (histogram)
+# TYPE tensorzero_inference_latency_overhead_seconds_histogram histogram
+tensorzero_inference_latency_overhead_seconds_histogram_bucket{function_name="my_function",variant_name="my_variant",le="0.001"} 0
+tensorzero_inference_latency_overhead_seconds_histogram_bucket{function_name="my_function",variant_name="my_variant",le="0.01"} 5
+tensorzero_inference_latency_overhead_seconds_histogram_bucket{function_name="my_function",variant_name="my_variant",le="0.1"} 10
+tensorzero_inference_latency_overhead_seconds_histogram_bucket{function_name="my_function",variant_name="my_variant",le="+Inf"} 10
+tensorzero_inference_latency_overhead_seconds_histogram_sum{function_name="my_function",variant_name="my_variant"} 0.025
+tensorzero_inference_latency_overhead_seconds_histogram_count{function_name="my_function",variant_name="my_variant"} 10
+```
+
+## `tensorzero_inferences_total`
+
+This metric counts the total number of inferences performed by TensorZero.
+
+```txt title="GET /metrics"
+# HELP tensorzero_inferences_total Inferences performed by TensorZero
+# TYPE tensorzero_inferences_total counter
+tensorzero_inferences_total{endpoint="inference",function_name="my_function",model_name="gpt-4o-mini-2024-07-18"} 1
+```
+
+## `tensorzero_requests_total`
+
+This metric counts the total number of requests handled by TensorZero.
 
 ```txt title="GET /metrics"
 # HELP tensorzero_requests_total Requests handled by TensorZero
 # TYPE tensorzero_requests_total counter
-tensorzero_requests_total{endpoint="inference",function_name="tensorzero::default",model_name="gpt-4o-mini-2024-07-18"} 1
+tensorzero_requests_total{endpoint="inference",function_name="my_function",model_name="gpt-4o-mini-2024-07-18"} 1
 tensorzero_requests_total{endpoint="feedback",metric_name="draft_accepted"} 10
-
-# HELP tensorzero_inferences_total Inferences performed by TensorZero
-# TYPE tensorzero_inferences_total counter
-tensorzero_inferences_total{endpoint="inference",function_name="tensorzero::default",model_name="gpt-4o-mini-2024-07-18"} 1
 ```
