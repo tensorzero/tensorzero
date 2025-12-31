@@ -41,7 +41,7 @@ Retrieve specific inferences when you know their IDs.
 Source of the output to return:
 
 - `"inference"`: Returns the original model output
-- `"demonstration"`: Returns human-curated feedback output if available
+- `"demonstration"`: Returns human-curated feedback output (ignores inferences without one)
 - `"none"`: Returns the inference without output
 
 </ParamField>
@@ -80,7 +80,9 @@ curl -X POST http://localhost:3000/v1/inferences/get_inferences \
 <ResponseField name="inferences" type="StoredInference[]">
   <Expandable title="StoredInference properties" defaultOpen="true">
     <ResponseField name="dispreferred_outputs" type="array">
-      Outputs marked as dispreferred via feedback.
+      Outputs marked as dispreferred via feedback. This field is only available
+      if you set `output_source` to `demonstration`. It is primarily used for
+      preference-based optimization (e.g. DPO).
     </ResponseField>
     <ResponseField name="episode_id" type="string">
       Episode (UUID) this inference belongs to.
@@ -97,7 +99,7 @@ curl -X POST http://localhost:3000/v1/inferences/get_inferences \
     <ResponseField name="input" type="StoredInput">
       The input provided (system prompt, messages).
     </ResponseField>
-    <ResponseField name="output" type="array">
+    <ResponseField name="output" type="varies">
       The inference output (content blocks for chat, JSON for json).
     </ResponseField>
     <ResponseField name="processing_time_ms" type="integer" post={["optional"]}>
@@ -273,7 +275,7 @@ List inferences with filtering, pagination, and sorting.
 Source of the output to return:
 
 - `"inference"`: Returns the original model output
-- `"demonstration"`: Returns human-curated feedback output if available
+- `"demonstration"`: Returns human-curated feedback output (ignores inferences without one)
 - `"none"`: Returns the inference without output
 
 </ParamField>
@@ -337,7 +339,9 @@ curl -X POST http://localhost:3000/v1/inferences/list_inferences \
 <ResponseField name="inferences" type="StoredInference[]">
   <Expandable title="StoredInference properties" defaultOpen="true">
     <ResponseField name="dispreferred_outputs" type="array">
-      Outputs marked as dispreferred via feedback.
+      Outputs marked as dispreferred via feedback. This field is only available
+      if you set `output_source` to `demonstration`. It is primarily used for
+      preference-based optimization (e.g. DPO).
     </ResponseField>
     <ResponseField name="episode_id" type="string">
       Episode (UUID) this inference belongs to.
@@ -354,7 +358,7 @@ curl -X POST http://localhost:3000/v1/inferences/list_inferences \
     <ResponseField name="input" type="StoredInput">
       The input provided (system prompt, messages).
     </ResponseField>
-    <ResponseField name="output" type="array">
+    <ResponseField name="output" type="varies">
       The inference output (content blocks for chat, JSON for json).
     </ResponseField>
     <ResponseField name="processing_time_ms" type="integer" post={["optional"]}>
