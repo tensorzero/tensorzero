@@ -176,7 +176,7 @@ export default function DatasetDetailPage({
 
   return (
     <PageLayout>
-      <PageHeader heading={`Dataset`} name={dataset_name} count={countPromise}>
+      <PageHeader label="Dataset" name={dataset_name} count={countPromise}>
         <div className="flex justify-start">
           <DeleteButton
             onClick={handleDelete}
