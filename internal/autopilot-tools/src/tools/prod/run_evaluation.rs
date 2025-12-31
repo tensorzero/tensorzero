@@ -1,6 +1,7 @@
 //! Tool for running evaluations on datasets.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{
@@ -34,6 +35,12 @@ pub struct RunEvaluationToolParams {
     /// Maximum number of datapoints to evaluate from the dataset.
     #[serde(default)]
     pub max_datapoints: Option<u32>,
+    /// Precision targets for adaptive stopping.
+    /// Maps evaluator names to target confidence interval half-widths.
+    /// When the CI half-width for an evaluator falls below its target,
+    /// evaluation may stop early for that evaluator.
+    #[serde(default)]
+    pub precision_targets: HashMap<String, f32>,
 }
 
 fn default_concurrency() -> usize {
@@ -82,6 +89,7 @@ impl SimpleTool for RunEvaluationTool {
             concurrency: llm_params.concurrency,
             inference_cache: CacheEnabledMode::Off,
             max_datapoints: llm_params.max_datapoints,
+            precision_targets: llm_params.precision_targets,
         };
 
         ctx.client()

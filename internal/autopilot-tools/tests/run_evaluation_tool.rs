@@ -53,6 +53,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
         variant_name: "test_variant".to_string(),
         concurrency: 5,
         max_datapoints: Some(50),
+        precision_targets: HashMap::new(),
     };
 
     let side_info = AutopilotToolSideInfo {
@@ -73,6 +74,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
                 && params.variant_name == "test_variant"
                 && params.concurrency == 5
                 && params.max_datapoints == Some(50)
+                && params.precision_targets.is_empty()
         })
         .returning(move |_| Ok(mock_response.clone()));
 
@@ -122,6 +124,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
         variant_name: "test_variant".to_string(),
         concurrency: 10, // default
         max_datapoints: None,
+        precision_targets: HashMap::new(),
     };
 
     let side_info = AutopilotToolSideInfo {
@@ -180,6 +183,7 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
         variant_name: "test_variant".to_string(),
         concurrency: 10,
         max_datapoints: None,
+        precision_targets: HashMap::new(),
     };
 
     let side_info = AutopilotToolSideInfo {

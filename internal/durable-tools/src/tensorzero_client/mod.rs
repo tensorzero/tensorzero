@@ -85,6 +85,12 @@ pub struct RunEvaluationParams {
     pub inference_cache: CacheEnabledMode,
     /// Maximum number of datapoints to evaluate from the dataset.
     pub max_datapoints: Option<u32>,
+    /// Precision targets for adaptive stopping.
+    /// Maps evaluator names to target confidence interval half-widths.
+    /// When the CI half-width for an evaluator falls below its target,
+    /// evaluation may stop early for that evaluator.
+    #[serde(default)]
+    pub precision_targets: HashMap<String, f32>,
 }
 
 /// Statistics for a single evaluator.

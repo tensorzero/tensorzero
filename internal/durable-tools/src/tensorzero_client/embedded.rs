@@ -343,13 +343,14 @@ impl TensorZeroClient for EmbeddedClient {
             concurrency: params.concurrency,
         };
 
-        // Run the evaluation (no adaptive stopping, so empty precision_targets)
-        let result =
-            run_evaluation_core_streaming(core_args, params.max_datapoints, HashMap::new())
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::Evaluation(format!("Evaluation failed: {e}"))
-                })?;
+        // Run the evaluation with optional adaptive stopping via precision_targets
+        let result = run_evaluation_core_streaming(
+            core_args,
+            params.max_datapoints,
+            params.precision_targets,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::Evaluation(format!("Evaluation failed: {e}")))?;
 
         let mut receiver = result.receiver;
         let num_datapoints = result.run_info.num_datapoints;
