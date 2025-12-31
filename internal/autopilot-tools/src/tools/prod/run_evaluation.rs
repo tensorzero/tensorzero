@@ -41,6 +41,10 @@ pub struct RunEvaluationToolParams {
     /// evaluation may stop early for that evaluator.
     #[serde(default)]
     pub precision_targets: HashMap<String, f32>,
+    /// Cache configuration for inference requests.
+    /// Defaults to Off (no caching) to ensure fresh inferences during evaluation.
+    #[serde(default)]
+    pub inference_cache: CacheEnabledMode,
 }
 
 fn default_concurrency() -> usize {
@@ -87,7 +91,7 @@ impl SimpleTool for RunEvaluationTool {
             datapoint_ids: llm_params.datapoint_ids,
             variant_name: llm_params.variant_name,
             concurrency: llm_params.concurrency,
-            inference_cache: CacheEnabledMode::Off,
+            inference_cache: llm_params.inference_cache,
             max_datapoints: llm_params.max_datapoints,
             precision_targets: llm_params.precision_targets,
         };

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use durable::MIGRATOR;
-use durable_tools::{ErasedSimpleTool, RunEvaluationResponse, SimpleToolContext};
+use durable_tools::{CacheEnabledMode, ErasedSimpleTool, RunEvaluationResponse, SimpleToolContext};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -54,6 +54,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
         concurrency: 5,
         max_datapoints: Some(50),
         precision_targets: HashMap::new(),
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let side_info = AutopilotToolSideInfo {
@@ -125,6 +126,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
         concurrency: 10, // default
         max_datapoints: None,
         precision_targets: HashMap::new(),
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let side_info = AutopilotToolSideInfo {
@@ -184,6 +186,7 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
         concurrency: 10,
         max_datapoints: None,
         precision_targets: HashMap::new(),
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let side_info = AutopilotToolSideInfo {
