@@ -26,6 +26,7 @@ use tensorzero::{
     Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
@@ -175,6 +176,15 @@ impl TensorZeroClient for MockTensorZeroClient {
         &self,
         _target_id: Uuid,
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn get_feedback_by_variant(
+        &self,
+        _metric_name: String,
+        _function_name: String,
+        _variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 }
