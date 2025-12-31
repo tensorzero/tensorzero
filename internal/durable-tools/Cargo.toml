@@ -29,6 +29,7 @@ moka.workspace = true
 
 tensorzero-core.workspace = true
 evaluations = { path = "../../evaluations" }
+tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
 
 [dev-dependencies]
 mockall = "0.14"

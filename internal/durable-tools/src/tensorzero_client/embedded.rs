@@ -18,6 +18,8 @@ use tensorzero::{
     UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
+use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsRequest, DeleteDatapointsRequest,
     GetDatapointsRequest, UpdateDatapointsRequest,
@@ -275,6 +277,36 @@ impl TensorZeroClient for EmbeddedClient {
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
+    // ========== Optimization Operations ==========
+
+    async fn launch_optimization_workflow(
+        &self,
+        params: tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams,
+    ) -> Result<super::OptimizationJobHandle, TensorZeroClientError> {
+        tensorzero_optimizers::endpoints::launch_optimization_workflow(
+            &self.app_state.http_client,
+            self.app_state.config.clone(),
+            &self.app_state.clickhouse_connection_info,
+            params,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn poll_optimization(
+        &self,
+        job_handle: &super::OptimizationJobHandle,
+    ) -> Result<super::OptimizationJobInfo, TensorZeroClientError> {
+        tensorzero_optimizers::endpoints::poll_optimization(
+            &self.app_state.http_client,
+            job_handle,
+            &self.app_state.config.models.default_credentials,
+            &self.app_state.config.provider_types,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
     async fn get_latest_feedback_id_by_metric(
         &self,
         target_id: Uuid,
@@ -285,6 +317,21 @@ impl TensorZeroClient for EmbeddedClient {
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: String,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
+        self.app_state
+            .clickhouse_connection_info
+            .get_feedback_by_variant(&metric_name, &function_name, variant_names.as_ref())
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
     }
 
     async fn run_evaluation(

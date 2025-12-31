@@ -254,9 +254,8 @@ impl AutopilotClient {
     ///
     /// # Tool Call Lookup
     ///
-    /// The function first checks the local cache for the tool call. If not found
-    /// (e.g., client was restarted), it fetches the session events from the API
-    /// to retrieve the tool call details.
+    /// The function first checks the local cache for the tool call. If not found,
+    /// it fetches the tool call event directly from the API using `get_event`.
     ///
     /// # Side Info
     ///
@@ -270,8 +269,8 @@ impl AutopilotClient {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - Fetching session events fails
-    /// - The tool call is not found in cache or pending events
+    /// - Fetching the tool call event fails
+    /// - The event is not a tool call
     /// - Tool call arguments cannot be parsed as JSON
     /// - Spawning the durable task fails
     async fn handle_tool_call_authorization(
@@ -280,29 +279,17 @@ impl AutopilotClient {
         deployment_id: Uuid,
         tool_call_event_id: Uuid,
     ) -> Result<(), AutopilotError> {
-        let mut tool_call = self.tool_call_cache.get(&tool_call_event_id);
-
-        if tool_call.is_none() {
-            let response = self
-                .list_events(session_id, ListEventsParams::default())
-                .await?;
-
-            tool_call = response.pending_tool_calls.iter().find_map(|event| {
-                if event.id == tool_call_event_id {
-                    match &event.payload {
-                        EventPayload::ToolCall(tool_call) => {
-                            self.tool_call_cache.insert(event.id, tool_call.clone());
-                            Some(tool_call.clone())
-                        }
-                        _ => None,
-                    }
-                } else {
-                    None
+        // Check cache first, otherwise fetch the tool call event directly
+        let tool_call = match self.tool_call_cache.get(&tool_call_event_id) {
+            Some(tc) => tc,
+            None => {
+                let event = self.get_event(session_id, tool_call_event_id).await?;
+                match event.payload {
+                    EventPayload::ToolCall(tc) => tc,
+                    _ => return Err(AutopilotError::ToolCallNotFound(tool_call_event_id)),
                 }
-            });
-        }
-
-        let tool_call = tool_call.ok_or(AutopilotError::ToolCallNotFound(tool_call_event_id))?;
+            }
+        };
 
         let tool_call_id = tool_call.id.clone();
         let tool_name = tool_call.name.clone();
@@ -398,6 +385,27 @@ impl AutopilotClient {
         self.cache_tool_call_events(&body.events);
         self.cache_tool_call_events(&body.pending_tool_calls);
         Ok(body)
+    }
+
+    /// Gets a single event by ID.
+    pub async fn get_event(
+        &self,
+        session_id: Uuid,
+        event_id: Uuid,
+    ) -> Result<Event, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/events/{event_id}"))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let event: Event = response.json().await?;
+        self.cache_tool_call_event(&event);
+        Ok(event)
     }
 
     /// Creates an event in a session.

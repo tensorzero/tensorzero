@@ -14,11 +14,14 @@ use tensorzero::{
     UpdateDatapointsResponse, Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Input, InputMessage, Text};
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use uuid::Uuid;
 
 // Generate mock using mockall's mock! macro
@@ -96,10 +99,27 @@ mock! {
             ids: Vec<Uuid>,
         ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 
+        async fn launch_optimization_workflow(
+            &self,
+            params: LaunchOptimizationWorkflowParams,
+        ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
+
+        async fn poll_optimization(
+            &self,
+            job_handle: &OptimizationJobHandle,
+        ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
+
         async fn get_latest_feedback_id_by_metric(
             &self,
             target_id: Uuid,
         ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+        async fn get_feedback_by_variant(
+            &self,
+            metric_name: String,
+            function_name: String,
+            variant_names: Option<Vec<String>>,
+        ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
 
         async fn run_evaluation(
             &self,
@@ -200,5 +220,19 @@ pub fn create_test_input(text: &str) -> Input {
                 }),
             ],
         }],
+    }
+}
+
+/// Create a mock FeedbackByVariant response for testing.
+pub fn create_mock_feedback_by_variant(
+    variant_name: &str,
+    mean: f32,
+    count: u64,
+) -> FeedbackByVariant {
+    FeedbackByVariant {
+        variant_name: variant_name.to_string(),
+        mean,
+        variance: if count > 1 { Some(0.1) } else { None },
+        count,
     }
 }

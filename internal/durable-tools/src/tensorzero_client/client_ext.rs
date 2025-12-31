@@ -20,12 +20,18 @@ use tensorzero::{
     UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
+use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::feedback::internal::{
     LatestFeedbackIdByMetricResponse, get_latest_feedback_id_by_metric,
 };
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
+use tensorzero_optimizers::endpoints::{
+    LaunchOptimizationWorkflowParams, launch_optimization_workflow, poll_optimization,
+};
 use uuid::Uuid;
 
 use super::{
@@ -385,6 +391,82 @@ impl TensorZeroClient for Client {
             .map_err(TensorZeroClientError::TensorZero)
     }
 
+    // ========== Optimization Operations ==========
+
+    async fn launch_optimization_workflow(
+        &self,
+        params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(http) => {
+                let url = http
+                    .base_url
+                    .join("experimental_optimization_workflow")
+                    .map_err(|e: url::ParseError| {
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
+                    })?;
+
+                let builder = http.http_client.post(url).json(&params);
+                let response_text = http.send_request(builder).await?;
+
+                // The endpoint returns the base64-encoded job handle as plain text
+                OptimizationJobHandle::from_base64_urlencoded(&response_text).map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => launch_optimization_workflow(
+                &gateway.handle.app_state.http_client,
+                gateway.handle.app_state.config.clone(),
+                &gateway.handle.app_state.clickhouse_connection_info,
+                params,
+            )
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            }),
+        }
+    }
+
+    async fn poll_optimization(
+        &self,
+        job_handle: &OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(http) => {
+                let encoded_handle = job_handle.to_base64_urlencoded().map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })?;
+
+                let url = http
+                    .base_url
+                    .join(&format!("experimental_optimization/{encoded_handle}"))
+                    .map_err(|e: url::ParseError| {
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
+                    })?;
+
+                let builder = http.http_client.get(url);
+                let (response, _) = http.send_and_parse_http_response(builder).await?;
+                Ok(response)
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => poll_optimization(
+                &gateway.handle.app_state.http_client,
+                job_handle,
+                &gateway.handle.app_state.config.models.default_credentials,
+                &gateway.handle.app_state.config.provider_types,
+            )
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            }),
+        }
+    }
+
     async fn get_latest_feedback_id_by_metric(
         &self,
         target_id: Uuid,
@@ -430,6 +512,31 @@ impl TensorZeroClient for Client {
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
             }),
+        }
+    }
+
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: String,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(_) => Err(TensorZeroClientError::NotSupported(
+                "get_feedback_by_variant is only available in embedded mode".to_string(),
+            )),
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => gateway
+                .handle
+                .app_state
+                .clickhouse_connection_info
+                .get_feedback_by_variant(&metric_name, &function_name, variant_names.as_ref())
+                .await
+                .map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                }),
         }
     }
 
