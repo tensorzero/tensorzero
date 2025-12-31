@@ -11,8 +11,8 @@ test.describe("Dataset Deletion", () => {
     await page.goto(`/datasets/${datasetName}`);
 
     // Wait for the page to load
-    await expect(page.getByRole("heading", { name: "Dataset" })).toBeVisible();
-    await expect(page.getByText(datasetName).nth(1)).toBeVisible();
+    await expect(page.getByText("Dataset", { exact: true })).toBeVisible();
+    await expect(page.getByText(datasetName).first()).toBeVisible();
 
     // Get the first datapoint row
     const firstRow = page.locator("tbody tr").first();
@@ -55,8 +55,8 @@ test.describe("Dataset Deletion", () => {
     await page.goto(`/datasets/${datasetName}`);
 
     // Wait for the page to load
-    await expect(page.getByRole("heading", { name: "Dataset" })).toBeVisible();
-    await expect(page.getByText(datasetName).nth(1)).toBeVisible();
+    await expect(page.getByText("Dataset", { exact: true })).toBeVisible();
+    await expect(page.getByText(datasetName).first()).toBeVisible();
 
     // Get the first datapoint row
     const firstRow = page.locator("tbody tr").first();
@@ -87,8 +87,8 @@ test.describe("Dataset Deletion", () => {
     await page.goto(`/datasets/${datasetName}`);
 
     // Wait for the page to load
-    await expect(page.getByRole("heading", { name: "Dataset" })).toBeVisible();
-    await expect(page.getByText(datasetName).nth(1)).toBeVisible();
+    await expect(page.getByText("Dataset", { exact: true })).toBeVisible();
+    await expect(page.getByText(datasetName).first()).toBeVisible();
 
     // Click the dataset delete button (in the page header, not in the table)
     const datasetDeleteButton = page
@@ -121,8 +121,8 @@ test.describe("Dataset Deletion", () => {
     await page.goto(`/datasets/${datasetName}`);
 
     // Wait for the page to load
-    await expect(page.getByRole("heading", { name: "Dataset" })).toBeVisible();
-    await expect(page.getByText(datasetName).nth(1)).toBeVisible();
+    await expect(page.getByText("Dataset", { exact: true })).toBeVisible();
+    await expect(page.getByText(datasetName).first()).toBeVisible();
 
     // Click the dataset delete button
     const datasetDeleteButton = page
@@ -143,8 +143,8 @@ test.describe("Dataset Deletion", () => {
 
     // Verify we're still on the dataset page
     await expect(page).toHaveURL(`/datasets/${datasetName}`);
-    await expect(page.getByRole("heading", { name: "Dataset" })).toBeVisible();
-    await expect(page.getByText(datasetName).nth(1)).toBeVisible();
+    await expect(page.getByText("Dataset", { exact: true })).toBeVisible();
+    await expect(page.getByText(datasetName).first()).toBeVisible();
 
     // Verify the delete button is back to its original state
     await expect(datasetDeleteButton).toBeVisible();
@@ -159,8 +159,8 @@ test.describe("Dataset Deletion", () => {
     await page.goto(`/datasets/${datasetName}`);
 
     // Wait for the page to load
-    await expect(page.getByRole("heading", { name: "Dataset" })).toBeVisible();
-    await expect(page.getByText(datasetName).nth(1)).toBeVisible();
+    await expect(page.getByText("Dataset", { exact: true })).toBeVisible();
+    await expect(page.getByText(datasetName).first()).toBeVisible();
 
     // Verify there's only one datapoint in the table
     const rows = page.locator("tbody tr");
