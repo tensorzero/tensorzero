@@ -13,11 +13,16 @@ use std::sync::Arc;
 pub use tensorzero::{
     ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
-    ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
+    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, TensorZeroError,
+    UpdateDatapointRequest, UpdateDatapointsResponse,
 };
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+pub use tensorzero_core::optimization::OptimizationJobHandle;
+pub use tensorzero_core::optimization::OptimizationJobInfo;
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use url::Url;
 use uuid::Uuid;
 
@@ -69,6 +74,15 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         params: ClientInferenceParams,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+    /// Submit feedback for an inference or episode.
+    ///
+    /// Feedback can be a comment, demonstration, or a metric value (float or boolean).
+    /// The `metric_name` field in `FeedbackParams` determines the feedback type.
+    async fn feedback(
+        &self,
+        params: FeedbackParams,
+    ) -> Result<FeedbackResponse, TensorZeroClientError>;
 
     /// Create an event in an autopilot session.
     ///
@@ -157,6 +171,30 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         request: ListInferencesRequest,
     ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+    // ========== Optimization Operations ==========
+
+    /// Launch an optimization workflow.
+    ///
+    /// Returns a job handle that can be used to poll the optimization status.
+    async fn launch_optimization_workflow(
+        &self,
+        params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
+
+    /// Poll an optimization workflow for its current status.
+    ///
+    /// Returns the current status of the optimization job (Pending, Completed, or Failed).
+    async fn poll_optimization(
+        &self,
+        job_handle: &OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
+
+    /// Get the latest feedback ID for each metric for a target.
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.

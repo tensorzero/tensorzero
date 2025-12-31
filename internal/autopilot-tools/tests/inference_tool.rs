@@ -57,10 +57,12 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
     };
 
     let side_info = InferenceToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
-        tool_call_event_id,
+        base: AutopilotToolSideInfo {
+            episode_id,
+            session_id,
+            tool_call_id,
+            tool_call_event_id,
+        },
         config_snapshot_hash: None,
     };
 
@@ -136,10 +138,12 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
     };
 
     let side_info = InferenceToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
-        tool_call_event_id,
+        base: AutopilotToolSideInfo {
+            episode_id,
+            session_id,
+            tool_call_id,
+            tool_call_event_id,
+        },
         config_snapshot_hash: Some(test_snapshot_hash.to_string()),
     };
 

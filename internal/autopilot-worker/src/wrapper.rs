@@ -64,7 +64,7 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
         T::description()
     }
 
-    fn parameters_schema() -> Schema {
+    fn parameters_schema() -> DurableToolResult<Schema> {
         T::parameters_schema()
     }
 
@@ -299,11 +299,14 @@ mod tests {
     use tensorzero::ActionInput;
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-        CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse,
-        GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListInferencesRequest,
-        UpdateDatapointRequest, UpdateDatapointsResponse,
+        CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
+        GetDatapointsResponse, GetInferencesResponse, InferenceResponse, ListDatapointsRequest,
+        ListInferencesRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
+    use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+    use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
+    use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
     // Mock TensorZeroClient using mockall::mock! macro
     // (same pattern as autopilot-tools/tests/common/mod.rs)
@@ -316,6 +319,11 @@ mod tests {
                 &self,
                 params: ClientInferenceParams,
             ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+            async fn feedback(
+                &self,
+                params: FeedbackParams,
+            ) -> Result<FeedbackResponse, TensorZeroClientError>;
 
             async fn create_autopilot_event(
                 &self,
@@ -381,6 +389,21 @@ mod tests {
                 &self,
                 request: ListInferencesRequest,
             ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+            async fn launch_optimization_workflow(
+                &self,
+                params: LaunchOptimizationWorkflowParams,
+            ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
+
+            async fn poll_optimization(
+                &self,
+                job_handle: &OptimizationJobHandle,
+            ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
+
+            async fn get_latest_feedback_id_by_metric(
+                &self,
+                target_id: Uuid,
+            ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
         }
     }
 

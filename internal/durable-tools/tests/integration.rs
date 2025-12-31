@@ -26,8 +26,11 @@ use tensorzero::{
     Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -63,6 +66,13 @@ impl TensorZeroClient for MockTensorZeroClient {
         self.response
             .clone()
             .ok_or(TensorZeroClientError::StreamingNotSupported)
+    }
+
+    async fn feedback(
+        &self,
+        _params: tensorzero::FeedbackParams,
+    ) -> Result<tensorzero::FeedbackResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn create_autopilot_event(
@@ -151,6 +161,27 @@ impl TensorZeroClient for MockTensorZeroClient {
         &self,
         _request: tensorzero::ListInferencesRequest,
     ) -> Result<tensorzero::GetInferencesResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn launch_optimization_workflow(
+        &self,
+        _params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn poll_optimization(
+        &self,
+        _job_handle: &OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 }

@@ -10,18 +10,22 @@ use mockall::mock;
 use sqlx::types::chrono::Utc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse,
-    GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListInferencesRequest, Role,
-    StoredChatInference, StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
+    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
+    GetDatapointsResponse, GetInferencesResponse, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, Role, StoredChatInference, StoredInference, UpdateDatapointRequest,
+    UpdateDatapointsResponse, Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, Input, InputMessage, StoredInput, StoredInputMessage,
     StoredInputMessageContent, Text,
 };
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use uuid::Uuid;
 
 // Generate mock using mockall's mock! macro
@@ -34,6 +38,11 @@ mock! {
             &self,
             params: ClientInferenceParams,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+        async fn feedback(
+            &self,
+            params: FeedbackParams,
+        ) -> Result<FeedbackResponse, TensorZeroClientError>;
 
         async fn create_autopilot_event(
             &self,
@@ -98,7 +107,27 @@ mock! {
             &self,
             request: ListInferencesRequest,
         ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+        async fn launch_optimization_workflow(
+            &self,
+            params: LaunchOptimizationWorkflowParams,
+        ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
+
+        async fn poll_optimization(
+            &self,
+            job_handle: &OptimizationJobHandle,
+        ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
+
+        async fn get_latest_feedback_id_by_metric(
+            &self,
+            target_id: Uuid,
+        ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
     }
+}
+
+/// Create a mock feedback response with the given ID.
+pub fn create_mock_feedback_response(feedback_id: Uuid) -> FeedbackResponse {
+    FeedbackResponse { feedback_id }
 }
 
 /// Create a mock chat inference response with the given text content.
