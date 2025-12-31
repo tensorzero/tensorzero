@@ -193,6 +193,8 @@ The buckets must be in strictly ascending order and contain at least one value.
 tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
 ```
 
+See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
+
 ### `observability.async_writes`
 
 - **Type:** boolean
@@ -270,8 +272,6 @@ Disable automatic running of the TensorZero migrations when the TensorZero Gatew
 If `true`, then the migrations are not applied upon launch and must instead be applied manually
 by running `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations` or `docker compose run --rm gateway --run-clickhouse-migrations`.
 If `false`, then the migrations are run automatically upon launch.
-
-See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
 
 ### `relay`
 
