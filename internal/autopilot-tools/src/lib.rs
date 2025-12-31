@@ -18,10 +18,11 @@
 //! - `GetDatapointsTool` - Gets specific datapoints by ID
 //! - `UpdateDatapointsTool` - Updates existing datapoints
 //! - `DeleteDatapointsTool` - Deletes datapoints by ID
-//! - `ListInferencesTool` - Lists inferences with filtering and pagination
+//! - `LaunchOptimizationWorkflowTool` - Launches an optimization workflow (e.g., fine-tuning)
 //! - `GetLatestFeedbackByMetricTool` - Gets the latest feedback ID for each metric for a target
 //! - `GetFeedbackByVariantTool` - Gets feedback statistics (mean, variance, count) by variant for a function and metric
 //! - `RunEvaluationTool` - Runs an evaluation on a dataset and returns statistics
+//! - `ListInferencesTool` - Lists inferences with filtering and pagination
 //!
 //! # Test Tools (e2e_tests feature)
 //!
