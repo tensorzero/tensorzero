@@ -42,13 +42,17 @@ pub struct RunEvaluationToolParams {
     #[serde(default)]
     pub precision_targets: HashMap<String, f32>,
     /// Cache configuration for inference requests.
-    /// Defaults to Off (no caching) to ensure fresh inferences during evaluation.
-    #[serde(default)]
+    /// Defaults to On (caching enabled) to match the evaluations CLI behavior.
+    #[serde(default = "default_inference_cache")]
     pub inference_cache: CacheEnabledMode,
 }
 
 fn default_concurrency() -> usize {
     10
+}
+
+fn default_inference_cache() -> CacheEnabledMode {
+    CacheEnabledMode::On
 }
 
 /// Tool for running evaluations on datasets.
