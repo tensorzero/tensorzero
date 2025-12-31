@@ -19,6 +19,7 @@
 //! - `UpdateDatapointsTool` - Updates existing datapoints
 //! - `DeleteDatapointsTool` - Deletes datapoints by ID
 //! - `GetLatestFeedbackByMetricTool` - Gets the latest feedback ID for each metric for a target
+//! - `GetFeedbackByVariantTool` - Gets feedback statistics (mean, variance, count) by variant for a function and metric
 //!
 //! # Test Tools (e2e_tests feature)
 //!
