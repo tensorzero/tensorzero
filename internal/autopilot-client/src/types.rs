@@ -22,7 +22,7 @@ pub struct Session {
     pub id: Uuid,
     pub organization_id: String,
     pub workspace_id: String,
-    pub deployment_id: Uuid,
+    pub deployment_id: String,
     pub tensorzero_version: String,
     pub created_at: DateTime<Utc>,
 }
