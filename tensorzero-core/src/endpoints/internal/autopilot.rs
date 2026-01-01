@@ -12,7 +12,7 @@ use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use futures::stream::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -30,9 +30,9 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 ///
 /// This is the request type used by the HTTP handler. The `deployment_id` is
 /// injected from the gateway's app state, so it's not included in this request.
-#[derive(Debug, Clone, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
-pub struct CreateEventHttpRequest {
+pub struct CreateEventGatewayRequest {
     pub payload: EventPayload,
     /// Used for idempotency when adding events to an existing session.
     #[ts(optional)]
@@ -137,7 +137,7 @@ pub async fn list_events_handler(
 pub async fn create_event_handler(
     State(app_state): AppState,
     Path(session_id): Path<Uuid>,
-    StructuredJson(http_request): StructuredJson<CreateEventHttpRequest>,
+    StructuredJson(http_request): StructuredJson<CreateEventGatewayRequest>,
 ) -> Result<Json<CreateEventResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
 

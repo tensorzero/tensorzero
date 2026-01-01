@@ -7,7 +7,7 @@ import type { EventPayload } from "./EventPayload";
  * This is the request type used by the HTTP handler. The `deployment_id` is
  * injected from the gateway's app state, so it's not included in this request.
  */
-export type CreateEventHttpRequest = {
+export type CreateEventGatewayRequest = {
   payload: EventPayload;
   /**
    * Used for idempotency when adding events to an existing session.
