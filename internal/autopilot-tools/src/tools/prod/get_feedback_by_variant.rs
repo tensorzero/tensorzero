@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::feedback::FeedbackByVariant;
 
@@ -46,6 +46,31 @@ impl ToolMetadata for GetFeedbackByVariantTool {
              Returns statistics for each variant that has feedback data. \
              Optionally filter by specific variant names.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Get feedback statistics by variant for a function and metric.",
+            "properties": {
+                "metric_name": {
+                    "type": "string",
+                    "description": "The name of the metric to query."
+                },
+                "function_name": {
+                    "type": "string",
+                    "description": "The name of the function to query."
+                },
+                "variant_names": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Optional filter for specific variants. If not provided, all variants are included."
+                }
+            },
+            "required": ["metric_name", "function_name"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 

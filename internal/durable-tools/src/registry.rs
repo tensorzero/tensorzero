@@ -46,6 +46,11 @@ pub trait ErasedTool: Send + Sync {
 
     /// Check if this is a durable tool (`TaskTool`) or lightweight (`SimpleTool`).
     fn is_durable(&self) -> bool;
+
+    /// Validate that the provided JSON can be deserialized into the tool's parameter types.
+    ///
+    /// This allows validating parameters before spawning a job, catching errors early.
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()>;
 }
 
 /// Type-erased `SimpleTool` trait for dynamic execution.
@@ -106,6 +111,14 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
     fn is_durable(&self) -> bool {
         true
     }
+
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
+            .map_err(|e| ToolError::InvalidParams(format!("llm_params: {e}")))?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone())
+            .map_err(|e| ToolError::InvalidParams(format!("side_info: {e}")))?;
+        Ok(())
+    }
 }
 
 /// Blanket implementation of [`ErasedTool`] for all `SimpleTool` types.
@@ -128,6 +141,14 @@ impl<T: SimpleTool> ErasedTool for T {
 
     fn is_durable(&self) -> bool {
         false
+    }
+
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
+            .map_err(|e| ToolError::InvalidParams(format!("llm_params: {e}")))?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone())
+            .map_err(|e| ToolError::InvalidParams(format!("side_info: {e}")))?;
+        Ok(())
     }
 }
 
@@ -226,6 +247,22 @@ impl ToolRegistry {
     /// Returns `None` if the tool is not found.
     pub fn is_durable(&self, name: &str) -> Option<bool> {
         self.tools.get(name).map(|t| t.is_durable())
+    }
+
+    /// Validate parameters for a tool by name.
+    ///
+    /// Returns `ToolError::ToolNotFound` if the tool doesn't exist.
+    /// Returns `ToolError::InvalidParams` if validation fails.
+    pub fn validate_params(
+        &self,
+        tool_name: &str,
+        llm_params: &JsonValue,
+        side_info: &JsonValue,
+    ) -> ToolResult<()> {
+        let tool = self
+            .get(tool_name)
+            .ok_or_else(|| ToolError::ToolNotFound(tool_name.to_string()))?;
+        tool.validate_params(llm_params, side_info)
     }
 
     /// List all registered tool names.

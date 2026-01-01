@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 
@@ -40,6 +40,48 @@ impl ToolMetadata for ListInferencesTool {
              Can filter by function name, variant name, episode ID, tags, metrics, \
              time ranges, and order results. Supports both offset and cursor-based pagination.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "List inferences with filtering and pagination.",
+            "properties": {
+                "function_name": {
+                    "type": "string",
+                    "description": "Filter by function name (optional)."
+                },
+                "variant_name": {
+                    "type": "string",
+                    "description": "Filter by variant name (optional)."
+                },
+                "episode_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Filter by episode ID (optional)."
+                },
+                "tags": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Filter by tags (optional)."
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of inferences to return (default: 100)."
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Number of inferences to skip (for pagination)."
+                },
+                "order_by": {
+                    "type": "string",
+                    "enum": ["created_at_asc", "created_at_desc"],
+                    "description": "Sort order (default: created_at_desc)."
+                }
+            }
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointRequest, CreateDatapointsResponse};
 
@@ -41,6 +41,54 @@ impl ToolMetadata for CreateDatapointsTool {
             "Create datapoints in a dataset. Datapoints can be Chat or Json type. \
              Autopilot tags are automatically added for tracking.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Create datapoints in a dataset.",
+            "properties": {
+                "dataset_name": {
+                    "type": "string",
+                    "description": "The name of the dataset to create datapoints in."
+                },
+                "datapoints": {
+                    "type": "array",
+                    "description": "The datapoints to create. Each can be Chat or Json type.",
+                    "items": {
+                        "type": "object",
+                        "description": "A datapoint. Use 'Chat' type with 'input' containing messages, or 'Json' type with 'input'/'output' as JSON objects.",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": ["Chat", "Json"],
+                                "description": "The datapoint type."
+                            },
+                            "function_name": {
+                                "type": "string",
+                                "description": "The function name this datapoint is for."
+                            },
+                            "input": {
+                                "type": "object",
+                                "description": "The input data. For Chat: {system?, messages}. For Json: any JSON object."
+                            },
+                            "output": {
+                                "description": "Expected output. For Chat: string or content blocks. For Json: any JSON."
+                            },
+                            "tags": {
+                                "type": "object",
+                                "additionalProperties": { "type": "string" },
+                                "description": "Optional tags for the datapoint."
+                            }
+                        },
+                        "required": ["type", "function_name", "input"]
+                    }
+                }
+            },
+            "required": ["dataset_name", "datapoints"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 

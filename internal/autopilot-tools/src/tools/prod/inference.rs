@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SideInfo, SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{
@@ -73,6 +73,80 @@ impl ToolMetadata for InferenceTool {
         Cow::Borrowed(
             "Call TensorZero inference endpoint. Optionally use a config snapshot hash to use historical configuration.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Call TensorZero inference endpoint to get an LLM response.",
+            "properties": {
+                "function_name": {
+                    "type": "string",
+                    "description": "The function name to call (e.g., 'my_chat_function'). Either function_name or model_name is required."
+                },
+                "model_name": {
+                    "type": "string",
+                    "description": "Model shorthand as alternative to function_name (e.g., 'openai::gpt-4o', 'anthropic::claude-sonnet-4-20250514')"
+                },
+                "input": {
+                    "type": "object",
+                    "description": "The input for inference",
+                    "properties": {
+                        "system": {
+                            "description": "System prompt (string or array of content blocks)",
+                            "oneOf": [
+                                { "type": "string" },
+                                { "type": "array", "items": { "type": "object" } }
+                            ]
+                        },
+                        "messages": {
+                            "type": "array",
+                            "description": "Conversation messages",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "role": { "type": "string", "enum": ["user", "assistant"] },
+                                    "content": {
+                                        "description": "Message content (string or array of content blocks)",
+                                        "oneOf": [
+                                            { "type": "string" },
+                                            { "type": "array", "items": { "type": "object" } }
+                                        ]
+                                    }
+                                },
+                                "required": ["role", "content"]
+                            }
+                        }
+                    },
+                    "required": ["messages"]
+                },
+                "params": {
+                    "type": "object",
+                    "description": "Inference parameters",
+                    "properties": {
+                        "chat_completion": {
+                            "type": "object",
+                            "properties": {
+                                "temperature": { "type": "number", "description": "Sampling temperature (0.0-2.0)" },
+                                "max_tokens": { "type": "integer", "description": "Maximum tokens to generate" },
+                                "seed": { "type": "integer", "description": "Random seed for reproducibility" }
+                            }
+                        }
+                    }
+                },
+                "variant_name": {
+                    "type": "string",
+                    "description": "Pin a specific variant (optional, normally let API select)"
+                },
+                "output_schema": {
+                    "type": "object",
+                    "description": "Output schema override for JSON functions (optional)"
+                }
+            },
+            "required": ["input"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 
