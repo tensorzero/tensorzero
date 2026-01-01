@@ -1,96 +1,18 @@
 import type { Route } from "./+types/route";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { data, isRouteErrorResponse, type RouteHandle } from "react-router";
-import {
-  PageHeader,
-  PageLayout,
-  SectionLayout,
-} from "~/components/layout/PageLayout";
+import { PageHeader } from "~/components/layout/PageLayout";
 import EventStream from "~/components/autopilot/EventStream";
 import { logger } from "~/utils/logger";
+import { getAutopilotClient } from "~/utils/tensorzero.server";
+import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import type { Event } from "~/types/tensorzero";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.session_id!, isIdentifier: true }],
 };
 
-function buildMockEvents(sessionId: string): Event[] {
-  const baseTime = new Date("2024-08-15T16:00:00Z").getTime();
-  const stepMs = 2 * 60 * 1000;
-
-  return [
-    {
-      id: "b8c1f0a2-1d2e-4f3a-8b4c-5d6e7f8090a1",
-      session_id: sessionId,
-      created_at: new Date(baseTime + stepMs * 0).toISOString(),
-      payload: {
-        type: "message",
-        role: "user",
-        content: [{ type: "text", text: "Draft a release plan." }],
-      },
-    },
-    {
-      id: "c9d0e1f2-2a3b-4c5d-9e6f-708192a3b4c5",
-      session_id: sessionId,
-      created_at: new Date(baseTime + stepMs * 1).toISOString(),
-      payload: {
-        type: "status_update",
-        status_update: { type: "text", text: "Thinking through dependencies" },
-      },
-    },
-    {
-      id: "d0e1f2a3-3b4c-4d5e-8f6a-8192a3b4c5d6",
-      session_id: sessionId,
-      created_at: new Date(baseTime + stepMs * 2).toISOString(),
-      payload: {
-        type: "tool_call",
-        id: "tool-call-1",
-        name: "search_wikipedia",
-        arguments: '{"query":"TensorZero"}',
-      },
-    },
-    {
-      id: "e1f2a3b4-4c5d-4e6f-9a7b-92a3b4c5d6e7",
-      session_id: sessionId,
-      created_at: new Date(baseTime + stepMs * 3).toISOString(),
-      payload: {
-        type: "tool_call_authorization",
-        source: { type: "ui" },
-        status: { type: "approved" },
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d6e",
-      },
-    },
-    {
-      id: "f2a3b4c5-5d6e-4f7a-8b9c-a3b4c5d6e7f8",
-      session_id: sessionId,
-      created_at: new Date(baseTime + stepMs * 4).toISOString(),
-      payload: {
-        type: "tool_result",
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d6e",
-        outcome: {
-          type: "success",
-          id: "tool-result-1",
-          name: "search_wikipedia",
-          result: "Found background details for TensorZero.",
-        },
-      },
-    },
-    {
-      id: "0a1b2c3d-6e7f-4a8b-9c0d-b4c5d6e7f809",
-      session_id: sessionId,
-      created_at: new Date(baseTime + stepMs * 5).toISOString(),
-      payload: {
-        type: "message",
-        role: "assistant",
-        content: [
-          {
-            type: "text",
-            text: "Here is a concise release plan with milestones and risks.",
-          },
-        ],
-      },
-    },
-  ];
-}
+const EVENTS_PER_PAGE = 20;
 
 export async function loader({ params }: Route.LoaderArgs) {
   const sessionId = params.session_id;
@@ -98,29 +20,249 @@ export async function loader({ params }: Route.LoaderArgs) {
     throw data("Session ID is required", { status: 400 });
   }
 
-  const events = buildMockEvents(sessionId).sort(
-    (a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-  );
+  const client = getAutopilotClient();
+  // Fetch limit + 1 to detect if there are more events
+  const response = await client.listAutopilotEvents(sessionId, {
+    limit: EVENTS_PER_PAGE + 1,
+  });
+
+  // Check if there are more events than the page size
+  const hasMoreEvents = response.events.length > EVENTS_PER_PAGE;
+
+  // Sort events by created_at ascending and slice to page size
+  const events = response.events
+    .sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    )
+    .slice(hasMoreEvents ? 1 : 0); // If hasMore, remove oldest event (first after sorting)
 
   return {
     sessionId,
     events,
+    hasMoreEvents,
+  };
+}
+
+// Simple debounce helper
+function debounce<T extends (...args: Parameters<T>) => void>(
+  fn: T,
+  delay: number,
+): (...args: Parameters<T>) => void {
+  let timeoutId: NodeJS.Timeout | null = null;
+  return (...args: Parameters<T>) => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    timeoutId = setTimeout(() => {
+      fn(...args);
+      timeoutId = null;
+    }, delay);
   };
 }
 
 export default function AutopilotSessionEventsPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { sessionId, events } = loaderData;
+  const {
+    sessionId,
+    events: initialEvents,
+    hasMoreEvents: initialHasMore,
+  } = loaderData;
+
+  const { events, error, isRetrying, prependEvents } = useAutopilotEventStream({
+    sessionId,
+    initialEvents,
+    // enabled: false, // Disabled while implementing pagination
+  });
+
+  // State for pagination
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [hasReachedStart, setHasReachedStart] = useState(!initialHasMore);
+
+  // Refs
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+
+  // Track if older events were just loaded (for scroll preservation)
+  const pendingScrollPreservation = useRef<{
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
+
+  // Stick-to-bottom behavior
+  const checkIfAtBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return true;
+    // Consider "at bottom" if within 50px of the bottom
+    const threshold = 50;
+    return (
+      container.scrollHeight - container.scrollTop - container.clientHeight <
+      threshold
+    );
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, []);
+
+  // Update isAtBottom when user scrolls
+  const handleScroll = useCallback(() => {
+    isAtBottomRef.current = checkIfAtBottom();
+  }, [checkIfAtBottom]);
+
+  // Preserve scroll position when content changes at the top (skeleton or events)
+  useEffect(() => {
+    // If we have pending scroll preservation, apply it first
+    if (pendingScrollPreservation.current) {
+      const container = scrollContainerRef.current;
+      if (container) {
+        const { scrollHeight: prevHeight, scrollTop: prevScrollTop } =
+          pendingScrollPreservation.current;
+        const heightDiff = container.scrollHeight - prevHeight;
+        container.scrollTop = prevScrollTop + heightDiff;
+      }
+      pendingScrollPreservation.current = null;
+      return;
+    }
+
+    // Otherwise, stick to bottom if user was at bottom
+    if (isAtBottomRef.current) {
+      scrollToBottom();
+    }
+  }, [events, isLoadingOlder, scrollToBottom]);
+
+  // Scroll to bottom on initial mount
+  useEffect(() => {
+    scrollToBottom();
+  }, [scrollToBottom]);
+
+  // Load older events
+  const loadOlderEvents = useCallback(async () => {
+    if (isLoadingOlder || hasReachedStart || events.length === 0) return;
+
+    // Store scroll position before loading
+    const container = scrollContainerRef.current;
+    if (container) {
+      pendingScrollPreservation.current = {
+        scrollHeight: container.scrollHeight,
+        scrollTop: container.scrollTop,
+      };
+    }
+
+    setIsLoadingOlder(true);
+
+    try {
+      const oldestEvent = events[0];
+      const response = await fetch(
+        `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events?limit=${EVENTS_PER_PAGE + 1}&before=${oldestEvent.id}`,
+      );
+
+      if (!response.ok) {
+        // API might return 500 when there are no older events
+        // Treat this as reaching the start of the session
+        logger.debug(
+          `API returned ${response.status} when fetching older events, treating as session start`,
+        );
+        setHasReachedStart(true);
+        return;
+      }
+
+      const data = (await response.json()) as { events: Event[] };
+
+      logger.debug(
+        `Loaded ${data.events.length} older events (requested ${EVENTS_PER_PAGE + 1})`,
+      );
+
+      // Check if we've reached the start (fewer events than requested)
+      if (data.events.length <= EVENTS_PER_PAGE) {
+        logger.debug("Reached session start");
+        setHasReachedStart(true);
+      }
+
+      // If no events returned, we're at the start
+      if (data.events.length === 0) {
+        return;
+      }
+
+      // Sort and take only the page size
+      const olderEvents = data.events
+        .sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        )
+        .slice(data.events.length > EVENTS_PER_PAGE ? 1 : 0);
+
+      prependEvents(olderEvents);
+    } catch (err) {
+      // Network errors or other issues - treat as session start to avoid infinite retries
+      logger.error("Failed to load older events:", err);
+      setHasReachedStart(true);
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }, [isLoadingOlder, hasReachedStart, events, sessionId, prependEvents]);
+
+  // Debounced version of loadOlderEvents
+  const loadOlderEventsDebounced = useMemo(
+    () => debounce(loadOlderEvents, 100),
+    [loadOlderEvents],
+  );
+
+  // Intersection Observer for loading older events
+  useEffect(() => {
+    const sentinel = topSentinelRef.current;
+    const container = scrollContainerRef.current;
+
+    if (!sentinel || !container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting && !isLoadingOlder && !hasReachedStart) {
+          loadOlderEventsDebounced();
+        }
+      },
+      {
+        root: container,
+        // Start loading 300px before reaching the top
+        rootMargin: "300px 0px 0px 0px",
+        threshold: 0.1,
+      },
+    );
+
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isLoadingOlder, hasReachedStart, loadOlderEventsDebounced]);
 
   return (
-    <PageLayout>
-      <PageHeader heading="Autopilot Session" name={sessionId} />
-      <SectionLayout>
-        <EventStream events={events} />
-      </SectionLayout>
-    </PageLayout>
+    <div className="container mx-auto flex h-full flex-col px-8 pt-16 pb-8">
+      <PageHeader label="Autopilot Session" name={sessionId} />
+      {error && isRetrying && (
+        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          Failed to fetch events. Retrying...
+        </div>
+      )}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="border-border mt-4 min-h-0 flex-1 overflow-y-auto rounded-lg border p-4"
+      >
+        <EventStream
+          events={events}
+          isLoadingOlder={isLoadingOlder}
+          hasReachedStart={hasReachedStart}
+          topSentinelRef={topSentinelRef}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useMemo } from "react";
 import {
   Home,
   Inferences,
@@ -16,6 +17,7 @@ import {
 import { KeyRound } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
+import { useAutopilotAvailable } from "~/context/autopilot-available";
 import { TensorZeroLogo } from "~/components/icons/Icons";
 import { Link } from "react-router";
 import type { IconProps } from "~/components/icons/Icons";
@@ -49,6 +51,16 @@ interface NavigationSection {
 }
 
 const navigation: NavigationSection[] = [
+  {
+    title: "Autopilot",
+    items: [
+      {
+        title: "Sessions",
+        url: "/autopilot",
+        icon: Chat,
+      },
+    ],
+  },
   {
     title: "Observability",
     items: [
@@ -93,11 +105,6 @@ const navigation: NavigationSection[] = [
         icon: Playground,
       },
       {
-        title: "Autopilot",
-        url: "/autopilot",
-        icon: Chat,
-      },
-      {
         title: "Datasets",
         url: "/datasets",
         icon: Dataset,
@@ -129,6 +136,15 @@ const navigation: NavigationSection[] = [
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { state } = useSidebar();
   const activePathUtils = useActivePath();
+  const autopilotAvailable = useAutopilotAvailable();
+
+  // Filter out Autopilot section if not available
+  const filteredNavigation = useMemo(() => {
+    if (autopilotAvailable) {
+      return navigation;
+    }
+    return navigation.filter((section) => section.title !== "Autopilot");
+  }, [autopilotAvailable]);
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -166,7 +182,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuItem>
           </SidebarGroupContent>
         </SidebarGroup>
-        {navigation.map((section) => (
+        {filteredNavigation.map((section) => (
           <SidebarGroup key={section.title}>
             {state === "expanded" && (
               <SidebarGroupLabel>{section.title}</SidebarGroupLabel>

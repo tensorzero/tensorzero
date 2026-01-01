@@ -1,10 +1,5 @@
 import type { Route } from "./+types/route";
-import {
-  data,
-  isRouteErrorResponse,
-  useNavigate,
-  type RouteHandle,
-} from "react-router";
+import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import {
   PageHeader,
@@ -13,49 +8,11 @@ import {
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
 import { logger } from "~/utils/logger";
-import type { Session } from "~/types/tensorzero";
 import AutopilotSessionsTable from "../AutopilotSessionsTable";
+import { getAutopilotClient } from "~/utils/tensorzero.server";
 
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_PAGE_SIZE = 20;
-const MOCK_SESSIONS = buildMockSessions(57);
-
-const ORGANIZATION_IDS = [
-  "0c4f3c9a-2e1b-4b9c-8d2a-8f7c2e7c0001",
-  "1b6a7d2f-3c7a-4d1f-8e2b-9c0d1e2f0002",
-  "2d5e6a7b-4c8d-5e2f-9f3c-0a1b2c3d0003",
-];
-const WORKSPACE_IDS = [
-  "7a3b1c2d-5e6f-4a9b-8c7d-1e2f3a4b0001",
-  "8c4d2e3f-6a7b-5c8d-9e0f-2a3b4c5d0002",
-];
-const DEPLOYMENT_IDS = [
-  "3f2e1d0c-9b8a-7c6d-5e4f-3a2b1c0d0001",
-  "4a3b2c1d-0e9f-8d7c-6b5a-4c3d2e1f0002",
-  "5b4c3d2e-1f0a-9e8d-7c6b-5a4b3c2d0003",
-];
-const TENSORZERO_VERSIONS = ["2026.1.0", "2026.2.7", "2026.3.4"];
-
-export const handle: RouteHandle = {
-  crumb: () => ["Sessions"],
-};
-
-function buildUuid(prefix: string, index: number) {
-  return `${prefix}-0000-0000-0000-${index.toString(16).padStart(12, "0")}`;
-}
-
-function buildMockSessions(count: number): Session[] {
-  const baseTime = new Date("2024-08-15T16:30:00Z").getTime();
-  const stepMs = 45 * 60 * 1000;
-  return Array.from({ length: count }, (_, index) => ({
-    id: buildUuid("d1a0b0c0", index + 1),
-    organization_id: ORGANIZATION_IDS[index % ORGANIZATION_IDS.length],
-    workspace_id: WORKSPACE_IDS[index % WORKSPACE_IDS.length],
-    deployment_id: DEPLOYMENT_IDS[index % DEPLOYMENT_IDS.length],
-    tensorzero_version: TENSORZERO_VERSIONS[index % TENSORZERO_VERSIONS.length],
-    created_at: new Date(baseTime - index * stepMs).toISOString(),
-  }));
-}
 
 function parseInteger(value: string | null, fallback: number) {
   if (!value) return fallback;
@@ -77,13 +34,21 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data(`Limit cannot exceed ${MAX_PAGE_SIZE}`, { status: 400 });
   }
 
-  const sessions = MOCK_SESSIONS.slice(offset, offset + limit);
+  const client = getAutopilotClient();
+  // Fetch limit + 1 to detect if more pages exist
+  const response = await client.listAutopilotSessions({
+    limit: limit + 1,
+    offset,
+  });
+
+  const hasMore = response.sessions.length > limit;
+  const sessions = response.sessions.slice(0, limit);
 
   return {
     sessions,
-    totalCount: MOCK_SESSIONS.length,
     offset,
     limit,
+    hasMore,
   };
 }
 
@@ -92,7 +57,7 @@ export default function AutopilotSessionsPage({
 }: Route.ComponentProps) {
   const navigate = useNavigate();
   const { status } = useTensorZeroStatusFetcher();
-  const { sessions, totalCount, offset, limit } = loaderData;
+  const { sessions, offset, limit, hasMore } = loaderData;
   const gatewayVersion = status?.version;
   const uiVersion = __APP_VERSION__;
 
@@ -113,7 +78,7 @@ export default function AutopilotSessionsPage({
 
   return (
     <PageLayout>
-      <PageHeader heading="Autopilot Sessions" count={totalCount} />
+      <PageHeader heading="Autopilot Sessions" />
       <SectionLayout>
         <AutopilotSessionsTable
           sessions={sessions}
@@ -124,7 +89,7 @@ export default function AutopilotSessionsPage({
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset <= 0}
-          disableNext={offset + limit >= totalCount}
+          disableNext={!hasMore}
         />
       </SectionLayout>
     </PageLayout>

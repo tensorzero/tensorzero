@@ -52,6 +52,15 @@ export default [
     ),
 
     route("feedback", "routes/api/feedback/route.ts"),
+
+    route(
+      "autopilot/sessions/:session_id/events",
+      "routes/api/autopilot/sessions/$session_id/events/route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/events/stream",
+      "routes/api/autopilot/sessions/$session_id/events/stream.route.ts",
+    ),
   ]),
 
   // Datasets
@@ -101,11 +110,10 @@ export default [
   // Autopilot
   route("autopilot", "routes/autopilot/layout.tsx", [
     index("routes/autopilot/route.tsx"),
-    route("sessions", "routes/autopilot/sessions/route.tsx"),
-    route(
-      "sessions/:session_id",
-      "routes/autopilot/sessions/$session_id/route.tsx",
-    ),
+    route("sessions", "routes/autopilot/sessions/layout.tsx", [
+      index("routes/autopilot/sessions/route.tsx"),
+      route(":session_id", "routes/autopilot/sessions/$session_id/route.tsx"),
+    ]),
   ]),
 
   // Playground

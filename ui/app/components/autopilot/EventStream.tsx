@@ -1,5 +1,6 @@
 import { AlertTriangle, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { type RefObject, useState } from "react";
+import { Skeleton } from "~/components/ui/skeleton";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
   Tooltip,
@@ -17,6 +18,9 @@ type EventStreamProps = {
   events: Event[];
   className?: string;
   emptyMessage?: string;
+  isLoadingOlder?: boolean;
+  hasReachedStart?: boolean;
+  topSentinelRef?: RefObject<HTMLDivElement | null>;
 };
 
 function ToolEventId({ id }: { id: string }) {
@@ -273,10 +277,42 @@ function EventItem({ event }: { event: Event }) {
   );
 }
 
+function EventSkeletons({ count = 3 }: { count?: number }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="border-border bg-bg-secondary rounded-md border px-4 py-3"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <Skeleton className="mt-2 h-4 w-3/4" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SessionStartedDivider() {
+  return (
+    <div className="flex items-center gap-4 py-2">
+      <div className="border-border flex-1 border-t" />
+      <span className="text-fg-muted text-xs">Session Started</span>
+      <div className="border-border flex-1 border-t" />
+    </div>
+  );
+}
+
 export default function EventStream({
   events,
   className,
   emptyMessage = "No events yet.",
+  isLoadingOlder = false,
+  hasReachedStart = false,
+  topSentinelRef,
 }: EventStreamProps) {
   if (events.length === 0) {
     return <p className="text-fg-muted text-sm">{emptyMessage}</p>;
@@ -284,6 +320,15 @@ export default function EventStream({
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
+      {/* Sentinel element for Intersection Observer */}
+      <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
+
+      {/* Loading skeletons at the top */}
+      {isLoadingOlder && <EventSkeletons count={3} />}
+
+      {/* Session started indicator */}
+      {hasReachedStart && !isLoadingOlder && <SessionStartedDivider />}
+
       {events.map((event) => (
         <EventItem key={event.id} event={event} />
       ))}
