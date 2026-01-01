@@ -27,7 +27,7 @@ use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
 
 use super::{
-    CreateEventRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
+    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
     ListSessionsParams, ListSessionsResponse, TensorZeroClient, TensorZeroClientError,
 };
 
@@ -92,7 +92,7 @@ impl TensorZeroClient for EmbeddedClient {
     async fn create_autopilot_event(
         &self,
         session_id: Uuid,
-        request: CreateEventRequest,
+        request: CreateEventGatewayRequest,
     ) -> Result<CreateEventResponse, TensorZeroClientError> {
         let autopilot_client = self
             .app_state
@@ -100,7 +100,22 @@ impl TensorZeroClient for EmbeddedClient {
             .as_ref()
             .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
-        create_event(autopilot_client, session_id, request)
+        // Get deployment_id from app_state
+        let deployment_id = self
+            .app_state
+            .deployment_id
+            .clone()
+            .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
+
+        // Construct the full request with deployment_id from app state
+        let full_request = autopilot_client::CreateEventRequest {
+            deployment_id,
+            tensorzero_version: tensorzero_core::endpoints::status::TENSORZERO_VERSION.to_string(),
+            payload: request.payload,
+            previous_user_message_event_id: request.previous_user_message_event_id,
+        };
+
+        create_event(autopilot_client, session_id, full_request)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })

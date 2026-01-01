@@ -79,7 +79,7 @@ impl TensorZeroClient for MockTensorZeroClient {
     async fn create_autopilot_event(
         &self,
         _session_id: Uuid,
-        _request: durable_tools::CreateEventRequest,
+        _request: durable_tools::CreateEventGatewayRequest,
     ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }

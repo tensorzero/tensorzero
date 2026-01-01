@@ -19,9 +19,6 @@ pub struct AutopilotSideInfo<S = ()> {
     /// The session ID for this autopilot session.
     pub session_id: Uuid,
 
-    /// The deployment_id for API calls.
-    pub deployment_id: Uuid,
-
     /// Tool-specific side info (hidden from LLM).
     pub inner: S,
 }
