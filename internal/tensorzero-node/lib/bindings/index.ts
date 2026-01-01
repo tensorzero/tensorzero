@@ -43,6 +43,7 @@ export * from "./CreateDatapointsFromInferenceRequest";
 export * from "./CreateDatapointsFromInferenceRequestParams";
 export * from "./CreateDatapointsRequest";
 export * from "./CreateDatapointsResponse";
+export * from "./CreateEventHttpRequest";
 export * from "./CreateEventRequest";
 export * from "./CreateEventResponse";
 export * from "./CreateJsonDatapointRequest";

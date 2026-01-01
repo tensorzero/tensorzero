@@ -105,6 +105,22 @@ impl TensorZeroClient for Client {
                     .as_ref()
                     .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
+                // Use deployment_id from request if provided, otherwise from app_state
+                let request = if request.deployment_id.is_empty() {
+                    let deployment_id = gateway
+                        .handle
+                        .app_state
+                        .deployment_id
+                        .clone()
+                        .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
+                    CreateEventRequest {
+                        deployment_id,
+                        ..request
+                    }
+                } else {
+                    request
+                };
+
                 tensorzero_core::endpoints::internal::autopilot::create_event(
                     autopilot_client,
                     session_id,

@@ -276,7 +276,7 @@ impl AutopilotClient {
     async fn handle_tool_call_authorization(
         &self,
         session_id: Uuid,
-        deployment_id: Uuid,
+        deployment_id: String,
         tool_call_event_id: Uuid,
     ) -> Result<(), AutopilotError> {
         // Check cache first, otherwise fetch the tool call event directly
@@ -430,7 +430,7 @@ impl AutopilotClient {
             },
             _ => None,
         };
-        let deployment_id = request.deployment_id;
+        let deployment_id = request.deployment_id.clone();
 
         let url = self
             .base_url

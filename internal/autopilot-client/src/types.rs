@@ -120,7 +120,7 @@ pub enum ToolOutcome {
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct CreateEventRequest {
-    pub deployment_id: Uuid,
+    pub deployment_id: String,
     pub tensorzero_version: String,
     pub payload: EventPayload,
     /// Used for idempotency when adding events to an existing session.

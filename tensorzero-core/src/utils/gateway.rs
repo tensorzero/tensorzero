@@ -139,6 +139,8 @@ pub struct AppStateData {
     pub config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
     /// Optional Autopilot API client for proxying requests to the Autopilot API
     pub autopilot_client: Option<Arc<AutopilotClient>>,
+    /// The deployment ID from ClickHouse (64-char hex string)
+    pub deployment_id: Option<String>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -224,6 +226,7 @@ impl GatewayHandle {
                 auth_cache,
                 config_snapshot_cache: None,
                 autopilot_client: None,
+                deployment_id: None,
                 _private: (),
             },
             cancel_token,
@@ -255,6 +258,11 @@ impl GatewayHandle {
             clickhouse_connection_info.clone(),
             cancel_token.clone(),
         );
+
+        // Fetch the deployment ID from ClickHouse (if available)
+        let deployment_id = crate::howdy::get_deployment_id(&clickhouse_connection_info)
+            .await
+            .ok();
 
         for (function_name, function_config) in &config.functions {
             function_config
@@ -290,6 +298,7 @@ impl GatewayHandle {
                 auth_cache,
                 config_snapshot_cache,
                 autopilot_client,
+                deployment_id,
                 _private: (),
             },
             cancel_token,
@@ -301,8 +310,8 @@ impl GatewayHandle {
 
 impl AppStateData {
     /// Create an AppStateData for use with a historical config snapshot.
-    /// This version does not include auth_cache, config_snapshot_cache, or autopilot_client
-    /// since those are specific to the live gateway.
+    /// This version does not include auth_cache, config_snapshot_cache, autopilot_client,
+    /// or deployment_id since those are specific to the live gateway.
     pub fn new_for_snapshot(
         config: Arc<Config>,
         http_client: TensorzeroHttpClient,
@@ -319,6 +328,7 @@ impl AppStateData {
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
+            deployment_id: None,
             _private: (),
         }
     }

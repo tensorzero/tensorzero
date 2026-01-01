@@ -20,7 +20,7 @@ use crate::side_info::AutopilotSideInfo;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PublishResultParams {
     session_id: Uuid,
-    deployment_id: Uuid,
+    deployment_id: String,
     tool_call_event_id: Uuid,
     tool_call_id: String,
     tool_name: String,
@@ -505,7 +505,7 @@ mod tests {
     #[tokio::test]
     async fn test_publish_result_success_outcome() {
         let session_id = Uuid::now_v7();
-        let deployment_id = Uuid::now_v7();
+        let deployment_id = "test_deployment_id".to_string();
         let tool_call_event_id = Uuid::now_v7();
         let tool_call_id = "call_123".to_string();
         let tool_name = "test_tool".to_string();
@@ -514,7 +514,7 @@ mod tests {
 
         // Capture the values we need to verify
         let expected_session_id = session_id;
-        let expected_deployment_id = deployment_id;
+        let expected_deployment_id = deployment_id.clone();
         let expected_tool_call_event_id = tool_call_event_id;
 
         mock_client
@@ -557,7 +557,7 @@ mod tests {
     #[tokio::test]
     async fn test_publish_result_failure_outcome() {
         let session_id = Uuid::now_v7();
-        let deployment_id = Uuid::now_v7();
+        let deployment_id = "test_deployment_id".to_string();
         let tool_call_event_id = Uuid::now_v7();
 
         let mut mock_client = MockTensorZeroClient::new();
@@ -607,7 +607,7 @@ mod tests {
 
         let params = PublishResultParams {
             session_id: Uuid::now_v7(),
-            deployment_id: Uuid::now_v7(),
+            deployment_id: "test_deployment_id".to_string(),
             tool_call_event_id: Uuid::now_v7(),
             tool_call_id: "call_789".to_string(),
             tool_name: "some_tool".to_string(),
