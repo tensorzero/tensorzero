@@ -286,7 +286,8 @@ impl GatewayHandle {
                 .build(),
         );
 
-        let autopilot_client = setup_autopilot_client(&postgres_connection_info).await?;
+        let autopilot_client =
+            setup_autopilot_client(&postgres_connection_info, deployment_id.as_ref()).await?;
 
         Ok(Self {
             app_state: AppStateData {
@@ -466,7 +467,7 @@ pub async fn setup_postgres(
 /// Sets up the Autopilot API client from the environment.
 /// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
 /// `Ok(None)` if not set, or an error if client construction fails.
-/// Requires Postgres to be enabled.
+/// Requires Postgres and ClickHouse (for deployment_id) to be enabled.
 ///
 /// Environment variables:
 /// - `TENSORZERO_AUTOPILOT_API_KEY`: Required to enable the client
@@ -474,6 +475,7 @@ pub async fn setup_postgres(
 /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Optional queue name for tool dispatching
 async fn setup_autopilot_client(
     postgres_connection_info: &PostgresConnectionInfo,
+    deployment_id: Option<&String>,
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
@@ -483,6 +485,15 @@ async fn setup_autopilot_client(
                         .to_string(),
                 })
             })?;
+
+            // Require deployment_id (from ClickHouse) for autopilot
+            if deployment_id.is_none() {
+                return Err(Error::new(ErrorDetails::AppState {
+                    message:
+                        "Autopilot client requires ClickHouse; set `TENSORZERO_CLICKHOUSE_URL`."
+                            .to_string(),
+                }));
+            }
             let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
                 .unwrap_or_else(|_| "autopilot".to_string());
 
