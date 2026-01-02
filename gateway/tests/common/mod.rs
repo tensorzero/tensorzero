@@ -64,6 +64,63 @@ pub async fn start_gateway_with_cli_bind_address(
     .await
 }
 
+/// Start gateway expecting it to fail during startup.
+/// Returns the output lines captured before the process exited.
+#[allow(dead_code)]
+pub async fn start_gateway_expect_failure(
+    config_bind_address: Option<&str>,
+    cli_bind_address: &str,
+    config_suffix: &str,
+) -> Vec<String> {
+    let bind_address_config = config_bind_address
+        .map(|addr| format!("bind_address = \"{addr}\""))
+        .unwrap_or_default();
+
+    let config_str = format!(
+        r"
+        [gateway]
+        {bind_address_config}
+        {config_suffix}
+    "
+    );
+
+    let tmpfile = NamedTempFile::new().unwrap();
+    std::fs::write(tmpfile.path(), config_str).unwrap();
+
+    let mut builder = Command::new(gateway_path());
+    builder
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .args([
+            "--config-file",
+            tmpfile.path().to_str().unwrap(),
+            "--log-format",
+            "json",
+            "--bind-address",
+            cli_bind_address,
+        ])
+        .env_remove("RUST_LOG")
+        .kill_on_drop(true);
+
+    let mut child = builder.spawn().unwrap();
+    let mut stdout = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
+
+    let mut output = Vec::new();
+    while let Some(line) = stdout.next_line().await.unwrap() {
+        println!("{line}");
+        output.push(line);
+    }
+
+    // Wait for the process to exit
+    let status = child.wait().await.unwrap();
+    assert!(
+        !status.success(),
+        "Expected gateway to fail, but it exited with success"
+    );
+
+    output
+}
+
 async fn start_gateway_impl(
     config_bind_address: Option<&str>,
     cli_bind_address: Option<&str>,

@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::start_gateway_with_cli_bind_address;
+use common::{start_gateway_expect_failure, start_gateway_with_cli_bind_address};
 
 /// Test that the gateway uses the --bind-address CLI flag when no config bind_address is set.
 #[tokio::test]
@@ -41,39 +41,22 @@ async fn test_bind_address_cli_flag() {
     );
 }
 
-/// Test that the --bind-address CLI flag takes precedence over config file bind_address.
+/// Test that specifying both --bind-address CLI flag and config file bind_address causes an error.
 #[tokio::test]
-async fn test_bind_address_cli_overrides_config() {
-    let child_data = start_gateway_with_cli_bind_address(
+async fn test_bind_address_cli_and_config_errors() {
+    let output = start_gateway_expect_failure(
         Some("0.0.0.0:0"), // config bind_address
-        "127.0.0.1:0",     // CLI bind_address (should override)
+        "127.0.0.1:0",     // CLI bind_address
         "",                // no extra config
     )
     .await;
 
-    // Verify the gateway bound to 127.0.0.1 (CLI wins over config's 0.0.0.0)
+    // Verify the error message
+    let error_logged = output.iter().any(|line| {
+        line.contains("must not specify both `--bind-address` and `[gateway].bind_address`")
+    });
     assert!(
-        child_data.addr.ip().is_loopback(),
-        "Expected loopback address (CLI should override config), got {}",
-        child_data.addr.ip()
-    );
-
-    // Verify the log line shows 127.0.0.1, not 0.0.0.0
-    let listening_logged = child_data
-        .output
-        .iter()
-        .any(|line| line.contains("listening on 127.0.0.1:"));
-    assert!(
-        listening_logged,
-        "Expected log to show 'listening on 127.0.0.1:' (CLI should override config), output: {:?}",
-        child_data.output
-    );
-
-    // Verify the health endpoint responds
-    let health_response = child_data.call_health_endpoint().await;
-    assert!(
-        health_response.status().is_success(),
-        "Health endpoint failed with status {}",
-        health_response.status()
+        error_logged,
+        "Expected error about specifying both CLI and config bind_address, output: {output:?}",
     );
 }

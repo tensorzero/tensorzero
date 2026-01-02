@@ -269,6 +269,12 @@ async fn run() -> Result<(), ExitCode> {
     );
 
     // Bind to the socket address specified in the CLI, config, or default to 0.0.0.0:3000
+    if args.bind_address.is_some() && config.gateway.bind_address.is_some() {
+        tracing::error!(
+            "You must not specify both `--bind-address` and `[gateway].bind_address` in the config file."
+        );
+        return Err(ExitCode::FAILURE);
+    }
     let bind_address = args
         .bind_address
         .or(config.gateway.bind_address)
