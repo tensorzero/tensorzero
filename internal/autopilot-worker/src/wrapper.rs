@@ -6,12 +6,12 @@ use std::marker::PhantomData;
 use async_trait::async_trait;
 use autopilot_client::ToolResult as AutopilotToolResult;
 use durable_tools::{
-    CreateEventRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient,
-    ToolAppState, ToolContext, ToolMetadata, ToolOutcome, ToolResult as DurableToolResult,
+    CreateEventGatewayRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool,
+    TensorZeroClient, ToolAppState, ToolContext, ToolMetadata, ToolOutcome,
+    ToolResult as DurableToolResult,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
-use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use uuid::Uuid;
 
 use crate::side_info::AutopilotSideInfo;
@@ -20,7 +20,6 @@ use crate::side_info::AutopilotSideInfo;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PublishResultParams {
     session_id: Uuid,
-    deployment_id: Uuid,
     tool_call_event_id: Uuid,
     tool_call_id: String,
     tool_name: String,
@@ -108,7 +107,6 @@ where
         // Publish result to autopilot API (checkpointed)
         let publish_params = PublishResultParams {
             session_id: side_info.session_id,
-            deployment_id: side_info.deployment_id,
             tool_call_event_id: side_info.tool_call_event_id,
             tool_call_id: side_info.tool_call_id,
             tool_name,
@@ -136,14 +134,10 @@ async fn publish_result(
     params: PublishResultParams,
     t0_client: &dyn TensorZeroClient,
 ) -> anyhow::Result<()> {
-    let tensorzero_version = TENSORZERO_VERSION.to_string();
-
     t0_client
         .create_autopilot_event(
             params.session_id,
-            CreateEventRequest {
-                deployment_id: params.deployment_id,
-                tensorzero_version,
+            CreateEventGatewayRequest {
                 payload: EventPayload::ToolResult {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
@@ -248,7 +242,6 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
         // Publish result to autopilot API (checkpointed)
         let publish_params = PublishResultParams {
             session_id: side_info.session_id,
-            deployment_id: side_info.deployment_id,
             tool_call_event_id: side_info.tool_call_event_id,
             tool_call_id: side_info.tool_call_id,
             tool_name,
@@ -300,8 +293,9 @@ mod tests {
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
         CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-        GetDatapointsResponse, GetInferencesResponse, InferenceResponse, ListDatapointsRequest,
-        ListInferencesRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
+        GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
+        ListDatapointsRequest, ListInferencesRequest, UpdateDatapointRequest,
+        UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -329,7 +323,7 @@ mod tests {
             async fn create_autopilot_event(
                 &self,
                 session_id: Uuid,
-                request: CreateEventRequest,
+                request: CreateEventGatewayRequest,
             ) -> Result<CreateEventResponse, TensorZeroClientError>;
 
             async fn list_autopilot_events(
@@ -348,6 +342,16 @@ mod tests {
                 snapshot_hash: SnapshotHash,
                 params: ActionInput,
             ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+            async fn get_config_snapshot(
+                &self,
+                hash: Option<String>,
+            ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+            async fn write_config(
+                &self,
+                request: WriteConfigRequest,
+            ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
             async fn create_datapoints(
                 &self,
@@ -510,7 +514,6 @@ mod tests {
     #[tokio::test]
     async fn test_publish_result_success_outcome() {
         let session_id = Uuid::now_v7();
-        let deployment_id = Uuid::now_v7();
         let tool_call_event_id = Uuid::now_v7();
         let tool_call_id = "call_123".to_string();
         let tool_name = "test_tool".to_string();
@@ -519,14 +522,12 @@ mod tests {
 
         // Capture the values we need to verify
         let expected_session_id = session_id;
-        let expected_deployment_id = deployment_id;
         let expected_tool_call_event_id = tool_call_event_id;
 
         mock_client
             .expect_create_autopilot_event()
             .withf(move |sid, request| {
                 *sid == expected_session_id
-                    && request.deployment_id == expected_deployment_id
                     && matches!(
                         &request.payload,
                         EventPayload::ToolResult {
@@ -544,7 +545,6 @@ mod tests {
 
         let params = PublishResultParams {
             session_id,
-            deployment_id,
             tool_call_event_id,
             tool_call_id,
             tool_name,
@@ -562,7 +562,6 @@ mod tests {
     #[tokio::test]
     async fn test_publish_result_failure_outcome() {
         let session_id = Uuid::now_v7();
-        let deployment_id = Uuid::now_v7();
         let tool_call_event_id = Uuid::now_v7();
 
         let mut mock_client = MockTensorZeroClient::new();
@@ -589,7 +588,6 @@ mod tests {
 
         let params = PublishResultParams {
             session_id,
-            deployment_id,
             tool_call_event_id,
             tool_call_id: "call_456".to_string(),
             tool_name: "failing_tool".to_string(),
@@ -612,7 +610,6 @@ mod tests {
 
         let params = PublishResultParams {
             session_id: Uuid::now_v7(),
-            deployment_id: Uuid::now_v7(),
             tool_call_event_id: Uuid::now_v7(),
             tool_call_id: "call_789".to_string(),
             tool_name: "some_tool".to_string(),

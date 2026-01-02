@@ -11,9 +11,10 @@ use sqlx::types::chrono::Utc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetDatapointsResponse, GetInferencesResponse, InferenceResponse, ListDatapointsRequest,
-    ListInferencesRequest, Role, StoredChatInference, StoredInference, UpdateDatapointRequest,
-    UpdateDatapointsResponse, Usage,
+    GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
+    ListDatapointsRequest, ListInferencesRequest, Role, StoredChatInference, StoredInference,
+    UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
+    WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -48,7 +49,7 @@ mock! {
         async fn create_autopilot_event(
             &self,
             session_id: Uuid,
-            request: durable_tools::CreateEventRequest,
+            request: durable_tools::CreateEventGatewayRequest,
         ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError>;
 
         async fn list_autopilot_events(
@@ -67,6 +68,16 @@ mock! {
             snapshot_hash: SnapshotHash,
             input: tensorzero::ActionInput,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+        async fn get_config_snapshot(
+            &self,
+            hash: Option<String>,
+        ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+        async fn write_config(
+            &self,
+            request: WriteConfigRequest,
+        ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
         async fn create_datapoints(
             &self,

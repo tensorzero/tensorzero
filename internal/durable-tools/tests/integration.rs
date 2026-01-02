@@ -20,10 +20,9 @@ use durable_tools::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tensorzero::ActionInput;
 use tensorzero::{
-    ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
-    Usage,
+    ActionInput, ClientInferenceParams, GetConfigResponse, InferenceResponse, Input, InputMessage,
+    InputMessageContent, Role, Tool, Usage, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -79,7 +78,7 @@ impl TensorZeroClient for MockTensorZeroClient {
     async fn create_autopilot_event(
         &self,
         _session_id: Uuid,
-        _request: durable_tools::CreateEventRequest,
+        _request: durable_tools::CreateEventGatewayRequest,
     ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
@@ -108,6 +107,20 @@ impl TensorZeroClient for MockTensorZeroClient {
         self.response
             .clone()
             .ok_or(TensorZeroClientError::StreamingNotSupported)
+    }
+
+    async fn get_config_snapshot(
+        &self,
+        _hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn write_config(
+        &self,
+        _request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn create_datapoints(

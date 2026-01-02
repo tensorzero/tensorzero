@@ -145,7 +145,7 @@ impl http_body::Body for GuardBodyWrapper {
 /// See the `inference` route handler for an example of how to use this.
 #[derive(Clone)]
 pub struct HttpMetricData {
-    /// Extra labels to add to the `tensorzero_inference_latency_overhead_seconds` histogram metric.
+    /// Extra labels to add to the `tensorzero_inference_latency_overhead_seconds` metric.
     /// We currently use this to attach `function_name`, `variant_name`, and `model_name` labels
     /// when recording the overhead of `/inference` requests
     pub extra_overhead_labels: Vec<Label>,

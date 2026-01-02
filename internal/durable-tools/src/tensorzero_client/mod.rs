@@ -17,8 +17,9 @@ pub use tensorzero::{
     ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, TensorZeroError,
-    UpdateDatapointRequest, UpdateDatapointsResponse,
+    GetConfigResponse, GetDatapointsResponse, InferenceResponse, ListDatapointsRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
+    WriteConfigResponse,
 };
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::cache::CacheEnabledMode;
@@ -36,9 +37,10 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    ListSessionsResponse, ToolOutcome,
 };
+pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
 #[cfg(test)]
 use mockall::automock;
@@ -178,10 +180,11 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     /// Create an event in an autopilot session.
     ///
     /// Use `Uuid::nil()` as `session_id` to create a new session.
+    /// The deployment_id is injected from the gateway's app state.
     async fn create_autopilot_event(
         &self,
         session_id: Uuid,
-        request: CreateEventRequest,
+        request: CreateEventGatewayRequest,
     ) -> Result<CreateEventResponse, TensorZeroClientError>;
 
     /// List events in an autopilot session.
@@ -210,6 +213,18 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         snapshot_hash: SnapshotHash,
         input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+    /// Get a config snapshot by hash, or the live config if no hash is provided.
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+    /// Write a config snapshot to storage.
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
     // ========== Datapoint CRUD Operations ==========
 

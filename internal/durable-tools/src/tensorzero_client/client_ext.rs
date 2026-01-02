@@ -15,9 +15,10 @@ use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_core_streaming}
 use tensorzero::{
     Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams, ClientMode,
     CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
-    DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetDatapointsResponse,
-    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
-    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetConfigResponse,
+    GetDatapointsResponse, GetInferencesResponse, InferenceOutput, InferenceResponse,
+    ListDatapointsRequest, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -35,7 +36,7 @@ use tensorzero_optimizers::endpoints::{
 use uuid::Uuid;
 
 use super::{
-    CreateEventRequest, CreateEventResponse, EvaluatorStatsResponse, ListEventsParams,
+    CreateEventGatewayRequest, CreateEventResponse, EvaluatorStatsResponse, ListEventsParams,
     ListEventsResponse, ListSessionsParams, ListSessionsResponse, RunEvaluationParams,
     RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
 };
@@ -65,11 +66,12 @@ impl TensorZeroClient for Client {
     async fn create_autopilot_event(
         &self,
         session_id: Uuid,
-        request: CreateEventRequest,
+        request: CreateEventGatewayRequest,
     ) -> Result<CreateEventResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 // HTTP mode: call the internal endpoint
+                // The gateway will inject deployment_id from its app state
                 let url = http
                     .base_url
                     .join(&format!(
@@ -113,10 +115,27 @@ impl TensorZeroClient for Client {
                     .as_ref()
                     .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
+                // Get deployment_id from app_state
+                let deployment_id = gateway
+                    .handle
+                    .app_state
+                    .deployment_id
+                    .clone()
+                    .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
+
+                // Construct the full request with deployment_id from app state
+                let full_request = autopilot_client::CreateEventRequest {
+                    deployment_id,
+                    tensorzero_version: tensorzero_core::endpoints::status::TENSORZERO_VERSION
+                        .to_string(),
+                    payload: request.payload,
+                    previous_user_message_event_id: request.previous_user_message_event_id,
+                };
+
                 tensorzero_core::endpoints::internal::autopilot::create_event(
                     autopilot_client,
                     session_id,
-                    request,
+                    full_request,
                 )
                 .await
                 .map_err(|e| {
@@ -327,6 +346,24 @@ impl TensorZeroClient for Client {
                 }
             }
         }
+    }
+
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError> {
+        ClientExt::get_config_snapshot(self, hash.as_deref())
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError> {
+        ClientExt::write_config(self, request)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
     }
 
     // ========== Datapoint CRUD Operations ==========
