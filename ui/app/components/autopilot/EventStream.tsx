@@ -154,8 +154,15 @@ function renderEventTitle(event: Event) {
           return <>Tool Call Authorization &middot; Approved</>;
         case "rejected":
           return <>Tool Call Authorization &middot; Rejected</>;
+        default:
+          // This branch should never be reached but we need it to keep ESLint happy...
+          {
+            const _exhaustiveCheck: never = payload.status; // TS compiler should yell if this branch is reachable
+          }
+          throw new Error(
+            "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+          );
       }
-      break;
     case "tool_result":
       switch (payload.outcome.type) {
         case "success":
@@ -211,8 +218,16 @@ function renderEventTitle(event: Event) {
               </Tooltip>
             </span>
           );
+        default:
+          // This branch should never be reached but we need it to keep ESLint happy...
+          {
+            const _exhaustiveCheck: never = payload.outcome; // TS compiler should yell if this branch is reachable
+          }
+          throw new Error(
+            "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+          );
       }
-      break;
+
     case "other":
       return (
         <span className="inline-flex items-center gap-2">
