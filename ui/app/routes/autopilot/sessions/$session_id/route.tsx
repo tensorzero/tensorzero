@@ -186,7 +186,9 @@ function EventStreamContent({
   );
   const oldestPendingToolCall = pendingToolCalls[0] ?? null;
 
-  // SSE change detection for queue top changes.
+  // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
+  // Covers both directions: new item jumping to top, or top item removed by external approval.
+  // Does NOT trigger when queue was empty and first item arrives (no accidental click risk).
   const prevQueueTopRef = useRef<string | null>(null);
   const userActionRef = useRef(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
