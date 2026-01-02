@@ -293,7 +293,10 @@ function EventStreamContent({
 
   // Handle scroll when events change
   useEffect(() => {
-    // Loading older events - preserve scroll position
+    // Still loading older events - wait for them to arrive before adjusting scroll
+    if (isLoadingOlder) return;
+
+    // Older events loaded - preserve scroll position
     if (pendingScrollPreservation.current) {
       const container = scrollContainerRef.current;
       if (container) {

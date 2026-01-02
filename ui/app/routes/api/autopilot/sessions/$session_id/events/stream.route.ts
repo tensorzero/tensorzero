@@ -35,7 +35,10 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 
   try {
-    const response = await fetch(gatewayUrl.toString(), { headers });
+    const response = await fetch(gatewayUrl.toString(), {
+      headers,
+      signal: request.signal,
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
