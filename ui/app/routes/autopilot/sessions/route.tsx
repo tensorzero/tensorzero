@@ -1,6 +1,12 @@
 import { Plus } from "lucide-react";
+import { Suspense, use } from "react";
 import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import {
   PageHeader,
@@ -13,9 +19,24 @@ import PageButtons from "~/components/utils/PageButtons";
 import { logger } from "~/utils/logger";
 import AutopilotSessionsTable from "../AutopilotSessionsTable";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
+import type { Session } from "~/types/tensorzero";
+import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
 
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_PAGE_SIZE = 20;
+
+export type SessionsData = {
+  sessions: Session[];
+  hasMore: boolean;
+};
 
 function parseInteger(value: string | null, fallback: number) {
   if (!value) return fallback;
@@ -38,29 +59,115 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const client = getAutopilotClient();
-  // Fetch limit + 1 to detect if more pages exist
-  const response = await client.listAutopilotSessions({
-    limit: limit + 1,
-    offset,
-  });
 
-  const hasMore = response.sessions.length > limit;
-  const sessions = response.sessions.slice(0, limit);
+  // Return promise WITHOUT awaiting - enables streaming/skeleton loading
+  const sessionsDataPromise = client
+    .listAutopilotSessions({
+      limit: limit + 1,
+      offset,
+    })
+    .then((response) => {
+      const hasMore = response.sessions.length > limit;
+      const sessions = response.sessions.slice(0, limit);
+      return { sessions, hasMore };
+    });
 
   return {
-    sessions,
+    sessionsData: sessionsDataPromise,
     offset,
     limit,
-    hasMore,
   };
+}
+
+// Skeleton rows for loading state - matches table columns (Session ID, Created)
+function SkeletonRows() {
+  return (
+    <>
+      {Array.from({ length: 10 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell>
+            <Skeleton className="h-5 w-24" />
+          </TableCell>
+          <TableCell className="w-0 text-right whitespace-nowrap">
+            <Skeleton className="ml-auto h-5 w-36" />
+          </TableCell>
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+// Skeleton table shown while data loads
+function SessionsTableSkeleton() {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Session ID</TableHead>
+          <TableHead className="w-0 text-right whitespace-nowrap">
+            Created
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <SkeletonRows />
+      </TableBody>
+    </Table>
+  );
+}
+
+// Resolves promise and renders table
+function TableContent({
+  data,
+  gatewayVersion,
+  uiVersion,
+}: {
+  data: Promise<SessionsData>;
+  gatewayVersion?: string;
+  uiVersion?: string;
+}) {
+  const { sessions } = use(data);
+
+  return (
+    <AutopilotSessionsTable
+      sessions={sessions}
+      gatewayVersion={gatewayVersion}
+      uiVersion={uiVersion}
+    />
+  );
+}
+
+// Resolves promise and renders pagination
+function PaginationContent({
+  data,
+  offset,
+  onPreviousPage,
+  onNextPage,
+}: {
+  data: Promise<SessionsData>;
+  offset: number;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+}) {
+  const { hasMore } = use(data);
+
+  return (
+    <PageButtons
+      onPreviousPage={onPreviousPage}
+      onNextPage={onNextPage}
+      disablePrevious={offset <= 0}
+      disableNext={!hasMore}
+    />
+  );
 }
 
 export default function AutopilotSessionsPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { status } = useTensorZeroStatusFetcher();
-  const { sessions, offset, limit, hasMore } = loaderData;
+  const { sessionsData, offset, limit } = loaderData;
   const gatewayVersion = status?.version;
   const uiVersion = __APP_VERSION__;
 
@@ -93,17 +200,31 @@ export default function AutopilotSessionsPage({
             New Session
           </Button>
         </ActionBar>
-        <AutopilotSessionsTable
-          sessions={sessions}
-          gatewayVersion={gatewayVersion}
-          uiVersion={uiVersion}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={offset <= 0}
-          disableNext={!hasMore}
-        />
+        <Suspense key={location.key} fallback={<SessionsTableSkeleton />}>
+          <TableContent
+            data={sessionsData}
+            gatewayVersion={gatewayVersion}
+            uiVersion={uiVersion}
+          />
+        </Suspense>
+        <Suspense
+          key={location.key}
+          fallback={
+            <PageButtons
+              onPreviousPage={() => {}}
+              onNextPage={() => {}}
+              disablePrevious
+              disableNext
+            />
+          }
+        >
+          <PaginationContent
+            data={sessionsData}
+            offset={offset}
+            onPreviousPage={handlePreviousPage}
+            onNextPage={handleNextPage}
+          />
+        </Suspense>
       </SectionLayout>
     </PageLayout>
   );

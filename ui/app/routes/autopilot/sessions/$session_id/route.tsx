@@ -1,5 +1,13 @@
 import type { Route } from "./+types/route";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   data,
   isRouteErrorResponse,
@@ -7,7 +15,7 @@ import {
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { PageHeader } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
@@ -33,43 +41,47 @@ export const handle: RouteHandle = {
 
 const EVENTS_PER_PAGE = 20;
 
+export type EventsData = {
+  events: Event[];
+  hasMoreEvents: boolean;
+};
+
 export async function loader({ params }: Route.LoaderArgs) {
   const sessionId = params.session_id;
   if (!sessionId) {
     throw data("Session ID is required", { status: 400 });
   }
 
-  // Special case: "new" session
+  // Special case: "new" session - return synchronously (no data to fetch)
   if (sessionId === "new") {
     return {
       sessionId: "new",
-      events: [] as Event[],
-      hasMoreEvents: false,
+      eventsData: { events: [] as Event[], hasMoreEvents: false },
       isNewSession: true,
     };
   }
 
   const client = getAutopilotClient();
-  // Fetch limit + 1 to detect if there are more events
-  const response = await client.listAutopilotEvents(sessionId, {
-    limit: EVENTS_PER_PAGE + 1,
-  });
 
-  // Check if there are more events than the page size
-  const hasMoreEvents = response.events.length > EVENTS_PER_PAGE;
-
-  // Sort events by created_at ascending and slice to page size
-  const events = response.events
-    .sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    )
-    .slice(hasMoreEvents ? 1 : 0); // If hasMore, remove oldest event (first after sorting)
+  // Return promise WITHOUT awaiting - enables streaming/skeleton loading
+  const eventsDataPromise = client
+    .listAutopilotEvents(sessionId, {
+      limit: EVENTS_PER_PAGE + 1,
+    })
+    .then((response) => {
+      const hasMoreEvents = response.events.length > EVENTS_PER_PAGE;
+      const events = response.events
+        .sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        )
+        .slice(hasMoreEvents ? 1 : 0);
+      return { events, hasMoreEvents };
+    });
 
   return {
     sessionId,
-    events,
-    hasMoreEvents,
+    eventsData: eventsDataPromise,
     isNewSession: false,
   };
 }
@@ -91,22 +103,47 @@ function debounce<T extends (...args: Parameters<T>) => void>(
   };
 }
 
-export default function AutopilotSessionEventsPage({
-  loaderData,
-}: Route.ComponentProps) {
-  const {
-    sessionId,
-    events: initialEvents,
-    hasMoreEvents: initialHasMore,
-    isNewSession,
-  } = loaderData;
+// Skeleton shown while events are loading
+function EventStreamSkeleton() {
+  return (
+    <div className="border-border mt-8 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border p-4">
+      <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+    </div>
+  );
+}
 
-  const navigate = useNavigate();
+// Main content component that resolves the promise and renders the event stream with SSE
+function EventStreamContent({
+  sessionId,
+  eventsData,
+  isNewSession,
+  optimisticMessages,
+  onOptimisticMessagesChange,
+  scrollContainerRef,
+  onLoaded,
+}: {
+  sessionId: string;
+  eventsData: EventsData | Promise<EventsData>;
+  isNewSession: boolean;
+  optimisticMessages: OptimisticMessage[];
+  onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  onLoaded: () => void;
+}) {
+  // Resolve promise (or use direct data for new session)
+  const { events: initialEvents, hasMoreEvents: initialHasMore } =
+    eventsData instanceof Promise ? use(eventsData) : eventsData;
 
+  // Signal that loading is complete (this runs after promise resolves)
+  useEffect(() => {
+    onLoaded();
+  }, [onLoaded]);
+
+  // Now that we have resolved events, start SSE with the correct lastEventId
   const { events, error, isRetrying, prependEvents } = useAutopilotEventStream({
     sessionId: isNewSession ? NIL_UUID : sessionId,
     initialEvents,
-    enabled: !isNewSession, // Disable SSE for new sessions
+    enabled: !isNewSession,
   });
 
   // State for pagination
@@ -119,12 +156,6 @@ export default function AutopilotSessionEventsPage({
   >(new Map());
 
   const { toast } = useToast();
-
-  // Optimistic messages: shown immediately when user sends, removed when SSE confirms.
-  // See OptimisticMessage type in EventStream.tsx for detailed flow documentation.
-  const [optimisticMessages, setOptimisticMessages] = useState<
-    OptimisticMessage[]
-  >([]);
 
   // Compute pending tool calls (tool_calls without matching authorization or result)
   const pendingToolCalls = useMemo(() => {
@@ -156,10 +187,6 @@ export default function AutopilotSessionEventsPage({
   const oldestPendingToolCall = pendingToolCalls[0] ?? null;
 
   // SSE change detection for queue top changes.
-  // When the oldest pending tool call changes due to an external event (e.g., another user
-  // or system approving/rejecting via SSE), we show a brief cooldown animation to prevent
-  // accidental clicks on the newly displayed card. This gives users time to recognize
-  // that the card content has changed before they can interact with it.
   const prevQueueTopRef = useRef<string | null>(null);
   const userActionRef = useRef(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
@@ -168,12 +195,10 @@ export default function AutopilotSessionEventsPage({
     const currentTopId = oldestPendingToolCall?.id ?? null;
     const prevTopId = prevQueueTopRef.current;
 
-    // Update refs
     prevQueueTopRef.current = currentTopId;
     const wasUserAction = userActionRef.current;
     userActionRef.current = false;
 
-    // If top changed and it wasn't due to user action, trigger cooldown
     if (currentTopId !== prevTopId && prevTopId !== null && !wasUserAction) {
       setIsInCooldown(true);
       const timer = setTimeout(() => setIsInCooldown(false), 1000);
@@ -185,7 +210,6 @@ export default function AutopilotSessionEventsPage({
   // Handle tool call authorization
   const handleAuthorize = useCallback(
     async (eventId: string, approved: boolean) => {
-      // Mark as user action to prevent cooldown when this authorization causes queue change
       userActionRef.current = true;
 
       setAuthLoadingStates((prev) =>
@@ -213,7 +237,6 @@ export default function AutopilotSessionEventsPage({
         if (!response.ok) {
           throw new Error("Authorization failed");
         }
-        // Card will disappear when authorization event arrives via SSE
       } catch (err) {
         logger.error("Failed to authorize tool call:", err);
         toast.error({
@@ -232,108 +255,50 @@ export default function AutopilotSessionEventsPage({
     [sessionId, toast],
   );
 
-  // Optimistic message handler: create message only after POST completes (with eventId)
-  // This eliminates the race condition where SSE could deliver before we have the ID
-  const handleMessageSent = useCallback(
-    (response: { event_id: string; session_id: string }, text: string) => {
-      // Create optimistic message with eventId already set
-      setOptimisticMessages((prev) => [
-        ...prev,
-        {
-          tempId: crypto.randomUUID(),
-          eventId: response.event_id,
-          text,
-          status: "sending",
-        },
-      ]);
+  /*
+   * SCROLL BEHAVIOR SPEC:
+   * 1. Submit message → Scroll to bottom (after optimistic message appears)
+   * 2. New SSE event → Scroll to bottom ONLY if within BOTTOM_THRESHOLD of bottom
+   * 3. Page load → Scroll to bottom (once)
+   * 4. Scroll up (infinite scroll) → Preserve scroll position (no layout shift)
+   * 5. BOTTOM_THRESHOLD (100px) → Buffer to handle tool card appearance
+   */
+  const BOTTOM_THRESHOLD = 100;
 
-      // Scroll to bottom after React re-renders with the new message
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const container = scrollContainerRef.current;
-          if (container) {
-            container.scrollTop = container.scrollHeight;
-          }
-        });
-      });
-
-      // For new sessions, navigate to the created session
-      if (isNewSession) {
-        navigate(`/autopilot/sessions/${response.session_id}`);
-      }
-    },
-    [isNewSession, navigate],
-  );
-
-  const handleMessageFailed = useCallback(
-    (error: Error) => {
-      // No optimistic message exists on failure (we only create after POST succeeds)
-      toast.error({
-        title: isNewSession
-          ? "Failed to create session"
-          : "Failed to send message",
-        description: error.message,
-      });
-    },
-    [toast, isNewSession],
-  );
-
-  // SSE delivers event → remove optimistic message when real event arrives
-  useEffect(() => {
-    if (optimisticMessages.length === 0) return;
-
-    const confirmedEventIds = new Set(events.map((e) => e.id));
-
-    // Remove optimistic messages whose eventId matches a confirmed event
-    const hasConfirmedMessages = optimisticMessages.some((msg) =>
-      confirmedEventIds.has(msg.eventId),
-    );
-
-    if (hasConfirmedMessages) {
-      setOptimisticMessages((prev) =>
-        prev.filter((msg) => !confirmedEventIds.has(msg.eventId)),
-      );
-    }
-  }, [events, optimisticMessages]);
-
-  // Refs
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Refs for scroll management
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
+  const hasInitiallyScrolledRef = useRef(false);
 
-  // Track if older events were just loaded (for scroll preservation)
+  // For preserving scroll position when loading older events
   const pendingScrollPreservation = useRef<{
     scrollHeight: number;
     scrollTop: number;
   } | null>(null);
 
-  // Stick-to-bottom behavior
   const checkIfAtBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return true;
-    // Consider "at bottom" if within 50px of the bottom
-    const threshold = 50;
     return (
       container.scrollHeight - container.scrollTop - container.clientHeight <
-      threshold
+      BOTTOM_THRESHOLD
     );
-  }, []);
+  }, [scrollContainerRef]);
 
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (container) {
       container.scrollTop = container.scrollHeight;
     }
-  }, []);
+  }, [scrollContainerRef]);
 
-  // Update isAtBottom when user scrolls
   const handleScroll = useCallback(() => {
     isAtBottomRef.current = checkIfAtBottom();
   }, [checkIfAtBottom]);
 
-  // Preserve scroll position when content changes at the top (skeleton or events)
+  // Handle scroll when events change
   useEffect(() => {
-    // If we have pending scroll preservation, apply it first
+    // Loading older events - preserve scroll position
     if (pendingScrollPreservation.current) {
       const container = scrollContainerRef.current;
       if (container) {
@@ -346,22 +311,24 @@ export default function AutopilotSessionEventsPage({
       return;
     }
 
-    // Otherwise, stick to bottom if user was at bottom
+    // New events - only scroll if user was at bottom
     if (isAtBottomRef.current) {
       scrollToBottom();
     }
-  }, [events, isLoadingOlder, scrollToBottom]);
+  }, [events, isLoadingOlder, scrollToBottom, scrollContainerRef]);
 
-  // Scroll to bottom on initial mount
+  // Initial scroll to bottom on page load (once)
   useEffect(() => {
-    scrollToBottom();
-  }, [scrollToBottom]);
+    if (!hasInitiallyScrolledRef.current && scrollContainerRef.current) {
+      scrollToBottom();
+      hasInitiallyScrolledRef.current = true;
+    }
+  }, [scrollToBottom, scrollContainerRef]);
 
   // Load older events
   const loadOlderEvents = useCallback(async () => {
     if (isLoadingOlder || hasReachedStart || events.length === 0) return;
 
-    // Store scroll position before loading
     const container = scrollContainerRef.current;
     if (container) {
       pendingScrollPreservation.current = {
@@ -379,8 +346,6 @@ export default function AutopilotSessionEventsPage({
       );
 
       if (!response.ok) {
-        // API might return 500 when there are no older events
-        // Treat this as reaching the start of the session
         logger.debug(
           `API returned ${response.status} when fetching older events, treating as session start`,
         );
@@ -388,48 +353,49 @@ export default function AutopilotSessionEventsPage({
         return;
       }
 
-      const data = (await response.json()) as { events: Event[] };
+      const responseData = (await response.json()) as { events: Event[] };
 
       logger.debug(
-        `Loaded ${data.events.length} older events (requested ${EVENTS_PER_PAGE + 1})`,
+        `Loaded ${responseData.events.length} older events (requested ${EVENTS_PER_PAGE + 1})`,
       );
 
-      // Check if we've reached the start (fewer events than requested)
-      if (data.events.length <= EVENTS_PER_PAGE) {
+      if (responseData.events.length <= EVENTS_PER_PAGE) {
         logger.debug("Reached session start");
         setHasReachedStart(true);
       }
 
-      // If no events returned, we're at the start
-      if (data.events.length === 0) {
+      if (responseData.events.length === 0) {
         return;
       }
 
-      // Sort and take only the page size
-      const olderEvents = data.events
+      const olderEvents = responseData.events
         .sort(
           (a, b) =>
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
         )
-        .slice(data.events.length > EVENTS_PER_PAGE ? 1 : 0);
+        .slice(responseData.events.length > EVENTS_PER_PAGE ? 1 : 0);
 
       prependEvents(olderEvents);
     } catch (err) {
-      // Network errors or other issues - treat as session start to avoid infinite retries
       logger.error("Failed to load older events:", err);
       setHasReachedStart(true);
     } finally {
       setIsLoadingOlder(false);
     }
-  }, [isLoadingOlder, hasReachedStart, events, sessionId, prependEvents]);
+  }, [
+    isLoadingOlder,
+    hasReachedStart,
+    events,
+    sessionId,
+    prependEvents,
+    scrollContainerRef,
+  ]);
 
-  // Debounced version of loadOlderEvents
   const loadOlderEventsDebounced = useMemo(
     () => debounce(loadOlderEvents, 100),
     [loadOlderEvents],
   );
 
-  // Intersection Observer for loading older events
   useEffect(() => {
     const sentinel = topSentinelRef.current;
     const container = scrollContainerRef.current;
@@ -445,7 +411,6 @@ export default function AutopilotSessionEventsPage({
       },
       {
         root: container,
-        // Start loading 300px before reaching the top
         rootMargin: "300px 0px 0px 0px",
         threshold: 0.1,
       },
@@ -456,39 +421,51 @@ export default function AutopilotSessionEventsPage({
     return () => {
       observer.disconnect();
     };
-  }, [isLoadingOlder, hasReachedStart, loadOlderEventsDebounced]);
+  }, [
+    isLoadingOlder,
+    hasReachedStart,
+    loadOlderEventsDebounced,
+    scrollContainerRef,
+  ]);
 
-  // Filter out optimistic messages that have a matching event in the stream
-  // Since we only create optimistic messages after POST completes, eventId is always set
+  // SSE delivers event → remove optimistic message when real event arrives
+  useEffect(() => {
+    if (optimisticMessages.length === 0) return;
+
+    const confirmedEventIds = new Set(events.map((e) => e.id));
+
+    const hasConfirmedMessages = optimisticMessages.some((msg) =>
+      confirmedEventIds.has(msg.eventId),
+    );
+
+    if (hasConfirmedMessages) {
+      onOptimisticMessagesChange(
+        optimisticMessages.filter((msg) => !confirmedEventIds.has(msg.eventId)),
+      );
+    }
+  }, [events, optimisticMessages, onOptimisticMessagesChange]);
+
   const confirmedEventIds = new Set(events.map((e) => e.id));
   const visibleOptimisticMessages = optimisticMessages.filter(
     (msg) => !confirmedEventIds.has(msg.eventId),
   );
 
   return (
-    <div className="container mx-auto flex h-full flex-col px-8 py-8">
-      <PageHeader
-        label="Autopilot Session"
-        name={isNewSession ? "New Session" : sessionId}
-        tag={
-          !isNewSession ? (
-            <Link
-              to="/autopilot/sessions/new"
-              className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              New Session
-            </Link>
-          ) : undefined
-        }
-      />
+    <>
       {error && isRetrying && (
         <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           Failed to fetch events. Retrying...
         </div>
       )}
       <div
-        ref={scrollContainerRef}
+        ref={(el) => {
+          // Update parent's ref to point to the actual scrollable container
+          if (scrollContainerRef) {
+            (
+              scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>
+            ).current = el;
+          }
+        }}
         onScroll={handleScroll}
         className="border-border mt-8 min-h-0 flex-1 overflow-y-auto rounded-lg border p-4"
       >
@@ -517,14 +494,150 @@ export default function AutopilotSessionEventsPage({
           />
         </div>
       )}
+    </>
+  );
+}
 
-      {/* Chat input */}
+export default function AutopilotSessionEventsPage({
+  loaderData,
+}: Route.ComponentProps) {
+  const { sessionId, eventsData, isNewSession } = loaderData;
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  // Lift optimistic messages state to parent so ChatInput can work outside Suspense
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    OptimisticMessage[]
+  >([]);
+
+  // Track if events are still loading (for disabling chat input)
+  // New sessions have direct data (not a promise), so they're not loading
+  const [isEventsLoading, setIsEventsLoading] = useState(
+    !isNewSession && eventsData instanceof Promise,
+  );
+
+  // Ref for scroll container - shared between parent and EventStreamContent
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleNavigateToSession = useCallback(
+    (newSessionId: string) => {
+      navigate(`/autopilot/sessions/${newSessionId}`);
+    },
+    [navigate],
+  );
+
+  // Optimistic message handler - works without needing events resolved
+  const handleMessageSent = useCallback(
+    (response: { event_id: string; session_id: string }, text: string) => {
+      setOptimisticMessages((prev) => [
+        ...prev,
+        {
+          tempId: crypto.randomUUID(),
+          eventId: response.event_id,
+          text,
+          status: "sending",
+        },
+      ]);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const container = scrollContainerRef.current;
+          if (container) {
+            container.scrollTop = container.scrollHeight;
+          }
+        });
+      });
+
+      if (isNewSession) {
+        handleNavigateToSession(response.session_id);
+      }
+    },
+    [isNewSession, handleNavigateToSession],
+  );
+
+  const handleMessageFailed = useCallback(
+    (err: Error) => {
+      toast.error({
+        title: isNewSession
+          ? "Failed to create session"
+          : "Failed to send message",
+        description: err.message,
+      });
+    },
+    [toast, isNewSession],
+  );
+
+  return (
+    <div className="container mx-auto flex h-full flex-col px-8 py-8">
+      <PageHeader
+        label="Autopilot Session"
+        name={isNewSession ? "New Session" : sessionId}
+        tag={
+          !isNewSession ? (
+            <Link
+              to="/autopilot/sessions/new"
+              className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New Session
+            </Link>
+          ) : undefined
+        }
+      />
+
+      <Suspense fallback={<EventStreamSkeleton />}>
+        <EventStreamContentWrapper
+          sessionId={sessionId}
+          eventsData={eventsData}
+          isNewSession={isNewSession}
+          optimisticMessages={optimisticMessages}
+          onOptimisticMessagesChange={setOptimisticMessages}
+          scrollContainerRef={scrollContainerRef}
+          onLoaded={() => setIsEventsLoading(false)}
+        />
+      </Suspense>
+
+      {/* Chat input - always visible outside Suspense, disabled while loading */}
       <ChatInput
         sessionId={isNewSession ? NIL_UUID : sessionId}
         onMessageSent={handleMessageSent}
         onMessageFailed={handleMessageFailed}
         className="mt-4"
         isNewSession={isNewSession}
+        disabled={isEventsLoading}
+      />
+    </div>
+  );
+}
+
+// Wrapper that passes the scroll container ref back to parent
+function EventStreamContentWrapper({
+  sessionId,
+  eventsData,
+  isNewSession,
+  optimisticMessages,
+  onOptimisticMessagesChange,
+  scrollContainerRef,
+  onLoaded,
+}: {
+  sessionId: string;
+  eventsData: EventsData | Promise<EventsData>;
+  isNewSession: boolean;
+  optimisticMessages: OptimisticMessage[];
+  onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  onLoaded: () => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <EventStreamContent
+        sessionId={sessionId}
+        eventsData={eventsData}
+        isNewSession={isNewSession}
+        optimisticMessages={optimisticMessages}
+        onOptimisticMessagesChange={onOptimisticMessagesChange}
+        scrollContainerRef={scrollContainerRef}
+        onLoaded={onLoaded}
       />
     </div>
   );
