@@ -14,8 +14,9 @@ pub use tensorzero::{
     ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, TensorZeroError,
-    UpdateDatapointRequest, UpdateDatapointsResponse,
+    GetConfigResponse, GetDatapointsResponse, InferenceResponse, ListDatapointsRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
+    WriteConfigResponse,
 };
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::config::snapshot::SnapshotHash;
@@ -126,6 +127,18 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         snapshot_hash: SnapshotHash,
         input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+    /// Get a config snapshot by hash, or the live config if no hash is provided.
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+    /// Write a config snapshot to storage.
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
     // ========== Datapoint CRUD Operations ==========
 

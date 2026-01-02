@@ -7,11 +7,14 @@ use async_trait::async_trait;
 use tensorzero::{
     ActionResponse, ClientInferenceParams, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    FeedbackParams, FeedbackResponse, GetDatapointsResponse, GetInferencesResponse,
-    InferenceOutput, InferenceResponse, ListDatapointsRequest, ListInferencesRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
-use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
+use tensorzero_core::config::write_config_snapshot;
+use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::datasets::v1::types::{
@@ -23,6 +26,7 @@ use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResp
 use tensorzero_core::endpoints::inference::inference;
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, action};
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
+use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
 
@@ -183,6 +187,60 @@ impl TensorZeroClient for EmbeddedClient {
                 }))
             }
         }
+    }
+
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError> {
+        let snapshot_hash = match hash {
+            Some(hash) => hash.parse().map_err(|_| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::ConfigSnapshotNotFound {
+                        snapshot_hash: hash,
+                    })
+                    .into(),
+                })
+            })?,
+            None => self.app_state.config.hash.clone(),
+        };
+
+        let snapshot = self
+            .app_state
+            .clickhouse_connection_info
+            .get_config_snapshot(snapshot_hash)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        Ok(GetConfigResponse {
+            hash: snapshot.hash.to_string(),
+            config: snapshot.config.into(),
+            extra_templates: snapshot.extra_templates,
+            tags: snapshot.tags,
+        })
+    }
+
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError> {
+        let mut snapshot =
+            ConfigSnapshot::new(request.config, request.extra_templates).map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
+        snapshot.tags = request.tags;
+
+        let hash = snapshot.hash.to_string();
+
+        write_config_snapshot(&self.app_state.clickhouse_connection_info, snapshot)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        Ok(WriteConfigResponse { hash })
     }
 
     // ========== Datapoint CRUD Operations ==========

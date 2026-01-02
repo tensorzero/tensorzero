@@ -9,9 +9,10 @@ use autopilot_client::AutopilotError;
 use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    FeedbackParams, FeedbackResponse, GetDatapointsResponse, GetInferencesResponse,
-    InferenceOutput, InferenceResponse, ListDatapointsRequest, ListInferencesRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -337,6 +338,24 @@ impl TensorZeroClient for Client {
                 }
             }
         }
+    }
+
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError> {
+        ClientExt::get_config_snapshot(self, hash.as_deref())
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError> {
+        ClientExt::write_config(self, request)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
     }
 
     // ========== Datapoint CRUD Operations ==========
