@@ -19,16 +19,16 @@ from uuid_utils import uuid7
 
 
 def assert_openai_chat_usage_details(entry: RawUsageEntry) -> None:
-    usage = entry.usage
-    assert usage is not None, "raw_usage entry should include usage for chat completions"
-    assert isinstance(usage, dict), "raw_usage entry usage should be a dict for chat completions"
-    assert "total_tokens" in usage, "raw_usage should include `total_tokens` for chat completions"
-    prompt_details = usage.get("prompt_tokens_details")
+    data = entry.data
+    assert data is not None, "raw_usage entry should include data for chat completions"
+    assert isinstance(data, dict), "raw_usage entry data should be a dict for chat completions"
+    assert "total_tokens" in data, "raw_usage should include `total_tokens` for chat completions"
+    prompt_details = data.get("prompt_tokens_details")
     assert isinstance(prompt_details, dict), "raw_usage should include `prompt_tokens_details` for chat completions"
     assert "cached_tokens" in prompt_details, (
         "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
     )
-    completion_details = usage.get("completion_tokens_details")
+    completion_details = data.get("completion_tokens_details")
     assert isinstance(completion_details, dict), (
         "raw_usage should include `completion_tokens_details` for chat completions"
     )
@@ -53,12 +53,13 @@ async def test_async_raw_usage_non_streaming(async_client: AsyncTensorZeroGatewa
 
     assert isinstance(result, ChatInferenceResponse), "Response should be ChatInferenceResponse"
     assert result.usage is not None, "Response should have usage"
-    assert result.usage.raw_usage is not None, "usage should have raw_usage when requested"
-    assert isinstance(result.usage.raw_usage, list), "raw_usage should be a list"
-    assert len(result.usage.raw_usage) > 0, "raw_usage should have at least one entry"
+    # raw_usage is now at response level (sibling to usage)
+    assert result.raw_usage is not None, "Response should have raw_usage when requested"
+    assert isinstance(result.raw_usage, list), "raw_usage should be a list"
+    assert len(result.raw_usage) > 0, "raw_usage should have at least one entry"
 
     # Verify structure of first entry
-    entry = result.usage.raw_usage[0]
+    entry = result.raw_usage[0]
     assert entry.model_inference_id is not None, "Entry should have model_inference_id"
     assert entry.provider_type is not None, "Entry should have provider_type"
     assert entry.api_type is not None, "Entry should have api_type"
@@ -81,7 +82,8 @@ async def test_async_raw_usage_not_requested(async_client: AsyncTensorZeroGatewa
 
     assert isinstance(result, ChatInferenceResponse), "Response should be ChatInferenceResponse"
     assert result.usage is not None, "Response should have usage"
-    assert result.usage.raw_usage is None, "raw_usage should be None when not requested"
+    # raw_usage is now at response level (sibling to usage)
+    assert result.raw_usage is None, "raw_usage should be None when not requested"
 
 
 @pytest.mark.asyncio
@@ -102,13 +104,13 @@ async def test_async_raw_usage_streaming(async_client: AsyncTensorZeroGateway):
 
     found_raw_usage = False
     async for chunk in stream:
-        # Check if this chunk has usage with raw_usage
-        if chunk.usage is not None and chunk.usage.raw_usage is not None:
+        # Check if this chunk has raw_usage at chunk level (sibling to usage)
+        if chunk.raw_usage is not None:
             found_raw_usage = True
-            assert isinstance(chunk.usage.raw_usage, list), "raw_usage should be a list"
-            assert len(chunk.usage.raw_usage) > 0, "raw_usage should have at least one entry"
+            assert isinstance(chunk.raw_usage, list), "raw_usage should be a list"
+            assert len(chunk.raw_usage) > 0, "raw_usage should have at least one entry"
 
-            entry = chunk.usage.raw_usage[0]
+            entry = chunk.raw_usage[0]
             assert entry.model_inference_id is not None, "Entry should have model_inference_id"
             assert entry.provider_type is not None, "Entry should have provider_type"
             assert entry.api_type is not None, "Entry should have api_type"
@@ -132,12 +134,13 @@ def test_sync_raw_usage_non_streaming(sync_client: TensorZeroGateway):
 
     assert isinstance(result, ChatInferenceResponse), "Response should be ChatInferenceResponse"
     assert result.usage is not None, "Response should have usage"
-    assert result.usage.raw_usage is not None, "usage should have raw_usage when requested"
-    assert isinstance(result.usage.raw_usage, list), "raw_usage should be a list"
-    assert len(result.usage.raw_usage) > 0, "raw_usage should have at least one entry"
+    # raw_usage is now at response level (sibling to usage)
+    assert result.raw_usage is not None, "Response should have raw_usage when requested"
+    assert isinstance(result.raw_usage, list), "raw_usage should be a list"
+    assert len(result.raw_usage) > 0, "raw_usage should have at least one entry"
 
     # Verify structure of first entry
-    entry = result.usage.raw_usage[0]
+    entry = result.raw_usage[0]
     assert entry.model_inference_id is not None, "Entry should have model_inference_id"
     assert entry.provider_type is not None, "Entry should have provider_type"
     assert entry.api_type is not None, "Entry should have api_type"
@@ -161,13 +164,13 @@ def test_sync_raw_usage_streaming(sync_client: TensorZeroGateway):
 
     found_raw_usage = False
     for chunk in stream:
-        # Check if this chunk has usage with raw_usage
-        if chunk.usage is not None and chunk.usage.raw_usage is not None:
+        # Check if this chunk has raw_usage at chunk level (sibling to usage)
+        if chunk.raw_usage is not None:
             found_raw_usage = True
-            assert isinstance(chunk.usage.raw_usage, list), "raw_usage should be a list"
-            assert len(chunk.usage.raw_usage) > 0, "raw_usage should have at least one entry"
+            assert isinstance(chunk.raw_usage, list), "raw_usage should be a list"
+            assert len(chunk.raw_usage) > 0, "raw_usage should have at least one entry"
 
-            entry = chunk.usage.raw_usage[0]
+            entry = chunk.raw_usage[0]
             assert entry.model_inference_id is not None, "Entry should have model_inference_id"
             assert entry.provider_type is not None, "Entry should have provider_type"
             assert entry.api_type is not None, "Entry should have api_type"

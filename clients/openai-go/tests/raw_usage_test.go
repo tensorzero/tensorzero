@@ -21,11 +21,11 @@ func TestRawUsage(t *testing.T) {
 	assertOpenAIChatRawUsageFields := func(t *testing.T, entry map[string]interface{}) {
 		t.Helper()
 
-		usageValue, ok := entry["usage"]
-		require.True(t, ok, "raw_usage entry should include usage")
+		dataValue, ok := entry["data"]
+		require.True(t, ok, "raw_usage entry should include data")
 
-		usage, ok := usageValue.(map[string]interface{})
-		require.True(t, ok, "raw_usage entry usage should be an object")
+		usage, ok := dataValue.(map[string]interface{})
+		require.True(t, ok, "raw_usage entry data should be an object")
 
 		_, ok = usage["total_tokens"]
 		assert.True(t, ok, "raw_usage usage should include total_tokens")
@@ -63,9 +63,9 @@ func TestRawUsage(t *testing.T) {
 		// Verify usage exists
 		require.NotNil(t, resp.Usage, "Response should have usage")
 
-		// Check for tensorzero_raw_usage inside usage extra fields
-		rawUsageField, ok := resp.Usage.JSON.ExtraFields["tensorzero_raw_usage"]
-		require.True(t, ok, "Usage should have tensorzero_raw_usage field when requested")
+		// Check for tensorzero_raw_usage at the response level (sibling to usage)
+		rawUsageField, ok := resp.JSON.ExtraFields["tensorzero_raw_usage"]
+		require.True(t, ok, "Response should have tensorzero_raw_usage field when requested")
 
 		var rawUsage []map[string]interface{}
 		err = json.Unmarshal([]byte(rawUsageField.Raw()), &rawUsage)
@@ -102,8 +102,8 @@ func TestRawUsage(t *testing.T) {
 		// Verify usage exists
 		require.NotNil(t, resp.Usage, "Response should have usage")
 
-		// tensorzero_raw_usage should not be present
-		_, ok := resp.Usage.JSON.ExtraFields["tensorzero_raw_usage"]
+		// tensorzero_raw_usage should not be present at the response level
+		_, ok := resp.JSON.ExtraFields["tensorzero_raw_usage"]
 		assert.False(t, ok, "tensorzero_raw_usage should not be present when not requested")
 	})
 
@@ -135,26 +135,24 @@ func TestRawUsage(t *testing.T) {
 		require.NoError(t, stream.Err(), "Stream encountered an error")
 		require.NotEmpty(t, allChunks, "No chunks were received")
 
-		// The final chunk should have usage with tensorzero_raw_usage
+		// The final chunk should have tensorzero_raw_usage at the chunk level (sibling to usage)
 		foundRawUsage := false
 		for _, chunk := range allChunks {
-			if chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0 {
-				rawUsageField, ok := chunk.Usage.JSON.ExtraFields["tensorzero_raw_usage"]
-				if ok {
-					foundRawUsage = true
+			rawUsageField, ok := chunk.JSON.ExtraFields["tensorzero_raw_usage"]
+			if ok {
+				foundRawUsage = true
 
-					var rawUsage []map[string]interface{}
-					err := json.Unmarshal([]byte(rawUsageField.Raw()), &rawUsage)
-					require.NoError(t, err, "Failed to parse tensorzero_raw_usage")
-					require.Greater(t, len(rawUsage), 0, "tensorzero_raw_usage should have at least one entry")
+				var rawUsage []map[string]interface{}
+				err := json.Unmarshal([]byte(rawUsageField.Raw()), &rawUsage)
+				require.NoError(t, err, "Failed to parse tensorzero_raw_usage")
+				require.Greater(t, len(rawUsage), 0, "tensorzero_raw_usage should have at least one entry")
 
-					// Verify structure of first entry
-					entry := rawUsage[0]
-					assert.NotNil(t, entry["model_inference_id"], "Entry should have model_inference_id")
-					assert.NotNil(t, entry["provider_type"], "Entry should have provider_type")
-					assert.NotNil(t, entry["api_type"], "Entry should have api_type")
-					assertOpenAIChatRawUsageFields(t, entry)
-				}
+				// Verify structure of first entry
+				entry := rawUsage[0]
+				assert.NotNil(t, entry["model_inference_id"], "Entry should have model_inference_id")
+				assert.NotNil(t, entry["provider_type"], "Entry should have provider_type")
+				assert.NotNil(t, entry["api_type"], "Entry should have api_type")
+				assertOpenAIChatRawUsageFields(t, entry)
 			}
 		}
 

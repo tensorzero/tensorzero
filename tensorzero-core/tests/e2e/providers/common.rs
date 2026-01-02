@@ -2807,8 +2807,8 @@ pub async fn check_base64_pdf_response(
     );
 
     let usage = response.usage;
-    let input_tokens = usage.usage.input_tokens;
-    let output_tokens = usage.usage.output_tokens;
+    let input_tokens = usage.input_tokens;
+    let output_tokens = usage.output_tokens;
     if should_be_cached {
         assert_eq!(input_tokens, Some(0));
         assert_eq!(output_tokens, Some(0));
@@ -2960,8 +2960,8 @@ pub async fn check_base64_image_response(
     );
 
     let usage = response.usage;
-    let input_tokens = usage.usage.input_tokens;
-    let output_tokens = usage.usage.output_tokens;
+    let input_tokens = usage.input_tokens;
+    let output_tokens = usage.output_tokens;
     if should_be_cached {
         assert_eq!(input_tokens, Some(0));
         assert_eq!(output_tokens, Some(0));
@@ -3114,8 +3114,8 @@ pub async fn check_url_image_response(
     );
 
     let usage = response.usage;
-    let input_tokens = usage.usage.input_tokens;
-    let output_tokens = usage.usage.output_tokens;
+    let input_tokens = usage.input_tokens;
+    let output_tokens = usage.output_tokens;
     if should_be_cached {
         assert_eq!(input_tokens, Some(0));
         assert_eq!(output_tokens, Some(0));

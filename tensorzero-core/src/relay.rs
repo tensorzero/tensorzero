@@ -231,38 +231,28 @@ impl TensorzeroRelay {
                     let raw_chunk = serde_json::to_string(&chunk).unwrap_or_default();
                     match chunk {
                         InferenceResponseChunk::Chat(c) => {
-                            // Extract both usage and raw_usage from UsageWithRaw for passthrough
-                            let (usage, raw_usage) = c
-                                .usage
-                                .map(|u| (Some(u.usage), u.raw_usage))
-                                .unwrap_or((None, None));
                             Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
                                 c.content,
-                                usage,
+                                c.usage,
                                 // TODO - get the original chunk as a string
                                 raw_chunk,
                                 start_time.elapsed(),
                                 c.finish_reason,
-                                raw_usage,
+                                c.raw_usage,
                             ))
                         }
                         InferenceResponseChunk::Json(c) => {
-                            // Extract both usage and raw_usage from UsageWithRaw for passthrough
-                            let (usage, raw_usage) = c
-                                .usage
-                                .map(|u| (Some(u.usage), u.raw_usage))
-                                .unwrap_or((None, None));
                             Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
                                 vec![ContentBlockChunk::Text(TextChunk {
                                     id: "0".to_string(),
                                     text: c.raw,
                                 })],
-                                usage,
+                                c.usage,
                                 // TODO - get the original chunk as a string
                                 raw_chunk,
                                 start_time.elapsed(),
                                 c.finish_reason,
-                                raw_usage,
+                                c.raw_usage,
                             ))
                         }
                     }

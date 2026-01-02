@@ -37,14 +37,13 @@ class RawUsageEntry:
     model_inference_id: UUID
     provider_type: str
     api_type: ApiType
-    usage: Optional[Dict[str, Any]] = None
+    data: Optional[Dict[str, Any]] = None
 
 
 @dataclass
 class Usage:
     input_tokens: int
     output_tokens: int
-    raw_usage: Optional[List[RawUsageEntry]] = None
 
 
 # For type checking purposes only
@@ -212,6 +211,7 @@ class ChatInferenceResponse:
     variant_name: str
     content: List[ContentBlock]
     usage: Usage
+    raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
     original_response: Optional[str] = None
 
@@ -223,6 +223,7 @@ class JsonInferenceResponse:
     variant_name: str
     output: JsonInferenceOutput
     usage: Usage
+    raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
     original_response: Optional[str] = None
 
@@ -256,19 +257,16 @@ def parse_raw_usage_entry(entry: Dict[str, Any]) -> RawUsageEntry:
         model_inference_id=UUID(entry["model_inference_id"]),
         provider_type=entry["provider_type"],
         api_type=entry["api_type"],
-        usage=entry.get("usage"),
+        data=entry.get("data"),
     )
 
 
-def parse_usage(usage_data: Dict[str, Any]) -> Usage:
-    raw_usage = None
-    if "raw_usage" in usage_data and usage_data["raw_usage"] is not None:
-        raw_usage = [parse_raw_usage_entry(entry) for entry in usage_data["raw_usage"]]
-    return Usage(
-        input_tokens=usage_data["input_tokens"],
-        output_tokens=usage_data["output_tokens"],
-        raw_usage=raw_usage,
-    )
+def parse_raw_usage(
+    raw_usage_data: Optional[List[Dict[str, Any]]],
+) -> Optional[List[RawUsageEntry]]:
+    if raw_usage_data is None:
+        return None
+    return [parse_raw_usage_entry(entry) for entry in raw_usage_data]
 
 
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
@@ -281,7 +279,8 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
             content=[parse_content_block(block) for block in data["content"]],  # type: ignore
-            usage=parse_usage(data["usage"]),
+            usage=Usage(**data["usage"]),
+            raw_usage=parse_raw_usage(data.get("raw_usage")),
             finish_reason=finish_reason_enum,
             original_response=data.get("original_response"),
         )
@@ -295,7 +294,8 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
             output=JsonInferenceOutput(**output),
-            usage=parse_usage(data["usage"]),
+            usage=Usage(**data["usage"]),
+            raw_usage=parse_raw_usage(data.get("raw_usage")),
             finish_reason=finish_reason_enum,
             original_response=data.get("original_response"),
         )
@@ -390,6 +390,7 @@ class ChatChunk:
     variant_name: str
     content: List[ContentBlockChunk]
     usage: Optional[Usage] = None
+    raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
 
 
@@ -400,6 +401,7 @@ class JsonChunk:
     variant_name: str
     raw: str
     usage: Optional[Usage] = None
+    raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
 
 
@@ -416,7 +418,8 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             episode_id=UUID(chunk["episode_id"]),
             variant_name=chunk["variant_name"],
             content=[parse_content_block_chunk(block) for block in chunk["content"]],
-            usage=parse_usage(chunk["usage"]) if "usage" in chunk else None,
+            usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
+            raw_usage=parse_raw_usage(chunk.get("raw_usage")),
             finish_reason=finish_reason_enum,
         )
     elif "raw" in chunk:
@@ -425,7 +428,8 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             episode_id=UUID(chunk["episode_id"]),
             variant_name=chunk["variant_name"],
             raw=chunk["raw"],
-            usage=parse_usage(chunk["usage"]) if "usage" in chunk else None,
+            usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
+            raw_usage=parse_raw_usage(chunk.get("raw_usage")),
             finish_reason=finish_reason_enum,
         )
     else:

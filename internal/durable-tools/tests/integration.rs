@@ -27,7 +27,7 @@ use tensorzero::{
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
-use tensorzero_core::inference::types::{ContentBlockChatOutput, Text, Usage, UsageWithRaw};
+use tensorzero_core::inference::types::{ContentBlockChatOutput, Text, Usage};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -171,13 +171,11 @@ fn create_mock_chat_response(text: &str) -> InferenceResponse {
         content: vec![ContentBlockChatOutput::Text(Text {
             text: text.to_string(),
         })],
-        usage: UsageWithRaw {
-            usage: Usage {
-                input_tokens: Some(10),
-                output_tokens: Some(5),
-            },
-            raw_usage: None,
+        usage: Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(5),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     })

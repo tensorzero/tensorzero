@@ -21,11 +21,11 @@ beforeAll(() => {
 describe("Raw Usage", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const assertOpenAIChatRawUsageFields = (entry: any) => {
-    expect(entry.usage).toBeDefined();
-    expect(entry.usage.total_tokens).toBeDefined();
-    expect(entry.usage.prompt_tokens_details?.cached_tokens).toBeDefined();
+    expect(entry.data).toBeDefined();
+    expect(entry.data.total_tokens).toBeDefined();
+    expect(entry.data.prompt_tokens_details?.cached_tokens).toBeDefined();
     expect(
-      entry.usage.completion_tokens_details?.reasoning_tokens
+      entry.data.completion_tokens_details?.reasoning_tokens
     ).toBeDefined();
   };
 
@@ -44,8 +44,8 @@ describe("Raw Usage", () => {
     });
 
     expect(result.usage).toBeDefined();
-    // @ts-expect-error - custom TensorZero property
-    const rawUsage = result.usage?.tensorzero_raw_usage;
+    // @ts-expect-error - custom TensorZero property at response level (sibling to usage)
+    const rawUsage = result.tensorzero_raw_usage;
     expect(rawUsage).toBeDefined();
     expect(Array.isArray(rawUsage)).toBe(true);
     expect(rawUsage.length).toBeGreaterThan(0);
@@ -73,8 +73,8 @@ describe("Raw Usage", () => {
     });
 
     expect(result.usage).toBeDefined();
-    // @ts-expect-error - custom TensorZero property
-    const rawUsage = result.usage?.tensorzero_raw_usage;
+    // @ts-expect-error - custom TensorZero property at response level
+    const rawUsage = result.tensorzero_raw_usage;
     expect(rawUsage).toBeUndefined();
   });
 
@@ -97,20 +97,18 @@ describe("Raw Usage", () => {
     let foundRawUsage = false;
 
     for await (const chunk of stream) {
-      if (chunk.usage) {
-        // @ts-expect-error - custom TensorZero property
-        const rawUsage = chunk.usage?.tensorzero_raw_usage;
-        if (rawUsage) {
-          foundRawUsage = true;
-          expect(Array.isArray(rawUsage)).toBe(true);
-          expect(rawUsage.length).toBeGreaterThan(0);
+      // @ts-expect-error - custom TensorZero property at chunk level (sibling to usage)
+      const rawUsage = chunk.tensorzero_raw_usage;
+      if (rawUsage) {
+        foundRawUsage = true;
+        expect(Array.isArray(rawUsage)).toBe(true);
+        expect(rawUsage.length).toBeGreaterThan(0);
 
-          const entry = rawUsage[0];
-          expect(entry.model_inference_id).toBeDefined();
-          expect(entry.provider_type).toBeDefined();
-          expect(entry.api_type).toBeDefined();
-          assertOpenAIChatRawUsageFields(entry);
-        }
+        const entry = rawUsage[0];
+        expect(entry.model_inference_id).toBeDefined();
+        expect(entry.provider_type).toBeDefined();
+        expect(entry.api_type).toBeDefined();
+        assertOpenAIChatRawUsageFields(entry);
       }
     }
 

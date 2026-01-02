@@ -24,11 +24,12 @@ use crate::endpoints::openai_compatible::types::tool::{
     ChatCompletionToolChoiceOption, OpenAICompatibleTool, OpenAICompatibleToolCall,
     OpenAICompatibleToolChoiceParams, OpenAICompatibleToolMessage,
 };
-use crate::endpoints::openai_compatible::types::usage::OpenAICompatibleUsageWithRaw;
+use crate::endpoints::openai_compatible::types::usage::OpenAICompatibleUsage;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::chat_completion_inference_params::ServiceTier;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{
     Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage, InputMessageContent,
     RawText, Role, System, Template, Text, current_timestamp,
@@ -206,7 +207,9 @@ pub struct OpenAICompatibleResponse {
     pub system_fingerprint: String,
     pub service_tier: Option<String>,
     pub object: String,
-    pub usage: OpenAICompatibleUsageWithRaw,
+    pub usage: OpenAICompatibleUsage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 // ============================================================================
@@ -684,6 +687,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     system_fingerprint: String::new(),
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
+                    tensorzero_raw_usage: response.raw_usage,
                     episode_id: response.episode_id.to_string(),
                 }
             }
@@ -704,6 +708,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 service_tier: None,
                 object: "chat.completion".to_string(),
                 usage: response.usage.into(),
+                tensorzero_raw_usage: response.raw_usage,
                 episode_id: response.episode_id.to_string(),
             },
         }

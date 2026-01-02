@@ -254,7 +254,7 @@ pub async fn test_dicl_optimization_chat() {
     }
 
     // Verify usage metrics
-    validate_usage_metrics(chat_response.usage.usage);
+    validate_usage_metrics(chat_response.usage);
 
     // Validate ClickHouse data
     validate_inference_clickhouse(chat_response.inference_id, &inference_params, false).await;
@@ -328,7 +328,7 @@ pub async fn test_dicl_optimization_chat() {
     if let Some(last_chunk) = chunks.last()
         && let Some(usage) = &last_chunk.usage
     {
-        validate_usage_metrics(usage.usage);
+        validate_usage_metrics(*usage);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -539,7 +539,7 @@ pub async fn test_dicl_optimization_json() {
     }
 
     // Verify usage metrics
-    validate_usage_metrics(json_response.usage.usage);
+    validate_usage_metrics(json_response.usage);
 
     // Validate ClickHouse data
     validate_inference_clickhouse(json_response.inference_id, &inference_params, true).await;
@@ -613,7 +613,7 @@ pub async fn test_dicl_optimization_json() {
     if let Some(last_chunk) = chunks.last()
         && let Some(usage) = &last_chunk.usage
     {
-        validate_usage_metrics(usage.usage);
+        validate_usage_metrics(*usage);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)

@@ -23,7 +23,7 @@ pub struct RawUsageEntry {
     pub api_type: ApiType,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub usage: Option<serde_json::Value>,
+    pub data: Option<serde_json::Value>,
 }
 
 pub fn raw_usage_entries_from_value(
@@ -36,7 +36,7 @@ pub fn raw_usage_entries_from_value(
         model_inference_id,
         provider_type: provider_type.to_string(),
         api_type,
-        usage: Some(usage),
+        data: Some(usage),
     }]
 }
 
@@ -235,7 +235,7 @@ mod tests {
             model_inference_id: Uuid::nil(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            usage: Some(serde_json::json!({
+            data: Some(serde_json::json!({
                 "prompt_tokens": 100,
                 "completion_tokens": 50,
                 "reasoning_tokens": 30
@@ -244,21 +244,21 @@ mod tests {
         let json = serde_json::to_value(&entry).unwrap();
         assert_eq!(json["provider_type"], "openai");
         assert_eq!(json["api_type"], "chat_completions");
-        assert_eq!(json["usage"]["prompt_tokens"], 100);
-        assert_eq!(json["usage"]["reasoning_tokens"], 30);
+        assert_eq!(json["data"]["prompt_tokens"], 100);
+        assert_eq!(json["data"]["reasoning_tokens"], 30);
     }
 
     #[test]
-    fn test_raw_usage_entry_null_usage() {
+    fn test_raw_usage_entry_null_data() {
         let entry = RawUsageEntry {
             model_inference_id: Uuid::nil(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            usage: None,
+            data: None,
         };
         let json = serde_json::to_string(&entry).unwrap();
-        // usage field should be omitted when None
-        assert!(!json.contains("usage"));
+        // data field should be omitted when None
+        assert!(!json.contains("data"));
     }
 
     #[test]
@@ -272,7 +272,7 @@ mod tests {
                 model_inference_id: Uuid::nil(),
                 provider_type: "openai".to_string(),
                 api_type: ApiType::ChatCompletions,
-                usage: Some(serde_json::json!({"prompt_tokens": 100})),
+                data: Some(serde_json::json!({"prompt_tokens": 100})),
             }]),
         };
         let json = serde_json::to_value(&usage_with_raw).unwrap();

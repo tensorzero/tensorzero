@@ -9,7 +9,7 @@ use tensorzero_core::client::Input;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
 use tensorzero_core::evaluations::{EvaluationConfig, InferenceEvaluationConfig};
-use tensorzero_core::inference::types::{ContentBlockChatOutput, Text, Usage, UsageWithRaw};
+use tensorzero_core::inference::types::{ContentBlockChatOutput, Text, Usage};
 use tensorzero_core::tool::DynamicToolParams;
 
 // ============================================================================
@@ -127,13 +127,11 @@ fn mock_success(
         content: vec![ContentBlockChatOutput::Text(Text {
             text: "test output".to_string(),
         })],
-        usage: UsageWithRaw {
-            usage: Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
-            },
-            raw_usage: None,
+        usage: Usage {
+            input_tokens: Some(0),
+            output_tokens: Some(0),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     });

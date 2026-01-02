@@ -181,11 +181,11 @@ pub fn prepare_serialized_openai_compatible_events(
             inference_id = Some(chunk.inference_id());
             episode_id = Some(chunk.episode_id());
             variant_name = Some(chunk.variant_name().to_string());
-            let chunk_usage_with_raw = match &chunk {
-                InferenceResponseChunk::Chat(c) => &c.usage,
-                InferenceResponseChunk::Json(c) => &c.usage,
+            let (chunk_usage, chunk_raw_usage) = match &chunk {
+                InferenceResponseChunk::Chat(c) => (&c.usage, &c.raw_usage),
+                InferenceResponseChunk::Json(c) => (&c.usage, &c.raw_usage),
             };
-            if let Some(usage_with_raw) = chunk_usage_with_raw {
+            if let Some(usage) = chunk_usage {
                 // `total_usage` will be `None` if this is the first chunk with usage information....
                 if total_usage.is_none() {
                     // ... so initialize it to zero ...
@@ -193,12 +193,12 @@ pub fn prepare_serialized_openai_compatible_events(
                 }
                 // ...and then add the chunk usage to it (handling `None` fields)
                 if let Some(ref mut u) = total_usage {
-                    u.sum_usage_strict(&usage_with_raw.usage);
+                    u.sum_usage_strict(usage);
                 }
-                // Collect raw_usage entries from chunks
-                if let Some(raw_usage) = &usage_with_raw.raw_usage {
-                    raw_usage_entries.extend(raw_usage.iter().cloned());
-                }
+            }
+            // Collect raw_usage entries from chunks
+            if let Some(raw_usage) = chunk_raw_usage {
+                raw_usage_entries.extend(raw_usage.iter().cloned());
             }
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
             for chunk in openai_compatible_chunks {
@@ -261,11 +261,9 @@ pub fn prepare_serialized_openai_compatible_events(
                     message: format!("Failed to convert usage chunk to JSON: {e}"),
                 })
             })?;
-            // Add raw_usage to the usage object if include_raw_usage is set (even if empty)
-            if include_raw_usage
-                && let Some(usage_obj) = chunk_json.get_mut("usage")
-            {
-                usage_obj["tensorzero_raw_usage"] = serde_json::to_value(&raw_usage_entries).unwrap_or_default();
+            // Add raw_usage as a sibling to `usage` at the chunk JSON level if include_raw_usage is set (even if empty)
+            if include_raw_usage {
+                chunk_json["tensorzero_raw_usage"] = serde_json::to_value(&raw_usage_entries).unwrap_or_default();
             }
             yield Event::default().json_data(chunk_json).map_err(|e| {
                 Error::new(ErrorDetails::Inference {

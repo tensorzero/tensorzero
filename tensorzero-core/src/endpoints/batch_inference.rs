@@ -36,8 +36,7 @@ use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason,
     InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, UsageWithRaw,
-    current_timestamp,
+    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, current_timestamp,
 };
 use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -1426,10 +1425,8 @@ impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
             episode_id: value.episode_id,
             variant_name: value.variant_name,
             content: output,
-            usage: UsageWithRaw {
-                usage,
-                raw_usage: None, // batch inference does not support include_raw_usage (#5452)
-            },
+            usage,
+            raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             // This is currently unsupported in the batch API
             original_response: None,
             finish_reason: value.finish_reason,
@@ -1466,10 +1463,8 @@ impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
             episode_id: value.episode_id,
             variant_name: value.variant_name,
             output,
-            usage: UsageWithRaw {
-                usage,
-                raw_usage: None, // batch inference does not support include_raw_usage (#5452)
-            },
+            usage,
+            raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             // This is currently unsupported in the batch API
             original_response: None,
             finish_reason: value.finish_reason,

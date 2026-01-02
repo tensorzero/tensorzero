@@ -414,7 +414,7 @@ mod tests {
         },
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
         function::{FunctionConfig, FunctionConfigChat},
-        inference::types::{ContentBlockChatOutput, Input, Text, UsageWithRaw},
+        inference::types::{ContentBlockChatOutput, Input, Text, Usage},
         jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
         optimization::gepa::GEPAConfig,
         tool::StaticToolConfig,
@@ -499,7 +499,8 @@ mod tests {
             content: vec![ContentBlockChatOutput::Text(Text {
                 text: text.to_string(),
             })],
-            usage: UsageWithRaw::default(),
+            usage: Usage::default(),
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         })

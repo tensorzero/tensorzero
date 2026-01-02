@@ -1189,7 +1189,10 @@ pub struct ChatInferenceResponse {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub content: Vec<ContentBlockChatOutput>,
-    pub usage: UsageWithRaw,
+    pub usage: Usage,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1203,7 +1206,10 @@ pub struct JsonInferenceResponse {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub output: JsonInferenceOutput,
-    pub usage: UsageWithRaw,
+    pub usage: Usage,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1233,15 +1239,14 @@ impl InferenceResponse {
             None
         };
 
-        let usage_with_raw = UsageWithRaw { usage, raw_usage };
-
         match inference_result {
             InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
                 inference_id: result.inference_id,
                 episode_id,
                 variant_name,
                 content: result.content,
-                usage: usage_with_raw,
+                usage,
+                raw_usage: raw_usage.clone(),
                 original_response: result.original_response,
                 finish_reason: result.finish_reason,
             }),
@@ -1253,7 +1258,8 @@ impl InferenceResponse {
                     episode_id,
                     variant_name,
                     output,
-                    usage: usage_with_raw,
+                    usage,
+                    raw_usage,
                     original_response: result.original_response,
                     finish_reason: result.finish_reason,
                 })
@@ -1263,15 +1269,15 @@ impl InferenceResponse {
 
     pub fn usage(&self) -> Usage {
         match self {
-            InferenceResponse::Chat(c) => c.usage.usage,
-            InferenceResponse::Json(j) => j.usage.usage,
+            InferenceResponse::Chat(c) => c.usage,
+            InferenceResponse::Json(j) => j.usage,
         }
     }
 
     pub fn raw_usage(&self) -> Option<&Vec<RawUsageEntry>> {
         match self {
-            InferenceResponse::Chat(c) => c.usage.raw_usage.as_ref(),
-            InferenceResponse::Json(j) => j.usage.raw_usage.as_ref(),
+            InferenceResponse::Chat(c) => c.raw_usage.as_ref(),
+            InferenceResponse::Json(j) => j.raw_usage.as_ref(),
         }
     }
 
@@ -1345,7 +1351,9 @@ pub struct ChatInferenceResponseChunk {
     pub variant_name: String,
     pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<UsageWithRaw>,
+    pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1359,7 +1367,9 @@ pub struct JsonInferenceResponseChunk {
     pub variant_name: String,
     pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<UsageWithRaw>,
+    pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1431,12 +1441,6 @@ impl InferenceResponseChunk {
             }
         }
 
-        // Build UsageWithRaw from result_usage and result_raw_usage
-        let usage_with_raw = result_usage.map(|usage| UsageWithRaw {
-            usage,
-            raw_usage: result_raw_usage,
-        });
-
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
                 // For chat functions with json_mode="tool", convert tool call chunks to text chunks
@@ -1466,7 +1470,8 @@ impl InferenceResponseChunk {
                     content,
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: usage_with_raw.clone(),
+                    usage: result_usage,
+                    raw_usage: result_raw_usage.clone(),
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1482,7 +1487,8 @@ impl InferenceResponseChunk {
                     raw: result.raw.unwrap_or_default(),
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: usage_with_raw,
+                    usage: result_usage,
+                    raw_usage: result_raw_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -2265,7 +2271,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            usage: Some(json!({"prompt_tokens": 10, "completion_tokens": 20})),
+            data: Some(json!({"prompt_tokens": 10, "completion_tokens": 20})),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries.clone());
 
@@ -2275,8 +2281,8 @@ mod tests {
         // Verify raw_usage was emitted on this non-empty chunk
         match result {
             InferenceResponseChunk::Chat(c) => {
-                let usage_with_raw = c.usage.expect("usage should be present");
-                let raw_usage = usage_with_raw
+                assert!(c.usage.is_some(), "usage should be present");
+                let raw_usage = c
                     .raw_usage
                     .expect("raw_usage should be present on non-empty chunk with usage");
                 assert_eq!(
@@ -2310,7 +2316,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            usage: Some(json!({"prompt_tokens": 10})),
+            data: Some(json!({"prompt_tokens": 10})),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries);
 
@@ -2337,10 +2343,8 @@ mod tests {
             prepare_response_chunk(&metadata, chunk1, &mut None, &mut extra_raw_usage).unwrap();
         match &result1 {
             InferenceResponseChunk::Chat(c) => {
-                assert!(
-                    c.usage.as_ref().unwrap().raw_usage.is_some(),
-                    "First chunk should have raw_usage"
-                );
+                assert!(c.usage.is_some(), "First chunk should have usage");
+                assert!(c.raw_usage.is_some(), "First chunk should have raw_usage");
             }
             InferenceResponseChunk::Json(_) => panic!("Expected Chat chunk"),
         }
@@ -2365,8 +2369,9 @@ mod tests {
             prepare_response_chunk(&metadata, chunk2, &mut None, &mut extra_raw_usage).unwrap();
         match result2 {
             InferenceResponseChunk::Chat(c) => {
+                assert!(c.usage.is_some(), "Second chunk should have usage");
                 assert!(
-                    c.usage.as_ref().unwrap().raw_usage.is_none(),
+                    c.raw_usage.is_none(),
                     "Second chunk should NOT have raw_usage (already emitted)"
                 );
             }
@@ -2383,7 +2388,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "anthropic".to_string(),
             api_type: ApiType::ChatCompletions,
-            usage: Some(json!({"input_tokens": 100})),
+            data: Some(json!({"input_tokens": 100})),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries);
 
@@ -2408,8 +2413,8 @@ mod tests {
 
         match result {
             InferenceResponseChunk::Chat(c) => {
-                let usage_with_raw = c.usage.expect("usage should be present");
-                let raw_usage = usage_with_raw
+                assert!(c.usage.is_some(), "usage should be present");
+                let raw_usage = c
                     .raw_usage
                     .expect("raw_usage should be present on empty chunk");
                 assert_eq!(raw_usage.len(), 1);
@@ -2433,7 +2438,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            usage: Some(json!({})),
+            data: Some(json!({})),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries);
 
@@ -2479,7 +2484,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            usage: Some(json!({"total_tokens": 50})),
+            data: Some(json!({"total_tokens": 50})),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries);
 
@@ -2505,9 +2510,9 @@ mod tests {
 
         match result {
             InferenceResponseChunk::Json(j) => {
-                let usage_with_raw = j.usage.expect("usage should be present");
+                assert!(j.usage.is_some(), "usage should be present");
                 assert!(
-                    usage_with_raw.raw_usage.is_some(),
+                    j.raw_usage.is_some(),
                     "raw_usage should be emitted on non-empty JSON chunk with usage"
                 );
             }

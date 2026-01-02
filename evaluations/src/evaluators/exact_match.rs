@@ -76,7 +76,7 @@ mod tests {
         },
         inference::types::{
             ContentBlockChatOutput, Input, InputMessage, InputMessageContent, JsonInferenceOutput,
-            Template, Text, Usage, UsageWithRaw,
+            Template, Text, Usage,
         },
     };
     use uuid::Uuid;
@@ -118,13 +118,11 @@ mod tests {
             content: vec![ContentBlockChatOutput::Text(Text {
                 text: "hello world".to_string(),
             })],
-            usage: UsageWithRaw {
-                usage: Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(10),
-                },
-                raw_usage: None,
+            usage: Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             },
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         });
@@ -139,13 +137,11 @@ mod tests {
             content: vec![ContentBlockChatOutput::Text(Text {
                 text: "hello, world!".to_string(),
             })],
-            usage: UsageWithRaw {
-                usage: Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(10),
-                },
-                raw_usage: None,
+            usage: Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             },
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         });
@@ -229,13 +225,11 @@ mod tests {
                 parsed: Some(json!({"foo": "bar"})),
                 raw: Some(r#"{"foo": "bar"}"#.to_string()),
             },
-            usage: UsageWithRaw {
-                usage: Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(10),
-                },
-                raw_usage: None,
+            usage: Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             },
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         });
@@ -251,13 +245,11 @@ mod tests {
                 parsed: Some(json!({"foo": "baz"})),
                 raw: Some(r#"{"foo": "baz"}"#.to_string()),
             },
-            usage: UsageWithRaw {
-                usage: Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(10),
-                },
-                raw_usage: None,
+            usage: Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             },
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         });

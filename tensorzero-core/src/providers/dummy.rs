@@ -152,7 +152,7 @@ impl DummyProvider {
                         model_inference_id,
                         provider_type: "dummy".to_string(),
                         api_type: ApiType::ChatCompletions,
-                        usage: None, // dummy provider doesn't have real raw usage
+                        data: None, // dummy provider doesn't have real raw usage
                     }]),
                 }),
                 finish_reason: Some(FinishReason::Stop),
@@ -655,7 +655,7 @@ impl InferenceProvider for DummyProvider {
                 model_inference_id: id,
                 provider_type: "dummy".to_string(),
                 api_type: ApiType::ChatCompletions,
-                usage: None, // dummy provider doesn't have real raw usage
+                data: None, // dummy provider doesn't have real raw usage
             }]),
         })
     }
@@ -834,7 +834,7 @@ impl InferenceProvider for DummyProvider {
                     model_inference_id,
                     provider_type: "dummy".to_string(),
                     api_type: ApiType::ChatCompletions,
-                    usage: None, // dummy provider doesn't have real raw usage
+                    data: None, // dummy provider doesn't have real raw usage
                 }]),
             }),
             finish_reason,

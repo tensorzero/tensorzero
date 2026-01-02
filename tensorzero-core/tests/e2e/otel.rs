@@ -297,8 +297,8 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
         inference_id: response.inference_id,
         episode_id: response.episode_id,
         usage: OTelUsage {
-            input_tokens: response.usage.usage.input_tokens.map(|x| x as i64),
-            output_tokens: response.usage.usage.output_tokens.map(|x| x as i64),
+            input_tokens: response.usage.input_tokens.map(|x| x as i64),
+            output_tokens: response.usage.output_tokens.map(|x| x as i64),
         },
         underestimate: false,
         estimated_tokens: 1009,
@@ -358,7 +358,7 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
             }
             // ...and then add the chunk usage to it (handling `None` fields)
             if let Some(ref mut u) = usage {
-                u.sum_usage_strict(&chunk_usage.usage);
+                u.sum_usage_strict(&chunk_usage);
             }
         }
     }
@@ -456,7 +456,7 @@ async fn test_stream_fatal_error_usage() {
                     }
                     // ...and then add the chunk usage to it (handling `None` fields)
                     if let Some(ref mut u) = usage {
-                        u.sum_usage_strict(&response_usage.usage);
+                        u.sum_usage_strict(&response_usage);
                     }
                 }
             }
