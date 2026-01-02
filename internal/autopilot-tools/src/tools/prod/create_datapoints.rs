@@ -100,10 +100,6 @@ fn build_autopilot_tags(side_info: &AutopilotToolSideInfo) -> HashMap<String, St
         side_info.session_id.to_string(),
     );
     tags.insert(
-        "autopilot_tool_call_id".to_string(),
-        side_info.tool_call_id.to_string(),
-    );
-    tags.insert(
         "autopilot_tool_call_event_id".to_string(),
         side_info.tool_call_event_id.to_string(),
     );

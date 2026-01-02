@@ -40,11 +40,10 @@
 
 pub mod tools;
 pub mod types;
+mod visitor;
 
-pub use types::AutopilotToolSideInfo;
-
-// Re-export ToolVisitor for use with for_each_tool
-pub use durable_tools::ToolVisitor;
+pub use types::AutopilotSideInfo;
+pub use visitor::ToolVisitor;
 
 /// Iterate over all tools with a visitor.
 ///

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 // Re-export types from tensorzero-types that InputMessage depends on
 pub use tensorzero_types::{
     Base64File, File, InputMessage, InputMessageContent, ObjectStoragePointer, RawText, Role,
-    Template, Text, Thought, ToolCall, ToolCallWrapper, ToolResult, Unknown, UrlFile,
+    Template, Text, Thought, ToolCallWrapper, Unknown, UrlFile,
 };
 use uuid::Uuid;
 
@@ -46,7 +46,7 @@ pub enum EventPayload {
     StatusUpdate {
         status_update: StatusUpdate,
     },
-    ToolCall(ToolCall),
+    ToolCall(AutopilotToolCall),
     ToolCallAuthorization(ToolCallAuthorization),
     ToolResult {
         tool_call_event_id: Uuid,
@@ -80,6 +80,26 @@ pub enum StatusUpdate {
 // Tool Call Types
 // =============================================================================
 
+/// Autopilot tool call with side info for tool execution.
+///
+/// This wraps the LLM's `ToolCall` with `side_info` that gets passed to the tool
+/// when it's spawned for execution. The `side_info` propagates from the caller
+/// (e.g., autopilot session) to the tool executor.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+pub struct AutopilotToolCall {
+    /// Name
+    pub name: String,
+    /// Arguments
+    pub arguments: serde_json::Value,
+    /// Side info to pass to the tool (hidden from LLM, used for execution context).
+    pub side_info: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+pub struct AutopilotToolResult {
+    result: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallDecisionSource {
@@ -103,7 +123,7 @@ pub enum ToolCallAuthorizationStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutcome {
-    Success(ToolResult),
+    Success(AutopilotToolResult),
     Failure {
         message: String,
     },

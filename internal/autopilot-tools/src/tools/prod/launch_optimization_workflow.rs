@@ -5,6 +5,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use durable_tools::{SideInfo, TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
+
+use crate::types::AutopilotSideInfoParams;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::inferences::InferenceOutputSource;
@@ -75,6 +77,16 @@ impl Default for OptimizationWorkflowSideInfo {
 }
 
 impl SideInfo for OptimizationWorkflowSideInfo {}
+
+impl TryFrom<AutopilotSideInfoParams> for OptimizationWorkflowSideInfo {
+    type Error = anyhow::Error;
+
+    fn try_from(_params: AutopilotSideInfoParams) -> Result<Self, Self::Error> {
+        // This tool doesn't use the standard autopilot params - it has its own config.
+        // Return defaults for polling configuration.
+        Ok(Self::default())
+    }
+}
 
 /// Response from the optimization workflow tool.
 #[derive(Debug, Serialize, Deserialize)]

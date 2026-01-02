@@ -13,7 +13,7 @@ use tensorzero::{
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 
-use crate::types::AutopilotToolSideInfo;
+use crate::types::{AutopilotSideInfoParams, AutopilotToolSideInfo};
 
 /// Parameters for the inference tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -43,7 +43,7 @@ pub struct InferenceToolParams {
 /// Side information for the inference tool (hidden from LLM).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InferenceToolSideInfo {
-    /// Base autopilot side info (episode_id, session_id, tool_call_id, tool_call_event_id).
+    /// Base autopilot side info (episode_id, session_id, tool_call_event_id).
     #[serde(flatten)]
     pub base: AutopilotToolSideInfo,
     /// Optional config snapshot hash - if provided, uses action endpoint with historical config.
@@ -52,6 +52,17 @@ pub struct InferenceToolSideInfo {
 }
 
 impl SideInfo for InferenceToolSideInfo {}
+
+impl TryFrom<AutopilotSideInfoParams> for InferenceToolSideInfo {
+    type Error = anyhow::Error;
+
+    fn try_from(params: AutopilotSideInfoParams) -> Result<Self, Self::Error> {
+        Ok(Self {
+            base: AutopilotToolSideInfo::try_from(params.clone())?,
+            config_snapshot_hash: params.config_snapshot_hash,
+        })
+    }
+}
 
 /// Tool for calling TensorZero inference endpoint.
 ///

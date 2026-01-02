@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
-use autopilot_client::ToolResult as AutopilotToolResult;
+use autopilot_client::AutopilotToolResult;
 use durable_tools::{
     CreateEventGatewayRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool,
     TensorZeroClient, ToolAppState, ToolContext, ToolMetadata, ToolOutcome,
@@ -78,15 +78,18 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
 impl<T> TaskTool for ClientTaskToolWrapper<T>
 where
     T: TaskTool,
-    T::SideInfo: Default + PartialEq,
+    T::SideInfo: TryFrom<AutopilotSideInfo>,
 {
     async fn execute(
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
     ) -> DurableToolResult<Self::Output> {
+        let side_info: T::SideInfo = side_info.try_into().map_err(|e| {
+            anyhow::anyhow!("Failed to convert AutopilotSideInfo to tool SideInfo: {e}")
+        })?;
         // Execute the underlying tool
-        let result = T::execute(llm_params, side_info.inner, ctx).await;
+        let result = T::execute(llm_params, side_info, ctx).await;
 
         // Prepare the outcome for the autopilot API
         let tool_name = T::name().to_string();
@@ -96,7 +99,6 @@ where
                 ToolOutcome::Success(AutopilotToolResult {
                     name: tool_name.clone(),
                     result: result_json,
-                    id: side_info.tool_call_id.clone(),
                 })
             }
             Err(e) => ToolOutcome::Failure {

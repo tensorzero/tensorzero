@@ -4,10 +4,11 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use autopilot_tools::ToolVisitor;
+use autopilot_tools::{AutopilotSideInfoParams, ToolVisitor};
 use durable_tools::{
     SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
 };
+use serde::Serialize;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -143,9 +144,10 @@ struct LocalToolVisitor<'a> {
 impl ToolVisitor for LocalToolVisitor<'_> {
     type Error = ToolError;
 
-    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError>
+    async fn visit_task_tool<T>(&self) -> Result<(), ToolError>
     where
-        T::SideInfo: Default + PartialEq,
+        T: TaskTool + Default,
+        T::SideInfo: TryFrom<AutopilotSideInfoParams, Error = anyhow::Error> + Serialize,
     {
         self.executor
             .register_task_tool::<ClientTaskToolWrapper<T>>()
@@ -153,7 +155,11 @@ impl ToolVisitor for LocalToolVisitor<'_> {
         Ok(())
     }
 
-    async fn visit_simple_tool<T: SimpleTool + Default>(&self) -> Result<(), ToolError> {
+    async fn visit_simple_tool<T>(&self) -> Result<(), ToolError>
+    where
+        T: SimpleTool + Default,
+        T::SideInfo: TryFrom<AutopilotSideInfoParams, Error = anyhow::Error> + Serialize,
+    {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
         self.executor
             .register_task_tool::<ClientSimpleToolWrapper<T>>()
