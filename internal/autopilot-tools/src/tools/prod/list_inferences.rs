@@ -8,7 +8,7 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 
-use crate::types::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_inferences tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]

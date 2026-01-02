@@ -318,6 +318,7 @@ dependencies = [
  "moka",
  "reqwest",
  "reqwest-eventsource",
+ "schemars 1.2.0",
  "secrecy",
  "serde",
  "serde_json",
@@ -336,6 +337,7 @@ version = "2025.12.6"
 dependencies = [
  "anyhow",
  "async-trait",
+ "autopilot-client",
  "durable",
  "durable-tools",
  "mockall",

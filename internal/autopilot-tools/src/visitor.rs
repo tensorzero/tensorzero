@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use durable_tools::{SimpleTool, TaskTool};
 use serde::Serialize;
 
-use crate::types::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Visitor trait for iterating over tool definitions.
 ///

@@ -8,7 +8,7 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::feedback::FeedbackByVariant;
 
-use crate::types::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_feedback_by_variant tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

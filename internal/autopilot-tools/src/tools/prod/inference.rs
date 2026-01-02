@@ -13,7 +13,7 @@ use tensorzero::{
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 
-use crate::types::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the inference tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use uuid::Uuid;
 
-use crate::types::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_latest_feedback_by_metric tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

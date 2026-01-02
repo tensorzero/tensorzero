@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero::GetDatapointsResponse;
 use uuid::Uuid;
 
-use crate::types::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_datapoints tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

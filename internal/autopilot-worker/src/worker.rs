@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use autopilot_tools::{AutopilotSideInfo, ToolVisitor};
+use autopilot_client::AutopilotSideInfo;
+use autopilot_tools::ToolVisitor;
 use durable_tools::{
     SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
 };

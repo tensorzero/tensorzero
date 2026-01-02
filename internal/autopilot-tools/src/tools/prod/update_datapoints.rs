@@ -8,7 +8,7 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{UpdateDatapointRequest, UpdateDatapointsResponse};
 
-use crate::types::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the update_datapoints tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]

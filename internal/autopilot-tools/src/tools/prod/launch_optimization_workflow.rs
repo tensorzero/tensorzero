@@ -4,9 +4,9 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use durable_tools::{SideInfo, TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
 
-use crate::types::AutopilotSideInfo;
+use autopilot_client::OptimizationWorkflowSideInfo;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::inferences::InferenceOutputSource;
@@ -45,47 +45,6 @@ pub struct LaunchOptimizationWorkflowToolParams {
     pub val_fraction: Option<f64>,
     /// The optimizer configuration (e.g., SFT, DPO, MIPROv2).
     pub optimizer_config: UninitializedOptimizerInfo,
-}
-
-fn default_poll_interval_secs() -> u64 {
-    60
-}
-
-fn default_max_wait_secs() -> u64 {
-    86400
-}
-
-/// Side info for optimization workflow tool (hidden from LLM).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct OptimizationWorkflowSideInfo {
-    /// Polling interval in seconds (default: 60).
-    #[serde(default = "default_poll_interval_secs")]
-    pub poll_interval_secs: u64,
-
-    /// Maximum time to wait for completion in seconds (default: 86400 = 24 hours).
-    #[serde(default = "default_max_wait_secs")]
-    pub max_wait_secs: u64,
-}
-
-impl Default for OptimizationWorkflowSideInfo {
-    fn default() -> Self {
-        Self {
-            poll_interval_secs: default_poll_interval_secs(),
-            max_wait_secs: default_max_wait_secs(),
-        }
-    }
-}
-
-impl SideInfo for OptimizationWorkflowSideInfo {}
-
-impl TryFrom<AutopilotSideInfo> for OptimizationWorkflowSideInfo {
-    type Error = anyhow::Error;
-
-    fn try_from(params: AutopilotSideInfo) -> Result<Self, Self::Error> {
-        // This tool doesn't use the standard autopilot params - it has its own config.
-        // Return defaults for polling configuration.
-        Ok(params.optimization)
-    }
 }
 
 /// Response from the optimization workflow tool.
@@ -265,4 +224,8 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
             }
         }
     }
+}
+
+fn default_max_wait_secs() -> u64 {
+    86400
 }

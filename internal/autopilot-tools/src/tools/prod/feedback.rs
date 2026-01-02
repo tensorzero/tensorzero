@@ -10,7 +10,7 @@ use serde_json::Value;
 use tensorzero::{FeedbackParams, FeedbackResponse};
 use uuid::Uuid;
 
-use crate::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the feedback tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

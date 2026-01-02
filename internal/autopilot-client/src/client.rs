@@ -297,7 +297,7 @@ impl AutopilotClient {
             .spawn_tool_by_name(
                 &tool_name,
                 llm_params,
-                autopilot_tool_call.side_info,
+                serde_json::to_value(autopilot_tool_call.side_info)?,
                 episode_id,
                 SpawnOptions::default(),
             )

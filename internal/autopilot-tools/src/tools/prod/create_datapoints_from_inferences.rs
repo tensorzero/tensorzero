@@ -3,12 +3,11 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
-
-use crate::AutopilotSideInfo;
 
 /// Parameters for the create_datapoints_from_inferences tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]

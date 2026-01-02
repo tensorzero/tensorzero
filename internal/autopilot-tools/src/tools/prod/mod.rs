@@ -30,7 +30,7 @@ pub use get_latest_feedback_by_metric::{
 pub use inference::{InferenceTool, InferenceToolParams};
 pub use launch_optimization_workflow::{
     LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolOutput,
-    LaunchOptimizationWorkflowToolParams, OptimizationWorkflowSideInfo,
+    LaunchOptimizationWorkflowToolParams,
 };
 pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
 pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};

@@ -4,6 +4,7 @@ mod common;
 
 use std::sync::Arc;
 
+use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
@@ -14,12 +15,8 @@ use tensorzero::{
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
-use autopilot_tools::{
-    AutopilotSideInfo,
-    tools::{
-        InferenceTool, InferenceToolParams, ListInferencesTool, ListInferencesToolParams,
-        OptimizationWorkflowSideInfo,
-    },
+use autopilot_tools::tools::{
+    InferenceTool, InferenceToolParams, ListInferencesTool, ListInferencesToolParams,
 };
 use common::{MockTensorZeroClient, create_mock_chat_response};
 
@@ -56,6 +53,7 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        tool_call_id: String::new(),
         session_id,
         config_snapshot_hash: None,
         optimization: OptimizationWorkflowSideInfo::default(),
@@ -132,6 +130,7 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        tool_call_id: String::new(),
         session_id,
         config_snapshot_hash: Some(test_snapshot_hash.to_string()),
         optimization: OptimizationWorkflowSideInfo::default(),
@@ -195,6 +194,7 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        tool_call_id: String::new(),
         session_id: Uuid::now_v7(),
         config_snapshot_hash: None,
         optimization: OptimizationWorkflowSideInfo::default(),
@@ -239,6 +239,7 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        tool_call_id: String::new(),
         session_id: Uuid::now_v7(),
         config_snapshot_hash: None,
         optimization: OptimizationWorkflowSideInfo::default(),
@@ -288,6 +289,7 @@ async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        tool_call_id: String::new(),
         session_id: Uuid::now_v7(),
         config_snapshot_hash: None,
         optimization: OptimizationWorkflowSideInfo::default(),
@@ -324,6 +326,7 @@ async fn test_list_inferences_tool_error(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        tool_call_id: String::new(),
         session_id: Uuid::now_v7(),
         config_snapshot_hash: None,
         optimization: OptimizationWorkflowSideInfo::default(),

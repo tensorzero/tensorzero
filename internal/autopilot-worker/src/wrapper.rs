@@ -14,7 +14,7 @@ use schemars::Schema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use autopilot_tools::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the publish_result step.
 #[derive(Debug, Clone, Serialize, Deserialize)]

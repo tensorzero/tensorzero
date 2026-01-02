@@ -39,10 +39,8 @@
 //! - `SlowSimpleTool` - Sleeps for configurable duration
 
 pub mod tools;
-pub mod types;
 mod visitor;
 
-pub use types::AutopilotSideInfo;
 pub use visitor::ToolVisitor;
 
 /// Iterate over all tools with a visitor.

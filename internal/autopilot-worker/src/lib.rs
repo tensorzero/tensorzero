@@ -13,8 +13,7 @@ pub use wrapper::ClientTaskToolWrapper;
 
 // Re-export useful types from durable-tools and autopilot-tools
 pub use durable_tools::{
-    SideInfo, SimpleTool, SimpleToolContext, TaskTool, ToolContext, ToolError, ToolMetadata,
-    ToolResult,
+    SimpleTool, SimpleToolContext, TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult,
 };
 
-pub use autopilot_tools::AutopilotSideInfo;
+pub use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
