@@ -17,8 +17,13 @@ pub use tensorzero::{
     GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, TensorZeroError,
     UpdateDatapointRequest, UpdateDatapointsResponse,
 };
+use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+pub use tensorzero_core::optimization::OptimizationJobHandle;
+pub use tensorzero_core::optimization::OptimizationJobInfo;
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use url::Url;
 use uuid::Uuid;
 
@@ -27,9 +32,10 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    ListSessionsResponse, ToolOutcome,
 };
+pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
 #[cfg(test)]
 use mockall::automock;
@@ -52,6 +58,10 @@ pub enum TensorZeroClientError {
     /// Error from the Autopilot API.
     #[error("Autopilot error: {0}")]
     Autopilot(#[from] autopilot_client::AutopilotError),
+
+    /// Operation not supported in this client mode.
+    #[error("Operation not supported: {0}")]
+    NotSupported(String),
 }
 
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
@@ -83,10 +93,11 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     /// Create an event in an autopilot session.
     ///
     /// Use `Uuid::nil()` as `session_id` to create a new session.
+    /// The deployment_id is injected from the gateway's app state.
     async fn create_autopilot_event(
         &self,
         session_id: Uuid,
-        request: CreateEventRequest,
+        request: CreateEventGatewayRequest,
     ) -> Result<CreateEventResponse, TensorZeroClientError>;
 
     /// List events in an autopilot session.
@@ -160,11 +171,50 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 
+    // ========== Inference Query Operations ==========
+
+    /// List inferences with filtering and pagination.
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+    // ========== Optimization Operations ==========
+
+    /// Launch an optimization workflow.
+    ///
+    /// Returns a job handle that can be used to poll the optimization status.
+    async fn launch_optimization_workflow(
+        &self,
+        params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
+
+    /// Poll an optimization workflow for its current status.
+    ///
+    /// Returns the current status of the optimization job (Pending, Completed, or Failed).
+    async fn poll_optimization(
+        &self,
+        job_handle: &OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
+
     /// Get the latest feedback ID for each metric for a target.
     async fn get_latest_feedback_id_by_metric(
         &self,
         target_id: Uuid,
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+    /// Get feedback statistics by variant for a function and metric.
+    ///
+    /// Returns mean, variance, and count for each variant. This is useful for
+    /// analyzing variant performance without requiring an HTTP endpoint.
+    ///
+    /// Note: This method only works in embedded mode (no HTTP endpoint available).
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: String,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.

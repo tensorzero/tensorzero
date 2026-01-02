@@ -1,19 +1,29 @@
-//! Integration tests for InferenceTool.
+//! Integration tests for InferenceTool and ListInferencesTool.
 
 mod common;
 
 use std::sync::Arc;
 
 use durable::MIGRATOR;
-use durable_tools::{ErasedSimpleTool, SimpleToolContext};
+use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
-use tensorzero::{ActionInput, Input, InputMessage, InputMessageContent, Role};
+use tensorzero::{
+    ActionInput, GetInferencesResponse, Input, InputMessage, InputMessageContent,
+    ListInferencesRequest, Role,
+};
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
-use autopilot_tools::AutopilotToolSideInfo;
-use autopilot_tools::tools::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
+use autopilot_tools::{
+    AutopilotToolSideInfo,
+    tools::{
+        InferenceTool, InferenceToolParams, InferenceToolSideInfo, ListInferencesTool,
+        ListInferencesToolParams,
+    },
+};
 use common::{MockTensorZeroClient, create_mock_chat_response};
+
+use crate::common::create_mock_stored_chat_inference;
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
@@ -176,4 +186,176 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
 
     // The result should be an InferenceResponse (serialized as JSON)
     assert!(result.is_object(), "Result should be a JSON object");
+}
+
+// ===== ListInferencesTool Tests =====
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_inferences_tool_basic(pool: PgPool) {
+    let inference_id = Uuid::now_v7();
+    let inference =
+        create_mock_stored_chat_inference(inference_id, "test_function", "test_variant");
+    let mock_response = GetInferencesResponse {
+        inferences: vec![inference],
+    };
+
+    let llm_params = ListInferencesToolParams {
+        request: ListInferencesRequest::default(),
+    };
+
+    let side_info = AutopilotToolSideInfo {
+        episode_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        tool_call_id: Uuid::now_v7(),
+        tool_call_event_id: Uuid::now_v7(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_inferences()
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListInferencesTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListInferencesTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_inferences_tool_with_filters(pool: PgPool) {
+    let mock_response = GetInferencesResponse { inferences: vec![] };
+
+    let llm_params = ListInferencesToolParams {
+        request: ListInferencesRequest {
+            function_name: Some("specific_function".to_string()),
+            variant_name: Some("specific_variant".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            limit: Some(50),
+            offset: Some(10),
+            ..Default::default()
+        },
+    };
+
+    let side_info = AutopilotToolSideInfo {
+        episode_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        tool_call_id: Uuid::now_v7(),
+        tool_call_event_id: Uuid::now_v7(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_inferences()
+        .withf(|request| {
+            request.function_name == Some("specific_function".to_string())
+                && request.variant_name == Some("specific_variant".to_string())
+                && request.episode_id.is_some()
+                && request.limit == Some(50)
+                && request.offset == Some(10)
+        })
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListInferencesTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListInferencesTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
+    let mock_response = GetInferencesResponse { inferences: vec![] };
+    let cursor_id = Uuid::now_v7();
+
+    let llm_params = ListInferencesToolParams {
+        request: ListInferencesRequest {
+            before: Some(cursor_id),
+            limit: Some(20),
+            ..Default::default()
+        },
+    };
+
+    let side_info = AutopilotToolSideInfo {
+        episode_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        tool_call_id: Uuid::now_v7(),
+        tool_call_event_id: Uuid::now_v7(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_inferences()
+        .withf(move |request| request.before == Some(cursor_id) && request.limit == Some(20))
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListInferencesTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListInferencesTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_inferences_tool_error(pool: PgPool) {
+    let llm_params = ListInferencesToolParams {
+        request: ListInferencesRequest::default(),
+    };
+
+    let side_info = AutopilotToolSideInfo {
+        episode_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        tool_call_id: Uuid::now_v7(),
+        tool_call_event_id: Uuid::now_v7(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_inferences()
+        .returning(|_| Err(TensorZeroClientError::AutopilotUnavailable));
+
+    let tool = ListInferencesTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await;
+
+    assert!(result.is_err(), "Should return error when client fails");
 }

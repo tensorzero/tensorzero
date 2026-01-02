@@ -26,9 +26,12 @@ use tensorzero::{
     Usage,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -76,7 +79,7 @@ impl TensorZeroClient for MockTensorZeroClient {
     async fn create_autopilot_event(
         &self,
         _session_id: Uuid,
-        _request: durable_tools::CreateEventRequest,
+        _request: durable_tools::CreateEventGatewayRequest,
     ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
@@ -155,10 +158,40 @@ impl TensorZeroClient for MockTensorZeroClient {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
+    async fn list_inferences(
+        &self,
+        _request: tensorzero::ListInferencesRequest,
+    ) -> Result<tensorzero::GetInferencesResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn launch_optimization_workflow(
+        &self,
+        _params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn poll_optimization(
+        &self,
+        _job_handle: &OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
     async fn get_latest_feedback_id_by_metric(
         &self,
         _target_id: Uuid,
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn get_feedback_by_variant(
+        &self,
+        _metric_name: String,
+        _function_name: String,
+        _variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 }
