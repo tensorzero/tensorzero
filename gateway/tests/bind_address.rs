@@ -53,7 +53,7 @@ async fn test_bind_address_cli_and_config_errors() {
 
     // Verify the error message
     let error_logged = output.iter().any(|line| {
-        line.contains("must not specify both `--bind-address` and `[gateway].bind_address`")
+        line.contains("must not specify both `--bind-address` and `gateway.bind_address`")
     });
     assert!(
         error_logged,
