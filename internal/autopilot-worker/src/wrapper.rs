@@ -21,6 +21,7 @@ use autopilot_client::AutopilotSideInfo;
 struct PublishResultParams {
     session_id: Uuid,
     tool_call_event_id: Uuid,
+    tool_call_id: String,
     tool_name: String,
     outcome: ToolOutcome,
 }
@@ -87,6 +88,7 @@ where
     ) -> DurableToolResult<Self::Output> {
         let session_id = side_info.session_id;
         let tool_call_event_id = side_info.tool_call_event_id;
+        let tool_call_id = side_info.tool_call_id.clone();
         let side_info: T::SideInfo = side_info.try_into().map_err(|e| {
             anyhow::anyhow!("Failed to convert AutopilotSideInfo to tool SideInfo: {e}")
         })?;
@@ -111,6 +113,7 @@ where
         let publish_params = PublishResultParams {
             session_id,
             tool_call_event_id,
+            tool_call_id,
             tool_name,
             outcome,
         };
@@ -143,6 +146,7 @@ async fn publish_result(
                 payload: EventPayload::ToolResult {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
+                    tool_call_id: params.tool_call_id,
                 },
                 previous_user_message_event_id: None,
             },
@@ -219,6 +223,7 @@ where
         let tool_name = T::name().to_string();
         let tool_call_event_id = side_info.tool_call_event_id;
         let session_id = side_info.session_id;
+        let tool_call_id = side_info.tool_call_id.clone();
 
         // Convert AutopilotSideInfo to the underlying tool's SideInfo
         let converted_side_info: T::SideInfo = side_info.try_into().map_err(|e| {
@@ -258,6 +263,7 @@ where
         let publish_params = PublishResultParams {
             session_id,
             tool_call_event_id,
+            tool_call_id,
             tool_name,
             outcome,
         };
@@ -529,6 +535,7 @@ mod tests {
                         &request.payload,
                         EventPayload::ToolResult {
                             tool_call_event_id: tceid,
+                            tool_call_id: _,
                             outcome: ToolOutcome::Success(_),
                         } if *tceid == expected_tool_call_event_id
                     )
@@ -543,6 +550,7 @@ mod tests {
         let params = PublishResultParams {
             session_id,
             tool_call_event_id,
+            tool_call_id: "test_tool_call_id".to_string(),
             tool_name,
             outcome: ToolOutcome::Success(AutopilotToolResult {
                 result: r#"{"result":"success"}"#.to_string(),
@@ -569,6 +577,7 @@ mod tests {
                     &request.payload,
                     EventPayload::ToolResult {
                         tool_call_event_id: tceid,
+                        tool_call_id: _,
                         outcome: ToolOutcome::Failure { message },
                     } if *tceid == expected_tool_call_event_id && message == "Tool execution failed"
                 )
@@ -583,6 +592,7 @@ mod tests {
         let params = PublishResultParams {
             session_id,
             tool_call_event_id,
+            tool_call_id: "failing_tool_call_id".to_string(),
             tool_name: "failing_tool".to_string(),
             outcome: ToolOutcome::Failure {
                 message: "Tool execution failed".to_string(),
@@ -604,6 +614,7 @@ mod tests {
         let params = PublishResultParams {
             session_id: Uuid::now_v7(),
             tool_call_event_id: Uuid::now_v7(),
+            tool_call_id: "some_tool_call_id".to_string(),
             tool_name: "some_tool".to_string(),
             outcome: ToolOutcome::Success(AutopilotToolResult {
                 result: "{}".to_string(),

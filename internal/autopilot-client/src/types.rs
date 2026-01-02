@@ -53,6 +53,7 @@ pub enum EventPayload {
     ToolCallAuthorization(ToolCallAuthorization),
     ToolResult {
         tool_call_event_id: Uuid,
+        tool_call_id: String,
         outcome: ToolOutcome,
     },
     #[serde(other)]
