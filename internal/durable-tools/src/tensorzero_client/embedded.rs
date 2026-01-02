@@ -3,14 +3,26 @@
 //! This implementation is used when the worker runs inside the gateway process
 //! and wants to call inference and autopilot endpoints without HTTP overhead.
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use async_trait::async_trait;
+use evaluations::stats::EvaluationStats;
+use evaluations::types::{EvaluationCoreArgs, EvaluationVariant};
+use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_core_streaming};
 use tensorzero::{
-    ActionResponse, ClientInferenceParams, CreateDatapointRequest,
-    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    FeedbackParams, FeedbackResponse, GetDatapointsResponse, InferenceOutput, InferenceResponse,
-    ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    ActionResponse, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
+    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
+    DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetConfigResponse,
+    GetDatapointsResponse, GetInferencesResponse, InferenceOutput, InferenceResponse,
+    ListDatapointsRequest, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
-use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
+use tensorzero_core::config::write_config_snapshot;
+use tensorzero_core::db::ConfigQueries;
+use tensorzero_core::db::feedback::FeedbackByVariant;
+use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsRequest, DeleteDatapointsRequest,
     GetDatapointsRequest, UpdateDatapointsRequest,
@@ -20,12 +32,15 @@ use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResp
 use tensorzero_core::endpoints::inference::inference;
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, action};
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
+use tensorzero_core::error::{Error, ErrorDetails};
+use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
 
 use super::{
-    CreateEventRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, EvaluatorStatsResponse, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, RunEvaluationParams,
+    RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
 };
 
 /// TensorZero client that uses an existing gateway's state directly.
@@ -89,7 +104,7 @@ impl TensorZeroClient for EmbeddedClient {
     async fn create_autopilot_event(
         &self,
         session_id: Uuid,
-        request: CreateEventRequest,
+        request: CreateEventGatewayRequest,
     ) -> Result<CreateEventResponse, TensorZeroClientError> {
         let autopilot_client = self
             .app_state
@@ -97,7 +112,22 @@ impl TensorZeroClient for EmbeddedClient {
             .as_ref()
             .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
-        create_event(autopilot_client, session_id, request)
+        // Get deployment_id from app_state
+        let deployment_id = self
+            .app_state
+            .deployment_id
+            .clone()
+            .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
+
+        // Construct the full request with deployment_id from app state
+        let full_request = autopilot_client::CreateEventRequest {
+            deployment_id,
+            tensorzero_version: tensorzero_core::endpoints::status::TENSORZERO_VERSION.to_string(),
+            payload: request.payload,
+            previous_user_message_event_id: request.previous_user_message_event_id,
+        };
+
+        create_event(autopilot_client, session_id, full_request)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
@@ -165,6 +195,60 @@ impl TensorZeroClient for EmbeddedClient {
                 }))
             }
         }
+    }
+
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError> {
+        let snapshot_hash = match hash {
+            Some(hash) => hash.parse().map_err(|_| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::ConfigSnapshotNotFound {
+                        snapshot_hash: hash,
+                    })
+                    .into(),
+                })
+            })?,
+            None => self.app_state.config.hash.clone(),
+        };
+
+        let snapshot = self
+            .app_state
+            .clickhouse_connection_info
+            .get_config_snapshot(snapshot_hash)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        Ok(GetConfigResponse {
+            hash: snapshot.hash.to_string(),
+            config: snapshot.config.into(),
+            extra_templates: snapshot.extra_templates,
+            tags: snapshot.tags,
+        })
+    }
+
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError> {
+        let mut snapshot =
+            ConfigSnapshot::new(request.config, request.extra_templates).map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
+        snapshot.tags = request.tags;
+
+        let hash = snapshot.hash.to_string();
+
+        write_config_snapshot(&self.app_state.clickhouse_connection_info, snapshot)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        Ok(WriteConfigResponse { hash })
     }
 
     // ========== Datapoint CRUD Operations ==========
@@ -266,6 +350,51 @@ impl TensorZeroClient for EmbeddedClient {
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
+    // ========== Inference Query Operations ==========
+
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
+            &self.app_state.config,
+            &self.app_state.clickhouse_connection_info,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    // ========== Optimization Operations ==========
+
+    async fn launch_optimization_workflow(
+        &self,
+        params: tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams,
+    ) -> Result<super::OptimizationJobHandle, TensorZeroClientError> {
+        tensorzero_optimizers::endpoints::launch_optimization_workflow(
+            &self.app_state.http_client,
+            self.app_state.config.clone(),
+            &self.app_state.clickhouse_connection_info,
+            params,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn poll_optimization(
+        &self,
+        job_handle: &super::OptimizationJobHandle,
+    ) -> Result<super::OptimizationJobInfo, TensorZeroClientError> {
+        tensorzero_optimizers::endpoints::poll_optimization(
+            &self.app_state.http_client,
+            job_handle,
+            &self.app_state.config.models.default_credentials,
+            &self.app_state.config.provider_types,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
     async fn get_latest_feedback_id_by_metric(
         &self,
         target_id: Uuid,
@@ -276,5 +405,133 @@ impl TensorZeroClient for EmbeddedClient {
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: String,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
+        self.app_state
+            .clickhouse_connection_info
+            .get_feedback_by_variant(&metric_name, &function_name, variant_names.as_ref())
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
+    }
+
+    async fn run_evaluation(
+        &self,
+        params: RunEvaluationParams,
+    ) -> Result<RunEvaluationResponse, TensorZeroClientError> {
+        // Look up the evaluation config
+        let evaluation_config = self
+            .app_state
+            .config
+            .evaluations
+            .get(&params.evaluation_name)
+            .ok_or_else(|| {
+                TensorZeroClientError::Evaluation(format!(
+                    "Evaluation '{}' not found in config",
+                    params.evaluation_name
+                ))
+            })?
+            .clone();
+
+        // Build function configs table for the evaluation
+        let function_configs: HashMap<String, EvaluationFunctionConfig> = self
+            .app_state
+            .config
+            .functions
+            .iter()
+            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+            .collect();
+        let function_configs = Arc::new(function_configs);
+
+        // Build a Client from our existing components
+        let tensorzero_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
+            config: self.app_state.config.clone(),
+            clickhouse_connection_info: self.app_state.clickhouse_connection_info.clone(),
+            postgres_connection_info: self.app_state.postgres_connection_info.clone(),
+            http_client: self.app_state.http_client.clone(),
+            timeout: None,
+        })
+        .build()
+        .await
+        .map_err(|e| TensorZeroClientError::Evaluation(format!("Failed to build client: {e}")))?;
+
+        let evaluation_run_id = Uuid::now_v7();
+
+        let core_args = EvaluationCoreArgs {
+            tensorzero_client,
+            clickhouse_client: self.app_state.clickhouse_connection_info.clone(),
+            evaluation_config,
+            function_configs,
+            dataset_name: params.dataset_name,
+            datapoint_ids: params.datapoint_ids,
+            variant: EvaluationVariant::Name(params.variant_name),
+            evaluation_name: params.evaluation_name,
+            evaluation_run_id,
+            inference_cache: params.inference_cache,
+            concurrency: params.concurrency,
+        };
+
+        // Run the evaluation with optional adaptive stopping via precision_targets
+        let result = run_evaluation_core_streaming(
+            core_args,
+            params.max_datapoints,
+            params.precision_targets,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::Evaluation(format!("Evaluation failed: {e}")))?;
+
+        let mut receiver = result.receiver;
+        let num_datapoints = result.run_info.num_datapoints;
+
+        // Collect results - we use a dummy writer since we don't need CLI output
+        let mut evaluation_stats = EvaluationStats::new(OutputFormat::Jsonl, num_datapoints);
+        let mut dummy_writer = std::io::sink();
+
+        while let Some(update) = receiver.recv().await {
+            match update {
+                EvaluationUpdate::RunInfo(_) => {
+                    // Skip RunInfo
+                    continue;
+                }
+                update => {
+                    // Ignore write errors to the dummy sink
+                    let _ = evaluation_stats.push(update, &mut dummy_writer);
+                }
+            }
+        }
+
+        // Compute statistics
+        let EvaluationConfig::Inference(inference_config) = &*result.evaluation_config;
+        let stats = evaluation_stats.compute_stats(&inference_config.evaluators);
+
+        // Convert to response format
+        let stats_response: HashMap<String, EvaluatorStatsResponse> = stats
+            .into_iter()
+            .map(|(name, s)| {
+                (
+                    name,
+                    EvaluatorStatsResponse {
+                        mean: s.mean,
+                        stderr: s.stderr,
+                        count: s.count,
+                    },
+                )
+            })
+            .collect();
+
+        Ok(RunEvaluationResponse {
+            evaluation_run_id,
+            num_datapoints,
+            num_successes: evaluation_stats.evaluation_infos.len(),
+            num_errors: evaluation_stats.evaluation_errors.len(),
+            stats: stats_response,
+        })
     }
 }

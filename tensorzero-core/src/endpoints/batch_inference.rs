@@ -203,23 +203,11 @@ pub async fn start_batch_inference(
 
     // Increment the request count
     counter!(
-        "request_count",
-        "endpoint" => "batch_inference",
-        "function_name" => params.function_name.to_string(),
-    )
-    .increment(1);
-    counter!(
         "tensorzero_requests_total",
         "endpoint" => "batch_inference",
         "function_name" => params.function_name.to_string(),
     )
     .increment(1);
-    counter!(
-        "inference_count",
-        "endpoint" => "batch_inference",
-        "function_name" => params.function_name.to_string(),
-    )
-    .increment(num_inferences as u64);
     counter!(
         "tensorzero_inferences_total",
         "endpoint" => "batch_inference",

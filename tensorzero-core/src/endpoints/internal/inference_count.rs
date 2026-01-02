@@ -14,6 +14,7 @@ use crate::db::inference_count::{
     GetFunctionThroughputByVariantParams, InferenceCountQueries, VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
+use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the inference count endpoint
@@ -178,7 +179,9 @@ async fn get_inference_count(
     let function = config.get_function(function_name)?;
 
     // If variant_name is provided, validate that it exists
+    // Skip validation for default function since its variants are dynamic
     if let Some(ref variant_name) = params.variant_name
+        && function_name != DEFAULT_FUNCTION_NAME
         && !function.variants().contains_key(variant_name)
     {
         return Err(ErrorDetails::UnknownVariant {
@@ -588,5 +591,37 @@ mod tests {
             .unwrap();
 
         assert!(result.functions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_count_default_function_skips_variant_validation() {
+        // Default config includes tensorzero::default which has no variants in config
+        // but should allow any variant_name without returning UnknownVariant error
+        let config = Config::default();
+
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_count_queries
+            .expect_count_inferences_for_function()
+            .withf(|params| {
+                assert_eq!(params.function_name, DEFAULT_FUNCTION_NAME);
+                assert_eq!(params.function_type, FunctionConfigType::Chat);
+                assert_eq!(params.variant_name, Some("openai::gpt-5-mini"));
+                true
+            })
+            .times(1)
+            .returning(|_| Box::pin(async move { Ok(10) }));
+
+        let params = InferenceCountQueryParams {
+            variant_name: Some("openai::gpt-5-mini".to_string()),
+            group_by: None,
+        };
+
+        // This should NOT return UnknownVariant error
+        let result = get_inference_count(&config, &mock_clickhouse, DEFAULT_FUNCTION_NAME, params)
+            .await
+            .unwrap();
+
+        assert_eq!(result.inference_count, 10);
     }
 }

@@ -396,9 +396,7 @@ pub async fn inference(
         if let Some(model_name) = params.model_name {
             labels.push(("model_name", model_name.clone()));
         }
-        counter!("request_count", &labels).increment(1);
         counter!("tensorzero_requests_total", &labels).increment(1);
-        counter!("inference_count", &labels).increment(1);
         counter!("tensorzero_inferences_total", &labels).increment(1);
     }
 

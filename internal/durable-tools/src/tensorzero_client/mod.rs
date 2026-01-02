@@ -7,18 +7,28 @@
 mod client_ext;
 mod embedded;
 
-use async_trait::async_trait;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 pub use tensorzero::{
     ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, TensorZeroError,
-    UpdateDatapointRequest, UpdateDatapointsResponse,
+    GetConfigResponse, GetDatapointsResponse, InferenceResponse, ListDatapointsRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
+    WriteConfigResponse,
 };
+use tensorzero::{GetInferencesResponse, ListInferencesRequest};
+pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+pub use tensorzero_core::optimization::OptimizationJobHandle;
+pub use tensorzero_core::optimization::OptimizationJobInfo;
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use url::Url;
 use uuid::Uuid;
 
@@ -27,9 +37,10 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    ListSessionsResponse, ToolOutcome,
 };
+pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
 #[cfg(test)]
 use mockall::automock;
@@ -52,6 +63,71 @@ pub enum TensorZeroClientError {
     /// Error from the Autopilot API.
     #[error("Autopilot error: {0}")]
     Autopilot(#[from] autopilot_client::AutopilotError),
+
+    /// Operation not supported in this client mode.
+    #[error("Operation not supported: {0}")]
+    NotSupported(String),
+
+    /// Evaluation error.
+    #[error("Evaluation error: {0}")]
+    Evaluation(String),
+}
+
+// TODO: These evaluation types are defined here temporarily because there is no HTTP
+// endpoint for evaluations yet. Once an HTTP endpoint is added, these should be replaced
+// with the wire types from tensorzero-core (re-exported through the SDK).
+
+/// Parameters for running an evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunEvaluationParams {
+    /// Name of the evaluation to run.
+    pub evaluation_name: String,
+    /// Name of the dataset to run on.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub dataset_name: Option<String>,
+    /// Specific datapoint IDs to evaluate.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub datapoint_ids: Option<Vec<Uuid>>,
+    /// Name of the variant to evaluate.
+    pub variant_name: String,
+    /// Number of concurrent requests to make.
+    pub concurrency: usize,
+    /// Cache configuration for inference requests.
+    pub inference_cache: CacheEnabledMode,
+    /// Maximum number of datapoints to evaluate from the dataset.
+    pub max_datapoints: Option<u32>,
+    /// Precision targets for adaptive stopping.
+    /// Maps evaluator names to target confidence interval half-widths.
+    /// When the CI half-width for an evaluator falls below its target,
+    /// evaluation may stop early for that evaluator.
+    #[serde(default)]
+    pub precision_targets: HashMap<String, f32>,
+}
+
+/// Statistics for a single evaluator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvaluatorStatsResponse {
+    /// Mean value of the evaluator.
+    pub mean: f32,
+    /// Standard error of the evaluator.
+    pub stderr: f32,
+    /// Number of samples.
+    pub count: usize,
+}
+
+/// Response from running an evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunEvaluationResponse {
+    /// Unique identifier for this evaluation run.
+    pub evaluation_run_id: Uuid,
+    /// Number of datapoints evaluated.
+    pub num_datapoints: usize,
+    /// Number of successful evaluations.
+    pub num_successes: usize,
+    /// Number of errors.
+    pub num_errors: usize,
+    /// Per-evaluator statistics.
+    pub stats: HashMap<String, EvaluatorStatsResponse>,
 }
 
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
@@ -71,6 +147,8 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         params: ClientInferenceParams,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
 
+    // ========== Feedback Operations ==========
+
     /// Submit feedback for an inference or episode.
     ///
     /// Feedback can be a comment, demonstration, or a metric value (float or boolean).
@@ -80,13 +158,33 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         params: FeedbackParams,
     ) -> Result<FeedbackResponse, TensorZeroClientError>;
 
+    /// Get the latest feedback ID for each metric for a target.
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+    /// Get feedback statistics by variant for a function and metric.
+    ///
+    /// Returns mean, variance, and count for each variant. This is useful for
+    /// analyzing variant performance without requiring an HTTP endpoint.
+    ///
+    /// Note: This method only works in embedded mode (no HTTP endpoint available).
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: String,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
+
     /// Create an event in an autopilot session.
     ///
     /// Use `Uuid::nil()` as `session_id` to create a new session.
+    /// The deployment_id is injected from the gateway's app state.
     async fn create_autopilot_event(
         &self,
         session_id: Uuid,
-        request: CreateEventRequest,
+        request: CreateEventGatewayRequest,
     ) -> Result<CreateEventResponse, TensorZeroClientError>;
 
     /// List events in an autopilot session.
@@ -115,6 +213,18 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         snapshot_hash: SnapshotHash,
         input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+    /// Get a config snapshot by hash, or the live config if no hash is provided.
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+    /// Write a config snapshot to storage.
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
     // ========== Datapoint CRUD Operations ==========
 
@@ -160,11 +270,47 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 
-    /// Get the latest feedback ID for each metric for a target.
-    async fn get_latest_feedback_id_by_metric(
+    // ========== Inference Query Operations ==========
+
+    /// List inferences with filtering and pagination.
+    async fn list_inferences(
         &self,
-        target_id: Uuid,
-    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+    // ========== Optimization Operations ==========
+
+    /// Launch an optimization workflow.
+    ///
+    /// Returns a job handle that can be used to poll the optimization status.
+    async fn launch_optimization_workflow(
+        &self,
+        params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
+
+    /// Poll an optimization workflow for its current status.
+    ///
+    /// Returns the current status of the optimization job (Pending, Completed, or Failed).
+    async fn poll_optimization(
+        &self,
+        job_handle: &OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
+
+    // ========== Evaluation Operations ==========
+
+    /// Run an evaluation on a dataset or set of datapoints.
+    ///
+    /// This runs inference on each datapoint using the specified variant,
+    /// then runs the configured evaluators on the results.
+    ///
+    /// Returns summary statistics for each evaluator.
+    ///
+    /// Note: This operation is only supported in embedded gateway mode.
+    /// HTTP gateway mode will return a `NotSupported` error.
+    async fn run_evaluation(
+        &self,
+        params: RunEvaluationParams,
+    ) -> Result<RunEvaluationResponse, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.

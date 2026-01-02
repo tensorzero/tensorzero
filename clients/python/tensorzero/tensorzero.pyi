@@ -287,6 +287,7 @@ class FireworksSFTConfig:
         mtp_enabled: Optional[bool] = None,
         mtp_num_draft_tokens: Optional[int] = None,
         mtp_freeze_base_model: Optional[bool] = None,
+        deploy_after_training: Optional[bool] = None,
     ) -> None: ...
 
 @final

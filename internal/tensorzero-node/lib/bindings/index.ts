@@ -44,7 +44,7 @@ export * from "./CreateDatapointsFromInferenceRequest";
 export * from "./CreateDatapointsFromInferenceRequestParams";
 export * from "./CreateDatapointsRequest";
 export * from "./CreateDatapointsResponse";
-export * from "./CreateEventRequest";
+export * from "./CreateEventGatewayRequest";
 export * from "./CreateEventResponse";
 export * from "./CreateJsonDatapointRequest";
 export * from "./CumulativeFeedbackTimeSeriesPoint";
