@@ -48,7 +48,7 @@ mock! {
         async fn create_autopilot_event(
             &self,
             session_id: Uuid,
-            request: durable_tools::CreateEventRequest,
+            request: durable_tools::CreateEventGatewayRequest,
         ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError>;
 
         async fn list_autopilot_events(

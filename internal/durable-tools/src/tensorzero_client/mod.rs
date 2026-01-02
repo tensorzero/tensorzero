@@ -32,9 +32,10 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    ListSessionsResponse, ToolOutcome,
 };
+pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
 #[cfg(test)]
 use mockall::automock;
@@ -92,10 +93,11 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     /// Create an event in an autopilot session.
     ///
     /// Use `Uuid::nil()` as `session_id` to create a new session.
+    /// The deployment_id is injected from the gateway's app state.
     async fn create_autopilot_event(
         &self,
         session_id: Uuid,
-        request: CreateEventRequest,
+        request: CreateEventGatewayRequest,
     ) -> Result<CreateEventResponse, TensorZeroClientError>;
 
     /// List events in an autopilot session.

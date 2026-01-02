@@ -203,8 +203,8 @@ pub use tensorzero_client::{
 
 // Re-export autopilot types for use by tools
 pub use tensorzero_client::{
-    CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    CreateEventGatewayRequest, CreateEventResponse, EventPayload, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, ToolOutcome,
 };
 
 // Re-export datapoint types for CRUD operations
