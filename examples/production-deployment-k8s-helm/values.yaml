@@ -51,6 +51,7 @@ gateway:
       cpu: 2000m
       memory: 4096Mi
 
+  # Needed for persistence + filesystem object storage (writes a test file at startup) since the image runs as non-root.
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
