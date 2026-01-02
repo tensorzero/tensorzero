@@ -1,8 +1,9 @@
 //! Wrapper that adds result publishing to client tools.
 
+use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::{borrow::Cow, fmt::Display};
 
+use anyhow::Context;
 use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use durable_tools::{
@@ -79,7 +80,7 @@ impl<T> TaskTool for ClientTaskToolWrapper<T>
 where
     T: TaskTool,
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
 {
     async fn execute(
         llm_params: Self::LlmParams,
@@ -89,9 +90,13 @@ where
         let session_id = side_info.session_id;
         let tool_call_event_id = side_info.tool_call_event_id;
         let tool_call_id = side_info.tool_call_id.clone();
-        let side_info: T::SideInfo = side_info.try_into().map_err(|e| {
-            anyhow::anyhow!("Failed to convert AutopilotSideInfo to tool SideInfo: {e}")
-        })?;
+        let side_info: T::SideInfo = side_info
+            .try_into()
+            .map_err(|e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
+                let e: anyhow::Error = e.into();
+                e
+            })
+            .with_context(|| "Failed to convert AutopilotSideInfo to tool SideInfo: {e}")?;
         // Execute the underlying tool
         let result = T::execute(llm_params, side_info, ctx).await;
 
@@ -183,7 +188,7 @@ impl<T: SimpleTool> Default for ClientSimpleToolWrapper<T> {
 impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T>
 where
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
 {
     fn name() -> Cow<'static, str> {
         T::name()
@@ -213,7 +218,7 @@ struct SimpleToolStepParams<L, S> {
 impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T>
 where
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
 {
     async fn execute(
         llm_params: Self::LlmParams,
@@ -226,9 +231,15 @@ where
         let tool_call_id = side_info.tool_call_id.clone();
 
         // Convert AutopilotSideInfo to the underlying tool's SideInfo
-        let converted_side_info: T::SideInfo = side_info.try_into().map_err(|e| {
-            anyhow::anyhow!("Failed to convert AutopilotSideInfo to tool SideInfo: {e}")
-        })?;
+        let converted_side_info: T::SideInfo = side_info
+            .try_into()
+            .map_err(|e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
+                let e: anyhow::Error = e.into();
+                e
+            })
+            .with_context(|| {
+                format!("Failed to convert AutopilotSideInfo to tool SideInfo for tool {tool_name}")
+            })?;
 
         // Execute the underlying simple tool within a checkpointed step.
         // The step returns Ok(Result<output, error_string>) so tool errors are
@@ -436,6 +447,11 @@ mod tests {
                 function_name: String,
                 variant_names: Option<Vec<String>>,
             ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
+
+            async fn run_evaluation(
+                &self,
+                params: durable_tools::RunEvaluationParams,
+            ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
         }
     }
 

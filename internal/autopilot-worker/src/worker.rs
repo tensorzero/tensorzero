@@ -1,6 +1,5 @@
 //! Autopilot worker implementation.
 
-use std::fmt::Display;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -150,7 +149,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
     where
         T: TaskTool + Default,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
     {
         self.executor
             .register_task_tool::<ClientTaskToolWrapper<T>>()
@@ -162,7 +161,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
     where
         T: SimpleTool + Default,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
     {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
         self.executor

@@ -1,4 +1,9 @@
 //! Tool for getting feedback statistics by variant for a function and metric.
+//!
+//! TODO: The `GetFeedbackByVariantToolParams` type is defined here temporarily because
+//! there is no HTTP endpoint for this operation yet. Once an HTTP endpoint is added,
+//! this should be replaced with the wire types from tensorzero-core (re-exported
+//! through the SDK).
 
 use std::borrow::Cow;
 

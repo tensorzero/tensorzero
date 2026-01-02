@@ -141,6 +141,11 @@ mock! {
             function_name: String,
             variant_names: Option<Vec<String>>,
         ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
+
+        async fn run_evaluation(
+            &self,
+            params: durable_tools::RunEvaluationParams,
+        ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
     }
 }
 

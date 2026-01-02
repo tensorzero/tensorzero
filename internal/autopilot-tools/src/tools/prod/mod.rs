@@ -15,6 +15,7 @@ mod inference;
 mod launch_optimization_workflow;
 mod list_datapoints;
 mod list_inferences;
+mod run_evaluation;
 mod update_datapoints;
 mod write_config;
 
@@ -37,5 +38,6 @@ pub use launch_optimization_workflow::{
 };
 pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
 pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};
+pub use run_evaluation::{RunEvaluationTool, RunEvaluationToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};
 pub use write_config::{WriteConfigTool, WriteConfigToolParams};

@@ -290,7 +290,6 @@ impl AutopilotClient {
         let llm_params = autopilot_tool_call.arguments.clone();
 
         // Use the side_info from the ToolCall event (propagated from caller)
-        // Fall back to null if not provided
 
         let episode_id = Uuid::now_v7();
         self.spawn_client
