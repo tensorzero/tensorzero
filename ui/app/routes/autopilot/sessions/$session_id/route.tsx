@@ -506,6 +506,11 @@ export default function AutopilotSessionEventsPage({
     OptimisticMessage[]
   >([]);
 
+  // Clear optimistic messages when session changes to prevent cross-session leakage
+  useEffect(() => {
+    setOptimisticMessages([]);
+  }, [sessionId]);
+
   // Track if events are still loading (for disabling chat input)
   // New sessions have direct data (not a promise), so they're not loading
   const [isEventsLoading, setIsEventsLoading] = useState(
@@ -583,6 +588,7 @@ export default function AutopilotSessionEventsPage({
 
       <Suspense fallback={<EventStreamSkeleton />}>
         <EventStreamContentWrapper
+          key={sessionId}
           sessionId={sessionId}
           eventsData={eventsData}
           isNewSession={isNewSession}
