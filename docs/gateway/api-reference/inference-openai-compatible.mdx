@@ -867,11 +867,17 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
-- **`tensorzero_raw_usage`** (optional, only when `tensorzero::include_raw_usage` is `true`): An array of raw provider-specific usage data. Each entry contains:
-  - `model_inference_id`: UUID of the model inference.
-  - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
-  - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
-  - `usage` (optional): The raw usage object from the provider.
+
+#### `tensorzero_raw_usage`
+
+- **Type:** array (optional, only when `tensorzero::include_raw_usage` is `true`)
+
+An array of raw provider-specific usage data. Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data` (optional): The raw usage object from the provider.
 
 </Tab>
 <Tab title="Streaming">
@@ -938,11 +944,17 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
-- **`tensorzero_raw_usage`** (optional, only when `tensorzero::include_raw_usage` is `true`): An array of raw provider-specific usage data. Each entry contains:
-  - `model_inference_id`: UUID of the model inference.
-  - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
-  - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
-  - `usage` (optional): The raw usage object from the provider.
+
+#### `tensorzero_raw_usage`
+
+- **Type:** array (optional, only when `tensorzero::include_raw_usage` is `true`)
+
+An array of raw provider-specific usage data. Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data` (optional): The raw usage object from the provider.
 
 </Tab>
 </Tabs>

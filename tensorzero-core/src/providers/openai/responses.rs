@@ -274,7 +274,7 @@ impl OpenAIResponsesResponse<'_> {
 fn openai_responses_usage_from_raw_response(raw_response: &str) -> Option<Value> {
     serde_json::from_str::<Value>(raw_response)
         .ok()
-        .and_then(|value| value.get("usage").cloned())
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
@@ -1396,7 +1396,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
         // Completed event - extract usage and finish reason
         OpenAIResponsesStreamEvent::ResponseCompleted { response } => {
-            let usage_value = response.get("usage").cloned();
+            // Filter out null values to avoid creating RawUsageEntry with null data
+            let usage_value = response.get("usage").filter(|v| !v.is_null()).cloned();
             let usage = usage_value.as_ref().map(|u| {
                 let input_tokens = match u.get("input_tokens") {
                     None => None,
@@ -1465,7 +1466,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
         // Incomplete event - extract finish reason
         OpenAIResponsesStreamEvent::ResponseIncomplete { response } => {
-            let usage_value = response.get("usage").cloned();
+            // Filter out null values to avoid creating RawUsageEntry with null data
+            let usage_value = response.get("usage").filter(|v| !v.is_null()).cloned();
             let usage = usage_value.as_ref().map(|u| {
                 let input_tokens = match u.get("input_tokens") {
                     None => None,

@@ -805,7 +805,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
 fn gcp_vertex_anthropic_usage_from_raw_response(raw_response: &str) -> Option<serde_json::Value> {
     serde_json::from_str::<serde_json::Value>(raw_response)
         .ok()
-        .and_then(|value| value.get("usage").cloned())
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 #[cfg(test)]

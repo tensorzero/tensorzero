@@ -516,7 +516,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
 fn hyperbolic_usage_from_raw_response(raw_response: &str) -> Option<Value> {
     serde_json::from_str::<Value>(raw_response)
         .ok()
-        .and_then(|value| value.get("usage").cloned())
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 #[cfg(test)]

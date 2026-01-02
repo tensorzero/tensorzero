@@ -11,27 +11,29 @@ use uuid::Uuid;
 use crate::common::get_gateway_endpoint;
 
 fn assert_openai_chat_usage_details(entry: &Value) {
-    let usage = entry.get("usage").unwrap_or_else(|| {
-        panic!("raw_usage entry should include usage for chat completions: {entry:?}")
+    let data = entry.get("data").unwrap_or_else(|| {
+        panic!("raw_usage entry should include data field for chat completions: {entry:?}")
     });
     assert!(
-        usage.is_object(),
-        "raw_usage entry usage should be an object for chat completions"
+        !data.is_null(),
+        "raw_usage entry data should NOT be null for OpenAI chat completions. Entry: {entry:?}"
     );
     assert!(
-        usage.get("total_tokens").is_some(),
+        data.is_object(),
+        "raw_usage entry data should be an object for chat completions"
+    );
+    assert!(
+        data.get("total_tokens").is_some(),
         "raw_usage should include `total_tokens` for chat completions"
     );
     assert!(
-        usage
-            .get("prompt_tokens_details")
+        data.get("prompt_tokens_details")
             .and_then(|details| details.get("cached_tokens"))
             .is_some(),
         "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
     );
     assert!(
-        usage
-            .get("completion_tokens_details")
+        data.get("completion_tokens_details")
             .and_then(|details| details.get("reasoning_tokens"))
             .is_some(),
         "raw_usage should include `completion_tokens_details.reasoning_tokens` for chat completions"
@@ -87,16 +89,13 @@ async fn make_request_and_get_raw_usage(
             }
 
             let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
-            // Check for raw_usage nested inside usage
-            // Note: Only the final empty usage chunk has raw_usage, not all chunks with usage
-            if let Some(usage) = chunk_json.get("usage")
-                && let Some(ru) = usage.get("raw_usage")
-            {
+            // Check for raw_usage at chunk level (sibling to usage)
+            if let Some(ru) = chunk_json.get("raw_usage") {
                 raw_usage = Some(ru.as_array().expect("raw_usage should be an array").clone());
             }
         }
 
-        raw_usage.expect("Should have received a chunk with usage containing raw_usage")
+        raw_usage.expect("Should have received a chunk with raw_usage")
     } else {
         let response = Client::new()
             .post(get_gateway_endpoint("/inference"))
@@ -109,11 +108,10 @@ async fn make_request_and_get_raw_usage(
 
         let response_json: Value = response.json().await.unwrap();
 
-        // Get raw_usage nested inside usage
-        let usage = response_json.get("usage").expect("usage should be present");
-        let raw_usage = usage
+        // Get raw_usage at response level (sibling to usage)
+        let raw_usage = response_json
             .get("raw_usage")
-            .expect("raw_usage should be present in usage when include_raw_usage is true");
+            .expect("raw_usage should be present when include_raw_usage is true");
         raw_usage
             .as_array()
             .expect("raw_usage should be an array")
@@ -221,14 +219,11 @@ async fn test_raw_usage_cache_disabled() {
 
     let response_json: Value = response.json().await.unwrap();
 
-    // With cache disabled, raw_usage should still work (nested inside usage)
-    let usage = response_json.get("usage");
-    assert!(usage.is_some(), "usage should be present");
-
-    let raw_usage = usage.unwrap().get("raw_usage");
+    // With cache disabled, raw_usage should still work (at response level, sibling to usage)
+    let raw_usage = response_json.get("raw_usage");
     assert!(
         raw_usage.is_some(),
-        "raw_usage should be present inside usage even with cache disabled"
+        "raw_usage should be present even with cache disabled"
     );
 
     let raw_usage_array = raw_usage.unwrap().as_array().unwrap();
@@ -288,16 +283,13 @@ async fn test_raw_usage_cache_disabled_streaming() {
         }
 
         let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
-        // Check for raw_usage nested inside usage
-        if let Some(usage) = chunk_json.get("usage")
-            && let Some(ru) = usage.get("raw_usage")
-        {
+        // Check for raw_usage at chunk level (sibling to usage)
+        if let Some(ru) = chunk_json.get("raw_usage") {
             raw_usage = Some(ru.as_array().expect("raw_usage should be an array").clone());
         }
     }
 
-    let raw_usage =
-        raw_usage.expect("Should have received a chunk with usage containing raw_usage");
+    let raw_usage = raw_usage.expect("Should have received a chunk with raw_usage");
 
     // With cache disabled, raw_usage should have entries (no cache hits possible)
     assert!(
@@ -356,11 +348,8 @@ async fn make_openai_request_and_get_raw_usage(input_text: &str, stream: bool) -
             }
 
             let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
-            // Check for tensorzero_raw_usage nested inside usage
-            // Note: Only the final usage chunk has tensorzero_raw_usage
-            if let Some(usage) = chunk_json.get("usage")
-                && let Some(ru) = usage.get("tensorzero_raw_usage")
-            {
+            // Check for tensorzero_raw_usage at chunk level (sibling to usage)
+            if let Some(ru) = chunk_json.get("tensorzero_raw_usage") {
                 raw_usage = Some(
                     ru.as_array()
                         .expect("tensorzero_raw_usage should be an array")
@@ -369,7 +358,7 @@ async fn make_openai_request_and_get_raw_usage(input_text: &str, stream: bool) -
             }
         }
 
-        raw_usage.expect("Should have received a chunk with usage containing tensorzero_raw_usage")
+        raw_usage.expect("Should have received a chunk with tensorzero_raw_usage")
     } else {
         let response = Client::new()
             .post(get_gateway_endpoint("/openai/v1/chat/completions"))
@@ -382,11 +371,10 @@ async fn make_openai_request_and_get_raw_usage(input_text: &str, stream: bool) -
 
         let response_json: Value = response.json().await.unwrap();
 
-        // Get tensorzero_raw_usage nested inside usage
-        let usage = response_json.get("usage").expect("usage should be present");
-        let raw_usage = usage
-            .get("tensorzero_raw_usage")
-            .expect("tensorzero_raw_usage should be present in usage when tensorzero::include_raw_usage is true");
+        // Get tensorzero_raw_usage at response level (sibling to usage)
+        let raw_usage = response_json.get("tensorzero_raw_usage").expect(
+            "tensorzero_raw_usage should be present when tensorzero::include_raw_usage is true",
+        );
         raw_usage
             .as_array()
             .expect("tensorzero_raw_usage should be an array")

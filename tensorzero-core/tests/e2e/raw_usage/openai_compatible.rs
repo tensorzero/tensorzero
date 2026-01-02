@@ -6,33 +6,35 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
 fn assert_openai_chat_usage_details(entry: &Value) {
-    let usage = entry
-        .get("usage")
-        .expect("raw_usage entry should include usage for chat completions");
+    let data = entry
+        .get("data")
+        .expect("raw_usage entry should include data field for chat completions");
     assert!(
-        usage.is_object(),
-        "raw_usage entry usage should be an object for chat completions"
+        !data.is_null(),
+        "raw_usage entry data should NOT be null for OpenAI chat completions. Entry: {entry:?}"
     );
     assert!(
-        usage.get("total_tokens").is_some(),
+        data.is_object(),
+        "raw_usage entry data should be an object for chat completions"
+    );
+    assert!(
+        data.get("total_tokens").is_some(),
         "raw_usage should include `total_tokens` for chat completions"
     );
     assert!(
-        usage
-            .get("prompt_tokens_details")
+        data.get("prompt_tokens_details")
             .and_then(|details| details.get("cached_tokens"))
             .is_some(),
         "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
     );
     assert!(
-        usage
-            .get("completion_tokens_details")
+        data.get("completion_tokens_details")
             .and_then(|details| details.get("reasoning_tokens"))
             .is_some(),
         "raw_usage should include `completion_tokens_details.reasoning_tokens` for chat completions"
@@ -97,10 +99,10 @@ async fn test_openai_compatible_raw_usage_non_streaming() {
         "usage should have completion_tokens"
     );
 
-    // Check tensorzero_raw_usage exists inside usage and is an array
-    let raw_usage = usage
-        .get("tensorzero_raw_usage")
-        .expect("usage should have tensorzero_raw_usage when tensorzero::include_raw_usage=true");
+    // Check tensorzero_raw_usage exists at response level (sibling to usage)
+    let raw_usage = response_json.get("tensorzero_raw_usage").expect(
+        "Response should have tensorzero_raw_usage when tensorzero::include_raw_usage=true",
+    );
     assert!(
         raw_usage.is_array(),
         "tensorzero_raw_usage should be an array"
@@ -171,14 +173,9 @@ async fn test_openai_compatible_raw_usage_not_requested() {
 
     let response_json: Value = serde_json::from_str(&response_text).unwrap();
 
-    // Check usage exists
-    let usage = response_json
-        .get("usage")
-        .expect("Response should have usage field");
-
-    // tensorzero_raw_usage should NOT be present
+    // tensorzero_raw_usage should NOT be present at response level
     assert!(
-        usage.get("tensorzero_raw_usage").is_none(),
+        response_json.get("tensorzero_raw_usage").is_none(),
         "tensorzero_raw_usage should not be present when tensorzero::include_raw_usage is false"
     );
 }
@@ -279,10 +276,8 @@ async fn test_openai_compatible_raw_usage_streaming() {
             serde_json::from_str(&message.data).expect("Failed to parse chunk as JSON");
         all_chunks.push(chunk_json.clone());
 
-        // Check if this chunk has usage with tensorzero_raw_usage nested inside
-        if let Some(usage) = chunk_json.get("usage")
-            && let Some(raw_usage) = usage.get("tensorzero_raw_usage")
-        {
+        // Check if this chunk has tensorzero_raw_usage at chunk level (sibling to usage)
+        if let Some(raw_usage) = chunk_json.get("tensorzero_raw_usage") {
             found_raw_usage = true;
             last_chunk_with_usage = Some(chunk_json.clone());
             assert!(
@@ -312,7 +307,7 @@ async fn test_openai_compatible_raw_usage_streaming() {
 
     assert!(
         found_raw_usage,
-        "Streaming response should include tensorzero_raw_usage in usage in final chunk.\n\
+        "Streaming response should include tensorzero_raw_usage in final chunk.\n\
         Total chunks received: {}\n\
         Last few chunks:\n{:#?}",
         all_chunks.len(),
@@ -321,12 +316,9 @@ async fn test_openai_compatible_raw_usage_streaming() {
 
     let final_chunk = last_chunk_with_usage
         .expect("No chunk with tensorzero_raw_usage found despite found_raw_usage being true");
-    let usage = final_chunk
-        .get("usage")
-        .expect("usage field missing from final chunk");
-    let raw_usage = usage
+    let raw_usage = final_chunk
         .get("tensorzero_raw_usage")
-        .expect("tensorzero_raw_usage field missing from usage");
+        .expect("tensorzero_raw_usage field missing from chunk");
     assert!(
         raw_usage.is_array(),
         "tensorzero_raw_usage should be an array"
