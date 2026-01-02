@@ -34,7 +34,8 @@ impl ToolMetadata for GetConfigTool {
     fn parameters_schema() -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
-            "description": "Get the config snapshot. No parameters required."
+            "description": "Get the config snapshot. No parameters required.",
+            "properties": {}
         });
 
         serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
