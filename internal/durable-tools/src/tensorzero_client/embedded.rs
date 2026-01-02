@@ -7,9 +7,10 @@ use async_trait::async_trait;
 use tensorzero::{
     ActionResponse, ClientInferenceParams, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse, InferenceOutput,
-    InferenceResponse, ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest,
-    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
+    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;
@@ -30,7 +31,7 @@ use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
 
 use super::{
-    CreateEventRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
+    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
     ListSessionsParams, ListSessionsResponse, TensorZeroClient, TensorZeroClientError,
 };
 
@@ -95,7 +96,7 @@ impl TensorZeroClient for EmbeddedClient {
     async fn create_autopilot_event(
         &self,
         session_id: Uuid,
-        request: CreateEventRequest,
+        request: CreateEventGatewayRequest,
     ) -> Result<CreateEventResponse, TensorZeroClientError> {
         let autopilot_client = self
             .app_state
@@ -103,7 +104,22 @@ impl TensorZeroClient for EmbeddedClient {
             .as_ref()
             .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
-        create_event(autopilot_client, session_id, request)
+        // Get deployment_id from app_state
+        let deployment_id = self
+            .app_state
+            .deployment_id
+            .clone()
+            .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
+
+        // Construct the full request with deployment_id from app state
+        let full_request = autopilot_client::CreateEventRequest {
+            deployment_id,
+            tensorzero_version: tensorzero_core::endpoints::status::TENSORZERO_VERSION.to_string(),
+            payload: request.payload,
+            previous_user_message_event_id: request.previous_user_message_event_id,
+        };
+
+        create_event(autopilot_client, session_id, full_request)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
@@ -320,6 +336,21 @@ impl TensorZeroClient for EmbeddedClient {
         tensorzero_core::endpoints::datasets::v1::delete_datapoints(
             &self.app_state.clickhouse_connection_info,
             &dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    // ========== Inference Query Operations ==========
+
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
+            &self.app_state.config,
+            &self.app_state.clickhouse_connection_info,
             request,
         )
         .await

@@ -3,7 +3,7 @@
 use std::fmt;
 use std::time::Duration;
 
-use durable_tools_spawn::SpawnClient;
+use durable_tools_spawn::{SpawnClient, SpawnOptions};
 use futures::stream::{Stream, StreamExt};
 use moka::sync::Cache;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
@@ -276,7 +276,7 @@ impl AutopilotClient {
     async fn handle_tool_call_authorization(
         &self,
         session_id: Uuid,
-        deployment_id: Uuid,
+        deployment_id: String,
         tool_call_event_id: Uuid,
     ) -> Result<(), AutopilotError> {
         // Check cache first, otherwise fetch the tool call event directly
@@ -307,7 +307,13 @@ impl AutopilotClient {
 
         let episode_id = Uuid::now_v7();
         self.spawn_client
-            .spawn_tool_by_name(&tool_name, llm_params, side_info, episode_id)
+            .spawn_tool_by_name(
+                &tool_name,
+                llm_params,
+                side_info,
+                episode_id,
+                SpawnOptions::default(),
+            )
             .await?;
 
         Ok(())
@@ -424,7 +430,7 @@ impl AutopilotClient {
             },
             _ => None,
         };
-        let deployment_id = request.deployment_id;
+        let deployment_id = request.deployment_id.clone();
 
         let url = self
             .base_url

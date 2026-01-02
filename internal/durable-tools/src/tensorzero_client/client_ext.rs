@@ -9,9 +9,10 @@ use autopilot_client::AutopilotError;
 use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse, InferenceOutput,
-    InferenceResponse, ListDatapointsRequest, TensorZeroError, UpdateDatapointRequest,
-    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
+    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -28,7 +29,7 @@ use tensorzero_optimizers::endpoints::{
 use uuid::Uuid;
 
 use super::{
-    CreateEventRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
+    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
     ListSessionsParams, ListSessionsResponse, TensorZeroClient, TensorZeroClientError,
 };
 
@@ -57,11 +58,12 @@ impl TensorZeroClient for Client {
     async fn create_autopilot_event(
         &self,
         session_id: Uuid,
-        request: CreateEventRequest,
+        request: CreateEventGatewayRequest,
     ) -> Result<CreateEventResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 // HTTP mode: call the internal endpoint
+                // The gateway will inject deployment_id from its app state
                 let url = http
                     .base_url
                     .join(&format!(
@@ -105,10 +107,27 @@ impl TensorZeroClient for Client {
                     .as_ref()
                     .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
+                // Get deployment_id from app_state
+                let deployment_id = gateway
+                    .handle
+                    .app_state
+                    .deployment_id
+                    .clone()
+                    .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
+
+                // Construct the full request with deployment_id from app state
+                let full_request = autopilot_client::CreateEventRequest {
+                    deployment_id,
+                    tensorzero_version: tensorzero_core::endpoints::status::TENSORZERO_VERSION
+                        .to_string(),
+                    payload: request.payload,
+                    previous_user_message_event_id: request.previous_user_message_event_id,
+                };
+
                 tensorzero_core::endpoints::internal::autopilot::create_event(
                     autopilot_client,
                     session_id,
-                    request,
+                    full_request,
                 )
                 .await
                 .map_err(|e| {
@@ -397,6 +416,17 @@ impl TensorZeroClient for Client {
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError> {
         ClientExt::delete_datapoints(self, dataset_name, ids)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    // ========== Inference Query Operations ==========
+
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        ClientExt::list_inferences(self, request)
             .await
             .map_err(TensorZeroClientError::TensorZero)
     }

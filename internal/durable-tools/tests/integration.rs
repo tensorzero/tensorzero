@@ -78,7 +78,7 @@ impl TensorZeroClient for MockTensorZeroClient {
     async fn create_autopilot_event(
         &self,
         _session_id: Uuid,
-        _request: durable_tools::CreateEventRequest,
+        _request: durable_tools::CreateEventGatewayRequest,
     ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
@@ -168,6 +168,13 @@ impl TensorZeroClient for MockTensorZeroClient {
         _dataset_name: String,
         _ids: Vec<Uuid>,
     ) -> Result<tensorzero::DeleteDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn list_inferences(
+        &self,
+        _request: tensorzero::ListInferencesRequest,
+    ) -> Result<tensorzero::GetInferencesResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
