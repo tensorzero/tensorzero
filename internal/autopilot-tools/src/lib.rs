@@ -145,6 +145,12 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .visit_simple_tool::<tools::GetFeedbackByVariantTool>()
         .await?;
 
+    // Config snapshot tools
+    visitor.visit_simple_tool::<tools::GetConfigTool>().await?;
+    visitor
+        .visit_simple_tool::<tools::WriteConfigTool>()
+        .await?;
+
     // Inference query tools
     visitor
         .visit_simple_tool::<tools::ListInferencesTool>()
