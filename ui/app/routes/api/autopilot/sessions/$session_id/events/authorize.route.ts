@@ -3,13 +3,6 @@ import { getAutopilotClient } from "~/utils/tensorzero.server";
 import type { ToolCallAuthorizationStatus } from "~/types/tensorzero";
 import { logger } from "~/utils/logger";
 
-// Hardcoded deployment_id (temporary - will be removed soon)
-const DEPLOYMENT_ID = "019b7bb4-bd08-76ec-875e-4d27d5eb3864";
-
-// Get version from build-time constant or fallback
-const TENSORZERO_VERSION =
-  typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "unknown";
-
 type AuthorizeRequest = {
   tool_call_event_id: string;
   status: ToolCallAuthorizationStatus;
@@ -65,8 +58,6 @@ export async function action({ params, request }: ActionFunctionArgs) {
 
   try {
     const response = await client.createAutopilotEvent(sessionId, {
-      deployment_id: DEPLOYMENT_ID,
-      tensorzero_version: TENSORZERO_VERSION,
       payload: {
         type: "tool_call_authorization",
         source: { type: "ui" },
