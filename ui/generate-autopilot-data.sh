@@ -79,7 +79,8 @@ ASSISTANT_RESPONSES=(
 TOOL_NAMES=("read_file" "search_code" "run_tests" "fetch_url" "execute_command")
 
 for i in $(seq 1 "$NUM_SESSIONS"); do
-  DEPLOYMENT_ID=$(generate_uuid)
+  # Hardcoded deployment_id (temporary - will be removed soon)
+  DEPLOYMENT_ID="019b7bb4-bd08-76ec-875e-4d27d5eb3864"
   MSG_INDEX=$(( (i - 1) % ${#USER_MESSAGES[@]} ))
   USER_MSG="${USER_MESSAGES[$MSG_INDEX]}"
   ASSISTANT_MSG="${ASSISTANT_RESPONSES[$MSG_INDEX]}"

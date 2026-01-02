@@ -61,6 +61,10 @@ export default [
       "autopilot/sessions/:session_id/events/stream",
       "routes/api/autopilot/sessions/$session_id/events/stream.route.ts",
     ),
+    route(
+      "autopilot/sessions/:session_id/events/authorize",
+      "routes/api/autopilot/sessions/$session_id/events/authorize.route.ts",
+    ),
   ]),
 
   // Datasets

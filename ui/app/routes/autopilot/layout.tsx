@@ -19,6 +19,7 @@ export async function loader() {
   // Check if autopilot is available by making a minimal request
   const client = getAutopilotClient();
   try {
+    // TODO: Use dedicated endpoint (#5489)
     await client.listAutopilotSessions({ limit: 1 });
     return null;
   } catch (error) {

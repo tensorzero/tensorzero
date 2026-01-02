@@ -21,9 +21,12 @@ type EventStreamProps = {
   isLoadingOlder?: boolean;
   hasReachedStart?: boolean;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
+  pendingToolCallIds?: Set<string>;
+  authLoadingStates?: Map<string, "approving" | "rejecting">;
+  onAuthorize?: (eventId: string, approved: boolean) => Promise<void>;
 };
 
-function ToolEventId({ id }: { id: string }) {
+export function ToolEventId({ id }: { id: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -216,7 +219,13 @@ function renderEventTitle(event: Event) {
   }
 }
 
-function EventItem({ event }: { event: Event }) {
+function EventItem({
+  event,
+  isPending = false,
+}: {
+  event: Event;
+  isPending?: boolean;
+}) {
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const isToolEvent =
@@ -256,6 +265,11 @@ function EventItem({ event }: { event: Event }) {
             >
               <ChevronRight className="h-4 w-4" />
             </span>
+            {isPending && (
+              <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+                Action Required
+              </span>
+            )}
           </button>
         ) : (
           label
@@ -271,7 +285,17 @@ function EventItem({ event }: { event: Event }) {
         </div>
       </div>
       {shouldShowDetails && summary.description && (
-        <p className="text-fg-secondary text-sm">{summary.description}</p>
+        <p
+          className={cn(
+            "text-fg-secondary",
+            event.payload.type === "tool_call" ||
+              event.payload.type === "tool_result"
+              ? "font-mono text-sm"
+              : "text-sm",
+          )}
+        >
+          {summary.description}
+        </p>
       )}
     </div>
   );
@@ -313,6 +337,7 @@ export default function EventStream({
   isLoadingOlder = false,
   hasReachedStart = false,
   topSentinelRef,
+  pendingToolCallIds,
 }: EventStreamProps) {
   if (events.length === 0) {
     return <p className="text-fg-muted text-sm">{emptyMessage}</p>;
@@ -320,17 +345,22 @@ export default function EventStream({
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {/* Sentinel element for Intersection Observer */}
-      <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
+      {/* Session started indicator, or sentinel for loading more */}
+      {hasReachedStart && !isLoadingOlder ? (
+        <SessionStartedDivider />
+      ) : (
+        <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
+      )}
 
       {/* Loading skeletons at the top */}
       {isLoadingOlder && <EventSkeletons count={3} />}
 
-      {/* Session started indicator */}
-      {hasReachedStart && !isLoadingOlder && <SessionStartedDivider />}
-
       {events.map((event) => (
-        <EventItem key={event.id} event={event} />
+        <EventItem
+          key={event.id}
+          event={event}
+          isPending={pendingToolCallIds?.has(event.id)}
+        />
       ))}
     </div>
   );

@@ -3,10 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { data, isRouteErrorResponse, type RouteHandle } from "react-router";
 import { PageHeader } from "~/components/layout/PageLayout";
 import EventStream from "~/components/autopilot/EventStream";
+import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
 import { logger } from "~/utils/logger";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import type { Event } from "~/types/tensorzero";
+import { useToast } from "~/hooks/use-toast";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.session_id!, isIdentifier: true }],
@@ -79,6 +81,119 @@ export default function AutopilotSessionEventsPage({
   // State for pagination
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [hasReachedStart, setHasReachedStart] = useState(!initialHasMore);
+
+  // State for tool call authorization loading
+  const [authLoadingStates, setAuthLoadingStates] = useState<
+    Map<string, "approving" | "rejecting">
+  >(new Map());
+
+  const { toast } = useToast();
+
+  // Compute pending tool calls (tool_calls without matching authorization or result)
+  const pendingToolCalls = useMemo(() => {
+    const authorizedIds = new Set<string>();
+    const resultIds = new Set<string>();
+
+    for (const event of events) {
+      if (event.payload.type === "tool_call_authorization") {
+        authorizedIds.add(event.payload.tool_call_event_id);
+      }
+      if (event.payload.type === "tool_result") {
+        resultIds.add(event.payload.tool_call_event_id);
+      }
+    }
+
+    return events.filter(
+      (e) =>
+        e.payload.type === "tool_call" &&
+        !authorizedIds.has(e.id) &&
+        !resultIds.has(e.id),
+    );
+  }, [events]);
+
+  // Derive values for queue-based approval UI
+  const pendingToolCallIds = useMemo(
+    () => new Set(pendingToolCalls.map((e) => e.id)),
+    [pendingToolCalls],
+  );
+  const oldestPendingToolCall = pendingToolCalls[0] ?? null;
+
+  // SSE change detection for queue top changes.
+  // When the oldest pending tool call changes due to an external event (e.g., another user
+  // or system approving/rejecting via SSE), we show a brief cooldown animation to prevent
+  // accidental clicks on the newly displayed card. This gives users time to recognize
+  // that the card content has changed before they can interact with it.
+  const prevQueueTopRef = useRef<string | null>(null);
+  const userActionRef = useRef(false);
+  const [isInCooldown, setIsInCooldown] = useState(false);
+
+  useEffect(() => {
+    const currentTopId = oldestPendingToolCall?.id ?? null;
+    const prevTopId = prevQueueTopRef.current;
+
+    // Update refs
+    prevQueueTopRef.current = currentTopId;
+    const wasUserAction = userActionRef.current;
+    userActionRef.current = false;
+
+    // If top changed and it wasn't due to user action, trigger cooldown
+    if (currentTopId !== prevTopId && prevTopId !== null && !wasUserAction) {
+      setIsInCooldown(true);
+      const timer = setTimeout(() => setIsInCooldown(false), 1000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [oldestPendingToolCall?.id]);
+
+  // Handle tool call authorization
+  const handleAuthorize = useCallback(
+    async (eventId: string, approved: boolean) => {
+      // Mark as user action to prevent cooldown when this authorization causes queue change
+      userActionRef.current = true;
+
+      setAuthLoadingStates((prev) =>
+        new Map(prev).set(eventId, approved ? "approving" : "rejecting"),
+      );
+
+      try {
+        const response = await fetch(
+          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/authorize`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tool_call_event_id: eventId,
+              status: approved
+                ? { type: "approved" }
+                : {
+                    type: "rejected",
+                    reason: "The user rejected the tool call.",
+                  },
+            }),
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Authorization failed");
+        }
+        // Card will disappear when authorization event arrives via SSE
+      } catch (err) {
+        logger.error("Failed to authorize tool call:", err);
+        toast.error({
+          title: "Authorization failed",
+          description:
+            "Failed to submit tool call authorization. Please try again.",
+        });
+      } finally {
+        setAuthLoadingStates((prev) => {
+          const next = new Map(prev);
+          next.delete(eventId);
+          return next;
+        });
+      }
+    },
+    [sessionId, toast],
+  );
 
   // Refs
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -243,7 +358,7 @@ export default function AutopilotSessionEventsPage({
   }, [isLoadingOlder, hasReachedStart, loadOlderEventsDebounced]);
 
   return (
-    <div className="container mx-auto flex h-full flex-col px-8 pt-16 pb-8">
+    <div className="container mx-auto flex h-full flex-col px-8 py-8">
       <PageHeader label="Autopilot Session" name={sessionId} />
       {error && isRetrying && (
         <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
@@ -253,15 +368,32 @@ export default function AutopilotSessionEventsPage({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="border-border mt-4 min-h-0 flex-1 overflow-y-auto rounded-lg border p-4"
+        className="border-border mt-8 min-h-0 flex-1 overflow-y-auto rounded-lg border p-4"
       >
         <EventStream
           events={events}
           isLoadingOlder={isLoadingOlder}
           hasReachedStart={hasReachedStart}
           topSentinelRef={topSentinelRef}
+          pendingToolCallIds={pendingToolCallIds}
         />
       </div>
+
+      {/* Pinned approval card - outside scroll container */}
+      {oldestPendingToolCall && (
+        <div className="mt-4">
+          <PendingToolCallCard
+            event={oldestPendingToolCall}
+            isLoading={authLoadingStates.has(oldestPendingToolCall.id)}
+            loadingAction={authLoadingStates.get(oldestPendingToolCall.id)}
+            onAuthorize={(approved) =>
+              handleAuthorize(oldestPendingToolCall.id, approved)
+            }
+            additionalCount={pendingToolCalls.length - 1}
+            isInCooldown={isInCooldown}
+          />
+        </div>
+      )}
     </div>
   );
 }

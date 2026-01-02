@@ -79,7 +79,8 @@ STATUS_UPDATES=(
 TOOL_NAMES=("read_file" "search_code" "run_tests" "list_files" "execute_command")
 
 # Create initial session
-DEPLOYMENT_ID=$(generate_uuid)
+# Hardcoded deployment_id (temporary - will be removed soon)
+DEPLOYMENT_ID="019b7bb4-bd08-76ec-875e-4d27d5eb3864"
 
 echo "Creating session at $API_URL..."
 RESPONSE=$(curl -s -X POST "$API_URL/v1/sessions/00000000-0000-0000-0000-000000000000/events" \
