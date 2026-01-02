@@ -22,7 +22,6 @@ use url::Url;
 use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::inference::types::UsageWithRaw;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
     cache::ModelProviderRequest,
@@ -946,10 +945,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: response.usage.into(),
-            raw_usage,
-        };
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -960,6 +956,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_request,
                 raw_response,
                 usage,
+                raw_usage,
                 latency,
                 finish_reason: finish_reason.map(FireworksFinishReason::into),
                 id: model_inference_id,
@@ -1405,14 +1402,15 @@ mod tests {
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
-            Some(UsageWithRaw {
-                usage: Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(20),
-                },
-                raw_usage: expected_raw_usage,
+            Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             }),
             "expected usage to include provider raw_usage entries"
+        );
+        assert_eq!(
+            message.raw_usage, expected_raw_usage,
+            "expected raw_usage to include provider raw_usage entries"
         );
     }
 

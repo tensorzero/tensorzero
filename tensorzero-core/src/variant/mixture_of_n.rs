@@ -20,7 +20,7 @@ use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage, UsageWithRaw,
+    JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
 };
 use crate::inference::types::{
     ModelInferenceRequest, RequestMessage, Role, System,
@@ -430,20 +430,16 @@ fn make_stream_from_non_stream(
                 latency: tokio::time::Duration::from_secs(0),
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
-                usage: usage.map(|usage| UsageWithRaw {
-                    usage,
-                    raw_usage: raw_usage_entries.clone(),
-                }),
+                usage,
+                raw_usage: raw_usage_entries.clone(),
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: json.output.raw,
             thought: None,
             created: json.created,
-            usage: usage.map(|usage| UsageWithRaw {
-                usage,
-                raw_usage: raw_usage_entries,
-            }),
+            usage,
+            raw_usage: raw_usage_entries,
             latency: tokio::time::Duration::from_secs(0),
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
@@ -1826,13 +1822,11 @@ mod tests {
                     }),
                 ],
                 created: 123456,
-                usage: Some(
-                    Usage {
-                        input_tokens: Some(10),
-                        output_tokens: Some(20),
-                    }
-                    .into()
-                ),
+                usage: Some(Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                }),
+                raw_usage: None,
                 latency: std::time::Duration::from_secs(0),
                 raw_response: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),

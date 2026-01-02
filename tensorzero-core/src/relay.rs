@@ -21,7 +21,7 @@ use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
 use crate::inference::types::{
     ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    TextChunk, Usage, UsageWithRaw,
+    TextChunk, Usage,
 };
 use crate::model::Credential;
 use crate::{
@@ -337,10 +337,8 @@ impl TensorzeroRelay {
                 input_messages: request.messages.clone(),
                 raw_request: http_data.raw_request,
                 raw_response: http_data.raw_response.unwrap_or_default(),
-                usage: UsageWithRaw {
-                    usage,
-                    raw_usage: raw_usage_entries,
-                },
+                usage,
+                raw_usage: raw_usage_entries,
                 latency,
                 finish_reason,
                 id: Uuid::now_v7(),

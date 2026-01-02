@@ -47,7 +47,7 @@ use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, Usage, UsageWithRaw,
+    ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
@@ -622,10 +622,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: response.usage.into(),
-            raw_usage,
-        };
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -636,6 +633,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response: raw_response.clone(),
                 usage,
+                raw_usage,
                 latency,
                 finish_reason: finish_reason.map(Into::into),
                 id: model_inference_id,

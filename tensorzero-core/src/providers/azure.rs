@@ -15,7 +15,6 @@ use crate::embeddings::{
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::UsageWithRaw;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
@@ -818,10 +817,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: response.usage.into(),
-            raw_usage,
-        };
+        let usage = response.usage.into();
         let OpenAIResponseChoice {
             message,
             finish_reason,
@@ -852,6 +848,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 input_messages,
                 raw_request,
                 raw_response,
+                raw_usage,
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),

@@ -36,7 +36,7 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::types::{
     ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage, UsageWithRaw,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage,
     batch::StartBatchProviderInferenceResponse, serialize_or_log,
 };
 use crate::model::{Credential, ModelProvider};
@@ -1343,10 +1343,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: usage_metadata.into(),
-            raw_usage,
-        };
+        let usage = usage_metadata.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -1357,6 +1354,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response: raw_response.clone(),
                 usage,
+                raw_usage,
                 latency,
                 finish_reason: first_candidate.finish_reason.map(Into::into),
                 id: model_inference_id,
@@ -2641,8 +2639,8 @@ mod tests {
         // Verify usage is included when finish_reason is set
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.usage.input_tokens, Some(10));
-        assert_eq!(usage.usage.output_tokens, Some(20));
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(20));
 
         // Verify finish reason
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
@@ -2888,8 +2886,8 @@ mod tests {
         // Verify usage is included (with zero output tokens)
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.usage.input_tokens, Some(8));
-        assert_eq!(usage.usage.output_tokens, None);
+        assert_eq!(usage.input_tokens, Some(8));
+        assert_eq!(usage.output_tokens, None);
 
         // Verify finish reason for safety blocks
         assert_eq!(chunk.finish_reason, Some(FinishReason::ContentFilter));

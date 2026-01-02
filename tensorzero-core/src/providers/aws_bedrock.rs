@@ -41,7 +41,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ModelInferenceRequestJsonMode, ObjectStorageFile,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Role,
-    Text, TextChunk, Usage, UsageWithRaw, batch::StartBatchProviderInferenceResponse,
+    Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
@@ -1087,12 +1087,9 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             )
         });
 
-        let usage = UsageWithRaw {
-            usage: Usage {
-                input_tokens: Some(aws_usage.input_tokens as u32),
-                output_tokens: Some(aws_usage.output_tokens as u32),
-            },
-            raw_usage,
+        let usage = Usage {
+            input_tokens: Some(aws_usage.input_tokens as u32),
+            output_tokens: Some(aws_usage.output_tokens as u32),
         };
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
@@ -1102,6 +1099,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response,
                 usage,
+                raw_usage,
                 latency,
                 finish_reason: aws_stop_reason_to_tensorzero_finish_reason(output.stop_reason),
                 id: model_inference_id,

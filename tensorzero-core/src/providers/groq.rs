@@ -28,7 +28,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ObjectStorageFile, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Unknown, Usage, UsageWithRaw,
+    TextChunk, Unknown, Usage,
     batch::StartBatchProviderInferenceResponse,
     resolved_input::{FileUrl, LazyFile},
 };
@@ -1346,10 +1346,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: response.usage.into(),
-            raw_usage,
-        };
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -1359,6 +1356,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 input_messages: messages,
                 raw_request,
                 raw_response: raw_response.clone(),
+                raw_usage,
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
@@ -2565,14 +2563,15 @@ mod tests {
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
-            Some(UsageWithRaw {
-                usage: Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(20),
-                },
-                raw_usage: expected_raw_usage,
+            Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             }),
             "expected usage to include provider raw_usage entries"
+        );
+        assert_eq!(
+            message.raw_usage, expected_raw_usage,
+            "expected raw_usage to include provider raw_usage entries"
         );
     }
 

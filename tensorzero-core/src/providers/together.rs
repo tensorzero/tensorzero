@@ -22,7 +22,7 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, UsageWithRaw,
+    ProviderInferenceResponseArgs,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
@@ -670,10 +670,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: response.usage.into(),
-            raw_usage,
-        };
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -683,6 +680,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 input_messages,
                 raw_request,
                 raw_response: raw_response.clone(),
+                raw_usage,
                 usage,
                 latency,
                 finish_reason: finish_reason.map(Into::into),
@@ -1645,14 +1643,15 @@ mod tests {
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
-            Some(UsageWithRaw {
-                usage: Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(20),
-                },
-                raw_usage: expected_raw_usage,
+            Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             }),
             "expected usage to include provider raw_usage entries"
+        );
+        assert_eq!(
+            message.raw_usage, expected_raw_usage,
+            "expected raw_usage to include provider raw_usage entries"
         );
 
         // Test a thinking chunk

@@ -368,7 +368,6 @@ export * from "./UpdateDynamicToolParamsRequest";
 export * from "./UpdateJsonDatapointRequest";
 export * from "./UrlFile";
 export * from "./Usage";
-export * from "./UsageWithRaw";
 export * from "./VLLMProvider";
 export * from "./VariantConfig";
 export * from "./VariantInfo";

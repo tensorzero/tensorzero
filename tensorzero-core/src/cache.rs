@@ -401,7 +401,7 @@ pub fn start_cache_write_streaming(
             .into_iter()
             .map(|c| CachedProviderInferenceResponseChunk {
                 content: c.content,
-                usage: c.usage.map(|usage| usage.usage),
+                usage: c.usage,
                 raw_response: c.raw_response,
             })
             .collect(),

@@ -29,7 +29,7 @@ use crate::{
         ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
         Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-        TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, UsageWithRaw, file::Detail,
+        TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, file::Detail,
     },
     providers::openai::{
         OpenAIContentBlock, OpenAIFile, OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE,
@@ -253,10 +253,7 @@ impl OpenAIResponsesResponse<'_> {
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: self.usage.map(|u| u.into()).unwrap_or_default(),
-            raw_usage,
-        };
+        let usage = self.usage.map(|u| u.into()).unwrap_or_default();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output,
@@ -264,6 +261,7 @@ impl OpenAIResponsesResponse<'_> {
                 input_messages: generic_request.messages.clone(),
                 raw_request,
                 raw_response: raw_response.clone(),
+                raw_usage,
                 usage,
                 latency,
                 finish_reason,
@@ -2227,19 +2225,21 @@ mod tests {
         assert_eq!(result.content.len(), 0); // No content, just metadata
         assert_eq!(
             result.usage,
-            Some(UsageWithRaw {
-                usage: Usage {
-                    input_tokens: Some(15),
-                    output_tokens: Some(25),
-                },
-                raw_usage: Some(raw_usage_entries_from_value(
-                    model_inference_id,
-                    PROVIDER_TYPE,
-                    ApiType::Responses,
-                    usage_json,
-                )),
+            Some(Usage {
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             }),
             "expected usage to include provider raw_usage entries"
+        );
+        assert_eq!(
+            result.raw_usage,
+            Some(raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::Responses,
+                usage_json,
+            )),
+            "expected raw_usage to include provider raw_usage entries"
         );
         assert_eq!(result.finish_reason, Some(FinishReason::Stop));
     }
@@ -2286,19 +2286,21 @@ mod tests {
         assert_eq!(result.finish_reason, Some(FinishReason::Length));
         assert_eq!(
             result.usage,
-            Some(UsageWithRaw {
-                usage: Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(100),
-                },
-                raw_usage: Some(raw_usage_entries_from_value(
-                    model_inference_id,
-                    PROVIDER_TYPE,
-                    ApiType::Responses,
-                    usage_json,
-                )),
+            Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(100),
             }),
             "expected usage to include provider raw_usage entries"
+        );
+        assert_eq!(
+            result.raw_usage,
+            Some(raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::Responses,
+                usage_json,
+            )),
+            "expected raw_usage to include provider raw_usage entries"
         );
     }
 

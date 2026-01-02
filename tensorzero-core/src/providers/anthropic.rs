@@ -31,7 +31,7 @@ use crate::inference::types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk,
-    UnknownChunk, Usage, UsageWithRaw,
+    UnknownChunk, Usage,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, FinishReason, FunctionType, Latency,
@@ -1190,10 +1190,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: response.usage.into(),
-            raw_usage,
-        };
+        let usage = response.usage.into();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -1201,6 +1198,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 input_messages,
                 raw_request,
                 raw_response,
+                raw_usage,
                 usage,
                 latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
@@ -2812,8 +2810,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.usage.input_tokens, Some(10));
-        assert_eq!(usage.usage.output_tokens, Some(20));
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(20));
         assert_eq!(chunk.latency, latency);
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
@@ -2839,8 +2837,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.usage.input_tokens, Some(5));
-        assert_eq!(usage.usage.output_tokens, Some(15));
+        assert_eq!(usage.input_tokens, Some(5));
+        assert_eq!(usage.output_tokens, Some(15));
         assert_eq!(chunk.latency, latency);
 
         // Test MessageStop
@@ -3035,6 +3033,7 @@ mod tests {
             content: vec![],
             created: 0,
             usage: None,
+            raw_usage: None,
             raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
@@ -3052,6 +3051,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
+            raw_usage: None,
             raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
@@ -3074,6 +3074,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
+            raw_usage: None,
             raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,
@@ -3096,6 +3097,7 @@ mod tests {
         let chunk = ProviderInferenceResponseChunk {
             created: 0,
             usage: None,
+            raw_usage: None,
             raw_response: String::new(),
             latency: Duration::from_millis(0),
             finish_reason: None,

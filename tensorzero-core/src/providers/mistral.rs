@@ -26,7 +26,7 @@ use crate::{
             ModelInferenceRequest, ModelInferenceRequestJsonMode,
             PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
             ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStreamInner, TextChunk, Usage, UsageWithRaw,
+            ProviderInferenceResponseStreamInner, TextChunk, Usage,
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
@@ -782,10 +782,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: response.usage.into(),
-            raw_usage,
-        };
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -796,6 +793,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 raw_request,
                 raw_response: raw_response.clone(),
                 usage,
+                raw_usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,

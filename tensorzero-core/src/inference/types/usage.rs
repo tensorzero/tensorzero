@@ -56,28 +56,6 @@ pub struct Usage {
     pub output_tokens: Option<u32>,
 }
 
-/// Usage with optional raw provider-specific usage data.
-/// This is used at the API response boundary to include `raw_usage` when requested.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct UsageWithRaw {
-    #[serde(flatten)]
-    #[ts(flatten)]
-    pub usage: Usage,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
-}
-
-impl From<Usage> for UsageWithRaw {
-    fn from(usage: Usage) -> Self {
-        Self {
-            usage,
-            raw_usage: None,
-        }
-    }
-}
-
 impl Usage {
     pub fn zero() -> Usage {
         Usage {
@@ -257,44 +235,5 @@ mod tests {
         let json = serde_json::to_value(&entry).unwrap();
         // data field should be present as null
         assert_eq!(json["data"], serde_json::Value::Null, "data should be null");
-    }
-
-    #[test]
-    fn test_usage_with_raw_serialization() {
-        let usage_with_raw = UsageWithRaw {
-            usage: Usage {
-                input_tokens: Some(100),
-                output_tokens: Some(50),
-            },
-            raw_usage: Some(vec![RawUsageEntry {
-                model_inference_id: Uuid::nil(),
-                provider_type: "openai".to_string(),
-                api_type: ApiType::ChatCompletions,
-                data: serde_json::json!({"prompt_tokens": 100}),
-            }]),
-        };
-        let json = serde_json::to_value(&usage_with_raw).unwrap();
-        // Flattened fields should be at top level
-        assert_eq!(json["input_tokens"], 100);
-        assert_eq!(json["output_tokens"], 50);
-        assert!(json["raw_usage"].is_array());
-        assert_eq!(json["raw_usage"][0]["provider_type"], "openai");
-    }
-
-    #[test]
-    fn test_usage_with_raw_no_raw_usage() {
-        let usage_with_raw = UsageWithRaw {
-            usage: Usage {
-                input_tokens: Some(100),
-                output_tokens: Some(50),
-            },
-            raw_usage: None,
-        };
-        let json = serde_json::to_string(&usage_with_raw).unwrap();
-        // raw_usage should be omitted when None
-        assert!(!json.contains("raw_usage"));
-        // But input/output tokens should be present
-        assert!(json.contains("input_tokens"));
-        assert!(json.contains("output_tokens"));
     }
 }

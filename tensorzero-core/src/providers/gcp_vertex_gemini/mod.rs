@@ -58,7 +58,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{
     ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage, UsageWithRaw,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage,
     batch::StartBatchProviderInferenceResponse, serialize_or_log,
 };
 use crate::model::{Credential, CredentialLocationWithFallback, ModelProvider};
@@ -2973,12 +2973,9 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: Usage {
-                input_tokens: usage_metadata.prompt_token_count,
-                output_tokens: usage_metadata.candidates_token_count,
-            },
-            raw_usage,
+        let usage = Usage {
+            input_tokens: usage_metadata.prompt_token_count,
+            output_tokens: usage_metadata.candidates_token_count,
         };
 
         let system = generic_request.system.clone();
@@ -3000,6 +2997,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 raw_request,
                 raw_response,
                 usage,
+                raw_usage,
                 latency,
                 finish_reason,
                 id: model_inference_id,
@@ -4672,8 +4670,8 @@ mod tests {
         // Check that usage was captured
         assert!(result.usage.is_some());
         let usage = result.usage.unwrap();
-        assert_eq!(usage.usage.input_tokens, Some(10));
-        assert_eq!(usage.usage.output_tokens, Some(5));
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(5));
     }
 
     #[test]

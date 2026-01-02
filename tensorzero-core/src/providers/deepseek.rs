@@ -26,7 +26,7 @@ use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk, UsageWithRaw,
+    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
     batch::StartBatchProviderInferenceResponse,
 };
 use crate::model::{Credential, ModelProvider};
@@ -788,10 +788,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 usage,
             )
         });
-        let usage = UsageWithRaw {
-            usage: response.usage.into(),
-            raw_usage,
-        };
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -802,6 +799,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request,
                 raw_response,
                 usage,
+                raw_usage,
                 latency,
                 finish_reason: finish_reason.map(OpenAIFinishReason::into),
                 id: model_inference_id,

@@ -24,7 +24,7 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
-use crate::inference::types::usage::{ApiType, RawUsageEntry, UsageWithRaw};
+use crate::inference::types::usage::{ApiType, RawUsageEntry};
 use crate::inference::types::{ContentBlock, FinishReason, Role};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -138,6 +138,7 @@ impl DummyProvider {
                     created,
                     content: vec![chunk],
                     usage: None,
+                    raw_usage: None,
                     raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     finish_reason: None,
@@ -146,15 +147,13 @@ impl DummyProvider {
             .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
                 created,
                 content: vec![],
-                usage: Some(UsageWithRaw {
-                    usage: self.get_model_usage(total_tokens),
-                    raw_usage: Some(vec![RawUsageEntry {
-                        model_inference_id,
-                        provider_type: "dummy".to_string(),
-                        api_type: ApiType::ChatCompletions,
-                        data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
-                    }]),
-                }),
+                usage: Some(self.get_model_usage(total_tokens)),
+                raw_usage: Some(vec![RawUsageEntry {
+                    model_inference_id,
+                    provider_type: "dummy".to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
+                }]),
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: String::new(),
                 latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
@@ -818,6 +817,7 @@ impl InferenceProvider for DummyProvider {
                         })
                     }],
                     usage: None,
+                    raw_usage: None,
                     finish_reason: None,
                     raw_response: chunk.to_string(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
@@ -828,15 +828,13 @@ impl InferenceProvider for DummyProvider {
         let base_stream = stream.chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
             created,
             content: vec![],
-            usage: Some(UsageWithRaw {
-                usage: self.get_model_usage(content_chunk_len as u32),
-                raw_usage: Some(vec![RawUsageEntry {
-                    model_inference_id,
-                    provider_type: "dummy".to_string(),
-                    api_type: ApiType::ChatCompletions,
-                    data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
-                }]),
-            }),
+            usage: Some(self.get_model_usage(content_chunk_len as u32)),
+            raw_usage: Some(vec![RawUsageEntry {
+                model_inference_id,
+                provider_type: "dummy".to_string(),
+                api_type: ApiType::ChatCompletions,
+                data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
+            }]),
             finish_reason,
             raw_response: String::new(),
             latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),

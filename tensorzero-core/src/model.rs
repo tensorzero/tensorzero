@@ -188,7 +188,9 @@ impl StreamResponse {
                         created: current_timestamp(),
                         // Use the real usage (so that the `ModelInference` row we write is accurate)
                         // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
-                        usage: c.usage.map(Into::into),
+                        usage: c.usage,
+                        // raw_usage is not cached
+                        raw_usage: None,
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
@@ -745,7 +747,7 @@ async fn wrap_provider_stream(
         let mut total_usage: Option<Usage> = None;
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref()
-                && let Some(chunk_usage) = chunk.usage.as_ref().map(|usage| &usage.usage) {
+                && let Some(chunk_usage) = chunk.usage.as_ref() {
                 // `total_usage` will be `None` if this is the first chunk with usage information....
                 if total_usage.is_none() {
                     // ... so initialize it to zero ...

@@ -137,7 +137,7 @@ pub use streams::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
     UnknownChunk, collect_chunks,
 };
-pub use usage::{ApiType, RawUsageEntry, Usage, UsageWithRaw};
+pub use usage::{ApiType, RawUsageEntry, Usage};
 
 /*
  * Data flow in TensorZero
@@ -1689,7 +1689,8 @@ pub struct ProviderInferenceResponseArgs {
     pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
-    pub usage: UsageWithRaw,
+    pub usage: Usage,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub latency: Latency,
     pub finish_reason: Option<FinishReason>,
     pub id: Uuid,
@@ -1707,10 +1708,10 @@ impl ProviderInferenceResponse {
             input_messages: args.input_messages,
             raw_request: sanitized_raw_request,
             raw_response: args.raw_response,
-            usage: args.usage.usage,
+            usage: args.usage,
             latency: args.latency,
             finish_reason: args.finish_reason,
-            raw_usage: args.usage.raw_usage,
+            raw_usage: args.raw_usage,
         }
     }
 }
@@ -1996,10 +1997,8 @@ impl ProviderInferenceResponseChunk {
         Self {
             content,
             created: current_timestamp(),
-            usage: usage.map(|usage| UsageWithRaw {
-                usage,
-                raw_usage: None,
-            }),
+            usage,
+            raw_usage: None,
             raw_response,
             latency,
             finish_reason,
@@ -2018,7 +2017,8 @@ impl ProviderInferenceResponseChunk {
         Self {
             content,
             created: current_timestamp(),
-            usage: usage.map(|usage| UsageWithRaw { usage, raw_usage }),
+            usage,
+            raw_usage,
             raw_response,
             latency,
             finish_reason,

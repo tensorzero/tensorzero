@@ -9,7 +9,7 @@ use crate::inference::types::{
     ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
     Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, RawUsageEntry, RequestMessage, Text, Thought,
-    ThoughtSummaryBlock, ToolCall, Unknown, Usage, UsageWithRaw,
+    ThoughtSummaryBlock, ToolCall, Unknown, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -30,7 +30,9 @@ use super::InferenceResult;
 pub struct ProviderInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
-    pub usage: Option<UsageWithRaw>,
+    pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub raw_response: String,
     pub latency: Duration,
     pub finish_reason: Option<FinishReason>,
@@ -83,7 +85,9 @@ pub struct ChatInferenceResultChunk {
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<UsageWithRaw>,
+    pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub latency: Duration,
     pub raw_response: String,
     pub finish_reason: Option<FinishReason>,
@@ -95,7 +99,9 @@ pub struct JsonInferenceResultChunk {
     pub thought: Option<String>,
     pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<UsageWithRaw>,
+    pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub latency: Duration,
     pub raw_response: String,
     pub finish_reason: Option<FinishReason>,
@@ -118,21 +124,15 @@ impl InferenceResultChunk {
 
     pub fn usage(&self) -> Option<&Usage> {
         match self {
-            InferenceResultChunk::Chat(chunk) => chunk.usage.as_ref().map(|usage| &usage.usage),
-            InferenceResultChunk::Json(chunk) => chunk.usage.as_ref().map(|usage| &usage.usage),
+            InferenceResultChunk::Chat(chunk) => chunk.usage.as_ref(),
+            InferenceResultChunk::Json(chunk) => chunk.usage.as_ref(),
         }
     }
 
     pub fn raw_usage(&self) -> Option<&Vec<RawUsageEntry>> {
         match self {
-            InferenceResultChunk::Chat(chunk) => chunk
-                .usage
-                .as_ref()
-                .and_then(|usage| usage.raw_usage.as_ref()),
-            InferenceResultChunk::Json(chunk) => chunk
-                .usage
-                .as_ref()
-                .and_then(|usage| usage.raw_usage.as_ref()),
+            InferenceResultChunk::Chat(chunk) => chunk.raw_usage.as_ref(),
+            InferenceResultChunk::Json(chunk) => chunk.raw_usage.as_ref(),
         }
     }
 
@@ -164,6 +164,7 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
             content: chunk.content,
             created: chunk.created,
             usage: chunk.usage,
+            raw_usage: chunk.raw_usage,
             latency: chunk.latency,
             finish_reason: chunk.finish_reason,
             raw_response: chunk.raw_response,
@@ -199,6 +200,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
             thought,
             created: chunk.created,
             usage: chunk.usage,
+            raw_usage: chunk.raw_usage,
             latency: chunk.latency,
             raw_response: chunk.raw_response,
             finish_reason: chunk.finish_reason,
@@ -593,10 +595,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         raw_request,
         raw_response,
         // `usage` will be None if we don't see usage in any chunks, in which case we take the default value (fields as `None`)
-        usage: UsageWithRaw {
-            usage: usage.unwrap_or_default(),
-            raw_usage: raw_usage_entries,
-        },
+        usage: usage.unwrap_or_default(),
+        raw_usage: raw_usage_entries,
         latency: latency.clone(),
         finish_reason,
         id: model_inference_id,
@@ -889,6 +889,7 @@ mod tests {
                 content,
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "{\"message\": \"Hello}".to_string(),
                 latency,
                 finish_reason: None,
@@ -899,13 +900,11 @@ mod tests {
                     id: "0".to_string(),
                 })],
                 created,
-                usage: Some(
-                    Usage {
-                        input_tokens: Some(2),
-                        output_tokens: Some(4),
-                    }
-                    .into(),
-                ),
+                usage: Some(Usage {
+                    input_tokens: Some(2),
+                    output_tokens: Some(4),
+                }),
+                raw_usage: None,
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -995,7 +994,8 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage1.into()),
+                usage: Some(usage1),
+                raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1004,7 +1004,8 @@ mod tests {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
                 created,
-                usage: Some(usage2.into()),
+                usage: Some(usage2),
+                raw_usage: None,
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -1077,7 +1078,8 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage.into()),
+                usage: Some(usage),
+                raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(100),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1087,6 +1089,7 @@ mod tests {
                 thought: None,
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "\"John\"}".to_string(),
                 latency: Duration::from_millis(200),
                 finish_reason: None,
@@ -1158,7 +1161,8 @@ mod tests {
                 raw: Some("{\"name\":\"John\",".to_string()),
                 thought: None,
                 created,
-                usage: Some(usage.into()),
+                usage: Some(usage),
+                raw_usage: None,
                 raw_response: "{\"name\":\"John\",".to_string(),
                 latency: Duration::from_millis(100),
                 finish_reason: None,
@@ -1168,6 +1172,7 @@ mod tests {
                 thought: Some("Thought 2".to_string()),
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: String::new(),
                 latency: Duration::from_millis(200),
                 finish_reason: None,
@@ -1177,6 +1182,7 @@ mod tests {
                 thought: None,
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "\"age\":30}".to_string(),
                 latency: Duration::from_millis(300),
                 finish_reason: Some(FinishReason::Stop),
@@ -1284,7 +1290,8 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage1.into()),
+                usage: Some(usage1),
+                raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1293,7 +1300,8 @@ mod tests {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
                 created,
-                usage: Some(usage2.into()),
+                usage: Some(usage2),
+                raw_usage: None,
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -1395,7 +1403,8 @@ mod tests {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
                 created,
-                usage: Some(usage1.into()),
+                usage: Some(usage1),
+                raw_usage: None,
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
@@ -1404,7 +1413,8 @@ mod tests {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
                 created,
-                usage: Some(usage2.into()),
+                usage: Some(usage2),
+                raw_usage: None,
                 finish_reason: Some(FinishReason::ToolCall),
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
@@ -1495,6 +1505,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "{\"message\": \"Hello}".to_string(),
                 latency,
                 finish_reason: None,
@@ -1552,6 +1563,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "my raw thought".to_string(),
                 latency,
                 finish_reason: None,
@@ -1562,13 +1574,11 @@ mod tests {
                     id: "0".to_string(),
                 })],
                 created,
-                usage: Some(
-                    Usage {
-                        input_tokens: Some(2),
-                        output_tokens: Some(4),
-                    }
-                    .into(),
-                ),
+                usage: Some(Usage {
+                    input_tokens: Some(2),
+                    output_tokens: Some(4),
+                }),
+                raw_usage: None,
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -1584,6 +1594,7 @@ mod tests {
                 })],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "my other raw thought".to_string(),
                 latency,
                 finish_reason: None,
@@ -1702,6 +1713,7 @@ mod tests {
                 })],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -1713,13 +1725,11 @@ mod tests {
                     raw_arguments: "tion\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
                 })],
                 created,
-                usage: Some(
-                    Usage {
-                        input_tokens: Some(10),
-                        output_tokens: Some(20),
-                    }
-                    .into(),
-                ),
+                usage: Some(Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                }),
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1786,6 +1796,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -1804,13 +1815,11 @@ mod tests {
                     }),
                 ],
                 created,
-                usage: Some(
-                    Usage {
-                        input_tokens: Some(15),
-                        output_tokens: Some(25),
-                    }
-                    .into(),
-                ),
+                usage: Some(Usage {
+                    input_tokens: Some(15),
+                    output_tokens: Some(25),
+                }),
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1875,6 +1884,7 @@ mod tests {
                 })],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -1886,13 +1896,11 @@ mod tests {
                     raw_arguments: " \"value\"}".to_string(),
                 })],
                 created,
-                usage: Some(
-                    Usage {
-                        input_tokens: Some(5),
-                        output_tokens: Some(10),
-                    }
-                    .into(),
-                ),
+                usage: Some(Usage {
+                    input_tokens: Some(5),
+                    output_tokens: Some(10),
+                }),
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1955,6 +1963,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -1972,13 +1981,11 @@ mod tests {
                     }),
                 ],
                 created,
-                usage: Some(
-                    Usage {
-                        input_tokens: Some(20),
-                        output_tokens: Some(15),
-                    }
-                    .into(),
-                ),
+                usage: Some(Usage {
+                    input_tokens: Some(20),
+                    output_tokens: Some(15),
+                }),
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -2043,13 +2050,11 @@ mod tests {
                 raw_arguments: "{\"test\": true}".to_string(),
             })],
             created,
-            usage: Some(
-                Usage {
-                    input_tokens: Some(5),
-                    output_tokens: Some(5),
-                }
-                .into(),
-            ),
+            usage: Some(Usage {
+                input_tokens: Some(5),
+                output_tokens: Some(5),
+            }),
+            raw_usage: None,
             raw_response: "chunk1".to_string(),
             latency,
             finish_reason: Some(FinishReason::ToolCall),
@@ -2117,6 +2122,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -2141,6 +2147,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency,
                 finish_reason: None,
@@ -2164,13 +2171,11 @@ mod tests {
                     }),
                 ],
                 created,
-                usage: Some(
-                    Usage {
-                        input_tokens: Some(20),
-                        output_tokens: Some(30),
-                    }
-                    .into(),
-                ),
+                usage: Some(Usage {
+                    input_tokens: Some(20),
+                    output_tokens: Some(30),
+                }),
+                raw_usage: None,
                 raw_response: "chunk3".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -2246,13 +2251,11 @@ mod tests {
                 raw_name: Some("test_tool".to_string()),
             })],
             created: 1234567890,
-            usage: Some(
-                Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(20),
-                }
-                .into(),
-            ),
+            usage: Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(20),
+            }),
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: Some(FinishReason::ToolCall),
@@ -2266,13 +2269,10 @@ mod tests {
         assert_eq!(result.latency, Duration::from_secs(1));
         assert_eq!(
             result.usage,
-            Some(
-                Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(20),
-                }
-                .into()
-            )
+            Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(20),
+            })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
         // Test case for Text content
@@ -2283,6 +2283,7 @@ mod tests {
             })],
             created: 1234567890,
             usage: None,
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2304,6 +2305,7 @@ mod tests {
             })],
             created: 1234567890,
             usage: None,
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2336,6 +2338,7 @@ mod tests {
             ],
             created: 1234567890,
             usage: None,
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2350,6 +2353,7 @@ mod tests {
             content: vec![],
             created: 1234567890,
             usage: None,
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,

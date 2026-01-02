@@ -47,7 +47,7 @@ use crate::inference::types::{
     InferenceResultChunk, InferenceResultStream, Input, InputExt, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
     ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, ResolvedInput, TextChunk,
-    Usage, UsageWithRaw, collect_chunks,
+    Usage, collect_chunks,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -922,20 +922,16 @@ fn create_stream(
                         finish_reason: None,
                         latency: Duration::from_millis(0),
                         raw_response: String::new(),
-                        usage: Some(UsageWithRaw {
-                            usage: extra_usage,
-                            raw_usage: None,
-                        }),
+                        usage: Some(extra_usage),
+                        raw_usage: None,
                     })
                 }
                 FunctionConfig::Json(_) => {
                     InferenceResultChunk::Json(JsonInferenceResultChunk {
                         thought: None,
                         created: 0,
-                        usage: Some(UsageWithRaw {
-                            usage: extra_usage,
-                            raw_usage: None,
-                        }),
+                        usage: Some(extra_usage),
+                        raw_usage: None,
                         latency: Duration::from_millis(0),
                         raw: None,
                         raw_response: String::new(),
@@ -1748,6 +1744,7 @@ mod tests {
             content: content.clone(),
             created: 0,
             usage: None,
+            raw_usage: None,
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
             latency: Duration::from_millis(100),
@@ -1807,6 +1804,7 @@ mod tests {
             thought: Some("Thought 1".to_string()),
             created: 0,
             usage: None,
+            raw_usage: None,
             raw_response: String::new(),
             latency: Duration::from_millis(100),
             finish_reason: Some(FinishReason::Stop),
@@ -2254,13 +2252,11 @@ mod tests {
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content,
             created: 0,
-            usage: Some(
-                Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(20),
-                }
-                .into(),
-            ),
+            usage: Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(20),
+            }),
+            raw_usage: None,
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
             latency: Duration::from_millis(100),
@@ -2327,13 +2323,11 @@ mod tests {
                 id: "0".to_string(),
             })],
             created: 0,
-            usage: Some(
-                Usage {
-                    input_tokens: Some(5),
-                    output_tokens: Some(5),
-                }
-                .into(),
-            ),
+            usage: Some(Usage {
+                input_tokens: Some(5),
+                output_tokens: Some(5),
+            }),
+            raw_usage: None,
             finish_reason: None,
             raw_response: String::new(),
             latency: Duration::from_millis(50),
@@ -2353,13 +2347,11 @@ mod tests {
         let chunk2 = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content: vec![],
             created: 0,
-            usage: Some(
-                Usage {
-                    input_tokens: Some(5),
-                    output_tokens: Some(5),
-                }
-                .into(),
-            ),
+            usage: Some(Usage {
+                input_tokens: Some(5),
+                output_tokens: Some(5),
+            }),
+            raw_usage: None,
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
             latency: Duration::from_millis(50),
@@ -2396,13 +2388,11 @@ mod tests {
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content: vec![], // Empty content
             created: 0,
-            usage: Some(
-                Usage {
-                    input_tokens: Some(100),
-                    output_tokens: Some(50),
-                }
-                .into(),
-            ),
+            usage: Some(Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+            }),
+            raw_usage: None,
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
             latency: Duration::from_millis(100),
@@ -2450,6 +2440,7 @@ mod tests {
             })],
             created: 0,
             usage: None, // No usage
+            raw_usage: None,
             finish_reason: None,
             raw_response: String::new(),
             latency: Duration::from_millis(50),
@@ -2493,13 +2484,11 @@ mod tests {
             raw: Some(r#"{"key": "value"}"#.to_string()), // Non-empty
             thought: None,
             created: 0,
-            usage: Some(
-                Usage {
-                    input_tokens: Some(30),
-                    output_tokens: Some(20),
-                }
-                .into(),
-            ),
+            usage: Some(Usage {
+                input_tokens: Some(30),
+                output_tokens: Some(20),
+            }),
+            raw_usage: None,
             raw_response: String::new(),
             latency: Duration::from_millis(100),
             finish_reason: Some(FinishReason::Stop),
