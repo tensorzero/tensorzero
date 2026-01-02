@@ -1,17 +1,34 @@
 import type { Route } from "./+types/route";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { data, isRouteErrorResponse, type RouteHandle } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  Link,
+  useNavigate,
+  type RouteHandle,
+} from "react-router";
+import { Plus } from "lucide-react";
 import { PageHeader } from "~/components/layout/PageLayout";
-import EventStream from "~/components/autopilot/EventStream";
+import EventStream, {
+  type OptimisticMessage,
+} from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
+import { ChatInput } from "~/components/autopilot/ChatInput";
 import { logger } from "~/utils/logger";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import type { Event } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 
+// Nil UUID for creating new sessions
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
 export const handle: RouteHandle = {
-  crumb: (match) => [{ label: match.params.session_id!, isIdentifier: true }],
+  crumb: (match) => [
+    match.params.session_id === "new"
+      ? { label: "New Session" }
+      : { label: match.params.session_id!, isIdentifier: true },
+  ],
 };
 
 const EVENTS_PER_PAGE = 20;
@@ -20,6 +37,16 @@ export async function loader({ params }: Route.LoaderArgs) {
   const sessionId = params.session_id;
   if (!sessionId) {
     throw data("Session ID is required", { status: 400 });
+  }
+
+  // Special case: "new" session
+  if (sessionId === "new") {
+    return {
+      sessionId: "new",
+      events: [] as Event[],
+      hasMoreEvents: false,
+      isNewSession: true,
+    };
   }
 
   const client = getAutopilotClient();
@@ -43,6 +70,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     sessionId,
     events,
     hasMoreEvents,
+    isNewSession: false,
   };
 }
 
@@ -70,12 +98,15 @@ export default function AutopilotSessionEventsPage({
     sessionId,
     events: initialEvents,
     hasMoreEvents: initialHasMore,
+    isNewSession,
   } = loaderData;
 
+  const navigate = useNavigate();
+
   const { events, error, isRetrying, prependEvents } = useAutopilotEventStream({
-    sessionId,
+    sessionId: isNewSession ? NIL_UUID : sessionId,
     initialEvents,
-    // enabled: false, // Disabled while implementing pagination
+    enabled: !isNewSession, // Disable SSE for new sessions
   });
 
   // State for pagination
@@ -88,6 +119,12 @@ export default function AutopilotSessionEventsPage({
   >(new Map());
 
   const { toast } = useToast();
+
+  // Optimistic messages: shown immediately when user sends, removed when SSE confirms.
+  // See OptimisticMessage type in EventStream.tsx for detailed flow documentation.
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    OptimisticMessage[]
+  >([]);
 
   // Compute pending tool calls (tool_calls without matching authorization or result)
   const pendingToolCalls = useMemo(() => {
@@ -194,6 +231,70 @@ export default function AutopilotSessionEventsPage({
     },
     [sessionId, toast],
   );
+
+  // Optimistic message handler: create message only after POST completes (with eventId)
+  // This eliminates the race condition where SSE could deliver before we have the ID
+  const handleMessageSent = useCallback(
+    (response: { event_id: string; session_id: string }, text: string) => {
+      // Create optimistic message with eventId already set
+      setOptimisticMessages((prev) => [
+        ...prev,
+        {
+          tempId: crypto.randomUUID(),
+          eventId: response.event_id,
+          text,
+          status: "sending",
+        },
+      ]);
+
+      // Scroll to bottom after React re-renders with the new message
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const container = scrollContainerRef.current;
+          if (container) {
+            container.scrollTop = container.scrollHeight;
+          }
+        });
+      });
+
+      // For new sessions, navigate to the created session
+      if (isNewSession) {
+        navigate(`/autopilot/sessions/${response.session_id}`);
+      }
+    },
+    [isNewSession, navigate],
+  );
+
+  const handleMessageFailed = useCallback(
+    (error: Error) => {
+      // No optimistic message exists on failure (we only create after POST succeeds)
+      toast.error({
+        title: isNewSession
+          ? "Failed to create session"
+          : "Failed to send message",
+        description: error.message,
+      });
+    },
+    [toast, isNewSession],
+  );
+
+  // SSE delivers event → remove optimistic message when real event arrives
+  useEffect(() => {
+    if (optimisticMessages.length === 0) return;
+
+    const confirmedEventIds = new Set(events.map((e) => e.id));
+
+    // Remove optimistic messages whose eventId matches a confirmed event
+    const hasConfirmedMessages = optimisticMessages.some((msg) =>
+      confirmedEventIds.has(msg.eventId),
+    );
+
+    if (hasConfirmedMessages) {
+      setOptimisticMessages((prev) =>
+        prev.filter((msg) => !confirmedEventIds.has(msg.eventId)),
+      );
+    }
+  }, [events, optimisticMessages]);
 
   // Refs
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -357,9 +458,30 @@ export default function AutopilotSessionEventsPage({
     };
   }, [isLoadingOlder, hasReachedStart, loadOlderEventsDebounced]);
 
+  // Filter out optimistic messages that have a matching event in the stream
+  // Since we only create optimistic messages after POST completes, eventId is always set
+  const confirmedEventIds = new Set(events.map((e) => e.id));
+  const visibleOptimisticMessages = optimisticMessages.filter(
+    (msg) => !confirmedEventIds.has(msg.eventId),
+  );
+
   return (
     <div className="container mx-auto flex h-full flex-col px-8 py-8">
-      <PageHeader label="Autopilot Session" name={sessionId} />
+      <PageHeader
+        label="Autopilot Session"
+        name={isNewSession ? "New Session" : sessionId}
+        tag={
+          !isNewSession ? (
+            <Link
+              to="/autopilot/sessions/new"
+              className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New Session
+            </Link>
+          ) : undefined
+        }
+      />
       {error && isRetrying && (
         <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           Failed to fetch events. Retrying...
@@ -373,9 +495,10 @@ export default function AutopilotSessionEventsPage({
         <EventStream
           events={events}
           isLoadingOlder={isLoadingOlder}
-          hasReachedStart={hasReachedStart}
+          hasReachedStart={isNewSession ? false : hasReachedStart}
           topSentinelRef={topSentinelRef}
           pendingToolCallIds={pendingToolCallIds}
+          optimisticMessages={visibleOptimisticMessages}
         />
       </div>
 
@@ -394,6 +517,15 @@ export default function AutopilotSessionEventsPage({
           />
         </div>
       )}
+
+      {/* Chat input */}
+      <ChatInput
+        sessionId={isNewSession ? NIL_UUID : sessionId}
+        onMessageSent={handleMessageSent}
+        onMessageFailed={handleMessageFailed}
+        className="mt-4"
+        isNewSession={isNewSession}
+      />
     </div>
   );
 }

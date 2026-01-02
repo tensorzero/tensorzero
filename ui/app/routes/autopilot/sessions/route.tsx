@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import type { Route } from "./+types/route";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
@@ -6,6 +7,8 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { ActionBar } from "~/components/layout/ActionBar";
+import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { logger } from "~/utils/logger";
 import AutopilotSessionsTable from "../AutopilotSessionsTable";
@@ -80,6 +83,16 @@ export default function AutopilotSessionsPage({
     <PageLayout>
       <PageHeader heading="Autopilot Sessions" />
       <SectionLayout>
+        <ActionBar>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("/autopilot/sessions/new")}
+          >
+            <Plus className="text-fg-tertiary mr-2 h-4 w-4" />
+            New Session
+          </Button>
+        </ActionBar>
         <AutopilotSessionsTable
           sessions={sessions}
           gatewayVersion={gatewayVersion}

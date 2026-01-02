@@ -10,6 +10,25 @@ import {
 import type { Event, InputMessageContent } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 
+/**
+ * Optimistic messages are shown after the API confirms receipt but before
+ * SSE delivers the real event.
+ *
+ * Flow:
+ * 1. User sends message → POST request fires
+ * 2. API responds with event_id → optimistic message created (eventId already set)
+ * 3. SSE delivers event with matching ID → optimistic message is removed
+ *
+ * By waiting for the API response, we always have the eventId, eliminating
+ * the race condition where SSE could arrive before we know the ID.
+ */
+export type OptimisticMessage = {
+  tempId: string; // Client-generated UUID, only used as React key
+  eventId: string; // Real ID from API response, used to match SSE events
+  text: string;
+  status: "sending" | "failed";
+};
+
 type EventSummary = {
   description?: string;
 };
@@ -17,13 +36,13 @@ type EventSummary = {
 type EventStreamProps = {
   events: Event[];
   className?: string;
-  emptyMessage?: string;
   isLoadingOlder?: boolean;
   hasReachedStart?: boolean;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
   authLoadingStates?: Map<string, "approving" | "rejecting">;
   onAuthorize?: (eventId: string, approved: boolean) => Promise<void>;
+  optimisticMessages?: OptimisticMessage[];
 };
 
 export function ToolEventId({ id }: { id: string }) {
@@ -287,7 +306,7 @@ function EventItem({
       {shouldShowDetails && summary.description && (
         <p
           className={cn(
-            "text-fg-secondary",
+            "text-fg-secondary whitespace-pre-wrap",
             event.payload.type === "tool_call" ||
               event.payload.type === "tool_result"
               ? "font-mono text-sm"
@@ -330,23 +349,36 @@ function SessionStartedDivider() {
   );
 }
 
+function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
+  // Optimistic messages are shown after POST succeeds, so the message is saved.
+  // We display it like a regular user message, with a skeleton for the timestamp.
+  return (
+    <div className="border-border bg-bg-secondary flex flex-col gap-2 rounded-md border px-4 py-3">
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">User Message</span>
+        <Skeleton className="h-4 w-32" />
+      </div>
+      <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+        {message.text}
+      </p>
+    </div>
+  );
+}
+
 export default function EventStream({
   events,
   className,
-  emptyMessage = "No events yet.",
   isLoadingOlder = false,
   hasReachedStart = false,
   topSentinelRef,
   pendingToolCallIds,
+  optimisticMessages = [],
 }: EventStreamProps) {
-  if (events.length === 0) {
-    return <p className="text-fg-muted text-sm">{emptyMessage}</p>;
-  }
-
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       {/* Session started indicator, or sentinel for loading more */}
-      {hasReachedStart && !isLoadingOlder ? (
+      {/* Show divider when we've reached the start OR when there are optimistic messages (new session) */}
+      {(hasReachedStart || optimisticMessages.length > 0) && !isLoadingOlder ? (
         <SessionStartedDivider />
       ) : (
         <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
@@ -361,6 +393,11 @@ export default function EventStream({
           event={event}
           isPending={pendingToolCallIds?.has(event.id)}
         />
+      ))}
+
+      {/* Optimistic messages at the end */}
+      {optimisticMessages.map((message) => (
+        <OptimisticMessageItem key={message.tempId} message={message} />
       ))}
     </div>
   );
