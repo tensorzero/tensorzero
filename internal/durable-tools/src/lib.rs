@@ -224,6 +224,11 @@ pub use tensorzero::{
 // Re-export config snapshot types for historical inference
 pub use tensorzero_client::SnapshotHash;
 
+// Re-export evaluation types
+pub use tensorzero_client::{
+    CacheEnabledMode, EvaluatorStatsResponse, RunEvaluationParams, RunEvaluationResponse,
+};
+
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
     Client, ClientInferenceParams, DynamicToolParams, GetInferencesResponse, InferenceParams,
