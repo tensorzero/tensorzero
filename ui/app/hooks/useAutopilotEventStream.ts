@@ -4,11 +4,13 @@ import type { Event } from "~/types/tensorzero";
 interface UseAutopilotEventStreamOptions {
   sessionId: string;
   initialEvents: Event[];
+  initialPendingToolCalls: Event[];
   enabled?: boolean;
 }
 
 interface UseAutopilotEventStreamResult {
   events: Event[];
+  pendingToolCalls: Event[];
   isConnected: boolean;
   error: string | null;
   isRetrying: boolean;
@@ -24,9 +26,13 @@ const RETRY_DELAY_MS = 5000;
 export function useAutopilotEventStream({
   sessionId,
   initialEvents,
+  initialPendingToolCalls,
   enabled = true,
 }: UseAutopilotEventStreamOptions): UseAutopilotEventStreamResult {
   const [events, setEvents] = useState<Event[]>(initialEvents);
+  const [pendingToolCalls, setPendingToolCalls] = useState<Event[]>(
+    initialPendingToolCalls,
+  );
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -128,6 +134,30 @@ export function useAutopilotEventStream({
                     );
                     return newEvents;
                   });
+
+                  // Update pending tool calls based on event type
+                  setPendingToolCalls((prev) => {
+                    if (event.payload.type === "tool_call") {
+                      // Add new tool call if not already present
+                      if (prev.some((e) => e.id === event.id)) {
+                        return prev;
+                      }
+                      return [...prev, event].sort(
+                        (a, b) =>
+                          new Date(a.created_at).getTime() -
+                          new Date(b.created_at).getTime(),
+                      );
+                    }
+                    if (
+                      event.payload.type === "tool_call_authorization" ||
+                      event.payload.type === "tool_result"
+                    ) {
+                      // Remove tool call that was authorized or got a result
+                      const toolCallEventId = event.payload.tool_call_event_id;
+                      return prev.filter((e) => e.id !== toolCallEventId);
+                    }
+                    return prev;
+                  });
                 } catch {
                   // Skip invalid JSON
                 }
@@ -196,11 +226,12 @@ export function useAutopilotEventStream({
   // Update events when initialEvents change (e.g., on page refresh)
   useEffect(() => {
     setEvents(initialEvents);
+    setPendingToolCalls(initialPendingToolCalls);
     lastEventIdRef.current =
       initialEvents.length > 0
         ? initialEvents[initialEvents.length - 1].id
         : null;
-  }, [initialEvents]);
+  }, [initialEvents, initialPendingToolCalls]);
 
   // Allow prepending older events (for reverse infinite scroll)
   const prependEvents = useCallback((newEvents: Event[]) => {
@@ -221,6 +252,7 @@ export function useAutopilotEventStream({
 
   return {
     events,
+    pendingToolCalls,
     isConnected,
     error,
     isRetrying,

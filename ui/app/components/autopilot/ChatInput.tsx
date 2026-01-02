@@ -43,6 +43,11 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);
 
+  // Reset idempotency cursor when session changes
+  useEffect(() => {
+    previousUserMessageEventIdRef.current = undefined;
+  }, [sessionId]);
+
   // Sample a random placeholder for new sessions, default for existing sessions
   const placeholder = useMemo(
     () =>

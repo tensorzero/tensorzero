@@ -44,6 +44,7 @@ const EVENTS_PER_PAGE = 20;
 export type EventsData = {
   events: Event[];
   hasMoreEvents: boolean;
+  pendingToolCalls: Event[];
 };
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -56,7 +57,11 @@ export async function loader({ params }: Route.LoaderArgs) {
   if (sessionId === "new") {
     return {
       sessionId: "new",
-      eventsData: { events: [] as Event[], hasMoreEvents: false },
+      eventsData: {
+        events: [] as Event[],
+        hasMoreEvents: false,
+        pendingToolCalls: [] as Event[],
+      },
       isNewSession: true,
     };
   }
@@ -76,7 +81,12 @@ export async function loader({ params }: Route.LoaderArgs) {
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
         )
         .slice(hasMoreEvents ? 1 : 0);
-      return { events, hasMoreEvents };
+      // Sort pending tool calls by creation time (oldest first for queue)
+      const pendingToolCalls = response.pending_tool_calls.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+      return { events, hasMoreEvents, pendingToolCalls };
     });
 
   return {
@@ -131,8 +141,11 @@ function EventStreamContent({
   onLoaded: () => void;
 }) {
   // Resolve promise (or use direct data for new session)
-  const { events: initialEvents, hasMoreEvents: initialHasMore } =
-    eventsData instanceof Promise ? use(eventsData) : eventsData;
+  const {
+    events: initialEvents,
+    hasMoreEvents: initialHasMore,
+    pendingToolCalls: initialPendingToolCalls,
+  } = eventsData instanceof Promise ? use(eventsData) : eventsData;
 
   // Signal that loading is complete (this runs after promise resolves)
   useEffect(() => {
@@ -140,11 +153,13 @@ function EventStreamContent({
   }, [onLoaded]);
 
   // Now that we have resolved events, start SSE with the correct lastEventId
-  const { events, error, isRetrying, prependEvents } = useAutopilotEventStream({
-    sessionId: isNewSession ? NIL_UUID : sessionId,
-    initialEvents,
-    enabled: !isNewSession,
-  });
+  const { events, pendingToolCalls, error, isRetrying, prependEvents } =
+    useAutopilotEventStream({
+      sessionId: isNewSession ? NIL_UUID : sessionId,
+      initialEvents,
+      initialPendingToolCalls,
+      enabled: !isNewSession,
+    });
 
   // State for pagination
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
@@ -156,28 +171,6 @@ function EventStreamContent({
   >(new Map());
 
   const { toast } = useToast();
-
-  // Compute pending tool calls (tool_calls without matching authorization or result)
-  const pendingToolCalls = useMemo(() => {
-    const authorizedIds = new Set<string>();
-    const resultIds = new Set<string>();
-
-    for (const event of events) {
-      if (event.payload.type === "tool_call_authorization") {
-        authorizedIds.add(event.payload.tool_call_event_id);
-      }
-      if (event.payload.type === "tool_result") {
-        resultIds.add(event.payload.tool_call_event_id);
-      }
-    }
-
-    return events.filter(
-      (e) =>
-        e.payload.type === "tool_call" &&
-        !authorizedIds.has(e.id) &&
-        !resultIds.has(e.id),
-    );
-  }, [events]);
 
   // Derive values for queue-based approval UI
   const pendingToolCallIds = useMemo(

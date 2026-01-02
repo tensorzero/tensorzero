@@ -17,7 +17,7 @@ import { ActionBar } from "~/components/layout/ActionBar";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { logger } from "~/utils/logger";
-import AutopilotSessionsTable from "../AutopilotSessionsTable";
+import { SessionsTableRows } from "../AutopilotSessionsTable";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import type { Session } from "~/types/tensorzero";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -97,27 +97,8 @@ function SkeletonRows() {
   );
 }
 
-// Skeleton table shown while data loads
-function SessionsTableSkeleton() {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Session ID</TableHead>
-          <TableHead className="w-0 text-right whitespace-nowrap">
-            Created
-          </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        <SkeletonRows />
-      </TableBody>
-    </Table>
-  );
-}
-
-// Resolves promise and renders table
-function TableContent({
+// Resolves promise and renders table rows
+function TableBodyContent({
   data,
   gatewayVersion,
   uiVersion,
@@ -129,7 +110,7 @@ function TableContent({
   const { sessions } = use(data);
 
   return (
-    <AutopilotSessionsTable
+    <SessionsTableRows
       sessions={sessions}
       gatewayVersion={gatewayVersion}
       uiVersion={uiVersion}
@@ -200,15 +181,27 @@ export default function AutopilotSessionsPage({
             New Session
           </Button>
         </ActionBar>
-        <Suspense key={location.key} fallback={<SessionsTableSkeleton />}>
-          <TableContent
-            data={sessionsData}
-            gatewayVersion={gatewayVersion}
-            uiVersion={uiVersion}
-          />
-        </Suspense>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Session ID</TableHead>
+              <TableHead className="w-0 text-right whitespace-nowrap">
+                Created
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <Suspense key={location.search} fallback={<SkeletonRows />}>
+              <TableBodyContent
+                data={sessionsData}
+                gatewayVersion={gatewayVersion}
+                uiVersion={uiVersion}
+              />
+            </Suspense>
+          </TableBody>
+        </Table>
         <Suspense
-          key={location.key}
+          key={location.search}
           fallback={
             <PageButtons
               onPreviousPage={() => {}}

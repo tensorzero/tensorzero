@@ -8,7 +8,7 @@ import { isErrorLike } from "~/utils/common";
  */
 export class GatewayConnectionError extends Error {
   constructor(cause?: unknown) {
-    super("Cannot connect to TensorZero gateway", { cause });
+    super("Cannot connect to TensorZero Gateway", { cause });
     this.name = "GatewayConnectionError";
   }
 }

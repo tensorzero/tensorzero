@@ -124,6 +124,36 @@ function SessionIdCell({
   );
 }
 
+// Renders just the table rows (for use with Suspense inside TableBody)
+export function SessionsTableRows({
+  sessions,
+  gatewayVersion,
+  uiVersion,
+}: AutopilotSessionsTableProps) {
+  if (sessions.length === 0) {
+    return <TableEmptyState message="No sessions found" />;
+  }
+
+  return (
+    <>
+      {sessions.map((session) => (
+        <TableRow key={session.id}>
+          <TableCell>
+            <SessionIdCell
+              session={session}
+              gatewayVersion={gatewayVersion}
+              uiVersion={uiVersion}
+            />
+          </TableCell>
+          <TableCell className="w-0 text-right whitespace-nowrap">
+            <TableItemTime timestamp={session.created_at} />
+          </TableCell>
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
 export default function AutopilotSessionsTable({
   sessions,
   gatewayVersion,
@@ -140,24 +170,11 @@ export default function AutopilotSessionsTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {sessions.length === 0 ? (
-          <TableEmptyState message="No sessions found" />
-        ) : (
-          sessions.map((session) => (
-            <TableRow key={session.id}>
-              <TableCell>
-                <SessionIdCell
-                  session={session}
-                  gatewayVersion={gatewayVersion}
-                  uiVersion={uiVersion}
-                />
-              </TableCell>
-              <TableCell className="w-0 text-right whitespace-nowrap">
-                <TableItemTime timestamp={session.created_at} />
-              </TableCell>
-            </TableRow>
-          ))
-        )}
+        <SessionsTableRows
+          sessions={sessions}
+          gatewayVersion={gatewayVersion}
+          uiVersion={uiVersion}
+        />
       </TableBody>
     </Table>
   );
