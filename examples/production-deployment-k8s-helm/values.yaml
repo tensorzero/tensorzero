@@ -20,7 +20,6 @@ gateway:
   command: ["gateway"]
   args:
     - --config-file=/app/config/tensorzero.toml
-
   # Optional service account name for the gateway deployment
   serviceAccountName: "" # @schema description: The service account name for the gateway deployment.
 
@@ -51,6 +50,12 @@ gateway:
     requests:
       cpu: 2000m
       memory: 4096Mi
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
 
   nodeSelector: {}
 
@@ -106,6 +111,12 @@ ui:
     requests:
       cpu: 500m
       memory: 512Mi
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
 
   nodeSelector: {}
 
