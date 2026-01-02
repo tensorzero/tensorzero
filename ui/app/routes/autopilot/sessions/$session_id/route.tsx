@@ -483,6 +483,7 @@ function EventStreamContent({
       {oldestPendingToolCall && (
         <div className="mt-4">
           <PendingToolCallCard
+            key={oldestPendingToolCall.id}
             event={oldestPendingToolCall}
             isLoading={authLoadingStates.has(oldestPendingToolCall.id)}
             loadingAction={authLoadingStates.get(oldestPendingToolCall.id)}
