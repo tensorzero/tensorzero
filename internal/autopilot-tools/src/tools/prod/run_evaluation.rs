@@ -12,7 +12,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::types::AutopilotToolSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the run_evaluation tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -64,7 +64,7 @@ fn default_inference_cache() -> CacheEnabledMode {
 pub struct RunEvaluationTool;
 
 impl ToolMetadata for RunEvaluationTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = RunEvaluationResponse;
     type LlmParams = RunEvaluationToolParams;
 

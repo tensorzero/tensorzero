@@ -10,7 +10,7 @@ use durable_tools::{CacheEnabledMode, ErasedSimpleTool, RunEvaluationResponse, S
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use autopilot_tools::AutopilotToolSideInfo;
+use autopilot_client::AutopilotSideInfo;
 use autopilot_tools::tools::{RunEvaluationTool, RunEvaluationToolParams};
 use common::MockTensorZeroClient;
 
@@ -41,7 +41,6 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
     let expected_response = mock_response.clone();
 
     // Prepare test data
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
     let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -57,11 +56,12 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
         inference_cache: CacheEnabledMode::Off,
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        tool_call_id: tool_call_id.to_string(),
+        session_id,
+        config_snapshot_hash: None,
+        optimization: Default::default(),
     };
 
     // Create mock client with expectations
@@ -110,7 +110,6 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
     let mock_response = create_mock_run_evaluation_response();
 
     // Prepare test data
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
     let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -129,11 +128,12 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
         inference_cache: CacheEnabledMode::Off,
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        tool_call_id: tool_call_id.to_string(),
+        session_id,
+        config_snapshot_hash: None,
+        optimization: Default::default(),
     };
 
     // Create mock client with expectations
@@ -176,7 +176,6 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
     let mock_response = create_mock_run_evaluation_response();
 
     // Prepare test data
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
     let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -198,11 +197,12 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
         inference_cache: CacheEnabledMode::ReadOnly,
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        tool_call_id: tool_call_id.to_string(),
+        session_id,
+        config_snapshot_hash: None,
+        optimization: Default::default(),
     };
 
     // Create mock client with expectations that verify precision_targets and inference_cache
@@ -245,7 +245,6 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     // Prepare test data
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
     let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -261,11 +260,12 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
         inference_cache: CacheEnabledMode::Off,
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        tool_call_id: tool_call_id.to_string(),
+        session_id,
+        config_snapshot_hash: None,
+        optimization: Default::default(),
     };
 
     // Create mock client that returns an error
