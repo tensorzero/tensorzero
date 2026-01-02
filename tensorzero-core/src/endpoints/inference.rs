@@ -2271,7 +2271,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            data: Some(json!({"prompt_tokens": 10, "completion_tokens": 20})),
+            data: json!({"prompt_tokens": 10, "completion_tokens": 20}),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries.clone());
 
@@ -2316,7 +2316,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            data: Some(json!({"prompt_tokens": 10})),
+            data: json!({"prompt_tokens": 10}),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries);
 
@@ -2388,7 +2388,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "anthropic".to_string(),
             api_type: ApiType::ChatCompletions,
-            data: Some(json!({"input_tokens": 100})),
+            data: json!({"input_tokens": 100}),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries);
 
@@ -2438,7 +2438,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            data: Some(json!({})),
+            data: json!({}),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries);
 
@@ -2484,7 +2484,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            data: Some(json!({"total_tokens": 50})),
+            data: json!({"total_tokens": 50}),
         }];
         let mut extra_raw_usage = Some(raw_usage_entries);
 

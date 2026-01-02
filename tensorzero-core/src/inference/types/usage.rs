@@ -21,9 +21,7 @@ pub struct RawUsageEntry {
     pub model_inference_id: Uuid,
     pub provider_type: String,
     pub api_type: ApiType,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub data: Option<serde_json::Value>,
+    pub data: serde_json::Value,
 }
 
 pub fn raw_usage_entries_from_value(
@@ -36,7 +34,7 @@ pub fn raw_usage_entries_from_value(
         model_inference_id,
         provider_type: provider_type.to_string(),
         api_type,
-        data: Some(usage),
+        data: usage,
     }]
 }
 
@@ -235,11 +233,11 @@ mod tests {
             model_inference_id: Uuid::nil(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            data: Some(serde_json::json!({
+            data: serde_json::json!({
                 "prompt_tokens": 100,
                 "completion_tokens": 50,
                 "reasoning_tokens": 30
-            })),
+            }),
         };
         let json = serde_json::to_value(&entry).unwrap();
         assert_eq!(json["provider_type"], "openai");
@@ -254,11 +252,11 @@ mod tests {
             model_inference_id: Uuid::nil(),
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
-            data: None,
+            data: serde_json::Value::Null,
         };
-        let json = serde_json::to_string(&entry).unwrap();
-        // data field should be omitted when None
-        assert!(!json.contains("data"));
+        let json = serde_json::to_value(&entry).unwrap();
+        // data field should be present as null
+        assert_eq!(json["data"], serde_json::Value::Null, "data should be null");
     }
 
     #[test]
@@ -272,7 +270,7 @@ mod tests {
                 model_inference_id: Uuid::nil(),
                 provider_type: "openai".to_string(),
                 api_type: ApiType::ChatCompletions,
-                data: Some(serde_json::json!({"prompt_tokens": 100})),
+                data: serde_json::json!({"prompt_tokens": 100}),
             }]),
         };
         let json = serde_json::to_value(&usage_with_raw).unwrap();

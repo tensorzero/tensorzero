@@ -11,5 +11,5 @@ export type RawUsageEntry = {
   model_inference_id: string;
   provider_type: string;
   api_type: ApiType;
-  data?: JsonValue;
+  data: JsonValue;
 };

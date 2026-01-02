@@ -11,29 +11,23 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 fn assert_openai_chat_usage_details(entry: &Value) {
-    let usage = entry.get("usage").unwrap_or(&Value::Null);
+    let data = entry.get("data").unwrap_or(&Value::Null);
     assert!(
-        usage.is_object(),
-        "raw_usage entry should include usage for chat completions"
+        data.is_object(),
+        "raw_usage entry should include data for chat completions"
     );
     assert!(
-        usage.is_object(),
-        "raw_usage entry usage should be an object for chat completions"
-    );
-    assert!(
-        usage.get("total_tokens").is_some(),
+        data.get("total_tokens").is_some(),
         "raw_usage should include `total_tokens` for chat completions"
     );
     assert!(
-        usage
-            .get("prompt_tokens_details")
+        data.get("prompt_tokens_details")
             .and_then(|details| details.get("cached_tokens"))
             .is_some(),
         "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
     );
     assert!(
-        usage
-            .get("completion_tokens_details")
+        data.get("completion_tokens_details")
             .and_then(|details| details.get("reasoning_tokens"))
             .is_some(),
         "raw_usage should include `completion_tokens_details.reasoning_tokens` for chat completions"
@@ -87,14 +81,15 @@ async fn test_relay_raw_usage_non_streaming() {
         "Response should have inference_id. Body: {body}"
     );
 
-    // Check that usage exists and contains raw_usage (nested structure)
-    let usage = body
-        .get("usage")
-        .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
+    // Check that usage exists and raw_usage is at response level (sibling to usage)
+    assert!(
+        body.get("usage").is_some(),
+        "Response should have usage field. Body: {body}"
+    );
 
-    let raw_usage = usage
+    let raw_usage = body
         .get("raw_usage")
-        .unwrap_or_else(|| panic!("usage should have raw_usage when requested. Body: {body}"));
+        .unwrap_or_else(|| panic!("Response should have raw_usage when requested. Body: {body}"));
     assert!(
         raw_usage.is_array(),
         "raw_usage should be an array, got: {raw_usage}"
@@ -175,10 +170,8 @@ async fn test_relay_raw_usage_streaming() {
 
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
-        // Check if this chunk has usage with raw_usage nested inside
-        if let Some(usage) = chunk.get("usage")
-            && let Some(raw_usage) = usage.get("raw_usage")
-        {
+        // Check if this chunk has raw_usage (sibling to usage at chunk level)
+        if let Some(raw_usage) = chunk.get("raw_usage") {
             found_raw_usage = true;
             assert!(
                 raw_usage.is_array(),
@@ -217,7 +210,7 @@ async fn test_relay_raw_usage_streaming() {
 
     assert!(
         found_raw_usage,
-        "Streaming relay response should include raw_usage nested in usage in final chunk"
+        "Streaming relay response should include raw_usage in final chunk"
     );
 }
 
@@ -262,11 +255,14 @@ async fn test_relay_raw_usage_not_requested() {
 
     let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
 
-    // raw_usage should NOT be present in usage when not requested
-    let usage = body.get("usage").expect("Response should have usage field");
+    // raw_usage should NOT be present at response level when not requested
     assert!(
-        usage.get("raw_usage").is_none(),
-        "raw_usage should NOT be present in usage when not requested. Body: {body}"
+        body.get("usage").is_some(),
+        "Response should have usage field"
+    );
+    assert!(
+        body.get("raw_usage").is_none(),
+        "raw_usage should NOT be present when not requested. Body: {body}"
     );
 }
 
@@ -314,13 +310,11 @@ async fn test_relay_raw_usage_not_requested_streaming() {
 
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
-        // raw_usage should NOT be present in any chunk's usage when not requested
-        if let Some(usage) = chunk.get("usage") {
-            assert!(
-                usage.get("raw_usage").is_none(),
-                "raw_usage should NOT be present in streaming chunks when not requested"
-            );
-        }
+        // raw_usage should NOT be present at chunk level when not requested
+        assert!(
+            chunk.get("raw_usage").is_none(),
+            "raw_usage should NOT be present in streaming chunks when not requested"
+        );
     }
 }
 
@@ -395,13 +389,14 @@ reasoning_effort = "minimal"
 
     let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
 
-    let usage = body
-        .get("usage")
-        .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
+    assert!(
+        body.get("usage").is_some(),
+        "Response should have usage field. Body: {body}"
+    );
 
-    let raw_usage = usage
+    let raw_usage = body
         .get("raw_usage")
-        .unwrap_or_else(|| panic!("usage should have raw_usage when requested. Body: {body}"))
+        .unwrap_or_else(|| panic!("Response should have raw_usage when requested. Body: {body}"))
         .as_array()
         .expect("raw_usage should be an array");
 
@@ -508,9 +503,8 @@ reasoning_effort = "minimal"
 
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
-        // Check if this chunk has usage with raw_usage nested inside
-        if let Some(usage) = chunk.get("usage")
-            && let Some(raw_usage) = usage.get("raw_usage")
+        // Check if this chunk has raw_usage (sibling to usage at chunk level)
+        if let Some(raw_usage) = chunk.get("raw_usage")
             && let Some(arr) = raw_usage.as_array()
         {
             raw_usage_entries = arr.clone();
@@ -591,13 +585,14 @@ async fn test_relay_raw_usage_entry_structure() {
 
     let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
 
-    let usage = body
-        .get("usage")
-        .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
+    assert!(
+        body.get("usage").is_some(),
+        "Response should have usage field. Body: {body}"
+    );
 
-    let raw_usage = usage
+    let raw_usage = body
         .get("raw_usage")
-        .unwrap_or_else(|| panic!("usage should have raw_usage when requested. Body: {body}"))
+        .unwrap_or_else(|| panic!("Response should have raw_usage when requested. Body: {body}"))
         .as_array()
         .expect("raw_usage should be an array");
 
