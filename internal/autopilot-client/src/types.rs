@@ -22,7 +22,7 @@ pub struct Session {
     pub id: Uuid,
     pub organization_id: String,
     pub workspace_id: String,
-    pub deployment_id: Uuid,
+    pub deployment_id: String,
     pub tensorzero_version: String,
     pub created_at: DateTime<Utc>,
 }
@@ -117,10 +117,9 @@ pub enum ToolOutcome {
 // =============================================================================
 
 /// Request body for creating an event.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateEventRequest {
-    pub deployment_id: Uuid,
+    pub deployment_id: String,
     pub tensorzero_version: String,
     pub payload: EventPayload,
     /// Used for idempotency when adding events to an existing session.
@@ -129,7 +128,6 @@ pub struct CreateEventRequest {
     /// the most recent `user_message` event in the session. This prevents duplicate events
     /// from being created if a client retries a create user request that already succeeded.
     /// This should only apply to Message events.
-    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_user_message_event_id: Option<Uuid>,
 }

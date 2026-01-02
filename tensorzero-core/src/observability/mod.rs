@@ -61,7 +61,7 @@ use axum::{Router, middleware};
 use clap::ValueEnum;
 use http::HeaderMap;
 use metrics::{Unit, describe_counter, describe_histogram};
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
 use opentelemetry::trace::Status;
 use opentelemetry::trace::{Tracer, TracerProvider as _};
@@ -1201,20 +1201,28 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
 pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<PrometheusHandle, Error> {
     let mut builder = PrometheusBuilder::new();
 
-    let buckets = metrics_config.and_then(|config| {
-        config
-            .tensorzero_inference_latency_overhead_seconds_histogram_buckets
-            .as_ref()
-    });
+    let buckets = metrics_config
+        .map(|config| config.get_buckets())
+        .unwrap_or_default();
 
-    if let Some(buckets) = buckets {
-        use metrics_exporter_prometheus::Matcher;
+    if !buckets.is_empty() {
+        // Set buckets for both the new and deprecated metric names
+        builder = builder
+            .set_buckets_for_metric(
+                Matcher::Full("tensorzero_inference_latency_overhead_seconds".to_string()),
+                &buckets,
+            )
+            .map_err(|e| {
+                Error::new(ErrorDetails::Observability {
+                    message: format!("Failed to set histogram buckets: {e}"),
+                })
+            })?;
         builder = builder
             .set_buckets_for_metric(
                 Matcher::Full(
                     "tensorzero_inference_latency_overhead_seconds_histogram".to_string(),
                 ),
-                buckets,
+                &buckets,
             )
             .map_err(|e| {
                 Error::new(ErrorDetails::Observability {
@@ -1253,19 +1261,18 @@ pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<Prometheu
         "Inferences performed by TensorZero",
     );
 
-    describe_histogram!(
-        "tensorzero_inference_latency_overhead_seconds",
-        Unit::Seconds,
-        "Overhead of TensorZero on HTTP requests"
-    );
-
-    if buckets.is_some() {
+    if !buckets.is_empty() {
+        describe_histogram!(
+            "tensorzero_inference_latency_overhead_seconds",
+            Unit::Seconds,
+            "Overhead of TensorZero on HTTP requests. You can customize buckets using `gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets` in the configuration."
+        );
+        // DEPRECATED (2026.2+): Also emit under the old name for backward compatibility
         describe_histogram!(
             "tensorzero_inference_latency_overhead_seconds_histogram",
             Unit::Seconds,
-            "Overhead of TensorZero on HTTP requests (histogram)"
+            "DEPRECATED (2026.2+): Use `tensorzero_inference_latency_overhead_seconds` instead. Overhead of TensorZero on HTTP requests."
         );
-        crate::observability::overhead_timing::enable_histogram_latency_metric();
     }
 
     Ok(metrics_handle)
