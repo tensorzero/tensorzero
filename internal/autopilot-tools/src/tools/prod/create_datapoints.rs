@@ -9,7 +9,7 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointRequest, CreateDatapointsResponse};
 
-use crate::types::AutopilotToolSideInfo;
+use crate::types::AutopilotSideInfo;
 
 /// Parameters for the create_datapoints tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -28,7 +28,7 @@ pub struct CreateDatapointsToolParams {
 pub struct CreateDatapointsTool;
 
 impl ToolMetadata for CreateDatapointsTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsToolParams;
 
@@ -92,20 +92,6 @@ impl ToolMetadata for CreateDatapointsTool {
     }
 }
 
-/// Build autopilot tags from side info.
-fn build_autopilot_tags(side_info: &AutopilotToolSideInfo) -> HashMap<String, String> {
-    let mut tags = HashMap::new();
-    tags.insert(
-        "autopilot_session_id".to_string(),
-        side_info.session_id.to_string(),
-    );
-    tags.insert(
-        "autopilot_tool_call_event_id".to_string(),
-        side_info.tool_call_event_id.to_string(),
-    );
-    tags
-}
-
 /// Merge autopilot tags into existing tags, preserving user-provided tags.
 fn merge_tags(
     existing: Option<HashMap<String, String>>,
@@ -144,7 +130,7 @@ impl SimpleTool for CreateDatapointsTool {
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
-        let autopilot_tags = build_autopilot_tags(&side_info);
+        let autopilot_tags = side_info.to_tags();
 
         // Add autopilot tags to each datapoint
         let datapoints: Vec<CreateDatapointRequest> = llm_params

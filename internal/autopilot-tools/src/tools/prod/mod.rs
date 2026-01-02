@@ -27,7 +27,7 @@ pub use get_feedback_by_variant::{GetFeedbackByVariantTool, GetFeedbackByVariant
 pub use get_latest_feedback_by_metric::{
     GetLatestFeedbackByMetricTool, GetLatestFeedbackByMetricToolParams,
 };
-pub use inference::{InferenceTool, InferenceToolParams, InferenceToolSideInfo};
+pub use inference::{InferenceTool, InferenceToolParams};
 pub use launch_optimization_workflow::{
     LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolOutput,
     LaunchOptimizationWorkflowToolParams, OptimizationWorkflowSideInfo,

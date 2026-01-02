@@ -8,7 +8,7 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::feedback::FeedbackByVariant;
 
-use crate::types::AutopilotToolSideInfo;
+use crate::types::AutopilotSideInfo;
 
 /// Parameters for the get_feedback_by_variant tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -32,7 +32,7 @@ pub struct GetFeedbackByVariantToolParams {
 pub struct GetFeedbackByVariantTool;
 
 impl ToolMetadata for GetFeedbackByVariantTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = Vec<FeedbackByVariant>;
     type LlmParams = GetFeedbackByVariantToolParams;
 

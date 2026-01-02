@@ -15,10 +15,10 @@ use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 use autopilot_tools::{
-    AutopilotToolSideInfo,
+    AutopilotSideInfo,
     tools::{
-        InferenceTool, InferenceToolParams, InferenceToolSideInfo, ListInferencesTool,
-        ListInferencesToolParams,
+        InferenceTool, InferenceToolParams, ListInferencesTool, ListInferencesToolParams,
+        OptimizationWorkflowSideInfo,
     },
 };
 use common::{MockTensorZeroClient, create_mock_chat_response};
@@ -31,9 +31,7 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
     let mock_response = create_mock_chat_response("Hello from mock!");
 
     // Prepare test data
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let input = Input {
@@ -56,14 +54,11 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
         output_schema: None,
     };
 
-    let side_info = InferenceToolSideInfo {
-        base: AutopilotToolSideInfo {
-            episode_id,
-            session_id,
-            tool_call_id,
-            tool_call_event_id,
-        },
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id,
+        session_id,
         config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     // Create mock client with expectations
@@ -72,13 +67,13 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
         .expect_inference()
         .withf(move |params| {
             params.function_name == Some("test_function".to_string())
-                && params.episode_id == Some(episode_id)
+                && params.episode_id.is_none()
                 && params.dryrun == Some(false)
                 && params.stream == Some(false)
                 && params.internal
-                && params.tags.get("autopilot_session_id") == Some(&session_id.to_string())
-                && params.tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
-                && params.tags.get("autopilot_tool_call_event_id")
+                && params.tags.get("tensorzero::autopilot::session_id")
+                    == Some(&session_id.to_string())
+                && params.tags.get("tensorzero::autopilot::tool_call_event_id")
                     == Some(&tool_call_event_id.to_string())
         })
         .returning(move |_| Ok(mock_response.clone()));
@@ -109,9 +104,7 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
     let mock_response = create_mock_chat_response("Hello from action!");
 
     // Prepare test data
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let input = Input {
@@ -137,14 +130,11 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
         output_schema: None,
     };
 
-    let side_info = InferenceToolSideInfo {
-        base: AutopilotToolSideInfo {
-            episode_id,
-            session_id,
-            tool_call_id,
-            tool_call_event_id,
-        },
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id,
+        session_id,
         config_snapshot_hash: Some(test_snapshot_hash.to_string()),
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     // Create mock client with expectations for action()
@@ -157,13 +147,13 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
             };
             snapshot_hash.to_string() == test_snapshot_hash
                 && params.function_name == Some("test_function".to_string())
-                && params.episode_id == Some(episode_id)
+                && params.episode_id.is_none()
                 && params.dryrun == Some(false)
                 && params.stream == Some(false)
                 && params.internal
-                && params.tags.get("autopilot_session_id") == Some(&session_id.to_string())
-                && params.tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
-                && params.tags.get("autopilot_tool_call_event_id")
+                && params.tags.get("tensorzero::autopilot::session_id")
+                    == Some(&session_id.to_string())
+                && params.tags.get("tensorzero::autopilot::tool_call_event_id")
                     == Some(&tool_call_event_id.to_string())
         })
         .returning(move |_, _| Ok(mock_response.clone()));
@@ -203,11 +193,11 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
         request: ListInferencesRequest::default(),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -247,11 +237,11 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
         },
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -296,11 +286,11 @@ async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
         },
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -332,11 +322,11 @@ async fn test_list_inferences_tool_error(pool: PgPool) {
         request: ListInferencesRequest::default(),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();

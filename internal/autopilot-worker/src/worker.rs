@@ -1,10 +1,11 @@
 //! Autopilot worker implementation.
 
+use std::fmt::Display;
 use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use autopilot_tools::{AutopilotSideInfoParams, ToolVisitor};
+use autopilot_tools::{AutopilotSideInfo, ToolVisitor};
 use durable_tools::{
     SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
 };
@@ -147,7 +148,8 @@ impl ToolVisitor for LocalToolVisitor<'_> {
     async fn visit_task_tool<T>(&self) -> Result<(), ToolError>
     where
         T: TaskTool + Default,
-        T::SideInfo: TryFrom<AutopilotSideInfoParams, Error = anyhow::Error> + Serialize,
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display,
     {
         self.executor
             .register_task_tool::<ClientTaskToolWrapper<T>>()
@@ -158,7 +160,8 @@ impl ToolVisitor for LocalToolVisitor<'_> {
     async fn visit_simple_tool<T>(&self) -> Result<(), ToolError>
     where
         T: SimpleTool + Default,
-        T::SideInfo: TryFrom<AutopilotSideInfoParams, Error = anyhow::Error> + Serialize,
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display,
     {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
         self.executor

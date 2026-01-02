@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use uuid::Uuid;
 
-use crate::types::AutopilotToolSideInfo;
+use crate::types::AutopilotSideInfo;
 
 /// Parameters for the get_latest_feedback_by_metric tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -25,7 +25,7 @@ pub struct GetLatestFeedbackByMetricToolParams {
 pub struct GetLatestFeedbackByMetricTool;
 
 impl ToolMetadata for GetLatestFeedbackByMetricTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = LatestFeedbackIdByMetricResponse;
     type LlmParams = GetLatestFeedbackByMetricToolParams;
 

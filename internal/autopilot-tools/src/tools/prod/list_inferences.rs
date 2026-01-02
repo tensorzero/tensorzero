@@ -8,7 +8,7 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 
-use crate::types::AutopilotToolSideInfo;
+use crate::types::AutopilotSideInfo;
 
 /// Parameters for the list_inferences tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -26,7 +26,7 @@ pub struct ListInferencesToolParams {
 pub struct ListInferencesTool;
 
 impl ToolMetadata for ListInferencesTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = GetInferencesResponse;
     type LlmParams = ListInferencesToolParams;
 

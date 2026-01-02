@@ -8,7 +8,7 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
 
-use crate::types::AutopilotToolSideInfo;
+use crate::AutopilotSideInfo;
 
 /// Parameters for the create_datapoints_from_inferences tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -28,7 +28,7 @@ pub struct CreateDatapointsFromInferencesToolParams {
 pub struct CreateDatapointsFromInferencesTool;
 
 impl ToolMetadata for CreateDatapointsFromInferencesTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsFromInferencesToolParams;
 

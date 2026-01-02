@@ -14,12 +14,13 @@ use tensorzero::{
 };
 use uuid::Uuid;
 
-use autopilot_tools::AutopilotToolSideInfo;
+use autopilot_tools::AutopilotSideInfo;
 use autopilot_tools::tools::{
     CreateDatapointsFromInferencesTool, CreateDatapointsFromInferencesToolParams,
     CreateDatapointsTool, CreateDatapointsToolParams, DeleteDatapointsTool,
     DeleteDatapointsToolParams, GetDatapointsTool, GetDatapointsToolParams, ListDatapointsTool,
-    ListDatapointsToolParams, UpdateDatapointsTool, UpdateDatapointsToolParams,
+    ListDatapointsToolParams, OptimizationWorkflowSideInfo, UpdateDatapointsTool,
+    UpdateDatapointsToolParams,
 };
 use common::{
     MockTensorZeroClient, create_mock_chat_datapoint, create_mock_create_datapoints_response,
@@ -34,9 +35,7 @@ async fn test_create_datapoints_tool_basic(pool: PgPool) {
     let datapoint_id = Uuid::now_v7();
     let mock_response = create_mock_create_datapoints_response(vec![datapoint_id]);
 
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = CreateDatapointsToolParams {
@@ -52,11 +51,11 @@ async fn test_create_datapoints_tool_basic(pool: PgPool) {
         })],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -87,9 +86,7 @@ async fn test_create_datapoints_tool_adds_autopilot_tags(pool: PgPool) {
     let datapoint_id = Uuid::now_v7();
     let mock_response = create_mock_create_datapoints_response(vec![datapoint_id]);
 
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     // Create datapoint with no user tags
@@ -106,11 +103,11 @@ async fn test_create_datapoints_tool_adds_autopilot_tags(pool: PgPool) {
         })],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -121,9 +118,8 @@ async fn test_create_datapoints_tool_adds_autopilot_tags(pool: PgPool) {
             match &datapoints[0] {
                 CreateDatapointRequest::Chat(chat) => {
                     let tags = chat.tags.as_ref().expect("Tags should be set");
-                    tags.get("autopilot_session_id") == Some(&session_id.to_string())
-                        && tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
-                        && tags.get("autopilot_tool_call_event_id")
+                    tags.get("tensorzero::autopilot::session_id") == Some(&session_id.to_string())
+                        && tags.get("tensorzero::autopilot::tool_call_event_id")
                             == Some(&tool_call_event_id.to_string())
                 }
                 CreateDatapointRequest::Json(_) => false,
@@ -150,15 +146,13 @@ async fn test_create_datapoints_tool_user_tags_take_precedence(pool: PgPool) {
     let datapoint_id = Uuid::now_v7();
     let mock_response = create_mock_create_datapoints_response(vec![datapoint_id]);
 
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     // Create datapoint with user tags including one that conflicts with autopilot tag
     let mut user_tags = HashMap::new();
     user_tags.insert(
-        "autopilot_session_id".to_string(),
+        "tensorzero::autopilot::session_id".to_string(),
         "user_override".to_string(),
     );
     user_tags.insert("custom_tag".to_string(), "custom_value".to_string());
@@ -176,11 +170,11 @@ async fn test_create_datapoints_tool_user_tags_take_precedence(pool: PgPool) {
         })],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -191,11 +185,11 @@ async fn test_create_datapoints_tool_user_tags_take_precedence(pool: PgPool) {
                 CreateDatapointRequest::Chat(chat) => {
                     let tags = chat.tags.as_ref().expect("Tags should be set");
                     // User tag should take precedence
-                    tags.get("autopilot_session_id") == Some(&"user_override".to_string())
+                    tags.get("tensorzero::autopilot::session_id") == Some(&"user_override".to_string())
                         // Custom user tag should be preserved
                         && tags.get("custom_tag") == Some(&"custom_value".to_string())
                         // Other autopilot tags should still be present
-                        && tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
+                        && tags.get("tensorzero::autopilot::tool_call_event_id") == Some(&tool_call_event_id.to_string())
                 }
                 CreateDatapointRequest::Json(_) => false,
             }
@@ -231,11 +225,11 @@ async fn test_create_datapoints_tool_error(pool: PgPool) {
         })],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -272,11 +266,11 @@ async fn test_get_datapoints_tool_with_dataset_name(pool: PgPool) {
         ids: vec![datapoint_id],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -315,11 +309,11 @@ async fn test_get_datapoints_tool_without_dataset_name(pool: PgPool) {
         ids: vec![datapoint_id],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -352,11 +346,11 @@ async fn test_get_datapoints_tool_error(pool: PgPool) {
         ids: vec![Uuid::now_v7()],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -393,11 +387,11 @@ async fn test_list_datapoints_tool_basic(pool: PgPool) {
         request: ListDatapointsRequest::default(),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -437,11 +431,11 @@ async fn test_list_datapoints_tool_with_filters(pool: PgPool) {
         },
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -479,11 +473,11 @@ async fn test_list_datapoints_tool_error(pool: PgPool) {
         request: ListDatapointsRequest::default(),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -531,11 +525,11 @@ async fn test_update_datapoints_tool_basic(pool: PgPool) {
         })],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -579,11 +573,11 @@ async fn test_update_datapoints_tool_error(pool: PgPool) {
         })],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -619,11 +613,11 @@ async fn test_delete_datapoints_tool_basic(pool: PgPool) {
         ids: vec![datapoint_id],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -658,11 +652,11 @@ async fn test_delete_datapoints_tool_error(pool: PgPool) {
         ids: vec![Uuid::now_v7()],
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -702,11 +696,11 @@ async fn test_create_datapoints_from_inferences_tool_with_ids(pool: PgPool) {
         },
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -751,11 +745,11 @@ async fn test_create_datapoints_from_inferences_tool_error(pool: PgPool) {
         },
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();

@@ -10,7 +10,7 @@ use serde_json::Value;
 use tensorzero::{FeedbackParams, FeedbackResponse};
 use uuid::Uuid;
 
-use crate::AutopilotToolSideInfo;
+use crate::AutopilotSideInfo;
 
 /// Parameters for the feedback tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -44,7 +44,7 @@ pub struct FeedbackToolParams {
 pub struct FeedbackTool;
 
 impl ToolMetadata for FeedbackTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = FeedbackResponse;
     type LlmParams = FeedbackToolParams;
 

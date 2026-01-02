@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero::DeleteDatapointsResponse;
 use uuid::Uuid;
 
-use crate::types::AutopilotToolSideInfo;
+use crate::AutopilotSideInfo;
 
 /// Parameters for the delete_datapoints tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -27,7 +27,7 @@ pub struct DeleteDatapointsToolParams {
 pub struct DeleteDatapointsTool;
 
 impl ToolMetadata for DeleteDatapointsTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = DeleteDatapointsResponse;
     type LlmParams = DeleteDatapointsToolParams;
 

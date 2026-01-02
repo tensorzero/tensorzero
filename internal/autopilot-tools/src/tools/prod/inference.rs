@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SideInfo, SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,7 +13,7 @@ use tensorzero::{
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 
-use crate::types::{AutopilotSideInfoParams, AutopilotToolSideInfo};
+use crate::types::AutopilotSideInfo;
 
 /// Parameters for the inference tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -40,30 +40,6 @@ pub struct InferenceToolParams {
     pub output_schema: Option<Value>,
 }
 
-/// Side information for the inference tool (hidden from LLM).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InferenceToolSideInfo {
-    /// Base autopilot side info (episode_id, session_id, tool_call_event_id).
-    #[serde(flatten)]
-    pub base: AutopilotToolSideInfo,
-    /// Optional config snapshot hash - if provided, uses action endpoint with historical config.
-    #[serde(default)]
-    pub config_snapshot_hash: Option<String>,
-}
-
-impl SideInfo for InferenceToolSideInfo {}
-
-impl TryFrom<AutopilotSideInfoParams> for InferenceToolSideInfo {
-    type Error = anyhow::Error;
-
-    fn try_from(params: AutopilotSideInfoParams) -> Result<Self, Self::Error> {
-        Ok(Self {
-            base: AutopilotToolSideInfo::try_from(params.clone())?,
-            config_snapshot_hash: params.config_snapshot_hash,
-        })
-    }
-}
-
 /// Tool for calling TensorZero inference endpoint.
 ///
 /// This tool allows autopilot to make inference calls, optionally using
@@ -72,7 +48,7 @@ impl TryFrom<AutopilotSideInfoParams> for InferenceToolSideInfo {
 pub struct InferenceTool;
 
 impl ToolMetadata for InferenceTool {
-    type SideInfo = InferenceToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = InferenceResponse;
     type LlmParams = InferenceToolParams;
 
@@ -173,11 +149,11 @@ impl SimpleTool for InferenceTool {
             function_name: llm_params.function_name,
             model_name: llm_params.model_name,
             input: llm_params.input,
-            episode_id: Some(side_info.base.episode_id),
+            episode_id: None,
             params: llm_params.params,
             variant_name: llm_params.variant_name,
             dryrun: Some(false), // Always store
-            tags: side_info.base.to_tags(),
+            tags: side_info.to_tags(),
             dynamic_tool_params: llm_params.dynamic_tool_params,
             output_schema: llm_params.output_schema,
             stream: Some(false), // Never stream

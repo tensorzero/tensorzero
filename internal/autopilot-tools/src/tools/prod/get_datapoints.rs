@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero::GetDatapointsResponse;
 use uuid::Uuid;
 
-use crate::types::AutopilotToolSideInfo;
+use crate::types::AutopilotSideInfo;
 
 /// Parameters for the get_datapoints tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -28,7 +28,7 @@ pub struct GetDatapointsToolParams {
 pub struct GetDatapointsTool;
 
 impl ToolMetadata for GetDatapointsTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = GetDatapointsResponse;
     type LlmParams = GetDatapointsToolParams;
 

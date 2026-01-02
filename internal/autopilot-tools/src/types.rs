@@ -6,6 +6,8 @@ use durable_tools::SideInfo;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::tools::OptimizationWorkflowSideInfo;
+
 /// Side information required for autopilot client tools.
 ///
 /// This should contain all IDs that might be needed as input to a tool
@@ -21,6 +23,9 @@ pub struct AutopilotSideInfo {
     /// An optional hash of the current configuration.
     /// Set if you would like to start from a particular config for a tool call.
     pub config_snapshot_hash: Option<String>,
+
+    /// Settings for optimization workflows run on the gateway by autopilot.
+    pub optimization: OptimizationWorkflowSideInfo,
 }
 
 impl SideInfo for AutopilotSideInfo {}
@@ -29,12 +34,18 @@ impl AutopilotSideInfo {
     pub fn to_tags(&self) -> HashMap<String, String> {
         let mut tags = HashMap::new();
         tags.insert(
-            "tool_call_event_id".to_string(),
+            "tensorzero::autopilot::tool_call_event_id".to_string(),
             self.tool_call_event_id.to_string(),
         );
-        tags.insert("session_id".to_string(), self.session_id.to_string());
+        tags.insert(
+            "tensorzero::autopilot::session_id".to_string(),
+            self.session_id.to_string(),
+        );
         if let Some(config_hash) = &self.config_snapshot_hash {
-            tags.insert("config_snapshot_hash".to_string(), config_hash.clone());
+            tags.insert(
+                "tensorzero::autopilot::config_snapshot_hash".to_string(),
+                config_hash.clone(),
+            );
         }
         tags
     }

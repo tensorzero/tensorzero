@@ -97,7 +97,7 @@ pub struct AutopilotToolCall {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 pub struct AutopilotToolResult {
-    result: String,
+    pub result: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]

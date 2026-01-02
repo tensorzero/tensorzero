@@ -4,6 +4,8 @@
 //! different registration strategies while ensuring the same set of tools is
 //! processed regardless of the visitor implementation.
 
+use std::fmt::Display;
+
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, TaskTool};
 use serde::Serialize;
@@ -22,7 +24,7 @@ use crate::types::AutopilotSideInfo;
 /// - Remote execution adapters (like `ClientToolTaskAdapter`) require `Default`
 ///
 /// The bounds on `SideInfo` are required for:
-/// - `TryFrom<AutopilotSideInfoParams>`: Converting caller params to tool-specific side info
+/// - `TryFrom<AutopilotSideInfo>`: Converting caller params to tool-specific side info
 /// - `Serialize`: Serializing side info into tool call events
 ///
 /// # Implementors
@@ -42,7 +44,8 @@ pub trait ToolVisitor {
     async fn visit_task_tool<T>(&self) -> Result<(), Self::Error>
     where
         T: TaskTool + Default,
-        T::SideInfo: TryFrom<AutopilotSideInfo, Error = anyhow::Error> + Serialize;
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display;
 
     /// Visit a `SimpleTool`.
     ///
@@ -51,5 +54,6 @@ pub trait ToolVisitor {
     async fn visit_simple_tool<T>(&self) -> Result<(), Self::Error>
     where
         T: SimpleTool + Default,
-        T::SideInfo: TryFrom<AutopilotSideInfo, Error = anyhow::Error> + Serialize;
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display;
 }

@@ -9,7 +9,6 @@ use moka::sync::Cache;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest_eventsource::{Event as SseEvent, EventSource};
 use secrecy::{ExposeSecret, SecretString};
-use serde_json::Value as JsonValue;
 use sqlx::PgPool;
 use url::Url;
 use uuid::Uuid;

@@ -8,7 +8,7 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
 
-use crate::types::AutopilotToolSideInfo;
+use crate::types::AutopilotSideInfo;
 
 /// Parameters for the list_datapoints tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -27,7 +27,7 @@ pub struct ListDatapointsToolParams {
 pub struct ListDatapointsTool;
 
 impl ToolMetadata for ListDatapointsTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = GetDatapointsResponse;
     type LlmParams = ListDatapointsToolParams;
 
