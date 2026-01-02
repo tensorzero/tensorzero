@@ -75,11 +75,7 @@ export function ChatInput({
     const trimmedText = text.trim();
     if (!trimmedText || isSending) return;
 
-    setText("");
     setIsSending(true);
-
-    // Keep focus on textarea for quick follow-ups
-    textareaRef.current?.focus();
 
     try {
       const response = await fetch(
@@ -108,6 +104,7 @@ export function ChatInput({
       // Store for idempotency on next message
       previousUserMessageEventIdRef.current = data.event_id;
 
+      setText("");
       onMessageSent?.(data, trimmedText);
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Unknown error");
@@ -137,7 +134,7 @@ export function ChatInput({
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={disabled}
+        disabled={disabled || isSending}
         className="resize-none overflow-y-auto"
         style={{ minHeight: MIN_HEIGHT, maxHeight: MAX_HEIGHT }}
         rows={1}
