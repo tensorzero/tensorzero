@@ -4,8 +4,6 @@
 //! different registration strategies while ensuring the same set of tools is
 //! processed regardless of the visitor implementation.
 
-use std::fmt::Display;
-
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, TaskTool};
 use serde::Serialize;
@@ -45,7 +43,7 @@ pub trait ToolVisitor {
     where
         T: TaskTool + Default,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display;
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>;
 
     /// Visit a `SimpleTool`.
     ///
@@ -55,5 +53,5 @@ pub trait ToolVisitor {
     where
         T: SimpleTool + Default,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error> + Display;
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>;
 }
