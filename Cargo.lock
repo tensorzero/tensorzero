@@ -1824,7 +1824,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?branch=viraj%2Fimprove-spawn-defaults#2a67bcb9f1142d312a6b29422b4564d7c6b6c2ff"
+source = "git+https://github.com/tensorzero/durable?branch=viraj%2Fimprove-spawn-defaults#c456a351d4067d04ad9d549dc5c02ff9cb4be6b4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7774,9 +7774,9 @@ dependencies = [
 
 [[package]]
 name = "zmij"
-version = "1.0.4"
+version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77cc0158b0d3103d58e9e82bdbe9cf9289d80dbcf4e686ff16730eb9e5814d1a"
+checksum = "de9211a9f64b825911bdf0240f58b7a8dac217fe260fc61f080a07f61372fbd5"
 
 [[package]]
 name = "zstd"

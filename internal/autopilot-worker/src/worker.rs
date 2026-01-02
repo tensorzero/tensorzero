@@ -23,6 +23,8 @@ pub struct AutopilotWorkerConfig {
     pub queue_name: String,
     /// TensorZero client for calling inference and autopilot operations.
     pub t0_client: Arc<dyn TensorZeroClient>,
+    /// Default max attempts for a task in the worker
+    pub default_max_attempts: u32,
 }
 
 impl AutopilotWorkerConfig {
@@ -35,7 +37,11 @@ impl AutopilotWorkerConfig {
     ///
     /// Environment variables:
     /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Queue name (default: "autopilot")
-    pub fn new(pool: PgPool, t0_client: Arc<dyn TensorZeroClient>) -> Self {
+    pub fn new(
+        pool: PgPool,
+        t0_client: Arc<dyn TensorZeroClient>,
+        default_max_attempts: u32,
+    ) -> Self {
         let mut queue_name = autopilot_client::DEFAULT_SPAWN_QUEUE_NAME.to_string();
         if cfg!(feature = "e2e_tests")
             && let Some(name) = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME").ok()
@@ -47,6 +53,7 @@ impl AutopilotWorkerConfig {
             pool,
             queue_name,
             t0_client,
+            default_max_attempts,
         }
     }
 }
@@ -67,6 +74,7 @@ impl AutopilotWorker {
             .pool(config.pool)
             .queue_name(&config.queue_name)
             .t0_client(config.t0_client)
+            .default_max_attempts(config.default_max_attempts)
             .build()
             .await?;
 
