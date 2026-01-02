@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{ContentBlockChunk, FinishReason, current_timestamp};
 
 use crate::endpoints::inference::{InferenceResponseChunk, InferenceStream};
@@ -29,7 +30,10 @@ pub struct OpenAICompatibleResponseChunk {
     pub system_fingerprint: String,
     pub service_tier: Option<String>,
     pub object: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<OpenAICompatibleUsage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -50,6 +54,8 @@ fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAICompatibleDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     #[serde(skip_serializing_if = "is_none_or_empty")]
     pub tool_calls: Option<Vec<OpenAICompatibleToolCallChunk>>,
@@ -59,7 +65,15 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
     chunk: InferenceResponseChunk,
     tool_id_to_index: &mut HashMap<String, usize>,
     response_model_prefix: &str,
+    is_first_chunk: bool,
 ) -> Vec<OpenAICompatibleResponseChunk> {
+    // OpenAI includes "assistant" role in the first chunk but not in subsequent chunks
+    let role = if is_first_chunk {
+        Some("assistant".to_string())
+    } else {
+        None
+    };
+
     let response_chunk = match chunk {
         InferenceResponseChunk::Chat(c) => {
             let (content, tool_calls) = process_chat_content_chunk(c.content, tool_id_to_index);
@@ -71,6 +85,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                     finish_reason: c.finish_reason.map(FinishReason::into),
                     logprobs: None,
                     delta: OpenAICompatibleDelta {
+                        role: role.clone(),
                         content,
                         tool_calls: Some(tool_calls),
                     },
@@ -82,6 +97,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 object: "chat.completion.chunk".to_string(),
                 // We emit a single chunk containing 'usage' at the end of the stream
                 usage: None,
+                tensorzero_raw_usage: None,
             }
         }
         InferenceResponseChunk::Json(c) => OpenAICompatibleResponseChunk {
@@ -92,6 +108,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 finish_reason: c.finish_reason.map(FinishReason::into),
                 logprobs: None,
                 delta: OpenAICompatibleDelta {
+                    role,
                     content: Some(c.raw),
                     tool_calls: None,
                 },
@@ -103,6 +120,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
             object: "chat.completion.chunk".to_string(),
             // We emit a single chunk containing 'usage' at the end of the stream
             usage: None,
+            tensorzero_raw_usage: None,
         },
     };
 
@@ -200,22 +218,17 @@ pub fn prepare_serialized_openai_compatible_events(
             if let Some(raw_usage) = chunk_raw_usage {
                 raw_usage_entries.extend(raw_usage.iter().cloned());
             }
-            let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
+            let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(
+                chunk,
+                &mut tool_id_to_index,
+                &response_model_prefix,
+                is_first_chunk,
+            );
+            is_first_chunk = false;
             for chunk in openai_compatible_chunks {
-                let mut chunk_json = serde_json::to_value(chunk).map_err(|e| {
+                yield Event::default().json_data(&chunk).map_err(|e| {
                     Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to convert chunk to JSON: {e}"),
-                    })
-                })?;
-                if is_first_chunk {
-                    // OpenAI includes "assistant" role in the first chunk but not in the subsequent chunks
-                    chunk_json["choices"][0]["delta"]["role"] = serde_json::Value::String("assistant".to_string());
-                    is_first_chunk = false;
-                }
-
-                yield Event::default().json_data(chunk_json).map_err(|e| {
-                    Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to convert Value to Event: {e}"),
+                        message: format!("Failed to convert chunk to Event: {e}"),
                     })
                 })
             }
@@ -254,18 +267,13 @@ pub fn prepare_serialized_openai_compatible_events(
                     completion_tokens: total_usage.completion_tokens,
                     total_tokens: total_usage.total_tokens,
                 }),
+                tensorzero_raw_usage: if include_raw_usage {
+                    Some(raw_usage_entries.clone())
+                } else {
+                    None
+                },
             };
-            // Convert to JSON and add raw_usage if requested
-            let mut chunk_json = serde_json::to_value(usage_chunk).map_err(|e| {
-                Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to convert usage chunk to JSON: {e}"),
-                })
-            })?;
-            // Add raw_usage as a sibling to `usage` at the chunk JSON level if include_raw_usage is set (even if empty)
-            if include_raw_usage {
-                chunk_json["tensorzero_raw_usage"] = serde_json::to_value(&raw_usage_entries).unwrap_or_default();
-            }
-            yield Event::default().json_data(chunk_json).map_err(|e| {
+            yield Event::default().json_data(&usage_chunk).map_err(|e| {
                 Error::new(ErrorDetails::Inference {
                     message: format!("Failed to convert usage chunk to Event: {e}"),
                 })
