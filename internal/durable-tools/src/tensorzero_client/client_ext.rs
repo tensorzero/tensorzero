@@ -4,15 +4,21 @@
 //! handling both HTTP gateway and embedded gateway modes via the client's internal
 //! mode switching.
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use autopilot_client::AutopilotError;
+use evaluations::stats::EvaluationStats;
+use evaluations::types::{EvaluationCoreArgs, EvaluationVariant};
+use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_core_streaming};
 use tensorzero::{
-    Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
-    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
-    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
-    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
-    WriteConfigRequest, WriteConfigResponse,
+    Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams, ClientMode,
+    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
+    DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetConfigResponse,
+    GetDatapointsResponse, GetInferencesResponse, InferenceOutput, InferenceResponse,
+    ListDatapointsRequest, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -22,6 +28,7 @@ use tensorzero_core::endpoints::feedback::internal::{
 };
 use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
+use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_optimizers::endpoints::{
     LaunchOptimizationWorkflowParams, launch_optimization_workflow, poll_optimization,
@@ -29,8 +36,9 @@ use tensorzero_optimizers::endpoints::{
 use uuid::Uuid;
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, EvaluatorStatsResponse, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, RunEvaluationParams,
+    RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
 };
 
 /// Implementation of `TensorZeroClient` for the TensorZero SDK `Client`.
@@ -577,6 +585,133 @@ impl TensorZeroClient for Client {
                 .map_err(|e| {
                     TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
                 }),
+        }
+    }
+
+    async fn run_evaluation(
+        &self,
+        params: RunEvaluationParams,
+    ) -> Result<RunEvaluationResponse, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(_) => Err(TensorZeroClientError::NotSupported(
+                "run_evaluation is only supported in embedded gateway mode".to_string(),
+            )),
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                let app_state = &gateway.handle.app_state;
+
+                // Look up the evaluation config
+                let evaluation_config = app_state
+                    .config
+                    .evaluations
+                    .get(&params.evaluation_name)
+                    .ok_or_else(|| {
+                        TensorZeroClientError::Evaluation(format!(
+                            "Evaluation '{}' not found in config",
+                            params.evaluation_name
+                        ))
+                    })?
+                    .clone();
+
+                // Build function configs table for the evaluation
+                let function_configs: HashMap<String, EvaluationFunctionConfig> = app_state
+                    .config
+                    .functions
+                    .iter()
+                    .map(|(name, func)| {
+                        (name.clone(), EvaluationFunctionConfig::from(func.as_ref()))
+                    })
+                    .collect();
+                let function_configs = Arc::new(function_configs);
+
+                // Build a Client from our existing components
+                let tensorzero_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
+                    config: app_state.config.clone(),
+                    clickhouse_connection_info: app_state.clickhouse_connection_info.clone(),
+                    postgres_connection_info: app_state.postgres_connection_info.clone(),
+                    http_client: app_state.http_client.clone(),
+                    timeout: *timeout,
+                })
+                .build()
+                .await
+                .map_err(|e| {
+                    TensorZeroClientError::Evaluation(format!("Failed to build client: {e}"))
+                })?;
+
+                let evaluation_run_id = Uuid::now_v7();
+
+                let core_args = EvaluationCoreArgs {
+                    tensorzero_client,
+                    clickhouse_client: app_state.clickhouse_connection_info.clone(),
+                    evaluation_config,
+                    function_configs,
+                    dataset_name: params.dataset_name,
+                    datapoint_ids: params.datapoint_ids,
+                    variant: EvaluationVariant::Name(params.variant_name),
+                    evaluation_name: params.evaluation_name,
+                    evaluation_run_id,
+                    inference_cache: params.inference_cache,
+                    concurrency: params.concurrency,
+                };
+
+                // Run the evaluation with optional adaptive stopping via precision_targets
+                let result = run_evaluation_core_streaming(
+                    core_args,
+                    params.max_datapoints,
+                    params.precision_targets,
+                )
+                .await
+                .map_err(|e| {
+                    TensorZeroClientError::Evaluation(format!("Evaluation failed: {e}"))
+                })?;
+
+                let mut receiver = result.receiver;
+                let num_datapoints = result.run_info.num_datapoints;
+
+                // Collect evaluation results from the channel.
+                // We skip RunInfo since we already have that data from result.run_info.
+                // Success and Error updates are accumulated in evaluation_stats for
+                // computing final statistics. The dummy_writer discards serialized output
+                // since we only need the in-memory statistics, not CLI output.
+                let mut evaluation_stats =
+                    EvaluationStats::new(OutputFormat::Jsonl, num_datapoints);
+                let mut dummy_writer = std::io::sink();
+
+                while let Some(update) = receiver.recv().await {
+                    match update {
+                        EvaluationUpdate::RunInfo(_) => continue,
+                        update => {
+                            let _ = evaluation_stats.push(update, &mut dummy_writer);
+                        }
+                    }
+                }
+
+                // Compute statistics
+                let EvaluationConfig::Inference(inference_config) = &*result.evaluation_config;
+                let stats = evaluation_stats.compute_stats(&inference_config.evaluators);
+
+                // Convert to response format
+                let stats_response: HashMap<String, EvaluatorStatsResponse> = stats
+                    .into_iter()
+                    .map(|(name, s)| {
+                        (
+                            name,
+                            EvaluatorStatsResponse {
+                                mean: s.mean,
+                                stderr: s.stderr,
+                                count: s.count,
+                            },
+                        )
+                    })
+                    .collect();
+
+                Ok(RunEvaluationResponse {
+                    evaluation_run_id,
+                    num_datapoints,
+                    num_successes: evaluation_stats.evaluation_infos.len(),
+                    num_errors: evaluation_stats.evaluation_errors.len(),
+                    stats: stats_response,
+                })
+            }
         }
     }
 }
