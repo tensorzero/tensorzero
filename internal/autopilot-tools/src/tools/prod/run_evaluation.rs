@@ -8,7 +8,7 @@ use durable_tools::{
     CacheEnabledMode, RunEvaluationParams, RunEvaluationResponse, SimpleTool, SimpleToolContext,
     ToolError, ToolMetadata, ToolResult,
 };
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -78,6 +78,53 @@ impl ToolMetadata for RunEvaluationTool {
              specified variant, then runs the configured evaluators. Returns statistics \
              (mean, stderr, count) for each evaluator.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Run an evaluation on a dataset using configured evaluators.",
+            "properties": {
+                "evaluation_name": {
+                    "type": "string",
+                    "description": "Name of the evaluation to run (must be defined in config)."
+                },
+                "dataset_name": {
+                    "type": "string",
+                    "description": "Name of the dataset to evaluate on. Either dataset_name or datapoint_ids must be provided, but not both."
+                },
+                "datapoint_ids": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "uuid" },
+                    "description": "Specific datapoint IDs to evaluate. Either dataset_name or datapoint_ids must be provided, but not both."
+                },
+                "variant_name": {
+                    "type": "string",
+                    "description": "Name of the variant to evaluate."
+                },
+                "concurrency": {
+                    "type": "integer",
+                    "description": "Number of concurrent inference requests (default: 10)."
+                },
+                "max_datapoints": {
+                    "type": "integer",
+                    "description": "Maximum number of datapoints to evaluate from the dataset (optional)."
+                },
+                "precision_targets": {
+                    "type": "object",
+                    "description": "Precision targets for adaptive stopping. Maps evaluator names to target confidence interval half-widths.",
+                    "additionalProperties": { "type": "number" }
+                },
+                "inference_cache": {
+                    "type": "string",
+                    "enum": ["on", "off", "read_only"],
+                    "description": "Cache configuration for inference requests (default: 'on')."
+                }
+            },
+            "required": ["evaluation_name", "variant_name"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 
