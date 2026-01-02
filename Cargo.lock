@@ -1826,7 +1826,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?branch=viraj%2Fimprove-spawn-defaults#c456a351d4067d04ad9d549dc5c02ff9cb4be6b4"
+source = "git+https://github.com/tensorzero/durable?rev=ca986b6042829d924d413fc0f42d3bbd87b2df70#ca986b6042829d924d413fc0f42d3bbd87b2df70"
 dependencies = [
  "anyhow",
  "async-trait",
