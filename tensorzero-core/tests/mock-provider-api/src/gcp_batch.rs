@@ -1,7 +1,7 @@
 use axum::{Json, extract::Path, http::StatusCode};
 use bytes::Bytes;
-use object_store::ObjectStore;
 use object_store::gcp::GoogleCloudStorageBuilder;
+use object_store::{ObjectStore, ObjectStoreExt};
 use serde::Deserialize;
 use serde_json::json;
 use std::{

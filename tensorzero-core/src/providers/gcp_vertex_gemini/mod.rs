@@ -13,7 +13,7 @@ use http::{HeaderMap, HeaderValue};
 use itertools::Itertools;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
-use object_store::{ObjectStore, StaticCredentialProvider};
+use object_store::{ObjectStore, ObjectStoreExt, StaticCredentialProvider};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
