@@ -70,10 +70,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     return { rows, hasMore };
   })();
 
+  // Promise for function counts (for FunctionSelector filtering)
+  const functionCountsPromise = getTensorZeroClient()
+    .getDatapointCountsByFunction(dataset_name)
+    .then((response) => response.counts);
+
   return {
     dataset_name,
     countPromise,
     dataPromise,
+    functionCountsPromise,
     limit,
     offset,
     rowsAdded,
@@ -144,6 +150,7 @@ export default function DatasetDetailPage({
     dataset_name,
     countPromise,
     dataPromise,
+    functionCountsPromise,
     limit,
     offset,
     rowsAdded,
@@ -190,6 +197,7 @@ export default function DatasetDetailPage({
         <DatasetRowSearchBar dataset_name={dataset_name} />
         <DatasetRowTable
           data={dataPromise}
+          functionCountsPromise={functionCountsPromise}
           dataset_name={dataset_name}
           limit={limit}
           offset={offset}
