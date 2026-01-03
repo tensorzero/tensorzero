@@ -131,6 +131,7 @@ fn mock_success(
             input_tokens: Some(0),
             output_tokens: Some(0),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     });

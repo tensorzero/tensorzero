@@ -1711,6 +1711,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             input_tokens: Some(0),
             output_tokens: Some(0),
         },
+        raw_usage: None,
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
@@ -1888,6 +1889,7 @@ async fn test_run_llm_judge_evaluator_json() {
             input_tokens: Some(0),
             output_tokens: Some(0),
         },
+        raw_usage: None,
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Json(JsonInferenceDatapoint {

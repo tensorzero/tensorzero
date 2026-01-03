@@ -1,4 +1,4 @@
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
+#![expect(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
 
 mod common;
 

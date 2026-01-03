@@ -669,6 +669,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         stream: Some(false),
         params: InferenceParams::default(),
         include_original_response: false,
+        include_raw_usage: false,
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),

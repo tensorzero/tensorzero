@@ -1273,6 +1273,7 @@ async fn test_embedding_request() {
                     api_key_public_id: None,
                 },
                 relay: None,
+                include_raw_usage: false,
             },
         )
         .await
@@ -1363,6 +1364,7 @@ async fn test_embedding_request() {
                     api_key_public_id: None,
                 },
                 relay: None,
+                include_raw_usage: false,
             },
         )
         .await
@@ -1439,6 +1441,7 @@ async fn test_embedding_sanity_check() {
             api_key_public_id: None,
         },
         relay: None,
+        include_raw_usage: false,
     };
 
     // Compute all 3 embeddings concurrently

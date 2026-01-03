@@ -1,13 +1,13 @@
-#![allow(
+#![expect(
     clippy::expect_used,
     clippy::unwrap_used,
     clippy::print_stdout,
     clippy::print_stderr
 )]
 
-mod common;
-
-use common::{gateway_path, relay::start_relay_test_environment, start_gateway_on_random_port};
+use crate::common::{
+    gateway_path, relay::start_relay_test_environment, start_gateway_on_random_port,
+};
 use reqwest::Client;
 use serde_json::json;
 use std::process::Stdio;

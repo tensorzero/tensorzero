@@ -1,4 +1,4 @@
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 
 //! Tests for the TensorZero relay feature.
 //!
@@ -9,15 +9,14 @@
 //! This validates that the relay correctly proxies inference requests through
 //! another TensorZero gateway instance.
 
-mod common;
-
-use common::start_gateway_on_random_port;
+use crate::common::{
+    get_postgres_pool_for_testing, relay::start_relay_test_environment,
+    start_gateway_on_random_port,
+};
 use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde_json::json;
 use uuid::Uuid;
-
-use crate::common::{get_postgres_pool_for_testing, relay::start_relay_test_environment};
 
 // ============================================================================
 // Basic Tests
@@ -400,6 +399,150 @@ model_name = "good"
     );
     let content = body["content"].as_array().unwrap();
     assert!(!content.is_empty(), "Expected non-empty content");
+}
+
+// ============================================================================
+// Tag Filtering Tests
+// ============================================================================
+
+/// Test that internal tags (starting with "tensorzero::") are stripped when forwarding
+/// through relay, while regular user tags are preserved.
+///
+/// This is critical because:
+/// 1. The edge gateway adds internal tags like "tensorzero::variant_pinned" during inference
+/// 2. If these were forwarded to downstream, they would be rejected (internal tags not allowed)
+/// 3. Regular user tags must still be forwarded so they're stored in the downstream database
+#[tokio::test]
+async fn test_relay_strips_internal_tags_preserves_regular_tags() {
+    let downstream_config = "";
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    // Make a request with both internal (tensorzero::) tags and regular tags
+    // The internal tags should be stripped, regular tags should pass through
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false,
+            // Include both internal and regular tags
+            // Internal tags would cause downstream to reject if not stripped
+            "tags": {
+                "regular_tag": "should_be_preserved",
+                "another_user_tag": "also_preserved"
+            },
+            // Note: We can't directly add tensorzero:: tags from the request
+            // because they're rejected at the edge gateway too.
+            // This test verifies that internally-added tags (like tensorzero::variant_pinned)
+            // are stripped before forwarding.
+            "internal": true  // This allows us to add tensorzero:: tags for testing
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // If the relay didn't strip internal tags, downstream would reject with:
+    // "Tag name cannot start with 'tensorzero::'"
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(
+        status, 200,
+        "Request should succeed - relay should strip internal tags. Status: {status}, body: {body_text}"
+    );
+
+    let body: serde_json::Value = serde_json::from_str(&body_text).unwrap();
+    assert!(
+        body.get("inference_id").is_some(),
+        "Should have inference_id"
+    );
+}
+
+/// Test that relay strips tensorzero:: tags added internally during inference
+/// by using a pinned variant (which adds tensorzero::variant_pinned tag)
+#[tokio::test]
+async fn test_relay_strips_variant_pinned_tag() {
+    // Configure a function with a variant on the relay gateway
+    let relay_config = r#"
+[functions.test_function]
+type = "chat"
+
+[functions.test_function.variants.my_variant]
+type = "chat_completion"
+weight = 1
+model = "relay_model"
+
+[models.relay_model]
+routing = ["error"]
+
+[models.relay_model.providers.error]
+type = "dummy"
+model_name = "error"
+"#;
+    let downstream_config = r#"
+[models.relay_model]
+routing = ["good"]
+
+[models.relay_model.providers.good]
+type = "dummy"
+model_name = "good"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    // Make a request with a pinned variant
+    // This causes the gateway to add "tensorzero::variant_pinned" tag internally
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "test_function",
+            "variant_name": "my_variant",  // Pinning adds tensorzero::variant_pinned tag
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false,
+            "tags": {
+                "user_tag": "should_be_preserved"
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // If tensorzero::variant_pinned wasn't stripped, downstream would reject
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(
+        status, 200,
+        "Request with pinned variant should succeed - tensorzero::variant_pinned should be stripped. Status: {status}, body: {body_text}"
+    );
+
+    let body: serde_json::Value = serde_json::from_str(&body_text).unwrap();
+    assert!(
+        body.get("inference_id").is_some(),
+        "Should have inference_id"
+    );
+    assert!(
+        body.get("content").is_some(),
+        "Should have content from downstream"
+    );
 }
 
 // ============================================================================

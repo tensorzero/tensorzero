@@ -9,6 +9,7 @@
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
   - Run unit tests with `cargo test-unit-fast` which uses `nextest` under the hood.
 - When writing tests, key assertions should include a custom message stating the expected behavior.
+- Use `#[expect(clippy::...)]` instead of `#[allow(clippy::...)]`.
 
 ## For APIs
 

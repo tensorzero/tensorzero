@@ -17,6 +17,7 @@ use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
@@ -345,6 +346,8 @@ pub fn stream_inference_from_non_stream(
     // We set the 'cached' flag on the 'ModelUsedInfo, which will adjust the usage as needed when producing
     // the HTTP response stream.
     let usage = model_inference_result.usage;
+    // Preserve raw_usage entries from the selected candidate for fake streaming.
+    let raw_usage_entries = model_inference_result.raw_usage.clone();
     let model_used_info = ModelUsedInfo {
         model_name: model_inference_result.model_name.clone(),
         model_provider_name: model_inference_result.model_provider_name.clone(),
@@ -367,14 +370,16 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
+        model_inference_id: model_inference_result.id,
     };
-    let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
+    let stream = make_stream_from_non_stream(inference_result, Some(usage), raw_usage_entries)?;
     Ok((stream, model_used_info))
 }
 
 fn make_stream_from_non_stream(
     inference_result: InferenceResult,
     usage: Option<Usage>,
+    raw_usage_entries: Option<Vec<RawUsageEntry>>,
 ) -> Result<InferenceResultStream, Error> {
     let mut id = 0;
     let chunk = match inference_result {
@@ -422,10 +427,11 @@ fn make_stream_from_non_stream(
             Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: content_blocks,
                 created: chat.created,
-                usage,
                 latency: tokio::time::Duration::from_secs(0),
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
+                usage,
+                raw_usage: raw_usage_entries.clone(),
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -433,6 +439,7 @@ fn make_stream_from_non_stream(
             thought: None,
             created: json.created,
             usage,
+            raw_usage: raw_usage_entries,
             latency: tokio::time::Duration::from_secs(0),
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
@@ -1159,6 +1166,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1193,6 +1201,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1246,6 +1255,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1283,6 +1293,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1361,6 +1372,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1395,6 +1407,7 @@ mod tests {
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1459,6 +1472,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1763,6 +1777,7 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
             }),
+            None, // raw_usage_entries
         )
         .unwrap();
 
@@ -1811,6 +1826,7 @@ mod tests {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
                 }),
+                raw_usage: None,
                 latency: std::time::Duration::from_secs(0),
                 raw_response: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),

@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
-
 use std::sync::Arc;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::http::TensorzeroHttpClient;

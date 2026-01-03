@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used, clippy::panic)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 use chrono::{Duration, Utc};
 use secrecy::ExposeSecret;

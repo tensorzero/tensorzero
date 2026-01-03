@@ -39,7 +39,7 @@ repos:
 
       - id: cargo-fmt
         name: cargo fmt
-        entry: cargo fmt -- --check
+        entry: cargo fmt
         language: system
         types: [rust]
         pass_filenames: false

@@ -364,6 +364,7 @@ async fn embed_insert_example(
             api_key_public_id: None,
         },
         relay: None,
+        include_raw_usage: false,
     };
 
     let response = provider_config

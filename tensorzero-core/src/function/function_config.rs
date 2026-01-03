@@ -1886,6 +1886,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -1953,6 +1954,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2006,6 +2008,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2061,6 +2064,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2114,6 +2118,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2167,6 +2172,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2239,6 +2245,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2286,6 +2293,7 @@ mod tests {
             finish_reason: None,
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2340,6 +2348,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2392,6 +2401,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2451,6 +2461,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(

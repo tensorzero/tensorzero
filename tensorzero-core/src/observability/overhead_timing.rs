@@ -251,7 +251,7 @@ where
 // Constructing our `Error` type or using `tracing::error!` would cause our `OverheadTimingLayer` to potentially
 // get called re-entrantly (while the original span is still active).
 fn error_within_tracing(message: &str) {
-    #![allow(clippy::print_stderr)]
+    #![expect(clippy::print_stderr)]
     eprintln!(
         "ERROR: Internal error in TensorZero tracing code: {message}. {IMPOSSIBLE_ERROR_MESSAGE}"
     );

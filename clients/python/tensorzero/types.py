@@ -22,6 +22,23 @@ from tensorzero.generated_types import (
     OmitType,
 )
 
+# API type for model inferences (used in raw usage reporting)
+ApiType = Literal["chat_completions", "responses", "embeddings"]
+
+
+@dataclass
+class RawUsageEntry:
+    """A single entry in the raw usage array, representing usage data from one model inference.
+
+    This preserves the original provider-specific usage object for fields that TensorZero
+    normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
+    """
+
+    model_inference_id: UUID
+    provider_type: str
+    api_type: ApiType
+    data: Optional[Dict[str, Any]] = None
+
 
 @dataclass
 class Usage:
@@ -194,6 +211,7 @@ class ChatInferenceResponse:
     variant_name: str
     content: List[ContentBlock]
     usage: Usage
+    raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
     original_response: Optional[str] = None
 
@@ -205,6 +223,7 @@ class JsonInferenceResponse:
     variant_name: str
     output: JsonInferenceOutput
     usage: Usage
+    raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
     original_response: Optional[str] = None
 
@@ -233,6 +252,23 @@ class EvaluatorStatsDict(TypedDict):
 InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 
 
+def parse_raw_usage_entry(entry: Dict[str, Any]) -> RawUsageEntry:
+    return RawUsageEntry(
+        model_inference_id=UUID(entry["model_inference_id"]),
+        provider_type=entry["provider_type"],
+        api_type=entry["api_type"],
+        data=entry.get("data"),
+    )
+
+
+def parse_raw_usage(
+    raw_usage_data: Optional[List[Dict[str, Any]]],
+) -> Optional[List[RawUsageEntry]]:
+    if raw_usage_data is None:
+        return None
+    return [parse_raw_usage_entry(entry) for entry in raw_usage_data]
+
+
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
     if "content" in data and isinstance(data["content"], list):
         finish_reason = data.get("finish_reason")
@@ -244,6 +280,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             variant_name=data["variant_name"],
             content=[parse_content_block(block) for block in data["content"]],  # type: ignore
             usage=Usage(**data["usage"]),
+            raw_usage=parse_raw_usage(data.get("raw_usage")),
             finish_reason=finish_reason_enum,
             original_response=data.get("original_response"),
         )
@@ -258,6 +295,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             variant_name=data["variant_name"],
             output=JsonInferenceOutput(**output),
             usage=Usage(**data["usage"]),
+            raw_usage=parse_raw_usage(data.get("raw_usage")),
             finish_reason=finish_reason_enum,
             original_response=data.get("original_response"),
         )
@@ -352,6 +390,7 @@ class ChatChunk:
     variant_name: str
     content: List[ContentBlockChunk]
     usage: Optional[Usage] = None
+    raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
 
 
@@ -362,6 +401,7 @@ class JsonChunk:
     variant_name: str
     raw: str
     usage: Optional[Usage] = None
+    raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
 
 
@@ -379,6 +419,7 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             variant_name=chunk["variant_name"],
             content=[parse_content_block_chunk(block) for block in chunk["content"]],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
+            raw_usage=parse_raw_usage(chunk.get("raw_usage")),
             finish_reason=finish_reason_enum,
         )
     elif "raw" in chunk:
@@ -388,6 +429,7 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             variant_name=chunk["variant_name"],
             raw=chunk["raw"],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
+            raw_usage=parse_raw_usage(chunk.get("raw_usage")),
             finish_reason=finish_reason_enum,
         )
     else:

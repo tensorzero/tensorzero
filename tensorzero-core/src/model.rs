@@ -15,6 +15,7 @@ use tracing::{Level, Span, span};
 use tracing_futures::{Instrument, Instrumented};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
+use uuid::Uuid;
 
 use crate::cache::{
     CacheData, CacheValidationInfo, ModelProviderRequest, NonStreamingCacheData,
@@ -41,7 +42,7 @@ use crate::inference::types::batch::{
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
-    ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
+    ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
     current_timestamp,
 };
@@ -163,12 +164,14 @@ pub struct StreamResponse {
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
     pub cached: bool,
+    pub model_inference_id: Uuid,
 }
 
 impl StreamResponse {
     pub fn from_cache(
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
+        model_inference_id: Uuid,
     ) -> Self {
         let chunks = cache_lookup.output.chunks;
         let chunks_len = chunks.len();
@@ -186,6 +189,8 @@ impl StreamResponse {
                         // Use the real usage (so that the `ModelInference` row we write is accurate)
                         // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
                         usage: c.usage,
+                        // raw_usage is not cached
+                        raw_usage: None,
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
@@ -206,6 +211,7 @@ impl StreamResponse {
             raw_request: cache_lookup.raw_request,
             model_provider_name,
             cached: true,
+            model_inference_id,
         }
     }
 }
@@ -435,6 +441,7 @@ impl ModelConfig {
                 raw_request,
                 model_provider_name: model_provider_request.provider_name.into(),
                 cached: false,
+                model_inference_id: model_provider_request.model_inference_id,
             },
             messages: model_provider_request.request.messages.clone(),
         })
@@ -481,6 +488,7 @@ impl ModelConfig {
                     model_name,
                     provider_name,
                     otlp_config: &clients.otlp_config,
+                    model_inference_id: Uuid::now_v7(),
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
 
@@ -593,6 +601,7 @@ impl ModelConfig {
                         raw_request,
                         model_provider_name: "tensorzero::relay".into(),
                         cached: false,
+                        model_inference_id: Uuid::now_v7(),
                     },
                     messages: request.messages.clone(),
                 });
@@ -609,6 +618,7 @@ impl ModelConfig {
                     model_name,
                     provider_name,
                     otlp_config: &clients.otlp_config,
+                    model_inference_id: Uuid::now_v7(),
                 };
 
                 // This future includes a call to `peek_first_chunk`, so applying
@@ -737,13 +747,13 @@ async fn wrap_provider_stream(
         let mut total_usage: Option<Usage> = None;
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref()
-                && let Some(chunk_usage) = &chunk.usage {
-                    // `total_usage` will be `None` if this is the first chunk with usage information....
-                    if total_usage.is_none() {
-                        // ... so initialize it to zero ...
-                        total_usage = Some(Usage::zero());
-                    }
-                    // ...and then add the chunk usage to it (handling `None` fields)
+                && let Some(chunk_usage) = chunk.usage.as_ref() {
+                // `total_usage` will be `None` if this is the first chunk with usage information....
+                if total_usage.is_none() {
+                    // ... so initialize it to zero ...
+                    total_usage = Some(Usage::zero());
+                }
+                // ...and then add the chunk usage to it (handling `None` fields)
                     if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
                 }
             // We can skip cloning the chunk if we know we're not going to write to the cache
@@ -878,6 +888,11 @@ impl ModelProvider {
 
     /// The name to report in the OTEL `gen_ai.system` attribute
     fn genai_system_name(&self) -> &'static str {
+        self.provider_type()
+    }
+
+    /// The provider type string (e.g., "openai", "anthropic")
+    pub fn provider_type(&self) -> &'static str {
         match &self.config {
             ProviderConfig::Anthropic(_) => "anthropic",
             ProviderConfig::AWSBedrock(_) => "aws_bedrock",
@@ -900,6 +915,18 @@ impl ModelProvider {
             ProviderConfig::DeepSeek(_) => "deepseek",
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(_) => "dummy",
+        }
+    }
+
+    /// The API type used by this provider (e.g., ChatCompletions, Responses)
+    pub fn api_type(&self) -> ApiType {
+        match &self.config {
+            ProviderConfig::OpenAI(provider) => match provider.api_type() {
+                OpenAIAPIType::ChatCompletions => ApiType::ChatCompletions,
+                OpenAIAPIType::Responses => ApiType::Responses,
+            },
+            // All other providers use ChatCompletions API
+            _ => ApiType::ChatCompletions,
         }
     }
 
@@ -2608,6 +2635,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         // Try inferring the good model only
@@ -2740,6 +2768,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -2757,6 +2786,7 @@ mod tests {
             model_name: "test",
             provider_name: "test_provider",
             otlp_config: &Default::default(),
+            model_inference_id: Uuid::now_v7(),
         };
 
         // Should fail with RateLimitMissingMaxTokens
@@ -2784,6 +2814,7 @@ mod tests {
             model_name: "test",
             provider_name: "test_provider",
             otlp_config: &Default::default(),
+            model_inference_id: Uuid::now_v7(),
         };
 
         let result = provider
@@ -2827,6 +2858,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2962,6 +2994,7 @@ mod tests {
                     raw_request,
                     model_provider_name,
                     cached: _,
+                    model_inference_id: _,
                 },
             messages: _input,
         } = model_config
@@ -2985,6 +3018,7 @@ mod tests {
                         api_key_public_id: None,
                     },
                     relay: None,
+                    include_raw_usage: false,
                 },
                 "my_model",
             )
@@ -3060,6 +3094,7 @@ mod tests {
                         api_key_public_id: None,
                     },
                     relay: None,
+                    include_raw_usage: false,
                 },
                 "my_model",
             )
@@ -3159,6 +3194,7 @@ mod tests {
                     raw_request,
                     model_provider_name,
                     cached: _,
+                    model_inference_id: _,
                 },
             messages: _,
         } = model_config
@@ -3182,6 +3218,7 @@ mod tests {
                         api_key_public_id: None,
                     },
                     relay: None,
+                    include_raw_usage: false,
                 },
                 "my_model",
             )
@@ -3266,6 +3303,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3328,6 +3366,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3393,6 +3432,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3454,6 +3494,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)

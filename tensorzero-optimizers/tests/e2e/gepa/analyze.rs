@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::missing_panics_doc)]
+#![expect(clippy::unwrap_used, clippy::expect_used, clippy::missing_panics_doc)]
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -356,6 +356,7 @@ pub fn create_test_evaluation_info(
             text: output_text.to_string(),
         })],
         usage: Usage::default(),
+        raw_usage: None,
         original_response: None,
         finish_reason: Some(FinishReason::Stop),
     });
@@ -860,6 +861,7 @@ async fn test_analyze_input_format_scenarios() {
                     },
                 )],
                 usage: tensorzero_core::inference::types::Usage::default(),
+                raw_usage: None,
                 original_response: None,
                 finish_reason: Some(tensorzero_core::inference::types::FinishReason::Stop),
             },

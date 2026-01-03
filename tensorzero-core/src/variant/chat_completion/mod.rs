@@ -1303,6 +1303,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let system_template = get_system_template();
@@ -2319,6 +2320,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let templates = Box::leak(Box::new(get_test_template_config().await));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();

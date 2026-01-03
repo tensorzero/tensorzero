@@ -331,6 +331,7 @@ export function prepareInferenceActionRequest(
       enabled: "on",
     },
     include_original_response: false,
+    include_raw_usage: false,
     internal_dynamic_variant_config: null,
   };
 

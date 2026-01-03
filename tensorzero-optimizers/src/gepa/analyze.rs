@@ -500,6 +500,7 @@ mod tests {
                 text: text.to_string(),
             })],
             usage: Usage::default(),
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         })

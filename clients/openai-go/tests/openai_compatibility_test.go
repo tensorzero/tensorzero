@@ -57,8 +57,9 @@ func systemMessageWithAssistant(t *testing.T, assistant_name string) *openai.Cha
 	data := map[string]interface{}{
 		"content": []map[string]interface{}{
 			{
-				"type": "text",
-				"tensorzero::arguments": map[string]interface{}{
+				"type":      "tensorzero::template",
+				"name":      "system",
+				"arguments": map[string]interface{}{
 					"assistant_name": assistant_name,
 				},
 			},

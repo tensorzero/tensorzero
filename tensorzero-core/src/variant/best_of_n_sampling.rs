@@ -1081,6 +1081,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1118,6 +1119,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1174,6 +1176,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1214,6 +1217,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::ToolCall),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1286,6 +1290,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1323,6 +1328,7 @@ mod tests {
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1387,6 +1393,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let input = LazyResolvedInput {
             system: None,

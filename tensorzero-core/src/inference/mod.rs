@@ -21,6 +21,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::pin::Pin;
 use tokio::time::Instant;
+use uuid::Uuid;
 
 /// A helper type for preserving custom errors when working with `reqwest_eventsource`
 /// This is currently used by `stream_openai` to allow using it with a provider
@@ -77,6 +78,7 @@ pub trait WrappedProvider: Debug {
         request: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error>;
 
+    #[expect(clippy::too_many_arguments)]
     fn parse_response(
         &self,
         request: &ModelInferenceRequest,
@@ -85,6 +87,7 @@ pub trait WrappedProvider: Debug {
         latency: Latency,
         model_name: &str,
         provider_name: &str,
+        model_inference_id: Uuid,
     ) -> Result<ProviderInferenceResponse, Error>;
 
     fn stream_events(
@@ -94,5 +97,6 @@ pub trait WrappedProvider: Debug {
         >,
         start_time: Instant,
         raw_request: &str,
+        model_inference_id: Uuid,
     ) -> ProviderInferenceResponseStreamInner;
 }

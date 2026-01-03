@@ -1,4 +1,4 @@
-#![allow(non_snake_case)]
+#![expect(non_snake_case)]
 use clarabel::algebra::CscMatrix;
 use clarabel::solver::SolverStatus;
 use clarabel::solver::{

@@ -375,6 +375,18 @@ weight = 0
 model = "json"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+[functions.best_of_n.variants.openai_variant0]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n.variants.openai_variant1]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
 [functions.best_of_n.variants.best_of_n_variant]
 type = "experimental_best_of_n_sampling"
 weight = 1
@@ -382,6 +394,15 @@ candidates = ["variant0", "variant1"]
 
 [functions.best_of_n.variants.best_of_n_variant.evaluator]
 model = "gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n.variants.best_of_n_variant_openai]
+type = "experimental_best_of_n_sampling"
+weight = 0
+candidates = ["openai_variant0", "openai_variant1"]
+
+[functions.best_of_n.variants.best_of_n_variant_openai.evaluator]
+model = "gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.best_of_n_variant_extra_body]
