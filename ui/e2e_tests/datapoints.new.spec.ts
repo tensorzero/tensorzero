@@ -28,12 +28,12 @@ test.describe("New Datapoint Page", () => {
     await page.locator("[cmdk-item]").filter({ hasText: datasetName }).click();
 
     // Select function (chat type)
-    await page.getByTestId("function-selector").getByRole("combobox").click();
-    await page.getByPlaceholder("Find a function...").fill("write_haiku");
-    await page
-      .locator("[cmdk-item]")
-      .filter({ hasText: "write_haiku" })
-      .click();
+    const functionInput = page
+      .getByTestId("function-selector")
+      .getByPlaceholder("Select function");
+    await functionInput.click();
+    await functionInput.fill("write_haiku");
+    await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Wait for form sections to appear
     await expect(page.getByRole("heading", { name: "Input" })).toBeVisible();
@@ -142,12 +142,12 @@ test.describe("New Datapoint Page", () => {
     await page.locator("[cmdk-item]").filter({ hasText: datasetName }).click();
 
     // Select function (JSON type)
-    await page.getByTestId("function-selector").getByRole("combobox").click();
-    await page.getByPlaceholder("Find a function...").fill("extract_entities");
-    await page
-      .locator("[cmdk-item]")
-      .filter({ hasText: "extract_entities" })
-      .click();
+    const functionInput = page
+      .getByTestId("function-selector")
+      .getByPlaceholder("Select function");
+    await functionInput.click();
+    await functionInput.fill("extract_entities");
+    await page.getByRole("option", { name: "extract_entities" }).click();
 
     // Wait for form sections to appear
     await expect(page.getByRole("heading", { name: "Input" })).toBeVisible();
@@ -240,23 +240,20 @@ test.describe("New Datapoint Page", () => {
       .click();
 
     // Select JSON function first
-    await page.getByTestId("function-selector").getByRole("combobox").click();
-    await page.getByPlaceholder("Find a function...").fill("extract_entities");
-    await page
-      .locator("[cmdk-item]")
-      .filter({ hasText: "extract_entities" })
-      .click();
+    const functionInput = page
+      .getByTestId("function-selector")
+      .getByPlaceholder("Select function");
+    await functionInput.click();
+    await functionInput.fill("extract_entities");
+    await page.getByRole("option", { name: "extract_entities" }).click();
 
     // Wait for JSON output section with Schema tab
     await expect(page.getByRole("tab", { name: "Schema" })).toBeVisible();
 
     // Switch to chat function
-    await page.getByTestId("function-selector").getByRole("combobox").click();
-    await page.getByPlaceholder("Find a function...").fill("write_haiku");
-    await page
-      .locator("[cmdk-item]")
-      .filter({ hasText: "write_haiku" })
-      .click();
+    await functionInput.click();
+    await functionInput.fill("write_haiku");
+    await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Verify chat output renders without error (no Schema tab for chat)
     await expect(page.getByRole("heading", { name: "Output" })).toBeVisible();
