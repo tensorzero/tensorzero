@@ -955,6 +955,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 level: MetricConfigLevel::Inference,
                 optimize: MetricConfigOptimize::Max,
+                description: None,
             },
         );
         let config = Config {
@@ -1071,6 +1072,7 @@ mod tests {
             r#type: MetricConfigType::Boolean,
             level: MetricConfigLevel::Episode,
             optimize: MetricConfigOptimize::Max,
+            description: None,
         };
         let mut metrics = HashMap::new();
         metrics.insert("test_metric".to_string(), metric_config);
@@ -1223,6 +1225,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 level: MetricConfigLevel::Episode,
                 optimize: MetricConfigOptimize::Max,
+                description: None,
             },
         );
         let config = Arc::new(Config {
@@ -1295,6 +1298,7 @@ mod tests {
                 r#type: MetricConfigType::Boolean,
                 level: MetricConfigLevel::Inference,
                 optimize: MetricConfigOptimize::Max,
+                description: None,
             },
         );
         let config = Arc::new(Config {

@@ -257,6 +257,7 @@ async fn test_count_feedbacks_for_float_metric() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     let params = CountInferencesWithFeedbackParams {
@@ -288,6 +289,7 @@ async fn test_count_feedbacks_for_boolean_metric() {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     let params = CountInferencesWithFeedbackParams {
@@ -319,6 +321,7 @@ async fn test_count_inferences_with_threshold_float_metric() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     // First get total feedbacks
@@ -365,6 +368,7 @@ async fn test_count_inferences_with_threshold_boolean_metric_max() {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
 
     // First get total feedbacks
@@ -429,6 +433,7 @@ async fn test_count_feedbacks_for_episode_level_boolean_metric() {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Episode,
+        description: None,
     };
 
     let params = CountInferencesWithFeedbackParams {
@@ -459,6 +464,7 @@ async fn test_count_feedbacks_for_episode_level_float_metric() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Episode,
+        description: None,
     };
 
     let params = CountInferencesWithFeedbackParams {

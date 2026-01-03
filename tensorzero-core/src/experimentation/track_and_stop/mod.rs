@@ -2789,6 +2789,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 
@@ -2823,6 +2824,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 
@@ -2856,6 +2858,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 
@@ -2889,6 +2892,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 
@@ -2925,6 +2929,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 

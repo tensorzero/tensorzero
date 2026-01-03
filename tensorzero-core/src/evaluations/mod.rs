@@ -430,6 +430,7 @@ impl UninitializedEvaluatorConfig {
                     r#type: MetricConfigType::Boolean,
                     optimize: MetricConfigOptimize::Max,
                     level: MetricConfigLevel::Inference,
+                    description: None,
                 },
             )),
             UninitializedEvaluatorConfig::LLMJudge(params) => {
@@ -557,6 +558,7 @@ impl UninitializedEvaluatorConfig {
                         r#type: params.output_type.into(),
                         optimize: params.optimize.into(),
                         level: MetricConfigLevel::Inference,
+                        description: None,
                     },
                 ))
             }
