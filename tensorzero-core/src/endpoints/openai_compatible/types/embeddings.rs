@@ -141,7 +141,7 @@ mod tests {
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
         assert!(logs_contain(
-            "Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"
+            "Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"
         ));
     }
 
@@ -162,7 +162,7 @@ mod tests {
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
         assert!(!logs_contain(
-            "Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"
+            "Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"
         ));
     }
 }

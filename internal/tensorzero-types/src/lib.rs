@@ -12,7 +12,7 @@ pub mod storage;
 pub mod tool;
 
 pub(crate) fn deprecation_warning(message: &str) {
-    tracing::warn!("Deprecation warning: {message}");
+    tracing::warn!("Deprecation Warning: {message}");
 }
 
 // Re-export all public types at the crate root for convenience

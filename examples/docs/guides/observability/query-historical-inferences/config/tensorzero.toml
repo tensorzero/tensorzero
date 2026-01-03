@@ -1,0 +1,2 @@
+# Minimal configuration for querying historical inferences
+# This example uses the model_name shortcut (no explicit model/variant config needed)
