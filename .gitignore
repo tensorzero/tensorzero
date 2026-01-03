@@ -58,3 +58,4 @@ clients/rust/bindings/
 internal/tensorzero-node/bindings/
 *.junit.xml
 tensorzero-core/schemas
+dev-config/
