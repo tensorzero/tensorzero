@@ -153,6 +153,7 @@ assigning_clones = "deny"
 stable_sort_primitive = "deny"
 ref_option = "deny"
 unnecessary_literal_bound = "deny"
+unused_async = "deny"
 
 # The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
 default_trait_access = "allow"

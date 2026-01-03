@@ -1090,6 +1090,7 @@ pub async fn setup_observability(
     .await
 }
 
+#[expect(clippy::unused_async)]
 pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'static>(
     log_format: LogFormat,
     exporter_override: Option<T>,

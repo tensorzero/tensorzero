@@ -103,11 +103,11 @@ impl DummyProvider {
         }
     }
 
-    async fn create_streaming_reasoning_response(
+    fn create_streaming_reasoning_response(
         &self,
         thinking_chunks: Vec<&'static str>,
         response_chunks: Vec<&'static str>,
-    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
+    ) -> (PeekableProviderInferenceResponseStream, String) {
         let thinking_chunks = thinking_chunks.into_iter().map(|chunk| {
             ContentBlockChunk::Thought(ThoughtChunk {
                 text: Some(chunk.to_string()),
@@ -128,7 +128,7 @@ impl DummyProvider {
         let created = current_timestamp();
         let chained = thinking_chunks
             .into_iter()
-            .chain(response_chunks.into_iter());
+            .chain(response_chunks);
         let total_tokens = num_chunks as u32;
         let stream = tokio_stream::iter(chained.enumerate())
             .map(move |(i, chunk)| {
@@ -151,10 +151,10 @@ impl DummyProvider {
             })))
             .throttle(std::time::Duration::from_millis(10));
 
-        Ok((
+        (
             futures::stream::StreamExt::peekable(Box::pin(stream)),
             DUMMY_RAW_REQUEST.to_string(),
-        ))
+        )
     }
 }
 
@@ -685,25 +685,22 @@ impl InferenceProvider for DummyProvider {
             }
         }
         if self.model_name == "reasoner" {
-            return self
-                .create_streaming_reasoning_response(
-                    DUMMY_STREAMING_THINKING.to_vec(),
-                    DUMMY_STREAMING_RESPONSE.to_vec(),
-                )
-                .await;
+            return Ok(self.create_streaming_reasoning_response(
+                DUMMY_STREAMING_THINKING.to_vec(),
+                DUMMY_STREAMING_RESPONSE.to_vec(),
+            ));
         }
         if self.model_name == "json_reasoner" {
-            return self
-                .create_streaming_reasoning_response(
-                    DUMMY_STREAMING_THINKING.to_vec(),
-                    DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
-                )
-                .await;
+            return Ok(self.create_streaming_reasoning_response(
+                DUMMY_STREAMING_THINKING.to_vec(),
+                DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
+            ));
         }
         if self.model_name == "json" {
-            return self
-                .create_streaming_reasoning_response(vec![], DUMMY_STREAMING_JSON_RESPONSE.to_vec())
-                .await;
+            return Ok(self.create_streaming_reasoning_response(
+                vec![],
+                DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
+            ));
         }
 
         if self.model_name.starts_with("error") {

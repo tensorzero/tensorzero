@@ -20,6 +20,7 @@ pub struct StatusResponse {
 }
 
 /// A handler for a simple liveness check
+#[expect(clippy::unused_async)]
 pub async fn status_handler(State(app_state): AppState) -> Json<StatusResponse> {
     Json(StatusResponse {
         status: "ok".to_string(),

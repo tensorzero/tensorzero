@@ -1821,14 +1821,17 @@ impl AsyncTensorZeroGateway {
     }
 
     /// Close the connection to the TensorZero gateway.
+    #[expect(clippy::unused_async)]
     async fn close(&self) {
         // TODO - implement closing the 'reqwest' connection pool: https://github.com/tensorzero/tensorzero/issues/857
     }
 
+    #[expect(clippy::unused_async)]
     async fn __aenter__(this: Py<Self>) -> Py<Self> {
         this
     }
 
+    #[expect(clippy::unused_async)]
     async fn __aexit__(
         _this: Py<Self>,
         _exc_type: Py<PyAny>,
