@@ -187,7 +187,7 @@ impl AzureCredentials {
                     Ok(key) => Ok(key),
                     Err(e) => {
                         e.log_at_level(
-                            "Using fallback credential, as default credential is unavailable: ",
+                            "Deprecation Warning: The environment variable `AZURE_OPENAI_API_KEY` is deprecated and will be removed in a future release. Please set `AZURE_API_KEY` instead: ",
                             tracing::Level::WARN,
                         );
                         fallback.get_api_key(dynamic_api_keys)

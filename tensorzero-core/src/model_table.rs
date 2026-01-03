@@ -9,6 +9,8 @@ use std::{
 
 use crate::{
     config::{
+        provider_types::{AzureDefaults, ProviderTypesConfig},
+        skip_credential_validation,
         e2e_skip_credential_validation, provider_types::ProviderTypesConfig,
         skip_credential_validation, with_skip_credential_validation,
     },
@@ -83,7 +85,7 @@ pub trait ProviderKind {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ProviderType {
     Anthropic,
     Azure,
@@ -685,6 +687,19 @@ fn load_credential_with_fallback(
     // If fallback location is specified, construct a WithFallback credential
     if let Some(fallback_location) = location_with_fallback.fallback_location() {
         let fallback_credential = load_credential(fallback_location, provider_type)?;
+
+        // Warn if using the default Azure config and AZURE_OPENAI_API_KEY is set
+        if provider_type.to_string().to_lowercase() == "azure" {
+            let azure_default = AzureDefaults::default().api_key_location;
+            if *location_with_fallback == azure_default && env::var("AZURE_OPENAI_API_KEY").is_ok()
+            {
+                tracing::warn!(
+                    "Deprecation Warning: The environment variable `AZURE_OPENAI_API_KEY` is deprecated \
+                    and will be removed in a future release. Please set `AZURE_API_KEY` instead."
+                );
+            }
+        }
+
         Ok(Credential::WithFallback {
             default: Box::new(default_credential),
             fallback: Box::new(fallback_credential),

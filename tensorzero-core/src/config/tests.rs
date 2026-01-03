@@ -1568,7 +1568,7 @@ async fn test_config_load_shorthand_models_only() {
     .unwrap();
     tensorzero_unsafe_helpers::set_env_var_tests_only("OPENAI_API_KEY", "sk-something");
     tensorzero_unsafe_helpers::set_env_var_tests_only("ANTHROPIC_API_KEY", "sk-something");
-    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_OPENAI_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_API_KEY", "sk-something");
 
     Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.table)))
         .await
@@ -1653,7 +1653,7 @@ fn get_sample_valid_config() -> toml::Table {
     let config_str = include_str!("../../fixtures/config/tensorzero.toml");
     tensorzero_unsafe_helpers::set_env_var_tests_only("OPENAI_API_KEY", "sk-something");
     tensorzero_unsafe_helpers::set_env_var_tests_only("ANTHROPIC_API_KEY", "sk-something");
-    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_OPENAI_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_API_KEY", "sk-something");
 
     let table = DeTable::parse(config_str).expect("Failed to parse sample config");
 
