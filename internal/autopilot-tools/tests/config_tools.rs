@@ -5,6 +5,7 @@ mod common;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext};
 use sqlx::PgPool;
@@ -12,7 +13,6 @@ use tensorzero::{GetConfigResponse, WriteConfigResponse};
 use tensorzero_core::config::UninitializedConfig;
 use uuid::Uuid;
 
-use autopilot_tools::AutopilotToolSideInfo;
 use autopilot_tools::tools::{
     GetConfigTool, GetConfigToolParams, WriteConfigTool, WriteConfigToolParams,
 };
@@ -30,15 +30,17 @@ async fn test_get_config_tool_with_hash(pool: PgPool) {
         tags: HashMap::new(),
     };
 
-    let llm_params = GetConfigToolParams {
-        hash: Some("test_hash".to_string()),
-    };
+    let llm_params = GetConfigToolParams {};
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+        tool_call_id: "test tool call id".to_string(),
+        config_snapshot_hash: Some("test_hash".to_string()),
         tool_call_event_id: Uuid::now_v7(),
+        optimization: OptimizationWorkflowSideInfo {
+            poll_interval_secs: 10,
+            max_wait_secs: 10,
+        },
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -67,14 +69,17 @@ async fn test_get_config_tool_with_hash(pool: PgPool) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         session_id,
-        tool_call_id,
+        tool_call_id: "test tool call id".to_string(),
+        config_snapshot_hash: Some("test_hash".to_string()),
         tool_call_event_id,
+        optimization: OptimizationWorkflowSideInfo {
+            poll_interval_secs: 10,
+            max_wait_secs: 10,
+        },
     };
 
     let mut extra_templates = HashMap::new();
@@ -91,10 +96,16 @@ async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
         .withf(move |request| {
             request.config.functions.is_empty()
                 && request.extra_templates.get("template_a") == Some(&"content".to_string())
-                && request.tags.get("autopilot_session_id") == Some(&session_id.to_string())
-                && request.tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
-                && request.tags.get("autopilot_tool_call_event_id")
+                && request.tags.get("tensorzero::autopilot::session_id")
+                    == Some(&session_id.to_string())
+                && request
+                    .tags
+                    .get("tensorzero::autopilot::tool_call_event_id")
                     == Some(&tool_call_event_id.to_string())
+                && request
+                    .tags
+                    .get("tensorzero::autopilot::config_snapshot_hash")
+                    == Some(&"test_hash".to_string())
         })
         .return_once(|_| {
             Ok(WriteConfigResponse {

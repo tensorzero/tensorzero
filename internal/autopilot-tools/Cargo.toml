@@ -11,6 +11,7 @@ e2e_tests = []
 [dependencies]
 durable-tools = { path = "../durable-tools" }
 tensorzero = { path = "../../clients/rust" }
+autopilot-client = { path = "../autopilot-client" }
 tensorzero-core = { path = "../../tensorzero-core" }
 tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
 anyhow.workspace = true

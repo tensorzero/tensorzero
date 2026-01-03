@@ -517,7 +517,9 @@ async fn spawn_autopilot_worker_if_configured(
     // Create an embedded TensorZero client using the gateway's state
     let t0_client = std::sync::Arc::new(EmbeddedClient::new(gateway_handle.app_state.clone()));
 
-    let config = AutopilotWorkerConfig::new(pool, t0_client);
+    // TODO: decide how we want to do autopilot config.
+    let default_max_attempts = 5;
+    let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts);
 
     Ok(Some(
         spawn_autopilot_worker(

@@ -5,13 +5,13 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{WriteConfigRequest, WriteConfigResponse};
 use tensorzero_core::config::UninitializedConfig;
 
-use crate::AutopilotToolSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the write_config tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -28,7 +28,7 @@ pub struct WriteConfigToolParams {
 pub struct WriteConfigTool;
 
 impl ToolMetadata for WriteConfigTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = WriteConfigResponse;
     type LlmParams = WriteConfigToolParams;
 
@@ -41,6 +41,80 @@ impl ToolMetadata for WriteConfigTool {
             "Write a config snapshot to storage and return its hash. \
              Autopilot tags are automatically merged into the provided tags.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Write a config snapshot to storage.",
+            "properties": {
+                "config": {
+                    "type": "object",
+                    "description": "The TensorZero config to write. Contains functions, metrics, tools, and gateway settings.",
+                    "properties": {
+                        "functions": {
+                            "type": "object",
+                            "description": "Map of function names to function configurations.",
+                            "additionalProperties": {
+                                "type": "object",
+                                "description": "A function configuration with type (chat or json) and variants.",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["chat", "json"],
+                                        "description": "Function type: 'chat' for conversational, 'json' for structured output."
+                                    },
+                                    "variants": {
+                                        "type": "object",
+                                        "description": "Map of variant names to variant configurations."
+                                    }
+                                }
+                            }
+                        },
+                        "metrics": {
+                            "type": "object",
+                            "description": "Map of metric names to metric configurations.",
+                            "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["float", "boolean", "comment", "demonstration"],
+                                        "description": "Metric type."
+                                    },
+                                    "optimize": {
+                                        "type": "string",
+                                        "enum": ["max", "min"],
+                                        "description": "Optimization direction for float metrics."
+                                    },
+                                    "level": {
+                                        "type": "string",
+                                        "enum": ["inference", "episode"],
+                                        "description": "Whether metric applies to individual inferences or episodes."
+                                    }
+                                }
+                            }
+                        },
+                        "tools": {
+                            "type": "object",
+                            "description": "Map of tool names to tool configurations."
+                        },
+                        "gateway": {
+                            "type": "object",
+                            "description": "Gateway configuration settings."
+                        }
+                    }
+                },
+                "extra_templates": {
+                    "type": "object",
+                    "description": "Map of template paths to template content strings. Used for storing template files with the config.",
+                    "additionalProperties": { "type": "string" }
+                }
+            },
+            "required": ["config"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 

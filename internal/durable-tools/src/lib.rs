@@ -171,7 +171,6 @@ mod simple_tool;
 mod task_tool;
 pub mod tensorzero_client;
 mod tool_metadata;
-mod visitor;
 
 #[cfg(test)]
 mod tests;
@@ -192,8 +191,7 @@ pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 pub use simple_tool::SimpleTool;
 pub use task_tool::{TaskTool, TaskToolAdapter};
-pub use tool_metadata::{SideInfo, ToolMetadata};
-pub use visitor::ToolVisitor;
+pub use tool_metadata::ToolMetadata;
 
 // Re-export TensorZero client trait and helpers
 pub use tensorzero_client::{
