@@ -53,7 +53,6 @@ pub enum EventPayload {
     ToolCallAuthorization(ToolCallAuthorization),
     ToolResult {
         tool_call_event_id: Uuid,
-        tool_call_id: String,
         outcome: ToolOutcome,
     },
     #[serde(other)]
@@ -109,10 +108,6 @@ pub struct AutopilotToolCall {
 pub struct AutopilotSideInfo {
     /// The event ID of the ToolCall event (for correlating ToolResult).
     pub tool_call_event_id: Uuid,
-
-    /// TODO: remove
-    /// The tool call ID for LLMs
-    pub tool_call_id: String,
 
     /// The session ID for this autopilot session.
     pub session_id: Uuid,
