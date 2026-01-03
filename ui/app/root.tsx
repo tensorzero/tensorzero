@@ -10,9 +10,13 @@ import {
 
 import { ConfigProvider } from "./context/config";
 import { ReadOnlyProvider } from "./context/read-only";
+import { AutopilotAvailableProvider } from "./context/autopilot-available";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
-import { getConfig } from "./utils/config/index.server";
+import {
+  getConfig,
+  checkAutopilotAvailable,
+} from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
 import { GatewayAuthFailedState } from "./components/ui/error/GatewayAuthFailedState";
 import { GatewayRequiredState } from "./components/ui/error/GatewayRequiredState";
@@ -57,8 +61,12 @@ export async function loader() {
   startPeriodicCleanup();
   const isReadOnly = isReadOnlyMode();
   try {
-    const config = await getConfig();
-    return { config, isReadOnly };
+    // Fetch config and autopilot availability in parallel
+    const [config, autopilotAvailable] = await Promise.all([
+      getConfig(),
+      checkAutopilotAvailable(),
+    ]);
+    return { config, isReadOnly, autopilotAvailable };
   } catch (e) {
     if (isGatewayConnectionError(e)) {
       throw data({ errorType: GATEWAY_UNAVAILABLE_ERROR }, { status: 503 });
@@ -90,24 +98,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
-  const { config, isReadOnly } = loaderData;
+  const { config, isReadOnly, autopilotAvailable } = loaderData;
 
   return (
     <ReactQueryProvider>
       <GlobalToastProvider>
         <ReadOnlyProvider value={isReadOnly}>
-          <ConfigProvider value={config}>
-            <SidebarProvider>
-              <TooltipProvider>
-                <div className="fixed inset-0 flex">
-                  <AppSidebar />
-                  <ContentLayout>
-                    <Outlet />
-                  </ContentLayout>
-                </div>
-              </TooltipProvider>
-            </SidebarProvider>
-          </ConfigProvider>
+          <AutopilotAvailableProvider value={autopilotAvailable}>
+            <ConfigProvider value={config}>
+              <SidebarProvider>
+                <TooltipProvider>
+                  <div className="fixed inset-0 flex">
+                    <AppSidebar />
+                    <ContentLayout>
+                      <Outlet />
+                    </ContentLayout>
+                  </div>
+                </TooltipProvider>
+              </SidebarProvider>
+            </ConfigProvider>
+          </AutopilotAvailableProvider>
         </ReadOnlyProvider>
         <Toaster />
       </GlobalToastProvider>

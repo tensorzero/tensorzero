@@ -3,7 +3,6 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { File, ObjectStorageFile } from "~/types/tensorzero";
 import mp3Url from "./FileContentBlock.stories.fixture.mp3?url";
 import pdfUrl from "./FileContentBlock.stories.fixture.pdf?url";
-import { TooltipProvider } from "~/components/ui/tooltip";
 
 const meta = {
   title: "Input Output/Content Blocks/FileContentBlock",
@@ -13,9 +12,7 @@ const meta = {
     (Story) => (
       <div className="w-[80vw] bg-orange-100 p-8">
         <div className="bg-white p-4">
-          <TooltipProvider>
-            <Story />
-          </TooltipProvider>
+          <Story />
         </div>
       </div>
     ),

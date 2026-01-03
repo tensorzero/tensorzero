@@ -1,0 +1,3 @@
+- UI routes (pages & API) are defined in `./app/routes.ts`.
+- Prefer `logger` from `~/utils/logger` instead of `console.error`, `console.warn`, `console.log`, `console.debug`.
+- After modifying UI code, run from the `ui/` directory: `pnpm run format`, `pnpm run lint`, `pnpm run typecheck`. All commands must pass.

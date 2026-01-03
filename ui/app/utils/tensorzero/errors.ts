@@ -8,7 +8,7 @@ import { isErrorLike } from "~/utils/common";
  */
 export class GatewayConnectionError extends Error {
   constructor(cause?: unknown) {
-    super("Cannot connect to TensorZero gateway", { cause });
+    super("Cannot connect to TensorZero Gateway", { cause });
     this.name = "GatewayConnectionError";
   }
 }
@@ -41,6 +41,26 @@ export function isAuthenticationError(error: unknown): boolean {
     error.name === "TensorZeroServerError" &&
     "status" in error &&
     error.status === 401
+  );
+}
+
+/**
+ * Check if an error indicates that Autopilot is not configured.
+ * The gateway returns 501 NOT_IMPLEMENTED when autopilot is not implemented,
+ * or 401 UNAUTHORIZED when the autopilot API key is not configured.
+ */
+export function isAutopilotUnavailableError(error: unknown): boolean {
+  if (error instanceof TensorZeroServerError) {
+    return error.status === 501 || error.status === 401;
+  }
+  // Check serialized object properties (works if thrown from server loader)
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "TensorZeroServerError" &&
+    "status" in error &&
+    (error.status === 501 || error.status === 401)
   );
 }
 

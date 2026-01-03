@@ -52,6 +52,23 @@ export default [
     ),
 
     route("feedback", "routes/api/feedback/route.ts"),
+
+    route(
+      "autopilot/sessions/:session_id/events",
+      "routes/api/autopilot/sessions/$session_id/events/route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/events/stream",
+      "routes/api/autopilot/sessions/$session_id/events/stream.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/events/authorize",
+      "routes/api/autopilot/sessions/$session_id/events/authorize.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/events/message",
+      "routes/api/autopilot/sessions/$session_id/events/message.route.ts",
+    ),
   ]),
 
   // Datasets
@@ -96,6 +113,16 @@ export default [
       "projects/:project_name",
       "routes/workflow_evaluations/projects/$project_name/route.tsx",
     ),
+  ]),
+
+  // Autopilot
+  route("autopilot", "routes/autopilot/layout.tsx", [
+    index("routes/autopilot/route.tsx"),
+    route("sessions", "routes/autopilot/sessions/layout.tsx", [
+      index("routes/autopilot/sessions/route.tsx"),
+      // "new" is handled as a special case in the $session_id route
+      route(":session_id", "routes/autopilot/sessions/$session_id/route.tsx"),
+    ]),
   ]),
 
   // Playground
