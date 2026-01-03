@@ -20,9 +20,8 @@ pub use types::*;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::Input;
 use tensorzero_core::client::{
-    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams,
-    InferenceOutput, InferenceParams, InferenceResponse,
-    input_handling::resolved_input_to_client_input,
+    ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams, InferenceOutput,
+    InferenceParams, InferenceResponse, input_handling::resolved_input_to_client_input,
 };
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::endpoints::datasets::v1::{
@@ -56,7 +55,7 @@ pub mod types;
 const EVALUATION_CHANNEL_BUFFER_SIZE: usize = 128;
 
 pub struct Clients {
-    pub tensorzero_client: Client,
+    pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
@@ -184,8 +183,11 @@ pub async fn run_evaluation(
     .await
     .map_err(|e| anyhow!("Failed to build client: {e}"))?;
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
     let core_args = EvaluationCoreArgs {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse_client.clone(),
         evaluation_config,
         function_configs,
@@ -352,7 +354,7 @@ pub async fn run_evaluation_core_streaming(
     // Build the semaphore and clients
     let semaphore = Arc::new(Semaphore::new(args.concurrency));
     let clients = Arc::new(Clients {
-        tensorzero_client: args.tensorzero_client,
+        inference_executor: args.inference_executor,
         clickhouse_client: args.clickhouse_client,
     });
 
@@ -679,7 +681,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         api_key: None,
     };
     debug!("Making inference request");
-    let inference_result = clients.tensorzero_client.inference(params).await?;
+    let inference_result = clients.inference_executor.inference(params).await?;
     match inference_result {
         InferenceOutput::NonStreaming(inference_response) => {
             debug!(inference_id = %inference_response.inference_id(), "Inference completed successfully");
@@ -800,9 +802,8 @@ pub async fn process_batch(
             .input()
             .clone()
             .into_stored_input_without_file_handling()?;
-        let resolved_input = stored_input
-            .reresolve(&params.clients.tensorzero_client)
-            .await?;
+        let resolver = ExecutorStorageResolver(params.clients.inference_executor.clone());
+        let resolved_input = stored_input.reresolve(&resolver).await?;
         let input = Arc::new(resolved_input_to_client_input(resolved_input)?);
         datapoints_with_inputs.push((Arc::new(datapoint), input));
     }

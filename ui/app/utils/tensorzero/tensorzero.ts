@@ -11,7 +11,9 @@ import {
   ZodJsonValueSchema,
   type ZodStoragePath,
 } from "~/utils/clickhouse/common";
+import { logger } from "~/utils/logger";
 import type {
+  CacheEnabledMode,
   CloneDatapointsResponse,
   CountFeedbackByTargetIdResponse,
   CountInferencesRequest,
@@ -21,63 +23,68 @@ import type {
   CountWorkflowEvaluationRunEpisodesResponse,
   CountWorkflowEvaluationRunsResponse,
   CreateDatapointsFromInferenceRequest,
-  CumulativeFeedbackTimeSeriesPoint,
-  DatapointStatsResponse,
-  DemonstrationFeedbackRow,
-  EvaluationRunStatsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
-  FeedbackRow,
-  FunctionInferenceCount,
-  MetricsWithFeedbackResponse,
+  CumulativeFeedbackTimeSeriesPoint,
   Datapoint,
-  GetDatapointCountResponse,
+  DatapointStatsResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
+  DemonstrationFeedbackRow,
+  EvaluationConfig,
+  EvaluationFunctionConfig,
+  EvaluationRunEvent,
+  EvaluationRunStatsResponse,
+  FeedbackRow,
+  FunctionInferenceCount,
+  GetDatapointCountResponse,
+  GetDatapointsRequest,
+  GetDatapointsResponse,
   GetDemonstrationFeedbackResponse,
+  GetEpisodeInferenceCountResponse,
+  GetEvaluationResultsResponse,
+  GetEvaluationRunInfosResponse,
+  GetEvaluationStatisticsResponse,
   GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
   GetFunctionThroughputByVariantResponse,
+  GetInferencesRequest,
+  GetInferencesResponse,
+  GetModelInferencesResponse,
   GetModelLatencyResponse,
   GetModelUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
   GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
-  GetWorkflowEvaluationRunsResponse,
   GetWorkflowEvaluationRunStatisticsResponse,
-  InferenceWithFeedbackCountResponse,
-  GetDatapointsRequest,
-  GetDatapointsResponse,
-  GetInferencesRequest,
-  GetInferencesResponse,
-  GetModelInferencesResponse,
+  GetWorkflowEvaluationRunsResponse,
+  InferenceCountByVariant,
   InferenceCountResponse,
+  InferenceWithFeedbackCountResponse,
   LatestFeedbackIdByMetricResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
+  ListEpisodesResponse,
   ListEvaluationRunsResponse,
   ListFunctionsWithInferenceCountResponse,
-  ListInferencesRequest,
   ListInferenceMetadataResponse,
+  ListInferencesRequest,
   ListWorkflowEvaluationRunEpisodesByTaskNameResponse,
   ListWorkflowEvaluationRunsResponse,
+  MetricsWithFeedbackResponse,
+  RunEvaluationRequest,
   SearchEvaluationRunsResponse,
   SearchWorkflowEvaluationRunsResponse,
   StatusResponse,
-  TimeWindow,
   TableBoundsWithCount,
+  TimeWindow,
   UiConfig,
+  UninitializedVariantInfo,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
-  ListEpisodesResponse,
-  GetEpisodeInferenceCountResponse,
-  GetEvaluationResultsResponse,
-  GetEvaluationRunInfosResponse,
-  GetEvaluationStatisticsResponse,
   VariantPerformancesResponse,
-  InferenceCountByVariant,
 } from "~/types/tensorzero";
 
 /**
@@ -1636,4 +1643,161 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     }
     return (await response.json()) as GetEvaluationResultsResponse;
   }
+
+  /**
+   * Runs an evaluation via SSE streaming.
+   * @param params - The evaluation parameters
+   * @param params.evaluationConfig - The evaluation configuration object
+   * @param params.functionConfig - The function configuration for validation
+   * @param params.evaluationName - The name of the evaluation
+   * @param params.datasetName - The name of the dataset to evaluate (optional)
+   * @param params.datapointIds - Specific datapoint IDs to evaluate (optional)
+   * @param params.variantName - The name of the variant to use (optional)
+   * @param params.internalDynamicVariantConfig - Dynamic variant configuration (optional)
+   * @param params.concurrency - Number of concurrent requests
+   * @param params.inferenceCache - Cache mode for inference
+   * @param params.maxDatapoints - Maximum number of datapoints to evaluate (optional)
+   * @param params.precisionTargets - Per-evaluator precision targets (optional)
+   * @param params.onEvent - Callback for SSE events
+   * @returns A promise that resolves when the evaluation completes
+   */
+  async runEvaluationStreaming(
+    params: RunEvaluationStreamingParams,
+  ): Promise<void> {
+    const {
+      evaluationConfig,
+      functionConfig,
+      evaluationName,
+      datasetName,
+      datapointIds,
+      variantName,
+      internalDynamicVariantConfig,
+      concurrency,
+      inferenceCache,
+      maxDatapoints,
+      precisionTargets,
+      onEvent,
+    } = params;
+
+    const requestBody: RunEvaluationRequest = {
+      evaluation_config: evaluationConfig,
+      function_config: functionConfig,
+      evaluation_name: evaluationName,
+      dataset_name: datasetName,
+      datapoint_ids: datapointIds,
+      variant_name: variantName,
+      internal_dynamic_variant_config: internalDynamicVariantConfig,
+      concurrency,
+      inference_cache: inferenceCache,
+      max_datapoints: maxDatapoints,
+      precision_targets: precisionTargets,
+    };
+
+    const response = await this.fetch("/internal/evaluations/run", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    if (!response.body) {
+      throw new Error("Response body is null");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events in the buffer
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith("data:")) {
+            const data = line.slice(5).trim();
+            if (data) {
+              try {
+                const event = JSON.parse(data) as EvaluationRunEvent;
+                onEvent(event);
+              } catch (e) {
+                logger.error(
+                  "Failed to parse SSE event for runEvaluationStreaming:",
+                  e,
+                  "Data:",
+                  data,
+                );
+              }
+            }
+          }
+        }
+      }
+
+      // Process any remaining data in buffer
+      if (buffer.startsWith("data:")) {
+        const data = buffer.slice(5).trim();
+        if (data) {
+          try {
+            const event = JSON.parse(data) as EvaluationRunEvent;
+            onEvent(event);
+          } catch (e) {
+            logger.error(
+              "Failed to parse final SSE event for runEvaluationStreaming:",
+              e,
+              "Data:",
+              data,
+            );
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+}
+
+/**
+ * Parameters for running an evaluation via SSE streaming.
+ */
+export interface RunEvaluationStreamingParams {
+  /** The evaluation configuration */
+  evaluationConfig: EvaluationConfig;
+  /** The function configuration for output schema validation */
+  functionConfig: EvaluationFunctionConfig;
+  /** Name of the evaluation */
+  evaluationName: string;
+  /** Name of the dataset to evaluate (optional) */
+  datasetName?: string;
+  /** Specific datapoint IDs to evaluate (optional) */
+  datapointIds?: string[];
+  /** Variant name to use (optional) */
+  variantName?: string;
+  /** Dynamic variant configuration (optional) */
+  internalDynamicVariantConfig?: UninitializedVariantInfo;
+  /** Number of concurrent requests */
+  concurrency: number;
+  /** Cache mode for inference requests */
+  inferenceCache: CacheEnabledMode;
+  /** Maximum number of datapoints to evaluate (optional) */
+  maxDatapoints?: number;
+  /** Per-evaluator precision targets for adaptive stopping (optional) */
+  precisionTargets?: Record<string, number>;
+  /** Callback for SSE events */
+  onEvent: (event: EvaluationRunEvent) => void;
 }
