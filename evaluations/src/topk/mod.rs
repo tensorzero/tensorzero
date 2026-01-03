@@ -69,18 +69,17 @@ fn default_failure_threshold() -> f64 {
 
 /// Status of a variant in the top-k evaluation process.
 ///
-/// The Include/Exclude/Failed states are terminal, and decisions to transition to
-/// one of these states are based on the current set of non-Failed variants. That
-/// means variant failures can prevent a top-k set from being identified, because
-/// a variant may fail after other variants have already been excluded.
+/// The Stopped/Failed states are terminal, and decisions to transition to one of these
+/// states are based on the current set of non-Failed variants. That means variant
+/// failures can prevent a top-k set from being identified, because a variant may fail
+/// after other variants have already been stopped and there may be insufficient data
+/// to distinguish the remaining non-Failed variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VariantStatus {
     /// Still running evals on this variant
     Active,
-    /// Not running evals; variant is confidently within top k_min
-    Include,
-    /// Not running evals; variant is confidently outside the top k_max
-    Exclude,
+    /// Not running evals; variant is confidently resolved (either in or out of top-k)
+    Stopped,
     /// Not running evals; variant failure rate is confidently >= failure threshold
     Failed,
 }
@@ -483,33 +482,31 @@ struct VariantStatusParams {
 ///
 /// This function may transition variants from `Active` to one of the terminal states:
 /// - `Failed`: Variant's failure rate confidence interval lower bound exceeds the threshold
-/// - `Include`: Variant is confidently in the top k_min among non-failed variants (early inclusion)
-/// - `Exclude`: Variant is confidently outside the top k_max among non-failed variants (early exclusion)
+/// - `Stopped`: Variant is confidently resolved (either in top k_min or outside top k_max)
 ///
-/// Note: This function handles failure detection and early inclusion/exclusion only.
+/// Note: This function handles failure detection and early stopping only.
 /// Global top-k stopping (when we can identify the full top-k set) should be checked
 /// separately via `check_topk_stopping()` after calling this function. This ensures
-/// that `Failed` status always takes precedence over `Include`.
+/// that `Failed` status always takes precedence over `Stopped`.
 ///
 /// # Status Transition Logic
 ///
 /// The function uses a two-pass approach to ensure failure detection happens before
-/// early inclusion/exclusion checks:
+/// early stopping checks:
 ///
 /// **Pass 1 - Failure detection:**
 /// - Skip variants already in a terminal state
 /// - If the variant's failure rate CS lower bound exceeds `variant_failure_threshold`,
 ///   mark as `Failed`
 ///
-/// **Pass 2 - Early exclusion/inclusion (among non-failed variants):**
+/// **Pass 2 - Early stopping (among non-failed variants):**
 /// - Skip variants already in a terminal state (including those just marked as `Failed`)
-/// - **Early exclusion**: If at least `k_max` other non-failed variants have lower bounds above
-///   this variant's upper bound (adjusted by epsilon), this variant cannot be in the top k_max,
-///   so mark as `Exclude`. (Note that other variants may fail later, causing excluded variants
-///   to return to the top-k_max among non-failed variants.)
-/// - **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
-///   `(num_non_failed - k_min)` other non-failed variants (adjusted by epsilon), it's
-///   confidently in the top k_min, so mark as `Include`
+/// - **Early stopping for poor performance**: If at least `k_max` other non-failed variants
+///   have lower bounds above this variant's upper bound (adjusted by epsilon), this variant
+///   cannot be in the top k_max, so mark as `Stopped`.
+/// - **Early stopping for good performance**: If this variant's lower bound exceeds the upper
+///   bounds of at least `(num_non_failed - k_min)` other non-failed variants (adjusted by
+///   epsilon), it's confidently in the top k_min, so mark as `Stopped`.
 fn update_variant_statuses(
     variant_status: &mut HashMap<String, VariantStatus>,
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
@@ -571,12 +568,12 @@ fn update_variant_statuses(
             // If at least k_max variants are definitely better,
             // this variant cannot be in the top k_max
             if num_definitely_worse_than >= params.k_max as usize {
-                variant_status.insert(name, VariantStatus::Exclude);
+                variant_status.insert(name, VariantStatus::Stopped);
                 continue;
             }
         }
 
-        // Check if variant can be included early because it's confidently within the top k_min
+        // Check if variant can be stopped early because it's confidently within the top k_min
         // (its lower bound is above (upper_bound_j - epsilon) for all but k_min other non-failed variants j)
         if let Some(perf_cs) = variant_performance.get(&name) {
             // Count non-failed variants for the threshold calculation
@@ -593,7 +590,7 @@ fn update_variant_statuses(
             // If this variant beats at least (num_non_failed - k_min) others,
             // it's confidently in the top k_min among non-failed variants
             if num_definitely_better_than >= num_non_failed.saturating_sub(params.k_min as usize) {
-                variant_status.insert(name, VariantStatus::Include);
+                variant_status.insert(name, VariantStatus::Stopped);
             }
         }
     }
@@ -1421,20 +1418,6 @@ impl Task<TopKTaskState> for TopKTask {
         // If we processed all batches without satisfying one of the other stopping conditions,
         // then assign reason DatasetExhausted.
         let stopping_reason = stopping_reason.unwrap_or(GlobalStoppingReason::DatasetExhausted);
-
-        // Finalize variant statuses if a top-k set was found
-        if let GlobalStoppingReason::TopKFound { top_variants, .. } = &stopping_reason {
-            // Mark top variants as Include, remaining non-failed variants as Exclude
-            for (name, status) in &mut progress.variant_status {
-                if *status == VariantStatus::Active {
-                    if top_variants.contains(name) {
-                        *status = VariantStatus::Include;
-                    } else {
-                        *status = VariantStatus::Exclude;
-                    }
-                }
-            }
-        }
 
         info!(
             stopping_reason = ?stopping_reason,
