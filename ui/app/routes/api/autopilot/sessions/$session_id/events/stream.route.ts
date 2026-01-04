@@ -45,8 +45,34 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
       return new Response(errorText, { status: response.status });
     }
 
-    // Pass through the SSE stream
-    return new Response(response.body, {
+    // Wrap the stream to handle client disconnection gracefully.
+    // Without this, abort errors propagate as unhandled exceptions when
+    // the client navigates away mid-stream.
+    const wrappedStream = new ReadableStream({
+      async start(controller) {
+        const reader = response.body?.getReader();
+        if (!reader) {
+          controller.close();
+          return;
+        }
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            controller.enqueue(value);
+          }
+          controller.close();
+        } catch {
+          // Client disconnected - close gracefully
+          controller.close();
+        } finally {
+          reader.releaseLock();
+        }
+      },
+    });
+
+    return new Response(wrappedStream, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -54,6 +80,11 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
       },
     });
   } catch (error) {
+    // Client disconnected - return silently since they won't see the response anyway
+    if (error instanceof Error && error.name === "AbortError") {
+      return new Response();
+    }
+
     const message =
       error instanceof Error ? error.message : "Failed to connect to gateway";
     return new Response(message, { status: 502 });
