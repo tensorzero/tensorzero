@@ -1,0 +1,52 @@
+name: Dispatch Autopilot E2E Tests
+
+on:
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "TensorZero commit SHA to test (defaults to current commit)"
+        required: false
+        type: string
+
+jobs:
+  dispatch-autopilot:
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - name: Determine commit SHA
+        id: commit
+        run: |
+          if [ -n "${{ inputs.commit_sha }}" ]; then
+            echo "sha=${{ inputs.commit_sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
+          owner: tensorzero
+          repositories: autopilot
+
+      - name: Dispatch to autopilot
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: tensorzero/autopilot
+          event-type: tensorzero-main-updated
+          client-payload: |
+            {
+              "tensorzero_commit": "${{ steps.commit.outputs.sha }}",
+              "triggered_by": "${{ github.actor }}",
+              "source_run_id": "${{ github.run_id }}",
+              "source_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+
+      - name: Log dispatch
+        run: |
+          echo "Dispatched autopilot e2e tests for tensorzero commit: ${{ steps.commit.outputs.sha }}"
+          echo "Source workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
