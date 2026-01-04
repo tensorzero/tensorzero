@@ -217,10 +217,7 @@ model_name = "mock-finetune-1234"
     await page.goto("/optimization/supervised-fine-tuning");
 
     // Select function
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "extract_entities" }).click();
 
     // Select metric
