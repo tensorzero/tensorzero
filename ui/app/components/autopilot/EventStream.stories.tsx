@@ -54,9 +54,17 @@ const toolingEvents: Event[] = [
       created_at: "",
       payload: {
         type: "tool_call",
-        id: "tool-call-1",
         name: "search_wikipedia",
-        arguments: '{"query":"TensorZero"}',
+        arguments: { query: "TensorZero" },
+        side_info: {
+          tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
+          session_id: sessionId,
+          config_snapshot_hash: null,
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
       },
     },
     0,
@@ -70,7 +78,7 @@ const toolingEvents: Event[] = [
         type: "tool_call_authorization",
         source: { type: "ui" },
         status: { type: "approved" },
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d6e",
+        tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
       },
     },
     1,
@@ -82,7 +90,7 @@ const toolingEvents: Event[] = [
       created_at: "",
       payload: {
         type: "tool_result",
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d6e",
+        tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
         outcome: {
           type: "success",
           result: "Found relevant context.",
@@ -119,6 +127,7 @@ const mixedEvents: Event[] = [
     },
     1,
   ),
+  // Chain 1: tool_call -> authorization (approved) -> result (success)
   buildEvent(
     {
       id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
@@ -126,9 +135,17 @@ const mixedEvents: Event[] = [
       created_at: "",
       payload: {
         type: "tool_call",
-        id: "tool-call-mixed-1",
         name: "search_wikipedia",
-        arguments: '{"query":"TensorZero Autopilot"}',
+        arguments: { query: "TensorZero Autopilot" },
+        side_info: {
+          tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+          session_id: sessionId,
+          config_snapshot_hash: null,
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
       },
     },
     2,
@@ -142,7 +159,7 @@ const mixedEvents: Event[] = [
         type: "tool_call_authorization",
         source: { type: "ui" },
         status: { type: "approved" },
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d71",
+        tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
       },
     },
     3,
@@ -154,17 +171,16 @@ const mixedEvents: Event[] = [
       created_at: "",
       payload: {
         type: "tool_result",
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d71",
+        tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
         outcome: {
           type: "success",
-          id: "tool-result-mixed-1",
-          name: "search_wikipedia",
           result: "Found audit notes on recent Autopilot sessions.",
         },
       },
     },
     4,
   ),
+  // Chain 2: authorization (rejected) -> result (failure) - tool_call not shown
   buildEvent(
     {
       id: "4e5f6a7b-8c9d-4e0f-9a1b-7890123456a7",
@@ -174,7 +190,7 @@ const mixedEvents: Event[] = [
         type: "tool_call_authorization",
         source: { type: "ui" },
         status: { type: "rejected", reason: "Blocked by policy" },
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d6f",
+        tool_call_event_id: "rejected-tool-call-event-id",
       },
     },
     5,
@@ -186,7 +202,7 @@ const mixedEvents: Event[] = [
       created_at: "",
       payload: {
         type: "tool_result",
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d6f",
+        tool_call_event_id: "rejected-tool-call-event-id",
         outcome: {
           type: "failure",
           message: "Authorization denied",
@@ -195,6 +211,7 @@ const mixedEvents: Event[] = [
     },
     6,
   ),
+  // Standalone tool_result with missing outcome
   buildEvent(
     {
       id: "f6a7b8c9-0d1e-4f2a-8b3c-4d5e6f708192",
@@ -202,7 +219,7 @@ const mixedEvents: Event[] = [
       created_at: "",
       payload: {
         type: "tool_result",
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d72",
+        tool_call_event_id: "missing-tool-call-event-id",
         outcome: {
           type: "missing",
         },
@@ -210,6 +227,7 @@ const mixedEvents: Event[] = [
     },
     7,
   ),
+  // Standalone tool_result with other outcome
   buildEvent(
     {
       id: "a7b8c9d0-1e2f-4a3b-9c4d-5e6f708192a3",
@@ -217,7 +235,7 @@ const mixedEvents: Event[] = [
       created_at: "",
       payload: {
         type: "tool_result",
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d73",
+        tool_call_event_id: "other-tool-call-event-id",
         outcome: {
           type: "other",
         },
@@ -300,9 +318,17 @@ const longFormEvents: Event[] = [
       created_at: "",
       payload: {
         type: "tool_call",
-        id: "tool-call-long",
         name: "search_wikipedia",
-        arguments: longToolArguments,
+        arguments: JSON.parse(longToolArguments),
+        side_info: {
+          tool_call_event_id: "8c9d0e1f-2a3b-4c4d-9e5f-1234567890e1",
+          session_id: sessionId,
+          config_snapshot_hash: null,
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
       },
     },
     1,
@@ -314,11 +340,9 @@ const longFormEvents: Event[] = [
       created_at: "",
       payload: {
         type: "tool_result",
-        tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d70",
+        tool_call_event_id: "8c9d0e1f-2a3b-4c4d-9e5f-1234567890e1",
         outcome: {
           type: "success",
-          id: "tool-result-long",
-          name: "search_wikipedia",
           result: longToolResult,
         },
       },

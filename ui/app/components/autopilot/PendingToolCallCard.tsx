@@ -3,7 +3,7 @@ import { useState } from "react";
 import { TableItemTime } from "~/components/ui/TableItems";
 import type { Event } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
-// import { ToolEventId } from "./EventStream";
+import { getToolCallEventId, isToolEvent, ToolEventId } from "./EventStream";
 
 type PendingToolCallCardProps = {
   event: Event;
@@ -26,7 +26,7 @@ export function PendingToolCallCard({
   const [confirmReject, setConfirmReject] = useState(false);
 
   // Only handle tool_call events
-  if (event.payload.type !== "tool_call") {
+  if (!isToolEvent(event) || event.payload.type !== "tool_call") {
     return null;
   }
 
@@ -141,8 +141,8 @@ export function PendingToolCallCard({
             </div>
           )}
           <div className="text-fg-muted flex items-center gap-1.5 text-xs">
-            {/*<ToolEventId id={event.id} />
-            <span aria-hidden="true">&middot;</span>*/}
+            <ToolEventId id={getToolCallEventId(event)} />
+            <span aria-hidden="true">&middot;</span>
             <TableItemTime timestamp={event.created_at} />
           </div>
         </div>

@@ -7,7 +7,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import type { Event, InputMessageContent } from "~/types/tensorzero";
+import type {
+  Event,
+  EventPayload,
+  InputMessageContent,
+} from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 
 /**
@@ -45,26 +49,63 @@ type EventStreamProps = {
   optimisticMessages?: OptimisticMessage[];
 };
 
-// export function ToolEventId({ id }: { id: string }) {
-//   return (
-//     <Tooltip>
-//       <TooltipTrigger asChild>
-//         <span
-//           className="inline-block max-w-12 cursor-help overflow-hidden align-middle font-mono text-xs text-ellipsis whitespace-nowrap"
-//           dir="rtl"
-//         >
-//           {id}
-//         </span>
-//       </TooltipTrigger>
-//       <TooltipContent
-//         className="border-border bg-bg-secondary text-fg-primary border text-xs shadow-lg"
-//         sideOffset={5}
-//       >
-//         Tool Call ID: <span className="font-mono text-xs">{id}</span>
-//       </TooltipContent>
-//     </Tooltip>
-//   );
-// }
+export function ToolEventId({ id }: { id: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-block max-w-12 cursor-help overflow-hidden align-middle font-mono text-xs text-ellipsis whitespace-nowrap"
+          dir="rtl"
+        >
+          {id}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent
+        className="border-border bg-bg-secondary text-fg-primary border text-xs shadow-lg"
+        sideOffset={5}
+      >
+        Tool Call ID: <span className="font-mono text-xs">{id}</span>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * Tool event payload types - events related to tool calls.
+ */
+export type ToolEventPayload = Extract<
+  EventPayload,
+  { type: "tool_call" | "tool_call_authorization" | "tool_result" }
+>;
+
+/**
+ * An event with a tool-related payload.
+ */
+export type ToolEvent = Event & { payload: ToolEventPayload };
+
+/**
+ * Type guard to check if an event is a tool event.
+ */
+export function isToolEvent(event: Event): event is ToolEvent {
+  return (
+    event.payload.type === "tool_call" ||
+    event.payload.type === "tool_call_authorization" ||
+    event.payload.type === "tool_result"
+  );
+}
+
+/**
+ * Extracts the tool_call_event_id from a tool event.
+ * For tool_call events, this is in side_info.tool_call_event_id.
+ * For tool_call_authorization and tool_result events, this is directly on the payload.
+ */
+export function getToolCallEventId(event: ToolEvent): string {
+  const { payload } = event;
+  if (payload.type === "tool_call") {
+    return payload.side_info.tool_call_event_id;
+  }
+  return payload.tool_call_event_id;
+}
 
 function getMessageText(content: InputMessageContent[]) {
   const textBlock = content.find(
@@ -256,10 +297,7 @@ function EventItem({
 }) {
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
-  // const isToolEvent =
-  //   event.payload.type === "tool_call" ||
-  //   event.payload.type === "tool_call_authorization" ||
-  //   event.payload.type === "tool_result";
+  const eventIsToolEvent = isToolEvent(event);
   const isExpandable =
     event.payload.type === "tool_call" ||
     (event.payload.type === "tool_call_authorization" &&
@@ -303,13 +341,12 @@ function EventItem({
           label
         )}
         <div className="text-fg-muted flex items-center gap-1.5 text-xs">
-          {/* TODO: we need a shared identifier between the differnt tool call types */}
-          {/*{isToolEvent && (
+          {eventIsToolEvent && (
             <>
-              <ToolEventId id={event.id} />
+              <ToolEventId id={getToolCallEventId(event)} />
               <span aria-hidden="true">&middot;</span>
             </>
-          )}*/}
+          )}
           <TableItemTime timestamp={event.created_at} />
         </div>
       </div>
@@ -387,8 +424,8 @@ export default function EventStream({
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       {/* Session started indicator, or sentinel for loading more */}
-      {/* Show divider when we've reached the start, otherwise show sentinel for infinite scroll */}
-      {hasReachedStart && !isLoadingOlder ? (
+      {/* Show divider when we've reached the start OR when there are optimistic messages (new session) */}
+      {(hasReachedStart || optimisticMessages.length > 0) && !isLoadingOlder ? (
         <SessionStartedDivider />
       ) : (
         <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
