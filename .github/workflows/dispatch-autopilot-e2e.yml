@@ -11,6 +11,8 @@ on:
 
 jobs:
   dispatch-autopilot:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
