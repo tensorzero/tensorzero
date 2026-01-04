@@ -6,7 +6,6 @@ on:
     paths-ignore:
       - "docs/**"
   pull_request:
-    branches: ["main"]
   workflow_dispatch:
 
 concurrency:
@@ -55,9 +54,9 @@ jobs:
       - name: Check coordinated edits
         run: python3 ci/check_coordinated_edits.py
 
-  # Like 'check-docker-compose', but loads the freshly built 'gateway' and 'ui' container images first
+  # Like `check-docker-compose-released`, but loads the freshly built `gateway` and `ui` container images first
   # This checks that all of our docker-compose files work with the changes in the PR
-  check-latest-docker-compose:
+  check-docker-compose-commit:
     needs: [build-gateway-container, build-ui-container]
     permissions:
       # Permission to checkout the repository
@@ -91,44 +90,21 @@ jobs:
           mkdir -p examples/multimodal-vision-finetuning/object_storage
           chmod 777 examples/multimodal-vision-finetuning/object_storage
 
-      - name: Apply Postgres migrations for the enforce-custom-rate-limits example
+      - name: Apply Postgres migrations for the centralize-auth-rate-limits-and-more/auth example
         # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
         # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        # Note: This uses relay-gateway instead of gateway, so it requires explicit handling here
         run: |
-          cd examples/docs/guides/operations/enforce-custom-rate-limits
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          cd examples/docs/guides/operations/centralize-auth-rate-limits-and-more/auth
+          OPENAI_API_KEY=dummy docker compose run --rm relay-gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for the set-up-auth-for-tensorzero example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/operations/set-up-auth-for-tensorzero
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for the run-adaptive-ab-tests example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/experimentation/run-adaptive-ab-tests
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
-        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/blog/bandits-in-your-llm-gateway
-          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          ANTHROPIC_API_KEY=dummy docker compose down
 
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
 
-  # Checks our docker-compose files against the most recent published 'gateway' and 'ui' container images
+  # Checks our docker-compose files against the most recent published `gateway` and `ui` container images
   # (not the ones built for this PR)
-  check-docker-compose:
+  check-docker-compose-released:
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -161,37 +137,14 @@ jobs:
           mkdir -p examples/multimodal-vision-finetuning/object_storage
           chmod 777 examples/multimodal-vision-finetuning/object_storage
 
-      - name: Apply Postgres migrations for the enforce-custom-rate-limits example
+      - name: Apply Postgres migrations for the centralize-auth-rate-limits-and-more/auth example
         # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
         # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        # Note: This uses relay-gateway instead of gateway, so it requires explicit handling here
         run: |
-          cd examples/docs/guides/operations/enforce-custom-rate-limits
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          cd examples/docs/guides/operations/centralize-auth-rate-limits-and-more/auth
+          OPENAI_API_KEY=dummy docker compose run --rm relay-gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for the set-up-auth-for-tensorzero example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/operations/set-up-auth-for-tensorzero
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for the run-adaptive-ab-tests example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/experimentation/run-adaptive-ab-tests
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
-        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/blog/bandits-in-your-llm-gateway
-          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          ANTHROPIC_API_KEY=dummy docker compose down
 
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
@@ -214,7 +167,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -264,7 +217,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -354,7 +307,7 @@ jobs:
         shell: bash
 
       - name: Install cargo-hack
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-hack
 
@@ -481,7 +434,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -544,12 +497,17 @@ jobs:
         shell: bash
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
       - name: Build (Rust)
         run: cargo build --workspace --verbose
+
+      - name: Validate config
+        run: |
+          unset TENSORZERO_CLICKHOUSE_URL
+          cargo run-e2e --validate-and-exit
 
   rust-test:
     permissions:
@@ -574,7 +532,7 @@ jobs:
         shell: bash
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -617,7 +575,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -651,6 +609,9 @@ jobs:
 
       - name: check‑case‑conflict
         run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
+
+      - name: end-of-file-fixer
+        run: uv run --with pre-commit pre-commit run end-of-file-fixer --all-files
 
       - name: check‑executables‑have‑shebangs
         run: uv run --with pre-commit pre-commit run check-executables-have-shebangs --all-files
@@ -698,12 +659,15 @@ jobs:
       #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
       - name: Run cargo-deny
         run: cargo deny check
+
+      - name: Check durable dependencies
+        run: ./ci/check-durable-deps.sh
 
       - name: Run cargo fmt
         run: cargo fmt --all --check
@@ -727,15 +691,15 @@ jobs:
       contents: read
       # Permission to download artifacts and for rust-cache
       actions: read
-    needs: [build-gateway-container, build-mock-inference-container]
+    needs: [build-gateway-container, build-mock-provider-api-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
     runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16;ephemeral-storage.size-multiplier=2' || 'namespace-profile-tensorzero-8x16' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
-    # This needs to pull from Docker Hub, so skip for external PR CI
-    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository) || inputs.is_merge_group }}
+    # This needs to pull from Docker Hub, so only run in the merge queue, or when running on a PR from the main repository
+    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
@@ -774,7 +738,7 @@ jobs:
       - name: "Free up disk space"
         run: ./ci/free-disk-space.sh
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest
 
@@ -796,14 +760,16 @@ jobs:
       - name: Download container images
         run: |
           docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}
+          docker pull nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
           # Retag the images to what we expect the names to be
           docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }} tensorzero/mock-inference-provider:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download ClickHouse fixtures
-        run: uv run ./ui/fixtures/download-fixtures.py
+        run: |
+          uv run ./ui/fixtures/download-large-fixtures.py
+          uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (non-replicated)
         if: matrix.replicated == false
@@ -825,9 +791,9 @@ jobs:
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Set TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG
+      - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG
         run: |
-          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
@@ -936,7 +902,7 @@ jobs:
         if: always()
         run: cat e2e_logs.txt
 
-  # Run 'cargo test-optimization' against mock-inference-provider
+  # Run 'cargo test-optimization' against mock-provider-api
   mock-optimization-tests:
     permissions:
       contents: read
@@ -947,9 +913,8 @@ jobs:
     env:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
-      FIREWORKS_ACCOUNT_ID: not_used
       TOGETHER_API_KEY: not_used
-      TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
+      TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://localhost:3030
       TENSORZERO_SKIP_LARGE_FIXTURES: 1
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -975,7 +940,7 @@ jobs:
           shared-key: "build-gateway-cache"
           save-if: false
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest
 
@@ -987,7 +952,9 @@ jobs:
           enable-cache: "false"
 
       - name: Download ClickHouse fixtures
-        run: uv run ./ui/fixtures/download-fixtures.py
+        run: |
+          uv run ./ui/fixtures/download-large-fixtures.py
+          uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Cleanup disk space
         run: ./ci/free-disk-space.sh
@@ -1002,13 +969,22 @@ jobs:
       - name: Launch the gateway for E2E tests
         run: |
           cargo run-e2e > e2e_logs.txt 2>&1 &
-          while ! curl http://localhost:3000/health; do
+          GATEWAY_PID=$!
+          while ! curl -s http://localhost:3000/health; do
+            if ! kill -0 $GATEWAY_PID 2>/dev/null; then
+              echo "Gateway process died!"
+              exit 1
+            fi
             echo "Waiting for gateway to be healthy..."
             sleep 1
           done
 
       - name: Test (Rust)
         run: cargo test-optimization-mock
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
 
   build-gateway-e2e-container:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
@@ -1038,8 +1014,8 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
 
-  build-mock-inference-container:
-    uses: ./.github/workflows/build-mock-inference-container.yml
+  build-mock-provider-api-container:
+    uses: ./.github/workflows/build-mock-provider-api-container.yml
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -1053,7 +1029,7 @@ jobs:
     uses: ./.github/workflows/ui-tests.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
-    needs: [build-gateway-container, build-mock-inference-container]
+    needs: [build-gateway-container, build-mock-provider-api-container]
 
   ui-tests-e2e:
     permissions:
@@ -1066,7 +1042,7 @@ jobs:
       [
         build-gateway-container,
         build-ui-container,
-        build-mock-inference-container,
+        build-mock-provider-api-container,
       ]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -1076,6 +1052,7 @@ jobs:
       FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
       S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
 
   check-production-docker-container:
     permissions:
@@ -1114,8 +1091,40 @@ jobs:
           docker compose -f examples/production-deployment/docker-compose.yml down
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
+  # Test that the ui e2e tests still pass after we regenerate the model inference cache
+  ui-tests-e2e-regen-model-inference-cache:
+    permissions:
+      contents: read
+      actions: write
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
+    with:
+      regen_cache: true
+      is_merge_group: true
+      force_no_auth: true
+    needs:
+      [
+        build-gateway-container,
+        build-ui-container,
+        build-mock-provider-api-container,
+      ]
+    secrets:
+      S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
   run-merge-queue-checks:
-    needs: [build-gateway-e2e-container, build-mock-inference-container]
+    needs:
+      [
+        build-gateway-container,
+        build-gateway-e2e-container,
+        build-mock-provider-api-container,
+      ]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
@@ -1138,7 +1147,7 @@ jobs:
       actions: read
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     uses: ./.github/workflows/mocked-batch-test.yml
-    needs: [build-mock-inference-container]
+    needs: [build-mock-provider-api-container]
     secrets: inherit
 
   # See 'ci/README.md' at the repository root for more details.
@@ -1150,8 +1159,8 @@ jobs:
         check-version-consistency,
         check-production-docker-container,
         check-if-edited-then-edit,
-        check-docker-compose,
-        check-latest-docker-compose,
+        check-docker-compose-released,
+        check-docker-compose-commit,
         check-python-client-build,
         check-node-bindings,
         check-python-schemas,
@@ -1159,7 +1168,7 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
-        build-mock-inference-container,
+        build-mock-provider-api-container,
         mocked-batch-tests,
         minikube,
         rust-build,
@@ -1171,12 +1180,17 @@ jobs:
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,
+        ui-tests-e2e-regen-model-inference-cache,
         mock-optimization-tests,
         run-merge-queue-checks,
       ]
     runs-on: ubuntu-latest
     steps:
+      - name: Print all job results
+        run: |
+          echo "'needs': ${{ toJson(needs) }}"
+          echo "github.event_name: ${{ github.event_name }}"
       # When running in the merge queue, jobs should never be skipped.
       # In PR CI, some jobs may be intentionally skipped (e.g. due to running from a fork, or to save money)
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled' || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped'))) }}
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
         run: exit 1

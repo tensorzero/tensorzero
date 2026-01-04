@@ -8,8 +8,6 @@ use tensorzero_core::providers::openai::grader::{
     OpenAIGrader, OpenAIModelGraderInput, OpenAIRFTRole, OpenAIStringCheckOp,
 };
 
-use super::mock_inference_provider_base;
-
 pub struct OpenAIRFTTestCase();
 
 impl OptimizationTestCase for OpenAIRFTTestCase {
@@ -21,25 +19,27 @@ impl OptimizationTestCase for OpenAIRFTTestCase {
         true
     }
 
-    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
+    fn get_optimizer_info(&self) -> UninitializedOptimizerInfo {
+        // Note: mock mode is configured via provider_types.openai.rft in the test config file
         UninitializedOptimizerInfo {
-            inner: UninitializedOptimizerConfig::OpenAIRFT(UninitializedOpenAIRFTConfig {
-                // Use a model that supports images and tool calls
-                model: "o4-mini-2025-04-16".to_string(),
-                grader: OpenAIGrader::Multi {
-                    name: "test_grader".to_string(),
-                    graders: {
-                        let mut map = HashMap::new();
-                        map.insert(
-                            "string_check_grader".to_string(),
-                            Box::new(OpenAIGrader::StringCheck {
-                                name: "string_check_grader".to_string(),
-                                operation: OpenAIStringCheckOp::Eq,
-                                input: "{{sample.output_text}}".to_string(),
-                                reference: "{{item.reference_text}}".to_string(),
-                            }),
-                        );
-                        map.insert(
+            inner: UninitializedOptimizerConfig::OpenAIRFT(Box::new(
+                UninitializedOpenAIRFTConfig {
+                    // Use a model that supports images and tool calls
+                    model: "o4-mini-2025-04-16".to_string(),
+                    grader: OpenAIGrader::Multi {
+                        name: "test_grader".to_string(),
+                        graders: {
+                            let mut map = HashMap::new();
+                            map.insert(
+                                "string_check_grader".to_string(),
+                                Box::new(OpenAIGrader::StringCheck {
+                                    name: "string_check_grader".to_string(),
+                                    operation: OpenAIStringCheckOp::Eq,
+                                    input: "{{sample.output_text}}".to_string(),
+                                    reference: "{{item.reference_text}}".to_string(),
+                                }),
+                            );
+                            map.insert(
                             "score_model_grader".to_string(),
                             Box::new(OpenAIGrader::ScoreModel {
                                 name: "score_model_grader".to_string(),
@@ -57,28 +57,23 @@ impl OptimizationTestCase for OpenAIRFTTestCase {
                                 range: Some([0.0, 1.0]),
                             })
                         );
-                        map
+                            map
+                        },
+                        calculate_output: "0.5 * string_check_grader + 0.5 * score_model_grader"
+                            .to_string(),
                     },
-                    calculate_output: "0.5 * string_check_grader + 0.5 * score_model_grader"
-                        .to_string(),
+                    response_format: None,
+                    batch_size: None,
+                    compute_multiplier: None,
+                    eval_interval: None,
+                    eval_samples: None,
+                    learning_rate_multiplier: None,
+                    n_epochs: Some(1),
+                    reasoning_effort: Some("low".to_string()),
+                    seed: None,
+                    suffix: None,
                 },
-                response_format: None,
-                batch_size: None,
-                compute_multiplier: None,
-                eval_interval: None,
-                eval_samples: None,
-                learning_rate_multiplier: None,
-                n_epochs: Some(1),
-                reasoning_effort: Some("low".to_string()),
-                credentials: None,
-                api_base: if use_mock_inference_provider {
-                    Some(mock_inference_provider_base().join("openai/").unwrap())
-                } else {
-                    None
-                },
-                seed: None,
-                suffix: None,
-            }),
+            )),
         }
     }
 }

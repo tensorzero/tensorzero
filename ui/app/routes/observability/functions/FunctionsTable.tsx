@@ -7,8 +7,10 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { FunctionConfig } from "~/types/tensorzero";
-import type { FunctionCountInfo } from "~/utils/clickhouse/inference.server";
+import type {
+  FunctionConfig,
+  FunctionInferenceCount,
+} from "~/types/tensorzero";
 import { TableItemTime, TableItemFunction } from "~/components/ui/TableItems";
 import { toFunctionUrl } from "~/utils/urls";
 import {
@@ -22,11 +24,13 @@ import {
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Input } from "~/components/ui/input";
 
 interface MergedFunctionData {
   function_name: string;
-  count: number;
-  max_timestamp: string;
+  inference_count: number;
+  last_inference_timestamp: string;
   type: "chat" | "json" | "?";
   variantsCount: number;
 }
@@ -36,11 +40,15 @@ const columnHelper = createColumnHelper<MergedFunctionData>();
 export default function FunctionsTable({
   functions,
   countsInfo,
+  showInternalFunctions,
+  onToggleShowInternalFunctions,
 }: {
   functions: {
     [x: string]: FunctionConfig | undefined;
   };
-  countsInfo: FunctionCountInfo[];
+  countsInfo: FunctionInferenceCount[];
+  showInternalFunctions: boolean;
+  onToggleShowInternalFunctions: (value: boolean) => void;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -72,8 +80,10 @@ export default function FunctionsTable({
 
       return {
         function_name,
-        count: countInfo ? countInfo.count : 0,
-        max_timestamp: countInfo ? countInfo.max_timestamp : "Never",
+        inference_count: countInfo ? countInfo.inference_count : 0,
+        last_inference_timestamp: countInfo
+          ? countInfo.last_inference_timestamp
+          : "Never",
         type,
         variantsCount,
       };
@@ -96,11 +106,11 @@ export default function FunctionsTable({
         header: "Variants",
         cell: (info) => info.getValue(),
       }),
-      columnHelper.accessor("count", {
+      columnHelper.accessor("inference_count", {
         header: "Inferences",
         cell: (info) => info.getValue(),
       }),
-      columnHelper.accessor("max_timestamp", {
+      columnHelper.accessor("last_inference_timestamp", {
         header: "Last Used",
         cell: (info) => {
           const timestamp = info.getValue();
@@ -132,17 +142,27 @@ export default function FunctionsTable({
 
   return (
     <div>
-      <div className="mb-4">
-        <div className="relative">
+      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full">
           <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <input
+          <Input
             type="text"
             placeholder="Search functions..."
-            value={globalFilter ?? ""}
+            value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
           />
         </div>
+        <label className="text-fg-muted flex items-center gap-2 text-sm font-medium whitespace-nowrap">
+          <Checkbox
+            id="show-internal-functions"
+            checked={showInternalFunctions}
+            onCheckedChange={(checked) =>
+              onToggleShowInternalFunctions(checked === true)
+            }
+          />
+          Show internal functions
+        </label>
       </div>
       <Table>
         <TableHeader>

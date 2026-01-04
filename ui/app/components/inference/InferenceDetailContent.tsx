@@ -278,7 +278,7 @@ export function InferenceDetailContent({
     <ActionBar>
       <TryWithButton
         options={options}
-        onOptionSelect={onSelect}
+        onSelect={onSelect}
         isLoading={variantInferenceIsLoading}
         isDefaultFunction={isDefault}
       />

@@ -82,11 +82,11 @@ services:
       timeout: 5s
       retries: 3
 
-  mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
+  mock-provider-api:
+    image: tensorzero/mock-provider-api:${TENSORZERO_MOCK_PROVIDER_API_TAG:-latest}
     build:
       context: ../../../
-      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
+      dockerfile: tensorzero-core/tests/mock-provider-api/Dockerfile
     environment:
       RUST_LOG: debug
     ports:
@@ -181,11 +181,13 @@ services:
       - CLICKHOUSE_HOST=clickhouse-01
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
       - TENSORZERO_SKIP_LARGE_FIXTURES
     depends_on:
       gateway:
         condition: service_healthy
-    # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
+    # Keep this running to make `check-docker-compose.sh` detect that all containers are healthy
     command:
       [
         "bash",

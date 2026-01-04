@@ -30,13 +30,14 @@ pub mod clickhouse_client; // Public because tests will use clickhouse_client::F
 pub mod dataset_queries;
 pub mod evaluation_queries;
 pub mod feedback;
+pub mod inference_count;
 pub mod inference_queries;
-pub mod inference_stats;
 pub mod migration_manager;
 pub mod model_inferences;
 pub mod query_builder;
 mod select_queries;
 mod table_name;
+pub mod workflow_evaluation_queries;
 
 #[cfg(test)]
 mod mock_clickhouse_connection_info;
@@ -340,11 +341,13 @@ impl ConfigQueries for ClickHouseConnectionInfo {
         struct ConfigSnapshotRow {
             config: String,
             extra_templates: HashMap<String, String>,
+            #[serde(default)]
+            tags: HashMap<String, String>,
         }
 
         let hash_str = snapshot_hash.to_string();
         let query = format!(
-            "SELECT config, extra_templates \
+            "SELECT config, extra_templates, tags \
              FROM ConfigSnapshot FINAL \
              WHERE hash = toUInt256('{hash_str}') \
              LIMIT 1 \
@@ -365,7 +368,7 @@ impl ConfigQueries for ClickHouseConnectionInfo {
             })
         })?;
 
-        ConfigSnapshot::from_stored(&row.config, row.extra_templates, &snapshot_hash)
+        ConfigSnapshot::from_stored(&row.config, row.extra_templates, row.tags, &snapshot_hash)
     }
 }
 

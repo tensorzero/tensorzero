@@ -58,13 +58,15 @@ pub async fn test_gepa_optimization_chat() {
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(
-        &config_glob,
-        false, // don't validate credentials in tests
-    )
-    .await
-    .unwrap()
-    .into_config_without_writing_for_tests();
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &config_glob,
+            false, // don't validate credentials in tests
+        )
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests(),
+    );
 
     // Launch GEPA optimization
     let job_handle = gepa_config
@@ -74,7 +76,7 @@ pub async fn test_gepa_optimization_chat() {
             val_examples,
             &credentials,
             &clickhouse,
-            Arc::new(config),
+            config.clone(),
         )
         .await
         .unwrap();
@@ -85,6 +87,7 @@ pub async fn test_gepa_optimization_chat() {
             &client,
             &credentials,
             &ProviderTypeDefaultCredentials::default(),
+            &config.provider_types,
         )
         .await
         .unwrap();
@@ -191,13 +194,15 @@ pub async fn test_gepa_optimization_json() {
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(
-        &config_glob,
-        false, // don't validate credentials in tests
-    )
-    .await
-    .unwrap()
-    .into_config_without_writing_for_tests();
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &config_glob,
+            false, // don't validate credentials in tests
+        )
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests(),
+    );
 
     // Launch GEPA optimization
     let job_handle = gepa_config
@@ -207,7 +212,7 @@ pub async fn test_gepa_optimization_json() {
             val_examples,
             &credentials,
             &clickhouse,
-            Arc::new(config),
+            config.clone(),
         )
         .await
         .unwrap();
@@ -218,6 +223,7 @@ pub async fn test_gepa_optimization_json() {
             &client,
             &credentials,
             &ProviderTypeDefaultCredentials::default(),
+            &config.provider_types,
         )
         .await
         .unwrap();

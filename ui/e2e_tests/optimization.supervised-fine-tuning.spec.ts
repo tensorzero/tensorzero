@@ -13,7 +13,7 @@ test("should show the supervised fine-tuning page", async ({ page }) => {
 test.describe("Custom user agent", () => {
   // We look for this user agent in the fine-tuning code, and configure a
   // shorter polling interval. This avoids the need to wait 10 seconds in
-  // between polling mock-inference-provider
+  // between polling mock-provider-api
   test.use({ userAgent: "TensorZeroE2E" });
 
   [
@@ -21,12 +21,12 @@ test.describe("Custom user agent", () => {
       provider: "OpenAI",
       model: "gpt-4o-2024-08-06",
       results: `
-    [models.mock-inference-finetune-1234]
-    routing = [ "mock-inference-finetune-1234" ]
+    [models.mock-finetune-1234]
+    routing = [ "mock-finetune-1234" ]
 
-    [models.mock-inference-finetune-1234.providers.mock-inference-finetune-1234]
+    [models.mock-finetune-1234.providers.mock-finetune-1234]
     type = "openai"
-    model_name = "mock-inference-finetune-1234"
+    model_name = "mock-finetune-1234"
     `,
     },
     {
@@ -53,7 +53,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
   ]
     .slice(2)
     .forEach(({ provider, model, results }) => {
-      test(`@slow should fine-tune on filtered metric data with a mocked ${provider} server`, async ({
+      test(`@mock @slow should fine-tune on filtered metric data with a mocked ${provider} server`, async ({
         page,
       }) => {
         await page.goto("/optimization/supervised-fine-tuning");
@@ -95,7 +95,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       });
     });
 
-  test("@slow should fine-tune on demonstration data with a mocked OpenAI server", async ({
+  test("@mock @slow should fine-tune on demonstration data with a mocked OpenAI server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -133,17 +133,17 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
 
     await expect(
       page.getByText(`
-[models.mock-inference-finetune-1234]
-routing = [ "mock-inference-finetune-1234" ]
+[models.mock-finetune-1234]
+routing = [ "mock-finetune-1234" ]
 
-[models.mock-inference-finetune-1234.providers.mock-inference-finetune-1234]
+[models.mock-finetune-1234.providers.mock-finetune-1234]
 type = "openai"
-model_name = "mock-inference-finetune-1234"
+model_name = "mock-finetune-1234"
 `),
     ).toBeVisible();
   });
 
-  test("@slow should fine-tune on image data with a mocked OpenAI server", async ({
+  test("@mock @slow should fine-tune on image data with a mocked OpenAI server", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -177,12 +177,12 @@ model_name = "mock-inference-finetune-1234"
       .waitFor({ timeout: 3000 });
     await expect(
       page.getByText(`
-[models.mock-inference-finetune-1234]
-routing = [ "mock-inference-finetune-1234" ]
+[models.mock-finetune-1234]
+routing = [ "mock-finetune-1234" ]
 
-[models.mock-inference-finetune-1234.providers.mock-inference-finetune-1234]
+[models.mock-finetune-1234.providers.mock-finetune-1234]
 type = "openai"
-model_name = "mock-inference-finetune-1234"
+model_name = "mock-finetune-1234"
 `),
     ).toBeVisible();
   });
@@ -210,10 +210,65 @@ model_name = "mock-inference-finetune-1234"
       page.getByRole("combobox").filter({ hasText: "demonstration" }),
     ).toBeVisible();
   });
+
+  test("@mock @slow should fine-tune with a mocked GCP Vertex Gemini server", async ({
+    page,
+  }) => {
+    await page.goto("/optimization/supervised-fine-tuning");
+
+    // Select function
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a function" })
+      .click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
+
+    // Select metric
+    await page.getByRole("combobox", { name: "Metric" }).click();
+    await page.getByText("exact_match", { exact: true }).click();
+
+    // Select variant
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a variant name" })
+      .click();
+    await page
+      .getByLabel("gpt4o_mini_initial_prompt")
+      .getByText("gpt4o_mini_initial_prompt")
+      .click();
+
+    // Select a GCP model from the default list
+    const modelInput = page.getByPlaceholder("Select model...");
+    await modelInput.click();
+    await page.getByRole("option", { name: "gemini-2.5-flash-lite" }).click();
+
+    // Start the fine-tuning job
+    await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
+
+    // Wait for job to start running
+    await page
+      .getByText("running", { exact: true })
+      .waitFor({ timeout: 60000 });
+
+    await expect(page.getByText("gemini-2.5-flash-lite")).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "extract_entities" }),
+    ).toBeVisible();
+    await expect(page.getByText("exact_match")).toBeVisible();
+    await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+
+    // Wait for job to complete
+    await page
+      .getByText("completed", { exact: true })
+      .waitFor({ timeout: 10000 });
+
+    // Verify the result contains GCP Vertex Gemini configuration
+    await expect(page.getByText('type = "gcp_vertex_gemini"')).toBeVisible();
+  });
 });
 
 test.describe("Error handling", () => {
-  test("should show an error when the model is an error model", async ({
+  test("@mock should show an error when the model is an error model", async ({
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");

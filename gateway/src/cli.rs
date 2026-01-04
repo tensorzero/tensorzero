@@ -4,6 +4,7 @@
 //! This constraint exists because CODEOWNERS requires specific review for CLI changes.
 
 use clap::{Args, Parser};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use tensorzero_core::observability::LogFormat;
 
@@ -24,6 +25,10 @@ pub struct GatewayArgs {
     #[clap(default_value_t = LogFormat::default())]
     pub log_format: LogFormat,
 
+    /// Sets the socket address the gateway will bind to (e.g., "127.0.0.1:8080").
+    #[arg(long)]
+    pub bind_address: Option<SocketAddr>,
+
     /// These commands trigger some workflow then exit without launching the gateway.
     #[command(flatten)]
     pub early_exit_commands: EarlyExitCommands,
@@ -43,4 +48,12 @@ pub struct EarlyExitCommands {
     /// Create an API key then exit.
     #[arg(long)]
     pub create_api_key: bool,
+
+    /// Disable an API key using its public ID then exit.
+    #[arg(long, value_name = "PUBLIC_ID")]
+    pub disable_api_key: Option<String>,
+
+    /// Validate the config file then exit.
+    #[arg(long)]
+    pub validate_and_exit: bool,
 }

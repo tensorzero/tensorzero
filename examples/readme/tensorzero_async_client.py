@@ -10,12 +10,12 @@ async def main():
     ) as gateway:
         response = await gateway.inference(
             model_name="openai::gpt-4o-mini",
-            # Try other providers easily: "anthropic::claude-3-7-sonnet-20250219"
+            # Try other providers easily: "anthropic::claude-sonnet-4-5-20250929"
             input={
                 "messages": [
                     {
                         "role": "user",
-                        "content": "Write a haiku about artificial intelligence.",
+                        "content": "Write a haiku about TensorZero.",
                     }
                 ]
             },

@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use tensorzero_core::{
     client::{ClientBuilder, ClientBuilderMode},
-    config::{Config, UninitializedVariantConfig},
+    config::{Config, UninitializedVariantConfig, provider_types::ProviderTypesConfig},
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     endpoints::{datasets::v1::delete_dataset, inference::InferenceCredentials},
     error::{Error, ErrorDetails},
@@ -585,6 +585,7 @@ impl JobHandle for GEPAJobHandle {
         _client: &TensorzeroHttpClient,
         _credentials: &InferenceCredentials,
         _default_credentials: &ProviderTypeDefaultCredentials,
+        _provider_types: &ProviderTypesConfig,
     ) -> Result<OptimizationJobInfo, Error> {
         // GEPA optimization is synchronous, so the result is available immediately
         // Check if optimization succeeded or failed

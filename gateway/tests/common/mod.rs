@@ -14,6 +14,8 @@ use tokio::{
     sync::mpsc::UnboundedReceiver,
 };
 
+pub mod relay;
+
 /// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
 #[allow(dead_code)]
 pub async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
@@ -35,12 +37,106 @@ pub async fn start_gateway_on_random_port(
     config_suffix: &str,
     rust_log: Option<&str>,
 ) -> ChildData {
+    start_gateway_impl(
+        Some("0.0.0.0:0"), // config bind_address
+        None,              // cli bind_address
+        config_suffix,
+        rust_log,
+    )
+    .await
+}
+
+/// Start gateway with a CLI --bind-address flag.
+/// If `config_bind_address` is Some, it will be included in the config file.
+/// The `cli_bind_address` is passed via --bind-address CLI arg.
+#[allow(dead_code)]
+pub async fn start_gateway_with_cli_bind_address(
+    config_bind_address: Option<&str>,
+    cli_bind_address: &str,
+    config_suffix: &str,
+) -> ChildData {
+    start_gateway_impl(
+        config_bind_address,
+        Some(cli_bind_address),
+        config_suffix,
+        None,
+    )
+    .await
+}
+
+/// Start gateway expecting it to fail during startup.
+/// Returns the output lines captured before the process exited.
+#[allow(dead_code)]
+pub async fn start_gateway_expect_failure(
+    config_bind_address: Option<&str>,
+    cli_bind_address: &str,
+    config_suffix: &str,
+) -> Vec<String> {
+    let bind_address_config = config_bind_address
+        .map(|addr| format!("bind_address = \"{addr}\""))
+        .unwrap_or_default();
+
     let config_str = format!(
-        r#"
+        r"
         [gateway]
-        bind_address = "0.0.0.0:0"
+        {bind_address_config}
         {config_suffix}
-    "#
+    "
+    );
+
+    let tmpfile = NamedTempFile::new().unwrap();
+    std::fs::write(tmpfile.path(), config_str).unwrap();
+
+    let mut builder = Command::new(gateway_path());
+    builder
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .args([
+            "--config-file",
+            tmpfile.path().to_str().unwrap(),
+            "--log-format",
+            "json",
+            "--bind-address",
+            cli_bind_address,
+        ])
+        .env_remove("RUST_LOG")
+        .kill_on_drop(true);
+
+    let mut child = builder.spawn().unwrap();
+    let mut stdout = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
+
+    let mut output = Vec::new();
+    while let Some(line) = stdout.next_line().await.unwrap() {
+        println!("{line}");
+        output.push(line);
+    }
+
+    // Wait for the process to exit
+    let status = child.wait().await.unwrap();
+    assert!(
+        !status.success(),
+        "Expected gateway to fail, but it exited with success"
+    );
+
+    output
+}
+
+async fn start_gateway_impl(
+    config_bind_address: Option<&str>,
+    cli_bind_address: Option<&str>,
+    config_suffix: &str,
+    rust_log: Option<&str>,
+) -> ChildData {
+    let bind_address_config = config_bind_address
+        .map(|addr| format!("bind_address = \"{addr}\""))
+        .unwrap_or_default();
+
+    let config_str = format!(
+        r"
+        [gateway]
+        {bind_address_config}
+        {config_suffix}
+    "
     );
 
     let tmpfile = NamedTempFile::new().unwrap();
@@ -59,6 +155,10 @@ pub async fn start_gateway_on_random_port(
         // Make sure we don't inherit `RUST_LOG` from the outer `cargo test/nextest` invocation
         .env_remove("RUST_LOG")
         .kill_on_drop(true);
+
+    if let Some(cli_addr) = cli_bind_address {
+        builder.args(["--bind-address", cli_addr]);
+    }
 
     if let Some(rust_log) = rust_log {
         builder.env("RUST_LOG", rust_log);
@@ -79,7 +179,7 @@ pub async fn start_gateway_on_random_port(
     let mut listening_line = None;
     let mut output = Vec::new();
     while let Some(line) = line_rx.recv().await {
-        if line.contains("listening on 0.0.0.0:") {
+        if line.contains("listening on ") {
             listening_line = Some(line.clone());
         }
         output.push(line.clone());
@@ -89,19 +189,35 @@ pub async fn start_gateway_on_random_port(
         }
     }
 
-    let port = listening_line
-        .expect("Gateway exited before listening")
-        .split_once("listening on 0.0.0.0:")
+    // Parse the listening address from the log line.
+    // The format is: "listening on <ip>:<port>"
+    let listening_line = listening_line.expect("Gateway exited before listening");
+    let addr_str = listening_line
+        .split("listening on ")
+        .nth(1)
         .expect("Gateway didn't log listening line")
-        .1
         .split("\"")
         .next()
-        .unwrap()
-        .parse::<u16>()
         .unwrap();
+    let bound_addr: SocketAddr = addr_str.parse().expect("Failed to parse bound address");
+
+    // For 0.0.0.0, tests must choose an appropriate address to connect to.
+    // On Windows, connecting to 0.0.0.0 fails with AddrNotAvailable, so use loopback there.
+    let connect_addr = if bound_addr.ip().is_unspecified() {
+        SocketAddr::new(
+            if cfg!(target_os = "windows") {
+                "127.0.0.1".parse().unwrap()
+            } else {
+                bound_addr.ip()
+            },
+            bound_addr.port(),
+        )
+    } else {
+        bound_addr
+    };
 
     ChildData {
-        addr: format!("0.0.0.0:{port}").parse::<SocketAddr>().unwrap(),
+        addr: connect_addr,
         output,
         stdout: line_rx,
         child,

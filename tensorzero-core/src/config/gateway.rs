@@ -50,6 +50,92 @@ pub struct AuthConfig {
     pub cache: Option<GatewayAuthCacheConfig>,
 }
 
+fn default_tensorzero_inference_latency_overhead_seconds_buckets() -> Vec<f64> {
+    vec![0.001, 0.01, 0.1]
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MetricsConfig {
+    /// Histogram buckets for the `tensorzero_inference_latency_overhead_seconds` metric.
+    /// Defaults to `[0.001, 0.01, 0.1]`. Set to empty to disable the metric.
+    #[serde(default)]
+    pub tensorzero_inference_latency_overhead_seconds_buckets: Option<Vec<f64>>,
+
+    /// DEPRECATED (2026.2+): use `tensorzero_inference_latency_overhead_seconds_buckets` instead.
+    #[serde(default, skip_serializing)]
+    pub tensorzero_inference_latency_overhead_seconds_histogram_buckets: Option<Vec<f64>>,
+}
+
+impl MetricsConfig {
+    /// Returns the histogram buckets, handling the deprecated field (2026.2+).
+    pub fn get_buckets(&self) -> Vec<f64> {
+        self.tensorzero_inference_latency_overhead_seconds_buckets
+            .clone()
+            .or_else(|| {
+                self.tensorzero_inference_latency_overhead_seconds_histogram_buckets
+                    .clone()
+            })
+            .unwrap_or_else(default_tensorzero_inference_latency_overhead_seconds_buckets)
+    }
+
+    pub fn validate(&self) -> Result<(), Error> {
+        // Handle deprecated field (2026.2+)
+        if self
+            .tensorzero_inference_latency_overhead_seconds_histogram_buckets
+            .is_some()
+        {
+            if self
+                .tensorzero_inference_latency_overhead_seconds_buckets
+                .is_some()
+            {
+                return Err(Error::new(crate::error::ErrorDetails::Config {
+                    message: "Cannot set both `gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets` and deprecated `gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`. Use only the former.".to_string(),
+                }));
+            }
+            crate::utils::deprecation_warning(
+                "`gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets` is deprecated and will be removed in a future release (2026.2+). Use `gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets` instead.",
+            );
+        }
+
+        let buckets = self.get_buckets();
+
+        if !buckets.is_empty() {
+            for (i, &bucket) in buckets.iter().enumerate() {
+                if !bucket.is_finite() {
+                    return Err(Error::new(crate::error::ErrorDetails::Config {
+                        message: format!(
+                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets[{i}] must be finite (not NaN or infinity), got: {bucket}"
+                        ),
+                    }));
+                }
+                if bucket < 0.0 {
+                    return Err(Error::new(crate::error::ErrorDetails::Config {
+                        message: format!(
+                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets[{i}] must be non-negative, got: {bucket}"
+                        ),
+                    }));
+                }
+            }
+
+            for i in 1..buckets.len() {
+                if buckets[i] <= buckets[i - 1] {
+                    return Err(Error::new(crate::error::ErrorDetails::Config {
+                        message: format!(
+                            "gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets must be in strictly ascending order, but buckets[{}] ({}) <= buckets[{}] ({})",
+                            i,
+                            buckets[i],
+                            i - 1,
+                            buckets[i - 1]
+                        ),
+                    }));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
@@ -84,10 +170,13 @@ pub struct UninitializedGatewayConfig {
     pub global_outbound_http_timeout_ms: Option<u64>,
     #[serde(default)]
     pub relay: Option<UninitializedRelayConfig>,
+    #[serde(default)]
+    pub metrics: MetricsConfig,
 }
 
 impl UninitializedGatewayConfig {
     pub fn load(self, object_store_info: Option<&ObjectStoreInfo>) -> Result<GatewayConfig, Error> {
+        self.metrics.validate()?;
         let fetch_and_encode_input_files_before_inference = if let Some(value) =
             self.fetch_and_encode_input_files_before_inference
         {
@@ -140,6 +229,7 @@ impl UninitializedGatewayConfig {
                 .map(|ms| Duration::milliseconds(ms as i64))
                 .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
             relay,
+            metrics: self.metrics,
         })
     }
 }
@@ -164,6 +254,7 @@ pub struct GatewayConfig {
     pub global_outbound_http_timeout: Duration,
     #[serde(skip)]
     pub relay: Option<TensorzeroRelay>,
+    pub metrics: MetricsConfig,
 }
 
 impl Default for GatewayConfig {
@@ -182,10 +273,13 @@ impl Default for GatewayConfig {
             auth: Default::default(),
             global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
             relay: Default::default(),
+            metrics: Default::default(),
         }
     }
 }
 
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
 fn serialize_optional_socket_addr<S>(
     addr: &Option<std::net::SocketAddr>,
     serializer: S,

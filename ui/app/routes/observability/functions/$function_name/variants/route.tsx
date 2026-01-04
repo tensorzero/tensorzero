@@ -14,7 +14,6 @@ import VariantInferenceTable from "./VariantInferenceTable";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { countInferencesForVariant } from "~/utils/clickhouse/inference.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { getVariantPerformances } from "~/utils/clickhouse/function";
 import type { TimeWindow } from "~/types/tensorzero";
 import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
@@ -29,6 +28,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
 import { applyPaginationLogic } from "~/utils/pagination";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -80,15 +80,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const variantPerformancesPromise =
     // Only get variant performances if metric_name is provided and valid
     metric_name && config.metrics[metric_name]
-      ? getVariantPerformances({
-          function_name,
-          function_config,
-          metric_name,
-          metric_config: config.metrics[metric_name],
-          time_window_unit: time_granularity as TimeWindow,
-          variant_name,
-        })
-      : undefined;
+      ? tensorZeroClient
+          .getVariantPerformances(
+            function_name,
+            metric_name,
+            time_granularity as TimeWindow,
+            variant_name,
+          )
+          .then((response) =>
+            response.performances.length > 0
+              ? response.performances
+              : undefined,
+          )
+      : Promise.resolve(undefined);
 
   const [
     inferenceResult,
@@ -147,15 +151,40 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
       },
     );
   }
-  const variant_info = function_config.variants[variant_name];
+  let variant_info = function_config.variants[variant_name];
   if (!variant_info) {
-    throw new Response(
-      "Variant not found. This likely means there is data in ClickHouse from an old TensorZero config.",
-      {
-        status: 404,
-        statusText: "Not Found",
-      },
-    );
+    if (function_name === DEFAULT_FUNCTION) {
+      // For default function, create synthetic variant config
+      variant_info = {
+        inner: {
+          type: "chat_completion",
+          model: variant_name,
+          weight: null,
+          templates: {},
+          temperature: null,
+          top_p: null,
+          max_tokens: null,
+          presence_penalty: null,
+          frequency_penalty: null,
+          seed: null,
+          stop_sequences: null,
+          json_mode: null,
+          retries: { num_retries: 0, max_delay_s: 0 },
+        },
+        timeouts: {
+          non_streaming: { total_ms: null },
+          streaming: { ttft_ms: null },
+        },
+      };
+    } else {
+      throw new Response(
+        "Variant not found. This likely means there is data in ClickHouse from an old TensorZero config.",
+        {
+          status: 404,
+          statusText: "Not Found",
+        },
+      );
+    }
   }
 
   const topInference = inferences.length > 0 ? inferences[0] : null;

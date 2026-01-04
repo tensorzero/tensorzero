@@ -310,29 +310,70 @@ def test_or_filter_mixed_metrics(embedded_sync_client: TensorZeroGateway):
 
 
 def test_not_filter(embedded_sync_client: TensorZeroGateway):
-    filters = NotFilter(
+    # NOT (exact_match = true OR exact_match = false) returns rows WITHOUT the metric.
+    # This test verifies that the NOT filter correctly excludes rows that have the metric
+    # (with either true or false value) and returns only rows without it.
+
+    # Get total count (no filter)
+    all_inferences = embedded_sync_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=None,
+        output_source="inference",
+        limit=1000,
+        offset=None,
+    )
+    total_count = len(all_inferences)
+
+    # Get count with exact_match = true
+    true_filter = BooleanMetricFilter(metric_name="exact_match", value=True)
+    true_inferences = embedded_sync_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=true_filter,
+        output_source="inference",
+        limit=1000,
+        offset=None,
+    )
+    true_count = len(true_inferences)
+
+    # Get count with exact_match = false
+    false_filter = BooleanMetricFilter(metric_name="exact_match", value=False)
+    false_inferences = embedded_sync_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=false_filter,
+        output_source="inference",
+        limit=1000,
+        offset=None,
+    )
+    false_count = len(false_inferences)
+
+    # Get count with NOT (true OR false) - should return rows WITHOUT the metric
+    not_filter = NotFilter(
         child=OrFilter(
             children=[
-                BooleanMetricFilter(
-                    metric_name="exact_match",
-                    value=True,
-                ),
-                BooleanMetricFilter(
-                    metric_name="exact_match",
-                    value=False,
-                ),
+                BooleanMetricFilter(metric_name="exact_match", value=True),
+                BooleanMetricFilter(metric_name="exact_match", value=False),
             ]
         )
     )
-    inferences = embedded_sync_client.experimental_list_inferences(
+    not_inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
-        filters=filters,
+        filters=not_filter,
         output_source="inference",
-        limit=None,
+        limit=1000,
         offset=None,
     )
-    assert len(inferences) == 0
+    not_count = len(not_inferences)
+
+    # Verify: rows with metric (true + false) + rows without metric (NOT result) = total
+    rows_with_metric = true_count + false_count
+    assert rows_with_metric + not_count == total_count, (
+        f"NOT filter should return exactly the rows without the metric. "
+        f"true={true_count}, false={false_count}, NOT={not_count}, total={total_count}"
+    )
 
 
 def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
@@ -696,29 +737,70 @@ async def test_or_filter_mixed_metrics_async(
 
 @pytest.mark.asyncio
 async def test_not_filter_async(embedded_async_client: AsyncTensorZeroGateway):
-    filters = NotFilter(
+    # NOT (exact_match = true OR exact_match = false) returns rows WITHOUT the metric.
+    # This test verifies that the NOT filter correctly excludes rows that have the metric
+    # (with either true or false value) and returns only rows without it.
+
+    # Get total count (no filter)
+    all_inferences = await embedded_async_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=None,
+        output_source="inference",
+        limit=1000,
+        offset=None,
+    )
+    total_count = len(all_inferences)
+
+    # Get count with exact_match = true
+    true_filter = BooleanMetricFilter(metric_name="exact_match", value=True)
+    true_inferences = await embedded_async_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=true_filter,
+        output_source="inference",
+        limit=1000,
+        offset=None,
+    )
+    true_count = len(true_inferences)
+
+    # Get count with exact_match = false
+    false_filter = BooleanMetricFilter(metric_name="exact_match", value=False)
+    false_inferences = await embedded_async_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=false_filter,
+        output_source="inference",
+        limit=1000,
+        offset=None,
+    )
+    false_count = len(false_inferences)
+
+    # Get count with NOT (true OR false) - should return rows WITHOUT the metric
+    not_filter = NotFilter(
         child=OrFilter(
             children=[
-                BooleanMetricFilter(
-                    metric_name="exact_match",
-                    value=True,
-                ),
-                BooleanMetricFilter(
-                    metric_name="exact_match",
-                    value=False,
-                ),
+                BooleanMetricFilter(metric_name="exact_match", value=True),
+                BooleanMetricFilter(metric_name="exact_match", value=False),
             ]
         )
     )
-    inferences = await embedded_async_client.experimental_list_inferences(
+    not_inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
-        filters=filters,
+        filters=not_filter,
         output_source="inference",
-        limit=None,
+        limit=1000,
         offset=None,
     )
-    assert len(inferences) == 0
+    not_count = len(not_inferences)
+
+    # Verify: rows with metric (true + false) + rows without metric (NOT result) = total
+    rows_with_metric = true_count + false_count
+    assert rows_with_metric + not_count == total_count, (
+        f"NOT filter should return exactly the rows without the metric. "
+        f"true={true_count}, false={false_count}, NOT={not_count}, total={total_count}"
+    )
 
 
 @pytest.mark.asyncio

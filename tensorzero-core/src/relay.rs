@@ -18,6 +18,7 @@ use crate::endpoints::openai_compatible::types::embeddings::{
     OpenAICompatibleEmbeddingParams, OpenAIEmbedding, OpenAIEmbeddingResponse,
 };
 use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
 use crate::inference::types::{
     ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     TextChunk, Usage,
@@ -492,9 +493,8 @@ impl TensorzeroRelay {
                     .unwrap_or_default(),
             },
             output_schema: request.output_schema.cloned(),
-            // TODO - implement extra_body and extra_headers
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: prepare_relay_extra_body(&request.extra_body),
+            extra_headers: prepare_relay_extra_headers(&request.extra_headers),
             credentials: clients
                 .credentials
                 .iter()
@@ -510,6 +510,8 @@ impl TensorzeroRelay {
             dryrun: None,
             tags: (*clients.tags).clone(),
             otlp_traces_extra_headers: HashMap::new(),
+            otlp_traces_extra_attributes: HashMap::new(),
+            otlp_traces_extra_resources: HashMap::new(),
             include_original_response: false,
             api_key,
         };

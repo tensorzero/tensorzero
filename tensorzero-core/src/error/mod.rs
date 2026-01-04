@@ -17,7 +17,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
-use crate::db::clickhouse::migration_manager::get_run_migrations_command;
+use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
@@ -171,7 +171,7 @@ impl Error {
 }
 
 // Expect for derive Serialize
-#[expect(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref, clippy::ref_option)]
 fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -605,6 +605,11 @@ pub enum ErrorDetails {
         path: String,
         method: String,
     },
+    AutopilotUnavailable,
+    Autopilot {
+        message: String,
+        status_code: Option<u16>,
+    },
 }
 impl ErrorDetails {
     /// Defines the error level for logging this error
@@ -732,6 +737,8 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
             ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
             ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::AutopilotUnavailable => tracing::Level::WARN,
+            ErrorDetails::Autopilot { .. } => tracing::Level::ERROR,
         }
     }
 
@@ -890,6 +897,10 @@ impl ErrorDetails {
             }
             ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::AutopilotUnavailable => StatusCode::NOT_IMPLEMENTED,
+            ErrorDetails::Autopilot { status_code, .. } => status_code
+                .and_then(|code| StatusCode::from_u16(code).ok())
+                .unwrap_or(StatusCode::BAD_GATEWAY),
         }
     }
 
@@ -1071,10 +1082,9 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error running ClickHouse migration {id}: {message}")
             }
             ErrorDetails::ClickHouseMigrationsDisabled => {
-                let run_migrations_command: String = get_run_migrations_command();
                 write!(
                     f,
-                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`"
+                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. {RUN_MIGRATIONS_COMMAND}"
                 )
             }
             ErrorDetails::ClickHouseQuery { message } => {
@@ -1625,6 +1635,12 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::RouteNotFound { path, method } => {
                 write!(f, "Route not found: {method} {path}")
             }
+            ErrorDetails::AutopilotUnavailable => {
+                write!(f, "Autopilot credentials unavailable")
+            }
+            ErrorDetails::Autopilot { message, .. } => {
+                write!(f, "Autopilot API error: {message}")
+            }
         }
     }
 }
@@ -1668,5 +1684,65 @@ impl From<sqlx::Error> for Error {
 impl From<AnalysisError> for Error {
     fn from(err: AnalysisError) -> Self {
         Self::new(ErrorDetails::DynamicTemplateLoad { internal: err })
+    }
+}
+
+impl From<autopilot_client::AutopilotError> for Error {
+    fn from(err: autopilot_client::AutopilotError) -> Self {
+        match err {
+            autopilot_client::AutopilotError::Http {
+                status_code,
+                message,
+            } => Self::new(ErrorDetails::Autopilot {
+                message,
+                status_code: Some(status_code),
+            }),
+            autopilot_client::AutopilotError::Request(e) => Self::new(ErrorDetails::Autopilot {
+                message: e.to_string(),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Json(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("JSON error: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Sse(message) => Self::new(ErrorDetails::Autopilot {
+                message: format!("SSE error: {message}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::InvalidUrl(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Invalid URL: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Spawn(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Spawn error: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::MissingConfig(field) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Missing config: {field}"),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::ToolCallNotFound(id) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Tool call not found: {id}"),
+                    status_code: None,
+                })
+            }
+        }
+    }
+}
+
+impl From<tensorzero_types::TypeError> for Error {
+    fn from(err: tensorzero_types::TypeError) -> Self {
+        match err {
+            tensorzero_types::TypeError::InvalidDataPrefix(message) => {
+                Self::new(ErrorDetails::InternalError { message })
+            }
+            tensorzero_types::TypeError::InvalidBase64(message)
+            | tensorzero_types::TypeError::InvalidMimeType(message) => {
+                Self::new(ErrorDetails::Base64 { message })
+            }
+        }
     }
 }

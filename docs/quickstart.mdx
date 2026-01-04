@@ -30,7 +30,7 @@ with OpenAI() as client:
         messages=[
             {
                 "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
+                "content": "Write a haiku about TensorZero.",
             }
         ],
     )
@@ -161,11 +161,7 @@ services:
 
   ui:
     image: tensorzero/ui
-    volumes:
-      # Mount our tensorzero.toml file into the container
-      - ./config:/app/config:ro
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
       - TENSORZERO_GATEWAY_URL=http://gateway:3000
     ports:
@@ -226,7 +222,7 @@ with TensorZeroGateway.build_embedded(
             "messages": [
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "Write a haiku about TensorZero.",
                 }
             ]
         },
@@ -286,7 +282,7 @@ async def main():
                 "messages": [
                     {
                         "role": "user",
-                        "content": "Write a haiku about artificial intelligence.",
+                        "content": "Write a haiku about TensorZero.",
                     }
                 ]
             },
@@ -348,7 +344,7 @@ response = client.chat.completions.create(
     messages=[
         {
             "role": "user",
-            "content": "Write a haiku about artificial intelligence.",
+            "content": "Write a haiku about TensorZero.",
         }
     ],
 )
@@ -414,7 +410,7 @@ const response = await client.chat.completions.create({
   messages: [
     {
       role: "user",
-      content: "Write a haiku about artificial intelligence.",
+      content: "Write a haiku about TensorZero.",
     },
   ],
 });
@@ -466,7 +462,7 @@ curl -X POST "http://localhost:3000/inference" \
       "messages": [
         {
           "role": "user",
-          "content": "Write a haiku about artificial intelligence."
+          "content": "Write a haiku about TensorZero."
         }
       ]
     }

@@ -1,12 +1,9 @@
 import { expect, test } from "vitest";
-import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
-  countInferencesForEpisode,
   listInferencesWithPagination,
-  countInferencesByFunction,
   countInferencesForVariant,
+  countInferencesForFunction,
 } from "./inference.server";
-import { countInferencesForFunction } from "./inference.server";
 import { displayModelInferenceInputMessageContentSchema } from "./common";
 
 // Test countInferencesForFunction
@@ -222,58 +219,6 @@ test("listInferencesWithPagination with episode_id filter", async () => {
   for (const inference of result2.inferences) {
     expect(inference.episode_id).toBe(episodeId);
   }
-});
-
-test("countInferencesForEpisode", async () => {
-  const count = await countInferencesForEpisode(
-    "01942e26-549f-7153-ac56-dd1d23d30f8c",
-  );
-  expect(count).toBe(43);
-});
-
-test("countInferencesForEpisode with invalid episode_id", async () => {
-  const count = await countInferencesForEpisode(
-    "01942e26-549f-7153-ac56-dd1d23d30f8d",
-  );
-  expect(count).toBe(0);
-});
-
-test("countInferencesByFunction", async () => {
-  const countsInfo = await countInferencesByFunction();
-  expect(countsInfo).toEqual(
-    expect.arrayContaining([
-      {
-        count: 204,
-        function_name: "tensorzero::llm_judge::entity_extraction::count_sports",
-        max_timestamp: "2025-04-15T02:34:22Z",
-      },
-      {
-        count: 604,
-        function_name: "extract_entities",
-        max_timestamp: "2025-04-15T02:34:21Z",
-      },
-      {
-        count: 310,
-        function_name: "tensorzero::llm_judge::haiku::topic_starts_with_f",
-        max_timestamp: "2025-04-15T02:33:10Z",
-      },
-      {
-        count: 804,
-        function_name: "write_haiku",
-        max_timestamp: "2025-05-12T21:59:20Z",
-      },
-      {
-        count: 3,
-        function_name: DEFAULT_FUNCTION,
-        max_timestamp: "2025-09-08T01:42:25Z",
-      },
-      {
-        count: 1,
-        function_name: "foo",
-        max_timestamp: "2025-02-13T22:29:20Z",
-      },
-    ]),
-  );
 });
 
 test("displayModelInferenceInputMessageContentSchema accepts thought content blocks", () => {

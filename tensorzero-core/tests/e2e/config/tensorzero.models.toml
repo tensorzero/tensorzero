@@ -108,23 +108,6 @@ type = "groq"
 model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 api_key_location = "dynamic::groq_api_key"
 
-[models."claude-3-7-sonnet-20250219-thinking-128k"]
-routing = ["anthropic"]
-
-[models."claude-3-7-sonnet-20250219-thinking-128k".providers.anthropic]
-type = "anthropic"
-model_name = "claude-3-7-sonnet-20250219"
-extra_headers = [{ name = "anthropic-beta", value = "output-128k-2025-02-19" }]
-extra_body = [
-    # We use a budget tokens of 1024 to make sure that it doesn't think for too long,
-    # since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
-    # to 128k in 'test_thinking_128k'
-    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
-    { pointer = "/stop_sequences", value = [
-        "my_custom_stop",
-    ] },
-]
-
 [models.claude-3-haiku-20240307]
 routing = ["anthropic", "aws_bedrock"]
 
@@ -178,12 +161,12 @@ type = "aws_bedrock"
 model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
 region = "us-east-1"
 
-[models."claude-3-7-sonnet-20250219-thinking-aws-bedrock"]
+[models."claude-sonnet-4-5-20250929-thinking-aws-bedrock"]
 routing = ["aws_bedrock"]
 
-[models."claude-3-7-sonnet-20250219-thinking-aws-bedrock".providers.aws_bedrock]
+[models."claude-sonnet-4-5-20250929-thinking-aws-bedrock".providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+model_id = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 region = "us-east-1"
 
 [models.gemma-3-1b-aws-sagemaker-openai]
@@ -309,6 +292,17 @@ model_name = "gemini-2.5-pro"
 # hitting our token limit
 extra_body = [
     { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
+    { pointer = "/generationConfig/thinkingConfig/includeThoughts", value = true },
+]
+
+[models."gemini-3-flash"]
+routing = ["google_ai_studio_gemini"]
+
+[models."gemini-3-flash".providers.google_ai_studio_gemini]
+type = "google_ai_studio_gemini"
+model_name = "gemini-3-flash-preview"
+extra_body = [
+    { pointer = "/generationConfig/thinkingConfig/includeThoughts", value = true },
 ]
 
 [models."gemini-2.5-pro-dynamic"]
@@ -362,12 +356,12 @@ model_name = "accounts/fireworks/models/deepseek-r1-0528"
 type = "fireworks"
 model_name = "accounts/fireworks/models/qwen2p5-72b-instruct"
 
-[models."llama3.1-8b-instruct-together"]
+[models."qwen3-next-80b-a3b-instruct-together"]
 routing = ["together"]
 
-[models."llama3.1-8b-instruct-together".providers.together]
+[models."qwen3-next-80b-a3b-instruct-together".providers.together]
 type = "together"
-model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
 
 [models."phi-3.5-mini-instruct-tgi"]
 routing = ["tgi"]
@@ -376,12 +370,12 @@ routing = ["tgi"]
 type = "tgi"
 api_base = "https://zr0gj152lrhnrr-80.proxy.runpod.net/v1/"
 
-[models."llama3.1-8b-instruct-together-dynamic"]
+[models."qwen3-next-80b-a3b-instruct-together-dynamic"]
 routing = ["together"]
 
-[models."llama3.1-8b-instruct-together-dynamic".providers.together]
+[models."qwen3-next-80b-a3b-instruct-together-dynamic".providers.together]
 type = "together"
-model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
 api_key_location = "dynamic::together_api_key"
 
 [models."llama3.1-405b-instruct-turbo-together"]
@@ -453,11 +447,6 @@ model_name = "grok-4-1-fast-non-reasoning"
 
 [models."grok_4_1_fast_non_reasoning-dynamic"]
 routing = ["xai"]
-
-[provider_types.gcp_vertex_gemini.batch]
-storage_type = "cloud_storage"
-input_uri_prefix = "gs://tensorzero-batch-tests-input/input-prefix/"
-output_uri_prefix = "gs://tensorzero-batch-tests-output/output-prefix/"
 
 [models."grok_4_1_fast_non_reasoning-dynamic".providers.xai]
 type = "xai"
@@ -614,6 +603,22 @@ routing = ["good"]
 [models.test.providers.good]
 type = "dummy"
 model_name = "good"
+
+# Echo model: returns the input text (for exact_match testing)
+[models.echo]
+routing = ["echo"]
+
+[models.echo.providers.echo]
+type = "dummy"
+model_name = "echo"
+
+# Empty model: always returns empty string (for exact_match testing)
+[models.empty]
+routing = ["empty"]
+
+[models.empty.providers.empty]
+type = "dummy"
+model_name = "empty"
 
 [models.error]
 routing = ["error"]

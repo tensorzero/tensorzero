@@ -38,10 +38,11 @@ use crate::inference::types::{
     InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
     Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, current_timestamp,
 };
-use crate::inference::types::{Input, batch::StartBatchModelInferenceWithMetadata};
+use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::rate_limiting::ScopeInfo;
+use crate::relay::TensorzeroRelay;
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
@@ -202,23 +203,11 @@ pub async fn start_batch_inference(
 
     // Increment the request count
     counter!(
-        "request_count",
-        "endpoint" => "batch_inference",
-        "function_name" => params.function_name.to_string(),
-    )
-    .increment(1);
-    counter!(
         "tensorzero_requests_total",
         "endpoint" => "batch_inference",
         "function_name" => params.function_name.to_string(),
     )
     .increment(1);
-    counter!(
-        "inference_count",
-        "endpoint" => "batch_inference",
-        "function_name" => params.function_name.to_string(),
-    )
-    .increment(num_inferences as u64);
     counter!(
         "tensorzero_inferences_total",
         "endpoint" => "batch_inference",
@@ -512,9 +501,14 @@ pub async fn poll_batch_inference_handler(
         BatchStatus::Pending => {
             // For now, we don't support dynamic API keys for batch inference
             let credentials = InferenceCredentials::default();
-            let response =
-                poll_batch_inference(&batch_request, http_client, &config.models, &credentials)
-                    .await?;
+            let response = poll_batch_inference(
+                &batch_request,
+                http_client,
+                &config.models,
+                &credentials,
+                config.gateway.relay.as_ref(),
+            )
+            .await?;
             let response = write_poll_batch_inference(
                 &clickhouse_connection_info,
                 &batch_request,
@@ -682,11 +676,12 @@ async fn poll_batch_inference(
     http_client: TensorzeroHttpClient,
     models: &ModelTable,
     credentials: &InferenceCredentials,
+    relay: Option<&TensorzeroRelay>,
 ) -> Result<PollBatchInferenceResponse, Error> {
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
-        .get(batch_request.model_name.as_ref())
+        .get(batch_request.model_name.as_ref(), relay)
         .await?
         .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidModel {

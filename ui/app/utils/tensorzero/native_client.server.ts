@@ -1,8 +1,4 @@
-import {
-  DatabaseClient,
-  TensorZeroClient,
-  runEvaluationStreaming,
-} from "tensorzero-node";
+import { TensorZeroClient, runEvaluationStreaming } from "tensorzero-node";
 import type { CacheEnabledMode, EvaluationRunEvent } from "~/types/tensorzero";
 import { getEnv } from "../env.server";
 
@@ -17,19 +13,6 @@ export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
     env.TENSORZERO_GATEWAY_URL,
   );
   return _tensorZeroClient;
-}
-
-let _databaseClient: DatabaseClient | undefined;
-export async function getNativeDatabaseClient(): Promise<DatabaseClient> {
-  if (_databaseClient) {
-    return _databaseClient;
-  }
-
-  const env = getEnv();
-  _databaseClient = await DatabaseClient.fromClickhouseUrl(
-    env.TENSORZERO_CLICKHOUSE_URL,
-  );
-  return _databaseClient;
 }
 
 export function runNativeEvaluationStreaming(params: {

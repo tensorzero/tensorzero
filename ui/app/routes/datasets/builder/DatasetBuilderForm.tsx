@@ -1,42 +1,46 @@
 import { useForm, useWatch } from "react-hook-form";
-import { Form } from "~/components/ui/form";
+import { Form, FormLabel } from "~/components/ui/form";
 import {
   DatasetBuilderFormValuesResolver,
   type DatasetBuilderFormValues,
 } from "./types";
 import { FunctionFormField } from "~/components/function/FunctionFormField";
 import { DatasetFormField } from "~/components/dataset/DatasetFormField";
-import { useConfig, useFunctionConfig } from "~/context/config";
-import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
-import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
+import { useFunctionConfig } from "~/context/config";
 import { useFetcher } from "react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Badge } from "~/components/ui/badge";
+import { VariantSelector } from "~/components/function/variant/VariantSelector";
 import OutputSourceSelector from "./OutputSourceSelector";
-import { DatasetCountDisplay } from "./DatasetCountDisplay";
 import { logger } from "~/utils/logger";
+import InferenceFilterBuilder from "~/components/querybuilder/InferenceFilterBuilder";
+import type {
+  InferenceFilter,
+  InferenceOutputSource,
+} from "~/types/tensorzero";
+import { useInferenceCountFetcher } from "~/routes/api/inferences/count.route";
 
 export function DatasetBuilderForm() {
-  const config = useConfig();
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "complete"
   >("idle");
-  const [countToInsert, setCountToInsert] = useState<number | null>(null);
-  const [isNewDataset, setIsNewDataset] = useState<boolean | null>(null);
-  // Track loading flags from child fetchers
-  const [isMetricSelectorLoading, setIsMetricSelectorLoading] = useState(false);
-  const [isOutputSourceLoading, setIsOutputSourceLoading] = useState(false);
-  const [isInsertCountLoading, setIsInsertCountLoading] = useState(false);
+
+  // Local state for InferenceFilter (managed outside react-hook-form)
+  const [inferenceFilter, setInferenceFilter] = useState<
+    InferenceFilter | undefined
+  >(undefined);
 
   const form = useForm<DatasetBuilderFormValues>({
     defaultValues: {
       dataset: "",
       type: "chat",
       function: undefined,
-      variant: undefined,
-      metric_name: null,
-      metric_config: undefined,
-      threshold: 0.5,
+      variant_name: undefined,
+      episode_id: undefined,
+      search_query: undefined,
+      filters: undefined,
       output_source: "none",
     },
     resolver: DatasetBuilderFormValuesResolver,
@@ -49,40 +53,55 @@ export function DatasetBuilderForm() {
 
   const watchedFields = useWatch({
     control: form.control,
-    name: ["function", "metric_name", "threshold", "dataset"] as const,
+    name: [
+      "function",
+      "dataset",
+      "variant_name",
+      "episode_id",
+      "search_query",
+      "output_source",
+    ] as const,
   });
 
-  const [functionName, metricName, threshold, selectedDataset] = watchedFields;
-  const counts = useCountFetcher({
-    functionName: functionName ?? undefined,
-    metricName: metricName ?? undefined,
-    threshold: threshold ?? undefined,
-  });
+  const [
+    functionName,
+    selectedDataset,
+    variantName,
+    episodeId,
+    searchQuery,
+    outputSource,
+  ] = watchedFields;
   const functionConfig = useFunctionConfig(functionName ?? "");
 
+  // Fetch inference count based on current form values
+  // Only fetch when form has no validation errors
+  const hasValidationErrors = Object.keys(form.formState.errors).length > 0;
+  const {
+    count: inferenceCount,
+    error: countError,
+    isLoading: isCountLoading,
+  } = useInferenceCountFetcher({
+    functionName: functionName ?? undefined,
+    variantName: variantName ?? undefined,
+    episodeId: episodeId ?? undefined,
+    outputSource: (outputSource as InferenceOutputSource) ?? "inference",
+    filters: inferenceFilter,
+    searchQuery: searchQuery ?? undefined,
+    enabled: !hasValidationErrors,
+  });
+
+  // Update form type when function changes
   useEffect(() => {
-    const metricConfig = config.metrics[metricName ?? ""];
-    form.setValue("metric_config", metricConfig ? metricConfig : undefined);
     const functionType = functionConfig?.type;
     if (functionType) {
       form.setValue("type", functionType);
     }
-  }, [metricName, functionName, config, form, functionConfig]);
+  }, [functionName, functionConfig, form]);
 
-  // Compute whether any part of the form is loading
-  const isAnyLoading = useMemo(
-    () =>
-      counts.isLoading ||
-      isMetricSelectorLoading ||
-      isOutputSourceLoading ||
-      isInsertCountLoading,
-    [
-      counts.isLoading,
-      isMetricSelectorLoading,
-      isOutputSourceLoading,
-      isInsertCountLoading,
-    ],
-  );
+  // Sync inferenceFilter state with form
+  useEffect(() => {
+    form.setValue("filters", inferenceFilter);
+  }, [inferenceFilter, form]);
 
   // Handle form submission response
   useEffect(() => {
@@ -106,9 +125,6 @@ export function DatasetBuilderForm() {
   // Form submission handler
   const onSubmit = async (data: DatasetBuilderFormValues) => {
     try {
-      if (isAnyLoading) {
-        return;
-      }
       const submitData = new FormData();
       submitData.append("data", JSON.stringify(data));
 
@@ -120,7 +136,7 @@ export function DatasetBuilderForm() {
     }
   };
 
-  function getButtonText(isNewDataset: boolean | null) {
+  function getButtonText() {
     switch (submissionPhase) {
       case "submitting":
         return "Creating Dataset...";
@@ -128,11 +144,7 @@ export function DatasetBuilderForm() {
         return "Success";
       case "idle":
       default:
-        if (isNewDataset) {
-          return "Create Dataset";
-        } else {
-          return "Insert Into Dataset";
-        }
+        return "Create Datapoints";
     }
   }
 
@@ -151,58 +163,139 @@ export function DatasetBuilderForm() {
             label="Dataset"
             placeholder="Select dataset"
             allowCreation
-            onSelect={(dataset, isNew) => {
-              setIsNewDataset(isNew);
-            }}
           />
 
           <FunctionFormField
             control={form.control}
             name="function"
             onSelect={() => {
-              form.resetField("variant");
+              form.resetField("variant_name");
             }}
           />
 
-          <CurationMetricSelector<DatasetBuilderFormValues>
-            control={form.control}
-            name="metric_name"
-            functionFieldName="function"
-            config={config}
-            addDemonstrations={false}
-            feedbackCount={counts.feedbackCount}
-            curatedInferenceCount={counts.curatedInferenceCount}
-            isLoading={counts.isLoading}
-            onMetricsLoadingChange={setIsMetricSelectorLoading}
-          />
-          <OutputSourceSelector
-            control={form.control}
-            onLoadingChange={setIsOutputSourceLoading}
-          />
+          <div className="grid gap-x-8 md:grid-cols-2">
+            <div className="border-border bg-muted/30 rounded-lg border p-4">
+              <div className="mb-4 flex items-center gap-2">
+                <h3 className="text-muted-foreground text-sm font-semibold">
+                  Filters
+                </h3>
+                <Badge
+                  variant="outline"
+                  className="text-muted-foreground text-xs"
+                >
+                  Optional
+                </Badge>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <FormLabel>Variant</FormLabel>
+                  <div className="mt-2">
+                    <VariantSelector
+                      functionName={functionName ?? null}
+                      value={form.watch("variant_name") ?? ""}
+                      onChange={(value) =>
+                        form.setValue(
+                          "variant_name",
+                          value === "__all__" ? undefined : value || undefined,
+                          { shouldValidate: true },
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <FormLabel>Episode ID</FormLabel>
+                  <div className="mt-2">
+                    <Input
+                      value={form.watch("episode_id") ?? ""}
+                      onChange={(e) =>
+                        form.setValue(
+                          "episode_id",
+                          e.target.value || undefined,
+                          {
+                            shouldValidate: true,
+                          },
+                        )
+                      }
+                      placeholder="00000000-0000-0000-0000-000000000000"
+                    />
+                    {form.formState.errors.episode_id && (
+                      <p className="mt-1 text-sm text-red-500">
+                        {form.formState.errors.episode_id.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-2">
+                    <FormLabel>Search Query</FormLabel>
+                    <Badge variant="outline" className="text-xs">
+                      Experimental
+                    </Badge>
+                  </div>
+                  <div className="mt-2">
+                    <Input
+                      value={form.watch("search_query") ?? ""}
+                      onChange={(e) =>
+                        form.setValue(
+                          "search_query",
+                          e.target.value || undefined,
+                          {
+                            shouldValidate: true,
+                          },
+                        )
+                      }
+                      placeholder="Search in input and output"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <InferenceFilterBuilder
+                    inferenceFilter={inferenceFilter}
+                    setInferenceFilter={setInferenceFilter}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <OutputSourceSelector control={form.control} />
         </div>
-        <DatasetCountDisplay
-          control={form.control}
-          setCountToInsert={setCountToInsert}
-          onLoadingChange={setIsInsertCountLoading}
-        />
-        <Button
-          type="submit"
-          disabled={
-            submissionPhase !== "idle" ||
-            isAnyLoading ||
-            countToInsert === null ||
-            countToInsert === 0 ||
-            !selectedDataset
-          }
-          onClick={() => {
-            if (submissionPhase === "complete") {
-              setSubmissionPhase("idle");
-              form.clearErrors("root");
+
+        <div className="flex items-center gap-4">
+          <Button
+            type="submit"
+            disabled={
+              submissionPhase !== "idle" ||
+              !selectedDataset ||
+              !functionName ||
+              isCountLoading ||
+              !!countError ||
+              inferenceCount === 0
             }
-          }}
-        >
-          {getButtonText(isNewDataset)}
-        </Button>
+            onClick={() => {
+              if (submissionPhase === "complete") {
+                setSubmissionPhase("idle");
+                form.clearErrors("root");
+              }
+            }}
+          >
+            {getButtonText()}
+          </Button>
+          {functionName && !hasValidationErrors && !countError && (
+            <span className="text-muted-foreground text-sm">
+              {isCountLoading
+                ? "Loading..."
+                : `${inferenceCount.toLocaleString()} matching inferences`}
+            </span>
+          )}
+        </div>
+        {countError && (
+          <p className="mt-2 text-sm text-red-500">{countError}</p>
+        )}
         {form.formState.errors.root && (
           <p className="mt-2 text-sm text-red-500">
             {form.formState.errors.root.message}

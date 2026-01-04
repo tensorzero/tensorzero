@@ -2,47 +2,77 @@ use std::{
     cell::Cell,
     pin::Pin,
     task::{Context, Poll},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use http::{Method, StatusCode};
 use http_body::{Frame, SizeHint};
-use tracing::Span;
+use metrics::Label;
+use tracing::{Level, Span};
+use tracing_futures::Instrument;
+
+use crate::observability::overhead_timing::{
+    OverheadSpanExt, TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME,
+};
 
 /// A drop guard that logs a message on drop if `start_time` is set.
 struct ConnectionDropGuard {
+    latency_span: Option<Span>,
+    request_logging_data: Option<HttpMetricData>,
     span: Span,
     start_time: Instant,
-    warn_on_drop: Cell<bool>,
+    finished_with_latency: Cell<Option<Duration>>,
     status: Option<StatusCode>,
 }
 
 impl ConnectionDropGuard {
-    fn elapsed_latency(&self) -> String {
-        format!("{} ms", self.start_time.elapsed().as_millis())
-    }
     // Mark the guard as explicitly finished by the server.
     // This suppresses the warning that we would otherwise log in the `Drop` impl.
     // Note that we call this method even if the server produces an error - the purpose
     // of this method is to detect early drops, when the server didn't produce a response of any kind.
     fn mark_finished(&self) {
-        self.warn_on_drop.set(true);
+        // Calculate the elapsed time when we've finished sending the response to
+        // the client - this is the latency that we want to log to users,
+        // and use for computing the `tensorzero_inference_latency_overhead_seconds` metric
+        self.finished_with_latency
+            .set(Some(self.start_time.elapsed()));
     }
 }
 
 impl Drop for ConnectionDropGuard {
     fn drop(&mut self) {
         let _guard = self.span.enter();
-        let latency = self.elapsed_latency();
-        // If `log_on_drop` is set, then `ConnectionDropGuard` was dropped before the response was sent
+        let latency_duration = if let Some(finished_with_latency) = self.finished_with_latency.get()
+        {
+            if let Some(latency_span) = &self.latency_span {
+                // Only update the 'overhead' metric when the request finished, so that we
+                // can accurately subtract off the time taken for 'external' spans.
+                latency_span.set_inference_latency_and_record(
+                    finished_with_latency,
+                    self.request_logging_data
+                        .take()
+                        .map(|data| data.extra_overhead_labels),
+                );
+            }
+            finished_with_latency
+        } else {
+            // If we didn't explicitly mark the request as 'finished' (due to the connection
+            // getting dropped early), then use the current time to compute the latency.
+            self.start_time.elapsed()
+        };
+
+        let latency = format!("{} ms", latency_duration.as_millis());
+
+        // If we did not explicitly set 'finished', then `ConnectionDropGuard` was dropped before the response was sent
         // We log a warning and the latency of the request.
-        if !self.warn_on_drop.get() {
+        if self.finished_with_latency.get().is_none() {
             tracing::warn!(
                 %latency,
                 "Client closed the connection before the response was sent",
             );
         }
+
         // We might have a status code even if the client closed the connection early
         // (e.g. if we were sending an SSE stream)
         if let Some(status) = self.status {
@@ -111,6 +141,16 @@ impl http_body::Body for GuardBodyWrapper {
     }
 }
 
+/// A *response* extension used to pass data from a route handler to `request_logging_middleware`
+/// See the `inference` route handler for an example of how to use this.
+#[derive(Clone)]
+pub struct HttpMetricData {
+    /// Extra labels to add to the `tensorzero_inference_latency_overhead_seconds` metric.
+    /// We currently use this to attach `function_name`, `variant_name`, and `model_name` labels
+    /// when recording the overhead of `/inference` requests
+    pub extra_overhead_labels: Vec<Label>,
+}
+
 // An Axum middleware that logs request processing events
 // * 'started processing request' when we begin processing a request
 // * 'finished processing request' when we we *completely* finish a request.
@@ -122,13 +162,39 @@ pub async fn request_logging_middleware(
     next: Next,
 ) -> Response<GuardBodyWrapper> {
     let start_time = Instant::now();
-    let span = tracing::info_span!(
-        target: "gateway",
-        "request",
-        method = %request.method(),
-        uri = %request.uri(),
-        version = ?request.version(),
-    );
+    // Create a separate span for latency tracing, using a custom 'target' that will
+    // get filtered out when we log to console/otel
+    // This prevents the `tensorzero.overhead.*` span attributes from being visible to users
+    // in the logs/OTEL
+    let latency_span = if request.method() == Method::POST && request.uri() == "/inference" {
+        Some(tracing::span!(
+            target: "tensorzero.overhead",
+            Level::DEBUG,
+            "request_latency_tracking",
+            { TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME } = true,
+        ))
+    } else {
+        None
+    };
+
+    let span = if let Some(latency_span) = &latency_span {
+        tracing::info_span!(
+            target: "gateway",
+            parent: latency_span,
+            "request",
+            method = %request.method(),
+            uri = %request.uri(),
+            version = ?request.version(),
+        )
+    } else {
+        tracing::info_span!(
+            target: "gateway",
+            "request",
+            method = %request.method(),
+            uri = %request.uri(),
+            version = ?request.version(),
+        )
+    };
     span.in_scope(|| {
         tracing::debug!("started processing request");
     });
@@ -137,12 +203,18 @@ pub async fn request_logging_middleware(
     // To avoid false positives, we never log a warning for HEAD requests.
     let is_finished = matches!(request.method(), &Method::HEAD);
     let mut guard = ConnectionDropGuard {
-        span,
+        latency_span,
+        request_logging_data: None,
+        span: span.clone(),
         start_time,
-        warn_on_drop: Cell::new(is_finished),
+        finished_with_latency: Cell::new(None),
         status: None,
     };
-    let response = next.run(request).await;
+    let mut response = next.run(request).instrument(span).await;
+    guard.request_logging_data = response.extensions_mut().remove::<HttpMetricData>();
     guard.status = Some(response.status());
+    if is_finished {
+        guard.mark_finished();
+    }
     response.map(|body| GuardBodyWrapper { inner: body, guard })
 }

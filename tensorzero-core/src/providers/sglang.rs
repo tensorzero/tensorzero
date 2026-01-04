@@ -230,6 +230,7 @@ impl InferenceProvider for SGLangProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -416,8 +417,6 @@ fn stream_sglang(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 
@@ -613,7 +612,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
     }
 
     if service_tier.is_some() {
