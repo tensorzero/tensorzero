@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use autopilot_client::OptimizationWorkflowSideInfo;
 use autopilot_tools::tools::{
-    LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolParams,
+    LaunchOptimizationWorkflowLlmParams, LaunchOptimizationWorkflowTool, LlmOptimizerConfig,
+    LlmOptimizerType, LlmOutputSource,
 };
 use common::MockTensorZeroClient;
 use durable::MIGRATOR;
@@ -19,14 +20,8 @@ use durable_tools::{
     SpawnOptions, TensorZeroClient, TensorZeroClientError, ToolExecutor, WorkerOptions,
 };
 use sqlx::PgPool;
-use tensorzero_core::db::inferences::InferenceOutputSource;
-use tensorzero_core::optimization::dicl::{
-    DiclOptimizationJobHandle, UninitializedDiclOptimizationConfig,
-};
-use tensorzero_core::optimization::{
-    OptimizationJobHandle, OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerConfig,
-    UninitializedOptimizerInfo,
-};
+use tensorzero_core::optimization::dicl::DiclOptimizationJobHandle;
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo, OptimizerOutput};
 use uuid::Uuid;
 
 // ===== Test Helpers =====
@@ -39,21 +34,27 @@ fn create_test_job_handle() -> OptimizationJobHandle {
     })
 }
 
-fn create_test_params() -> LaunchOptimizationWorkflowToolParams {
-    LaunchOptimizationWorkflowToolParams {
+fn create_test_params() -> LaunchOptimizationWorkflowLlmParams {
+    LaunchOptimizationWorkflowLlmParams {
         function_name: "test_function".to_string(),
         template_variant_name: "test_variant".to_string(),
         query_variant_name: None,
-        filters: None,
-        output_source: InferenceOutputSource::Inference,
-        order_by: None,
+        output_source: LlmOutputSource::InferenceOutput,
         limit: Some(100),
         offset: None,
         val_fraction: None,
-        optimizer_config: UninitializedOptimizerInfo {
-            inner: UninitializedOptimizerConfig::Dicl(
-                UninitializedDiclOptimizationConfig::default(),
-            ),
+        optimizer_config: LlmOptimizerConfig {
+            optimizer_type: LlmOptimizerType::Dicl,
+            embedding_model: Some("text-embedding-3-small".to_string()),
+            k: Some(5),
+            model: None,
+            n_epochs: None,
+            learning_rate_multiplier: None,
+            suffix: None,
+            gepa_function_name: None,
+            evaluation_name: None,
+            analysis_model: None,
+            mutation_model: None,
         },
     }
 }
