@@ -3,7 +3,7 @@ import { useState } from "react";
 import { TableItemTime } from "~/components/ui/TableItems";
 import type { Event } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
-import { ToolEventId } from "./EventStream";
+// import { ToolEventId } from "./EventStream";
 
 type PendingToolCallCardProps = {
   event: Event;
@@ -141,8 +141,8 @@ export function PendingToolCallCard({
             </div>
           )}
           <div className="text-fg-muted flex items-center gap-1.5 text-xs">
-            <ToolEventId id={event.id} />
-            <span aria-hidden="true">&middot;</span>
+            {/*<ToolEventId id={event.id} />
+            <span aria-hidden="true">&middot;</span>*/}
             <TableItemTime timestamp={event.created_at} />
           </div>
         </div>
@@ -150,7 +150,9 @@ export function PendingToolCallCard({
 
       {/* Tool arguments (expandable) */}
       {isExpanded && args && (
-        <p className="text-fg-secondary font-mono text-xs">{args}</p>
+        <pre className="text-fg-secondary overflow-x-auto font-mono text-xs whitespace-pre-wrap">
+          {JSON.stringify(args, null, 2)}
+        </pre>
       )}
     </div>
   );

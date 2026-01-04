@@ -45,26 +45,26 @@ type EventStreamProps = {
   optimisticMessages?: OptimisticMessage[];
 };
 
-export function ToolEventId({ id }: { id: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className="inline-block max-w-12 cursor-help overflow-hidden align-middle font-mono text-xs text-ellipsis whitespace-nowrap"
-          dir="rtl"
-        >
-          {id}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent
-        className="border-border bg-bg-secondary text-fg-primary border text-xs shadow-lg"
-        sideOffset={5}
-      >
-        Tool Call ID: <span className="font-mono text-xs">{id}</span>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
+// export function ToolEventId({ id }: { id: string }) {
+//   return (
+//     <Tooltip>
+//       <TooltipTrigger asChild>
+//         <span
+//           className="inline-block max-w-12 cursor-help overflow-hidden align-middle font-mono text-xs text-ellipsis whitespace-nowrap"
+//           dir="rtl"
+//         >
+//           {id}
+//         </span>
+//       </TooltipTrigger>
+//       <TooltipContent
+//         className="border-border bg-bg-secondary text-fg-primary border text-xs shadow-lg"
+//         sideOffset={5}
+//       >
+//         Tool Call ID: <span className="font-mono text-xs">{id}</span>
+//       </TooltipContent>
+//     </Tooltip>
+//   );
+// }
 
 function getMessageText(content: InputMessageContent[]) {
   const textBlock = content.find(
@@ -98,7 +98,7 @@ function summarizeEvent(event: Event): EventSummary {
       };
     case "tool_call":
       return {
-        description: payload.arguments,
+        description: JSON.stringify(payload.arguments, null, 2),
       };
     case "tool_call_authorization":
       return {
@@ -110,7 +110,7 @@ function summarizeEvent(event: Event): EventSummary {
     case "tool_result":
       if (payload.outcome.type === "success") {
         return {
-          description: payload.outcome.result,
+          description: JSON.stringify(payload.outcome.result, null, 2),
         };
       }
       if (payload.outcome.type === "failure") {
@@ -166,14 +166,8 @@ function renderEventTitle(event: Event) {
     case "tool_result":
       switch (payload.outcome.type) {
         case "success":
-          return (
-            <>
-              Tool Result &middot;{" "}
-              <span className="font-mono font-medium">
-                {payload.outcome.name}
-              </span>
-            </>
-          );
+          // TODO: need tool name
+          return <>Tool Result &middot; Success</>;
         case "failure":
           // TODO: need tool name
           return <>Tool Result &middot; Failure</>;
@@ -262,10 +256,10 @@ function EventItem({
 }) {
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
-  const isToolEvent =
-    event.payload.type === "tool_call" ||
-    event.payload.type === "tool_call_authorization" ||
-    event.payload.type === "tool_result";
+  // const isToolEvent =
+  //   event.payload.type === "tool_call" ||
+  //   event.payload.type === "tool_call_authorization" ||
+  //   event.payload.type === "tool_result";
   const isExpandable =
     event.payload.type === "tool_call" ||
     (event.payload.type === "tool_call_authorization" &&
@@ -309,12 +303,13 @@ function EventItem({
           label
         )}
         <div className="text-fg-muted flex items-center gap-1.5 text-xs">
-          {isToolEvent && (
+          {/* TODO: we need a shared identifier between the differnt tool call types */}
+          {/*{isToolEvent && (
             <>
               <ToolEventId id={event.id} />
               <span aria-hidden="true">&middot;</span>
             </>
-          )}
+          )}*/}
           <TableItemTime timestamp={event.created_at} />
         </div>
       </div>
@@ -392,8 +387,8 @@ export default function EventStream({
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       {/* Session started indicator, or sentinel for loading more */}
-      {/* Show divider when we've reached the start OR when there are optimistic messages (new session) */}
-      {(hasReachedStart || optimisticMessages.length > 0) && !isLoadingOlder ? (
+      {/* Show divider when we've reached the start, otherwise show sentinel for infinite scroll */}
+      {hasReachedStart && !isLoadingOlder ? (
         <SessionStartedDivider />
       ) : (
         <div ref={topSentinelRef} className="h-1" aria-hidden="true" />

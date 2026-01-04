@@ -85,8 +85,6 @@ const toolingEvents: Event[] = [
         tool_call_event_id: "0194e8b2-7c6a-7b9d-8c7f-1f2a3b4c5d6e",
         outcome: {
           type: "success",
-          id: "tool-result-1",
-          name: "search_wikipedia",
           result: "Found relevant context.",
         },
       },

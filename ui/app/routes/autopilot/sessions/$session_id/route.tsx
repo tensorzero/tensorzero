@@ -520,6 +520,11 @@ export default function AutopilotSessionEventsPage({
     !isNewSession && eventsData instanceof Promise,
   );
 
+  // Reset loading state when session changes (useState initial value only applies on first mount)
+  useEffect(() => {
+    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
+  }, [sessionId, isNewSession, eventsData]);
+
   // Ref for scroll container - shared between parent and EventStreamContent
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
