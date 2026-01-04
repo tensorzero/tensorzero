@@ -139,6 +139,8 @@ pub struct AppStateData {
     pub config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
     /// Optional Autopilot API client for proxying requests to the Autopilot API
     pub autopilot_client: Option<Arc<AutopilotClient>>,
+    /// The deployment ID from ClickHouse (64-char hex string)
+    pub deployment_id: Option<String>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -190,7 +192,7 @@ impl GatewayHandle {
         postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let config = Arc::new(config.into_config(&clickhouse_connection_info).await?);
+        let config = Arc::new(Box::pin(config.into_config(&clickhouse_connection_info)).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
@@ -224,6 +226,7 @@ impl GatewayHandle {
                 auth_cache,
                 config_snapshot_cache: None,
                 autopilot_client: None,
+                deployment_id: None,
                 _private: (),
             },
             cancel_token,
@@ -256,6 +259,11 @@ impl GatewayHandle {
             cancel_token.clone(),
         );
 
+        // Fetch the deployment ID from ClickHouse (if available)
+        let deployment_id = crate::howdy::get_deployment_id(&clickhouse_connection_info)
+            .await
+            .ok();
+
         for (function_name, function_config) in &config.functions {
             function_config
                 .experimentation()
@@ -278,7 +286,8 @@ impl GatewayHandle {
                 .build(),
         );
 
-        let autopilot_client = setup_autopilot_client(&postgres_connection_info).await?;
+        let autopilot_client =
+            setup_autopilot_client(&postgres_connection_info, deployment_id.as_ref()).await?;
 
         Ok(Self {
             app_state: AppStateData {
@@ -290,6 +299,7 @@ impl GatewayHandle {
                 auth_cache,
                 config_snapshot_cache,
                 autopilot_client,
+                deployment_id,
                 _private: (),
             },
             cancel_token,
@@ -301,8 +311,8 @@ impl GatewayHandle {
 
 impl AppStateData {
     /// Create an AppStateData for use with a historical config snapshot.
-    /// This version does not include auth_cache, config_snapshot_cache, or autopilot_client
-    /// since those are specific to the live gateway.
+    /// This version does not include auth_cache, config_snapshot_cache, autopilot_client,
+    /// or deployment_id since those are specific to the live gateway.
     pub fn new_for_snapshot(
         config: Arc<Config>,
         http_client: TensorzeroHttpClient,
@@ -319,6 +329,7 @@ impl AppStateData {
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
+            deployment_id: None,
             _private: (),
         }
     }
@@ -456,7 +467,7 @@ pub async fn setup_postgres(
 /// Sets up the Autopilot API client from the environment.
 /// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
 /// `Ok(None)` if not set, or an error if client construction fails.
-/// Requires Postgres to be enabled.
+/// Requires Postgres and ClickHouse (for deployment_id) to be enabled.
 ///
 /// Environment variables:
 /// - `TENSORZERO_AUTOPILOT_API_KEY`: Required to enable the client
@@ -464,6 +475,7 @@ pub async fn setup_postgres(
 /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Optional queue name for tool dispatching
 async fn setup_autopilot_client(
     postgres_connection_info: &PostgresConnectionInfo,
+    deployment_id: Option<&String>,
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
@@ -473,6 +485,15 @@ async fn setup_autopilot_client(
                         .to_string(),
                 })
             })?;
+
+            // Require deployment_id (from ClickHouse) for autopilot
+            if deployment_id.is_none() {
+                return Err(Error::new(ErrorDetails::AppState {
+                    message:
+                        "Autopilot client requires ClickHouse; set `TENSORZERO_CLICKHOUSE_URL`."
+                            .to_string(),
+                }));
+            }
             let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
                 .unwrap_or_else(|_| "autopilot".to_string());
 

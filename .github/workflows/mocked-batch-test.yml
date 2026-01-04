@@ -11,7 +11,6 @@ env:
   AZURE_OPENAI_DEPLOYMENT_ID: "fake_deployment_id"
   DEEPSEEK_API_KEY: "fake_deepseek_key"
   FIREWORKS_API_KEY: "fake_fireworks_key"
-  FIREWORKS_ACCOUNT_ID: "fake_fireworks_account"
   FORCE_COLOR: 1
   GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
   GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
@@ -28,7 +27,7 @@ env:
   VLLM_API_BASE: "http://fake-vllm-endpoint:8000"
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
   XAI_API_KEY: "fake_xai_key"
-  TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
+  TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://localhost:3030
 
 on:
   workflow_dispatch:
@@ -81,27 +80,27 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Download mock-inference-container
+      - name: Download mock-provider-api-container
         continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          name: build-mock-inference-container
+          name: build-mock-provider-api-container
           path: .
 
-      - name: Load mock-inference-container
-        id: load-mock-inference
+      - name: Load mock-provider-api-container
+        id: load-mock-provider-api
         continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
         run: |
-          docker load < mock-inference-container.tar
+          docker load < mock-provider-api-container.tar
 
-      - name: Set TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG
-        if: steps.load-mock-inference.outcome == 'success' # Only run if artifact was successfully loaded
+      - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG
+        if: steps.load-mock-provider-api.outcome == 'success' # Only run if artifact was successfully loaded
         run: |
-          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Start Docker services (mock-inference-provider + dependencies)
+      - name: Start Docker services (mock-provider-api + dependencies)
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-inference-provider
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-provider-api
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
         run: |
@@ -109,7 +108,7 @@ jobs:
 
       - name: Launch the gateway for batch tests
         run: |
-          cargo run-e2e-mock-batch > batch_logs.txt 2>&1 &
+          cargo run-e2e > batch_logs.txt 2>&1 &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."

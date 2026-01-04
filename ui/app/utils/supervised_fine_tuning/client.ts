@@ -8,7 +8,6 @@ import type {
 } from "~/types/tensorzero";
 import { getConfig } from "~/utils/config/index.server";
 import { getNativeTensorZeroClient } from "../tensorzero/native_client.server";
-import { getEnv } from "../env.server";
 
 export async function poll_sft_job(
   jobHandle: OptimizationJobHandle,
@@ -24,9 +23,6 @@ export async function poll_sft_job(
 export async function launch_sft_job(
   data: SFTFormValues,
 ): Promise<OptimizationJobHandle> {
-  const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
-  const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
-  const togetherNativeSFTBase = getEnv().TOGETHER_BASE_URL;
   let filters: InferenceFilter | null = null;
   let output_source: InferenceOutputSource = "inference";
   if (data.metric === "demonstration") {
@@ -48,20 +44,13 @@ export async function launch_sft_job(
         batch_size: 1,
         learning_rate_multiplier: 1,
         n_epochs: 1,
-        api_base: openAINativeSFTBase,
       };
       break;
     }
     case "fireworks": {
-      const accountId = getEnv().FIREWORKS_ACCOUNT_ID;
-      if (!accountId) {
-        throw new Error("FIREWORKS_ACCOUNT_ID is not set");
-      }
       optimizerConfig = {
         type: "fireworks_sft",
         model: data.model.name,
-        api_base: fireworksNativeSFTBase,
-        account_id: accountId,
       };
       break;
     }
@@ -69,7 +58,6 @@ export async function launch_sft_job(
       optimizerConfig = {
         type: "together_sft",
         model: data.model.name,
-        api_base: togetherNativeSFTBase,
         n_epochs: 1,
         n_checkpoints: 1,
         batch_size: "max",

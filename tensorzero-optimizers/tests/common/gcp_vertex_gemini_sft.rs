@@ -15,7 +15,7 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
         true
     }
 
-    fn get_optimizer_info(&self, _use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
+    fn get_optimizer_info(&self) -> UninitializedOptimizerInfo {
         // Provider-level settings (project_id, region, bucket_name, api_base, credentials)
         // come from [provider_types.gcp_vertex_gemini.sft] in the gateway config.
         // Only per-job settings are specified here.

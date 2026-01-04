@@ -56,6 +56,7 @@ env:
   SQLX_OFFLINE: 1
   TENSORZERO_E2E_PROXY: http://localhost:3003
   TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
+  TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
   TENSORZERO_CI: 1
   # Nextest filter expression for flaky tests to skip (e.g. "test(hyperbolic)|test(tgi)")
   CARGO_NEXTEST_FLAKY_TESTS: ${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}
@@ -156,6 +157,8 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+      # Permission to download artifacts
+      actions: read
     timeout-minutes: 45
     strategy:
       matrix:
@@ -315,11 +318,11 @@ jobs:
       - name: Install Python for python async client tests
         run: uv python install 3.9
 
-      - name: "Python: PyO3 Client: pytest"
+      - name: "Python: PyO3 Client: pytest (non-mock tests)"
         working-directory: clients/python
         run: |
           # Start the test in background and capture its PID
-          bash ./test.sh --verbose -n 8 &
+          bash ./test.sh --verbose -n 8 -m "not mock" &
           TEST_PID=$!
           echo "Started test.sh with PID: $TEST_PID"
 
@@ -357,6 +360,13 @@ jobs:
             echo "No Python processes found"
           fi
           exit 1
+
+      - name: "Python: PyO3 Client: pytest (mock tests)"
+        working-directory: clients/python
+        env:
+          TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://localhost:3030
+        run: |
+          bash ./test.sh --verbose -n 8 -m mock
 
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node

@@ -43,14 +43,14 @@ jobs:
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-{gateway,ui,mock-inference}-container
+          pattern: build-{gateway,ui,mock-provider-api}-container
           merge-multiple: true
 
       - name: Load container images
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
-          docker load < mock-inference-container.tar
+          docker load < mock-provider-api-container.tar
 
       # This allows us to use 'no-build' on subsequent steps
       - name: Build needed docker images
@@ -67,7 +67,7 @@ jobs:
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_CONFIG=/app/config/empty.toml" >> fixtures/.env
 
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
@@ -117,14 +117,14 @@ jobs:
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-{gateway,ui,mock-inference}-container
+          pattern: build-{gateway,ui,mock-provider-api}-container
           merge-multiple: true
 
       - name: Load container images
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
-          docker load < mock-inference-container.tar
+          docker load < mock-provider-api-container.tar
 
       # This allows us to use 'no-build' on subsequent steps
       - name: Build needed docker images
@@ -138,13 +138,10 @@ jobs:
         run: |
           # We set all of the environment variables for both the gateway and ui containers here
           # The 'ui-tests-e2e' job tests that the UI container starts without some of these variables set,
-          echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env
-          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
-          echo "TOGETHER_BASE_URL=http://mock-inference-provider:3030/together/" >> fixtures/.env
+          echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
           echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
@@ -152,7 +149,7 @@ jobs:
           echo "TENSORZERO_GATEWAY_CONFIG=/app/config/base-path.toml" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
@@ -236,14 +233,13 @@ jobs:
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-{gateway,ui,mock-inference}-container
+          pattern: build-{gateway,ui}-container
           merge-multiple: true
 
       - name: Load container images
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
-          docker load < mock-inference-container.tar
 
       - name: Set common fixture environment variables
         working-directory: ui
@@ -253,13 +249,6 @@ jobs:
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          # We need these set in the ui container, so that we construct the correct optimizer config
-          # to pass to 'experimentalLaunchOptimizationWorkflow'
-          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
-          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
-          echo "TOGETHER_BASE_URL=http://mock-inference-provider:3030/together/" >> fixtures/.env
-          echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env-gateway
@@ -270,7 +259,8 @@ jobs:
       - name: Start docker containers
         run: |
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
-          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml up -d
+          # Explicitly start services without mock-provider-api (TENSORZERO_INTERNAL_MOCK_PROVIDER_API is not set)
+          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml up clickhouse postgres gateway-postgres-migrations gateway fixtures ui -d
           docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml wait fixtures
 
       - name: Run UI E2E tests that require credentials
@@ -290,7 +280,100 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: playwright-report-e2e-base-path
+          name: playwright-report-e2e-credentials
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7
+
+  ui-tests-e2e-mock:
+    runs-on: ubuntu-latest
+    # Same conditions as ui-tests-e2e-credentials
+    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group }}
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.12.0"
+
+      - name: Setup `pnpm`
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install `pnpm` dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Playwright
+        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
+
+      - name: Download container images
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          pattern: build-{gateway,ui,mock-provider-api}-container
+          merge-multiple: true
+
+      - name: Load container images
+        run: |
+          docker load < gateway-container.tar
+          docker load < ui-container.tar
+          docker load < mock-provider-api-container.tar
+
+      - name: Set common fixture environment variables
+        working-directory: ui
+        run: |
+          # Environment variables shared by the gateway and ui containers
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
+          # S3 credentials are required - gateway validates object store at startup
+          echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          # Dummy values - not used since mock server handles requests
+          echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "TOGETHER_API_KEY=not_used" >> fixtures/.env-gateway
+
+      - name: Start docker containers
+        run: |
+          export TENSORZERO_SKIP_LARGE_FIXTURES=1
+          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml up -d
+          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml wait fixtures
+
+      - name: Run UI E2E tests that use the mock server
+        id: e2e_tests_mock
+        env:
+          TENSORZERO_CI: 1
+          TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
+          TENSORZERO_GATEWAY_URL: "http://gateway:3000"
+        run: pnpm ui:test:e2e --grep "@mock"
+
+      - name: Print docker compose logs
+        if: always()
+        run: |
+          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml logs -t
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: playwright-report-e2e-mock
           path: |
             ui/playwright-report/
             ui/test-results/

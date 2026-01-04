@@ -5,7 +5,6 @@ use std::sync::Arc;
 use tensorzero_core::{rate_limiting::ScopeInfo, tool::InferenceResponseToolCall};
 use tokio::time::{Duration, sleep};
 use tracing_subscriber::{self, EnvFilter};
-use url::Url;
 use uuid::Uuid;
 
 use tensorzero::{
@@ -48,21 +47,18 @@ pub mod together_sft;
 static FERRIS_PNG: &[u8] =
     include_bytes!("../../../tensorzero-core/tests/e2e/providers/ferris.png");
 
-fn use_mock_inference_provider() -> bool {
-    std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
-}
-
-pub fn mock_inference_provider_base() -> Url {
-    std::env::var("TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL")
-        .unwrap_or_else(|_| "http://localhost:3030/".to_string())
-        .parse()
-        .unwrap()
+fn use_mock_provider_api() -> bool {
+    std::env::var("TENSORZERO_INTERNAL_MOCK_PROVIDER_API")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .is_some()
 }
 
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
     fn supports_tool_calls(&self) -> bool;
-    fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo;
+    // Mock mode is now configured via provider_types in the test config file
+    fn get_optimizer_info(&self) -> UninitializedOptimizerInfo;
 }
 
 #[allow(clippy::allow_attributes, dead_code)]
@@ -72,11 +68,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let optimizer_info = test_case
-        .get_optimizer_info(use_mock_inference_provider())
-        .load(&ProviderTypeDefaultCredentials::default())
-        .await
-        .unwrap();
+    let optimizer_info = test_case.get_optimizer_info().load();
 
     let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_examples(test_case, 10);
@@ -145,7 +137,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         if matches!(status, OptimizationJobInfo::Failed { .. }) {
             panic!("Optimization failed: {status:?}");
         }
-        sleep(if use_mock_inference_provider() {
+        sleep(if use_mock_provider_api() {
             Duration::from_secs(1)
         } else {
             Duration::from_secs(60)
@@ -206,7 +198,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 relay: None,
             };
             // We didn't produce a real model, so there's nothing to test
-            if use_mock_inference_provider() {
+            if use_mock_provider_api() {
                 return;
             }
             let response = model_config
@@ -240,8 +232,8 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
         limit: Some(10),
         offset: None,
         val_fraction: None,
-        // We always mock the client tests since this is tested above
-        optimizer_config: test_case.get_optimizer_info(true),
+        // Mock mode is configured via provider_types in the test config file
+        optimizer_config: test_case.get_optimizer_info(),
     };
     let job_handle = client
         .experimental_launch_optimization_workflow(params)

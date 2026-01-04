@@ -73,7 +73,7 @@ impl ClickHouseClient for FakeClickHouseClient {
         &FAKE_CLUSTER_NAME
     }
 
-    fn database(&self) -> &str {
+    fn database(&self) -> &'static str {
         "fake"
     }
 

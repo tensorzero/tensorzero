@@ -232,7 +232,6 @@ class DICLOptimizationConfig:
         k: Optional[int] = None,
         model: Optional[str] = None,
         append_to_existing_variants: Optional[bool] = None,
-        credentials: Optional[str] = None,
     ) -> None: ...
 
 @final
@@ -244,8 +243,6 @@ class OpenAISFTConfig:
         batch_size: Optional[int] = None,
         learning_rate_multiplier: Optional[float] = None,
         n_epochs: Optional[int] = None,
-        credentials: Optional[str] = None,
-        api_base: Optional[str] = None,
         seed: Optional[int] = None,
         suffix: Optional[str] = None,
     ) -> None: ...
@@ -265,8 +262,6 @@ class OpenAIRFTConfig:
         learning_rate_multiplier: Optional[float] = None,
         n_epochs: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
-        credentials: Optional[str] = None,
-        api_base: Optional[str] = None,
         seed: Optional[int] = None,
         suffix: Optional[str] = None,
     ) -> None: ...
@@ -292,9 +287,7 @@ class FireworksSFTConfig:
         mtp_enabled: Optional[bool] = None,
         mtp_num_draft_tokens: Optional[int] = None,
         mtp_freeze_base_model: Optional[bool] = None,
-        credentials: Optional[str] = None,
-        account_id: str,
-        api_base: Optional[str] = None,
+        deploy_after_training: Optional[bool] = None,
     ) -> None: ...
 
 @final
@@ -343,8 +336,6 @@ class TogetherSFTConfig:
         self,
         *,
         model: str,
-        credentials: Optional[str] = None,
-        api_base: Optional[str] = None,
         n_epochs: Optional[int] = None,
         n_checkpoints: Optional[int] = None,
         n_evals: Optional[int] = None,
@@ -355,16 +346,12 @@ class TogetherSFTConfig:
         weight_decay: Optional[float] = None,
         suffix: Optional[str] = None,
         lr_scheduler: Optional[Dict[str, Any]] = None,
-        wandb_api_key: Optional[str] = None,
-        wandb_base_url: Optional[str] = None,
-        wandb_project_name: Optional[str] = None,
         wandb_name: Optional[str] = None,
         training_method: Optional[Dict[str, Any]] = None,
         training_type: Optional[Dict[str, Any]] = None,
         from_checkpoint: Optional[str] = None,
         from_hf_model: Optional[str] = None,
         hf_model_revision: Optional[str] = None,
-        hf_api_token: Optional[str] = None,
         hf_output_repo_name: Optional[str] = None,
     ) -> None: ...
 
@@ -546,6 +533,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
         extra_headers: Optional[List[ExtraHeader | Dict[str, Any]]] = None,
         otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
+        otlp_traces_extra_attributes: Optional[Dict[str, str]] = None,
+        otlp_traces_extra_resources: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
@@ -580,6 +569,10 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param extra_body: If set, injects extra fields into the provider request body.
         :param extra_headers: If set, injects extra headers into the provider request.
         :param otlp_traces_extra_headers: If set, adds custom headers to OTLP trace exports. Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
+        :param otlp_traces_extra_attributes: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+                                             Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-attributes-".
+        :param otlp_traces_extra_resources: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+                                            Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-resources-".
         :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
@@ -1091,6 +1084,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
         extra_headers: Optional[List[ExtraHeader | Dict[str, Any]]] = None,
         otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
+        otlp_traces_extra_attributes: Optional[Dict[str, str]] = None,
+        otlp_traces_extra_resources: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
@@ -1125,6 +1120,10 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param extra_body: If set, injects extra fields into the provider request body.
         :param extra_headers: If set, injects extra headers into the provider request.
         :param otlp_traces_extra_headers: If set, adds custom headers to OTLP trace exports. Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
+        :param otlp_traces_extra_attributes: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+                                             Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-attributes-".
+        :param otlp_traces_extra_resources: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+                                            Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-resources-".
         :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
