@@ -10,7 +10,7 @@ This page shows how to:
 
 - Create API keys for the TensorZero Gateway
 - Require clients to use these API keys for requests
-- Manage API keys in the TensorZero UI
+- Manage and disable API keys
 
 <Note>
 
@@ -307,10 +307,18 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
 
 </Step>
 
-<Step title="Manage API keys in the TensorZero UI">
+<Step title="Manage API keys">
 
-You can manage and delete API keys in the TensorZero UI.
+You can manage and disable API keys in the TensorZero UI.
 If you're running a standard local deployment, visit `http://localhost:4000/api-keys` to manage your keys.
+
+Alternatively, you can disable API keys programmatically in the CLI using the gateway binary with the `--disable-api-key` flag.
+Pass the public ID of the key you want to disable (the 12-character portion after `sk-t0-`).
+For example:
+
+```bash
+docker compose run --rm gateway --disable-api-key xxxxxxxxxxxx
+```
 
 </Step>
 

@@ -2,6 +2,7 @@
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -10,7 +11,7 @@ use crate::{
     providers::openai::grader::OpenAIGrader,
 };
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "RFTJsonSchemaInfoOption"))]
 #[serde(untagged)]
@@ -35,7 +36,7 @@ impl std::fmt::Display for RFTJsonSchemaInfoOption {
 /// If no response format is specified but the model is instructed (e.g., via prompts)
 /// to produce structured outputs, those outputs will be returned as raw JSON strings
 /// in the `output_text` field of the Sample namespace instead.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
 #[serde(tag = "type")]
@@ -76,7 +77,7 @@ pub struct OpenAIRFTConfig {
 /// Uninitialized OpenAI RFT Config (per-job settings only).
 /// Provider-level settings (credentials) come from
 /// `provider_types.openai` defaults in the gateway config.
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
 pub struct UninitializedOpenAIRFTConfig {

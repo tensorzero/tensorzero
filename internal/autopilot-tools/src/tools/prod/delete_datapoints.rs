@@ -3,13 +3,12 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::DeleteDatapointsResponse;
 use uuid::Uuid;
-
-use crate::types::AutopilotToolSideInfo;
 
 /// Parameters for the delete_datapoints tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -27,7 +26,7 @@ pub struct DeleteDatapointsToolParams {
 pub struct DeleteDatapointsTool;
 
 impl ToolMetadata for DeleteDatapointsTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = DeleteDatapointsResponse;
     type LlmParams = DeleteDatapointsToolParams;
 
@@ -40,6 +39,27 @@ impl ToolMetadata for DeleteDatapointsTool {
             "Delete datapoints from a dataset by their IDs. \
              This is a soft delete - datapoints are marked as stale but not truly removed.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Delete datapoints from a dataset by their IDs.",
+            "properties": {
+                "dataset_name": {
+                    "type": "string",
+                    "description": "The name of the dataset containing the datapoints."
+                },
+                "ids": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "uuid" },
+                    "description": "The IDs of the datapoints to delete."
+                }
+            },
+            "required": ["dataset_name", "ids"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 

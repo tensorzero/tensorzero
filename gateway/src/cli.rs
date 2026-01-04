@@ -5,6 +5,7 @@
 
 use clap::{Args, Parser};
 use sqlx::types::chrono::{DateTime, Utc};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use tensorzero_core::observability::LogFormat;
 
@@ -24,6 +25,10 @@ pub struct GatewayArgs {
     #[arg(value_enum)]
     #[clap(default_value_t = LogFormat::default())]
     pub log_format: LogFormat,
+
+    /// Sets the socket address the gateway will bind to (e.g., "127.0.0.1:8080").
+    #[arg(long)]
+    pub bind_address: Option<SocketAddr>,
 
     /// These commands trigger some workflow then exit without launching the gateway.
     #[command(flatten)]

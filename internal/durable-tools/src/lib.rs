@@ -117,7 +117,7 @@
 //!     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 //!         // Call the search tool
 //!         let _search = ctx
-//!             .call_tool("search", serde_json::json!({"query": llm_params.topic}))
+//!             .call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null))
 //!             .await?;
 //!
 //!         // Use a checkpointed step
@@ -184,14 +184,14 @@ pub mod spawn {
 }
 
 // Re-export main types
-pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext};
+pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext, ToolHandle};
 pub use durable_tools_spawn::TaskToolParams;
 pub use error::{ToolError, ToolResult};
 pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 pub use simple_tool::SimpleTool;
 pub use task_tool::{TaskTool, TaskToolAdapter};
-pub use tool_metadata::{SideInfo, ToolMetadata};
+pub use tool_metadata::ToolMetadata;
 
 // Re-export TensorZero client trait and helpers
 pub use tensorzero_client::{
@@ -201,14 +201,37 @@ pub use tensorzero_client::{
 
 // Re-export autopilot types for use by tools
 pub use tensorzero_client::{
-    CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    CreateEventGatewayRequest, CreateEventResponse, EventPayload, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, ToolOutcome,
+};
+
+// Re-export datapoint types for CRUD operations
+pub use tensorzero_client::{
+    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
+    DeleteDatapointsResponse, GetDatapointsResponse, ListDatapointsRequest, UpdateDatapointRequest,
+    UpdateDatapointsResponse,
+};
+
+// Re-export inference query filter and ordering types
+pub use tensorzero::{
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+    InferenceOutputSource, OrderBy, OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter,
+    TimeComparisonOperator, TimeFilter,
+};
+
+// Re-export config snapshot types for historical inference
+pub use tensorzero_client::SnapshotHash;
+
+// Re-export evaluation types
+pub use tensorzero_client::{
+    CacheEnabledMode, EvaluatorStatsResponse, RunEvaluationParams, RunEvaluationResponse,
 };
 
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
-    Client, ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse, Input,
-    InputMessage, InputMessageContent, Role, TensorZeroError, Tool,
+    Client, ClientInferenceParams, DynamicToolParams, GetInferencesResponse, InferenceParams,
+    InferenceResponse, Input, InputMessage, InputMessageContent, ListInferencesRequest, Role,
+    TensorZeroError, Tool,
 };
 
 // Re-export async_trait for convenience
