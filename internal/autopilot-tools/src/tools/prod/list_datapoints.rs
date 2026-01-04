@@ -4,11 +4,11 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
 
-use crate::types::AutopilotToolSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_datapoints tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -27,7 +27,7 @@ pub struct ListDatapointsToolParams {
 pub struct ListDatapointsTool;
 
 impl ToolMetadata for ListDatapointsTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = GetDatapointsResponse;
     type LlmParams = ListDatapointsToolParams;
 
@@ -40,6 +40,44 @@ impl ToolMetadata for ListDatapointsTool {
             "List datapoints in a dataset with optional filtering and pagination. \
              Can filter by function name, tags, time ranges, and order results.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "List datapoints in a dataset with filtering and pagination.",
+            "properties": {
+                "dataset_name": {
+                    "type": "string",
+                    "description": "The name of the dataset to list datapoints from."
+                },
+                "function_name": {
+                    "type": "string",
+                    "description": "Filter by function name (optional)."
+                },
+                "tags": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Filter by tags (optional)."
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of datapoints to return (default: 100)."
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Number of datapoints to skip (for pagination)."
+                },
+                "order_by": {
+                    "type": "string",
+                    "enum": ["created_at_asc", "created_at_desc"],
+                    "description": "Sort order (default: created_at_desc)."
+                }
+            },
+            "required": ["dataset_name"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 

@@ -4,12 +4,12 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use uuid::Uuid;
 
-use crate::types::AutopilotToolSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_latest_feedback_by_metric tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -25,7 +25,7 @@ pub struct GetLatestFeedbackByMetricToolParams {
 pub struct GetLatestFeedbackByMetricTool;
 
 impl ToolMetadata for GetLatestFeedbackByMetricTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = LatestFeedbackIdByMetricResponse;
     type LlmParams = GetLatestFeedbackByMetricToolParams;
 
@@ -38,6 +38,23 @@ impl ToolMetadata for GetLatestFeedbackByMetricTool {
             "Get the latest feedback ID for each metric for a given target (inference). \
              Returns a map from metric name to feedback ID.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Get the latest feedback ID for each metric for a target inference.",
+            "properties": {
+                "target_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "The target ID (inference ID) to get feedback for."
+                }
+            },
+            "required": ["target_id"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 

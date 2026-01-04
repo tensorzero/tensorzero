@@ -20,10 +20,9 @@ use durable_tools::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tensorzero::ActionInput;
 use tensorzero::{
-    ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
-    Usage,
+    ActionInput, ClientInferenceParams, GetConfigResponse, InferenceResponse, Input, InputMessage,
+    InputMessageContent, Role, Tool, Usage, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -110,6 +109,20 @@ impl TensorZeroClient for MockTensorZeroClient {
             .ok_or(TensorZeroClientError::StreamingNotSupported)
     }
 
+    async fn get_config_snapshot(
+        &self,
+        _hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn write_config(
+        &self,
+        _request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
     async fn create_datapoints(
         &self,
         _dataset_name: String,
@@ -193,6 +206,15 @@ impl TensorZeroClient for MockTensorZeroClient {
         _variant_names: Option<Vec<String>>,
     ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn run_evaluation(
+        &self,
+        _params: durable_tools::RunEvaluationParams,
+    ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "run_evaluation not supported in mock client".to_string(),
+        ))
     }
 }
 

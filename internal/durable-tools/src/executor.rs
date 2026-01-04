@@ -173,7 +173,7 @@ impl ToolExecutor {
     ///
     /// # Errors
     ///
-    /// Returns an error if spawning the tool fails.
+    /// Returns an error if the tool is not found, parameters are invalid, or spawning fails.
     pub async fn spawn_tool_by_name(
         &self,
         tool_name: &str,
@@ -181,6 +181,12 @@ impl ToolExecutor {
         side_info: JsonValue,
         episode_id: Uuid,
     ) -> anyhow::Result<SpawnResult> {
+        // Validate params before spawning
+        {
+            let registry = self.registry.read().await;
+            registry.validate_params(tool_name, &llm_params, &side_info)?;
+        }
+
         let wrapped_params = TaskToolParams {
             llm_params,
             side_info,
@@ -240,7 +246,7 @@ impl ToolExecutor {
     ///
     /// # Errors
     ///
-    /// Returns an error if spawning the tool fails.
+    /// Returns an error if the tool is not found, parameters are invalid, or spawning fails.
     pub async fn spawn_tool_by_name_with<'e, E>(
         &self,
         executor: E,
@@ -252,6 +258,12 @@ impl ToolExecutor {
     where
         E: Executor<'e, Database = Postgres>,
     {
+        // Validate params before spawning
+        {
+            let registry = self.registry.read().await;
+            registry.validate_params(tool_name, &llm_params, &side_info)?;
+        }
+
         let wrapped_params = TaskToolParams {
             llm_params,
             side_info,
