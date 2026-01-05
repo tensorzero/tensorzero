@@ -12,6 +12,8 @@ jobs:
   dispatch-autopilot:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      contents: read
     steps:
       - name: Generate GitHub App token
         uses: actions/create-github-app-token@v1
