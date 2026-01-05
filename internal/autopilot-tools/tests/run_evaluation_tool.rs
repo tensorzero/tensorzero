@@ -42,7 +42,6 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
 
     // Prepare test data
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = RunEvaluationToolParams {
@@ -58,7 +57,6 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
-        tool_call_id: tool_call_id.to_string(),
         session_id,
         config_snapshot_hash: None,
         optimization: Default::default(),
@@ -111,7 +109,6 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
 
     // Prepare test data
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let datapoint_ids = vec![Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7()];
@@ -130,7 +127,6 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
-        tool_call_id: tool_call_id.to_string(),
         session_id,
         config_snapshot_hash: None,
         optimization: Default::default(),
@@ -177,7 +173,6 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
 
     // Prepare test data
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     // Set up non-default precision_targets and inference_cache
@@ -199,7 +194,6 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
-        tool_call_id: tool_call_id.to_string(),
         session_id,
         config_snapshot_hash: None,
         optimization: Default::default(),
@@ -246,7 +240,6 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
 async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     // Prepare test data
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = RunEvaluationToolParams {
@@ -262,7 +255,6 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
-        tool_call_id: tool_call_id.to_string(),
         session_id,
         config_snapshot_hash: None,
         optimization: Default::default(),

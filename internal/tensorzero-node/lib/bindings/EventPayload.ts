@@ -13,10 +13,5 @@ export type EventPayload =
   | { type: "status_update"; status_update: StatusUpdate }
   | ({ type: "tool_call" } & AutopilotToolCall)
   | ({ type: "tool_call_authorization" } & ToolCallAuthorization)
-  | {
-      type: "tool_result";
-      tool_call_event_id: string;
-      tool_call_id: string;
-      outcome: ToolOutcome;
-    }
+  | { type: "tool_result"; tool_call_event_id: string; outcome: ToolOutcome }
   | { type: "other" };
