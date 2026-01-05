@@ -1,7 +1,12 @@
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
+
+fn default_deploy_after_training() -> bool {
+    false
+}
 
 /// Initialized Fireworks SFT Config (per-job settings only).
 /// Provider-level settings (account_id, credentials) come from
@@ -25,12 +30,14 @@ pub struct FireworksSFTConfig {
     pub mtp_enabled: Option<bool>,
     pub mtp_num_draft_tokens: Option<usize>,
     pub mtp_freeze_base_model: Option<bool>,
+    #[serde(default = "default_deploy_after_training")]
+    pub deploy_after_training: bool,
 }
 
 /// Uninitialized Fireworks SFT Config (per-job settings only).
 /// Provider-level settings (account_id, credentials) come from
 /// `provider_types.fireworks.sft` in the gateway config.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
 pub struct UninitializedFireworksSFTConfig {
@@ -50,6 +57,8 @@ pub struct UninitializedFireworksSFTConfig {
     pub mtp_enabled: Option<bool>,
     pub mtp_num_draft_tokens: Option<usize>,
     pub mtp_freeze_base_model: Option<bool>,
+    #[serde(default)]
+    pub deploy_after_training: Option<bool>,
 }
 
 impl std::fmt::Display for UninitializedFireworksSFTConfig {
@@ -84,7 +93,7 @@ impl UninitializedFireworksSFTConfig {
     /// :param mtp_num_draft_tokens: The number of draft tokens for MTP.
     /// :param mtp_freeze_base_model: Whether to freeze the base model for MTP.
     #[new]
-    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None))]
+    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None, deploy_after_training=None))]
     #[expect(clippy::too_many_arguments)]
     pub fn new(
         model: String,
@@ -103,6 +112,7 @@ impl UninitializedFireworksSFTConfig {
         mtp_enabled: Option<bool>,
         mtp_num_draft_tokens: Option<usize>,
         mtp_freeze_base_model: Option<bool>,
+        deploy_after_training: Option<bool>,
     ) -> PyResult<Self> {
         Ok(Self {
             model,
@@ -121,11 +131,12 @@ impl UninitializedFireworksSFTConfig {
             mtp_enabled,
             mtp_num_draft_tokens,
             mtp_freeze_base_model,
+            deploy_after_training,
         })
     }
 
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None))]
+    #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None, deploy_after_training=None))]
     fn __init__(
         this: Py<Self>,
         model: String,
@@ -144,6 +155,7 @@ impl UninitializedFireworksSFTConfig {
         mtp_enabled: Option<bool>,
         mtp_num_draft_tokens: Option<usize>,
         mtp_freeze_base_model: Option<bool>,
+        deploy_after_training: Option<bool>,
     ) -> Py<Self> {
         this
     }
@@ -168,6 +180,9 @@ impl UninitializedFireworksSFTConfig {
             mtp_enabled: self.mtp_enabled,
             mtp_num_draft_tokens: self.mtp_num_draft_tokens,
             mtp_freeze_base_model: self.mtp_freeze_base_model,
+            deploy_after_training: self
+                .deploy_after_training
+                .unwrap_or_else(default_deploy_after_training),
         }
     }
 }
@@ -180,6 +195,8 @@ impl UninitializedFireworksSFTConfig {
 pub struct FireworksSFTJobHandle {
     pub job_url: Url,
     pub job_path: String,
+    #[serde(default = "default_deploy_after_training")]
+    pub deploy_after_training: bool,
 }
 
 impl std::fmt::Display for FireworksSFTJobHandle {

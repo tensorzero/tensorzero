@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{FunctionTool, Tool};
 
+use crate::ToolResult;
 use crate::context::SimpleToolContext;
 use crate::error::ToolError;
 use crate::simple_tool::SimpleTool;
@@ -21,7 +22,7 @@ impl TryFrom<&dyn ErasedTool> for Tool {
         Ok(Tool::Function(FunctionTool {
             name: tool.name().to_string(),
             description: tool.description().to_string(),
-            parameters: serde_json::to_value(tool.parameters_schema())?,
+            parameters: serde_json::to_value(tool.parameters_schema()?)?,
             strict: false,
         }))
     }
@@ -38,13 +39,18 @@ pub trait ErasedTool: Send + Sync {
     fn description(&self) -> Cow<'static, str>;
 
     /// Get the JSON Schema for the tool's parameters.
-    fn parameters_schema(&self) -> Schema;
+    fn parameters_schema(&self) -> ToolResult<Schema>;
 
     /// Get the tool's execution timeout.
     fn timeout(&self) -> Duration;
 
     /// Check if this is a durable tool (`TaskTool`) or lightweight (`SimpleTool`).
     fn is_durable(&self) -> bool;
+
+    /// Validate that the provided JSON can be deserialized into the tool's parameter types.
+    ///
+    /// This allows validating parameters before spawning a job, catching errors early.
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()>;
 }
 
 /// Type-erased `SimpleTool` trait for dynamic execution.
@@ -94,7 +100,7 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
         <T as ToolMetadata>::description()
     }
 
-    fn parameters_schema(&self) -> Schema {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         <T as ToolMetadata>::parameters_schema()
     }
 
@@ -104,6 +110,14 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
 
     fn is_durable(&self) -> bool {
         true
+    }
+
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
+            .map_err(|e| ToolError::InvalidParams(format!("llm_params: {e}")))?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone())
+            .map_err(|e| ToolError::InvalidParams(format!("side_info: {e}")))?;
+        Ok(())
     }
 }
 
@@ -117,7 +131,7 @@ impl<T: SimpleTool> ErasedTool for T {
         <T as ToolMetadata>::description()
     }
 
-    fn parameters_schema(&self) -> Schema {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         <T as ToolMetadata>::parameters_schema()
     }
 
@@ -127,6 +141,14 @@ impl<T: SimpleTool> ErasedTool for T {
 
     fn is_durable(&self) -> bool {
         false
+    }
+
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
+            .map_err(|e| ToolError::InvalidParams(format!("llm_params: {e}")))?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone())
+            .map_err(|e| ToolError::InvalidParams(format!("side_info: {e}")))?;
+        Ok(())
     }
 }
 
@@ -225,6 +247,22 @@ impl ToolRegistry {
     /// Returns `None` if the tool is not found.
     pub fn is_durable(&self, name: &str) -> Option<bool> {
         self.tools.get(name).map(|t| t.is_durable())
+    }
+
+    /// Validate parameters for a tool by name.
+    ///
+    /// Returns `ToolError::ToolNotFound` if the tool doesn't exist.
+    /// Returns `ToolError::InvalidParams` if validation fails.
+    pub fn validate_params(
+        &self,
+        tool_name: &str,
+        llm_params: &JsonValue,
+        side_info: &JsonValue,
+    ) -> ToolResult<()> {
+        let tool = self
+            .get(tool_name)
+            .ok_or_else(|| ToolError::ToolNotFound(tool_name.to_string()))?;
+        tool.validate_params(llm_params, side_info)
     }
 
     /// List all registered tool names.

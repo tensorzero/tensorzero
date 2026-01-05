@@ -13,6 +13,22 @@ test("should show the inference detail page", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
+test("should show the default function inference detail page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196372f-1b4b-7013-a446-511e312a3c30",
+  );
+
+  // Verify the page loaded with expected content
+  await expect(
+    page.getByText("Do the images share any common features?").first(),
+  ).toBeVisible();
+
+  // Assert that "404" is not in the page
+  await expect(page.getByText("404", { exact: false })).not.toBeVisible();
+});
+
 // Tests an inference stored under the 'file' content block in the db
 test("should display inferences with new image content", async ({ page }) => {
   await page.goto(

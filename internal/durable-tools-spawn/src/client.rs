@@ -54,33 +54,12 @@ impl SpawnClient {
     /// * `llm_params` - Parameters visible to the LLM
     /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
     /// * `episode_id` - The episode ID for this execution
+    /// * `options` - Options for spawning the task
     ///
     /// # Errors
     ///
     /// Returns an error if spawning the task fails.
     pub async fn spawn_tool_by_name(
-        &self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        side_info: JsonValue,
-        episode_id: Uuid,
-    ) -> Result<SpawnResult, SpawnError> {
-        self.spawn_tool_by_name_with_options(
-            tool_name,
-            llm_params,
-            side_info,
-            episode_id,
-            SpawnOptions::default(),
-        )
-        .await
-    }
-
-    /// Spawn a task by name with custom spawn options.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the task fails.
-    pub async fn spawn_tool_by_name_with_options(
         &self,
         tool_name: &str,
         llm_params: JsonValue,
@@ -132,38 +111,12 @@ impl SpawnClient {
     /// * `llm_params` - Parameters visible to the LLM
     /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
     /// * `episode_id` - The episode ID for this execution
+    /// * `options` - Options for spawning the task
     ///
     /// # Errors
     ///
     /// Returns an error if spawning the task fails.
     pub async fn spawn_tool_by_name_with<'e, E>(
-        &self,
-        executor: E,
-        tool_name: &str,
-        llm_params: JsonValue,
-        side_info: JsonValue,
-        episode_id: Uuid,
-    ) -> Result<SpawnResult, SpawnError>
-    where
-        E: Executor<'e, Database = Postgres>,
-    {
-        self.spawn_tool_by_name_with_options_with(
-            executor,
-            tool_name,
-            llm_params,
-            side_info,
-            episode_id,
-            SpawnOptions::default(),
-        )
-        .await
-    }
-
-    /// Spawn a task by name with custom spawn options using a custom executor.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the task fails.
-    pub async fn spawn_tool_by_name_with_options_with<'e, E>(
         &self,
         executor: E,
         tool_name: &str,

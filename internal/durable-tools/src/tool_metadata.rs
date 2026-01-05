@@ -3,17 +3,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::time::Duration;
 
-/// Marker trait for side information types.
-///
-/// Types implementing this can be used as side information for tools.
-/// Side information is provided at spawn time and is hidden from the LLM
-/// (not included in the tool's JSON schema).
-///
-/// The unit type `()` implements this trait for tools that don't need side info.
-pub trait SideInfo: Serialize + DeserializeOwned + Send + 'static {}
-
-/// Unit type implements `SideInfo` for tools without side information.
-impl SideInfo for () {}
+use crate::ToolResult;
 
 /// Common metadata trait for all tools (both `TaskTool` and `SimpleTool`).
 ///
@@ -57,7 +47,7 @@ pub trait ToolMetadata: Send + Sync + 'static {
     /// Side information type provided at spawn time (hidden from LLM).
     ///
     /// Use `()` if no side information is needed.
-    type SideInfo: SideInfo;
+    type SideInfo: Serialize + DeserializeOwned + Send + 'static;
 
     /// The output type for this tool (must be JSON-serializable).
     type Output: Serialize + DeserializeOwned + Send + Sync + 'static;
@@ -85,8 +75,8 @@ pub trait ToolMetadata: Send + Sync + 'static {
     ///
     /// By default, this is derived from the `LlmParams` type using `schemars`.
     /// Override this if you need custom schema generation.
-    fn parameters_schema() -> Schema {
-        SchemaGenerator::default().into_root_schema_for::<Self::LlmParams>()
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(SchemaGenerator::default().into_root_schema_for::<Self::LlmParams>())
     }
 
     /// Execution timeout for this tool.

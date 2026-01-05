@@ -21,7 +21,17 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 #[derive(
-    Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, ValueEnum, ts_rs::TS,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+    ValueEnum,
+    schemars::JsonSchema,
+    ts_rs::TS,
 )]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]

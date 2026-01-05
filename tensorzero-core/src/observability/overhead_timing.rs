@@ -71,10 +71,7 @@
 //!
 //! The metric calculation is controlled entirely through `tracing` span attributes.
 //!
-use std::{
-    sync::atomic::{AtomicBool, Ordering},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::observability::disjoint_intervals::DisjointIntervals;
@@ -156,26 +153,22 @@ impl OverheadSpanExt for Span {
                 });
 
                 if let Some(extra_labels) = extra_labels {
-                    if HISTOGRAM_ENABLED.load(Ordering::Relaxed) {
-                        metrics::histogram!(
-                            "tensorzero_inference_latency_overhead_seconds_histogram",
-                            extra_labels.clone()
-                        )
-                        .record(overhead.as_secs_f64());
-                    }
                     metrics::histogram!(
                         "tensorzero_inference_latency_overhead_seconds",
+                        extra_labels.clone()
+                    )
+                    .record(overhead.as_secs_f64());
+                    // DEPRECATED (2026.2+): Also emit under the old name for backward compatibility
+                    metrics::histogram!(
+                        "tensorzero_inference_latency_overhead_seconds_histogram",
                         extra_labels
                     )
                     .record(overhead.as_secs_f64());
                 } else {
-                    if HISTOGRAM_ENABLED.load(Ordering::Relaxed) {
-                        metrics::histogram!(
-                            "tensorzero_inference_latency_overhead_seconds_histogram"
-                        )
-                        .record(overhead.as_secs_f64());
-                    }
                     metrics::histogram!("tensorzero_inference_latency_overhead_seconds")
+                        .record(overhead.as_secs_f64());
+                    // DEPRECATED (2026.2+): Also emit under the old name for backward compatibility
+                    metrics::histogram!("tensorzero_inference_latency_overhead_seconds_histogram")
                         .record(overhead.as_secs_f64());
                 }
             } else {
@@ -262,18 +255,6 @@ fn error_within_tracing(message: &str) {
     eprintln!(
         "ERROR: Internal error in TensorZero tracing code: {message}. {IMPOSSIBLE_ERROR_MESSAGE}"
     );
-}
-
-static HISTOGRAM_ENABLED: AtomicBool = AtomicBool::new(false);
-
-/// Enable recording the `tensorzero_inference_latency_overhead_seconds_histogram` metric,
-/// along with the normal `tensorzero_inference_latency_overhead_seconds` metric.
-///
-/// This is called after we've loaded our config file (since the `OverheadTimingLayer`
-/// is constructed and installed before we parse the config file, so that we can log from
-/// deserializatio code).
-pub fn enable_histogram_latency_metric() {
-    HISTOGRAM_ENABLED.store(true, Ordering::Relaxed);
 }
 
 /// Marks spans with the `tensorzero.overhead.track` attribute applied.

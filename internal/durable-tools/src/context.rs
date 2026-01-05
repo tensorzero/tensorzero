@@ -257,6 +257,8 @@ impl<'a> ToolContext<'a> {
     ) -> ToolResult<ToolHandle> {
         let is_durable = {
             let registry = self.app_state.tool_registry.read().await;
+            // Validate params before spawning
+            registry.validate_params(tool_name, &llm_params, &side_info)?;
             registry
                 .is_durable(tool_name)
                 .ok_or_else(|| ToolError::ToolNotFound(tool_name.to_string()))?

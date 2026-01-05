@@ -4,10 +4,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use autopilot_tools::ToolVisitor;
 use durable_tools::{
     SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
 };
+use serde::Serialize;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -23,6 +25,8 @@ pub struct AutopilotWorkerConfig {
     pub queue_name: String,
     /// TensorZero client for calling inference and autopilot operations.
     pub t0_client: Arc<dyn TensorZeroClient>,
+    /// Default max attempts for a task in the worker
+    pub default_max_attempts: u32,
 }
 
 impl AutopilotWorkerConfig {
@@ -35,7 +39,11 @@ impl AutopilotWorkerConfig {
     ///
     /// Environment variables:
     /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Queue name (default: "autopilot")
-    pub fn new(pool: PgPool, t0_client: Arc<dyn TensorZeroClient>) -> Self {
+    pub fn new(
+        pool: PgPool,
+        t0_client: Arc<dyn TensorZeroClient>,
+        default_max_attempts: u32,
+    ) -> Self {
         let mut queue_name = autopilot_client::DEFAULT_SPAWN_QUEUE_NAME.to_string();
         if cfg!(feature = "e2e_tests")
             && let Some(name) = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME").ok()
@@ -47,6 +55,7 @@ impl AutopilotWorkerConfig {
             pool,
             queue_name,
             t0_client,
+            default_max_attempts,
         }
     }
 }
@@ -67,6 +76,7 @@ impl AutopilotWorker {
             .pool(config.pool)
             .queue_name(&config.queue_name)
             .t0_client(config.t0_client)
+            .default_max_attempts(config.default_max_attempts)
             .build()
             .await?;
 
@@ -136,9 +146,11 @@ struct LocalToolVisitor<'a> {
 impl ToolVisitor for LocalToolVisitor<'_> {
     type Error = ToolError;
 
-    async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError>
+    async fn visit_task_tool<T>(&self) -> Result<(), ToolError>
     where
-        T::SideInfo: Default + PartialEq,
+        T: TaskTool + Default,
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
     {
         self.executor
             .register_task_tool::<ClientTaskToolWrapper<T>>()
@@ -146,7 +158,12 @@ impl ToolVisitor for LocalToolVisitor<'_> {
         Ok(())
     }
 
-    async fn visit_simple_tool<T: SimpleTool + Default>(&self) -> Result<(), ToolError> {
+    async fn visit_simple_tool<T>(&self) -> Result<(), ToolError>
+    where
+        T: SimpleTool + Default,
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+    {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
         self.executor
             .register_task_tool::<ClientSimpleToolWrapper<T>>()
