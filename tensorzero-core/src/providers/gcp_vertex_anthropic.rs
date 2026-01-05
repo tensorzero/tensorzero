@@ -386,6 +386,7 @@ fn stream_anthropic(
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
+        let mut previous_output_tokens: u32 = 0;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -416,6 +417,7 @@ fn stream_anthropic(
                                 start_time.elapsed(),
                                 &mut current_tool_id,
                                 &mut current_tool_name,
+                                &mut previous_output_tokens,
                                 discard_unknown_chunks,
                                 &model_name,
                                 &provider_name,

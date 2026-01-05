@@ -377,6 +377,7 @@ fn stream_anthropic(
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
+        let mut previous_output_tokens: u32 = 0;
 
         while let Some(ev) = event_source.next().await {
             match ev {
@@ -408,6 +409,7 @@ fn stream_anthropic(
                                 start_time.elapsed(),
                                 &mut current_tool_id,
                                 &mut current_tool_name,
+                                &mut previous_output_tokens,
                                 discard_unknown_chunks,
                                 &model_name,
                                 &provider_name,
@@ -1302,6 +1304,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
+    previous_output_tokens: &mut u32,
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
@@ -1460,7 +1463,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
             delta: FlattenUnknown::Normal(delta),
         } => {
             let usage_value = usage;
-            let usage = parse_usage_info(&usage_value);
+            let usage = parse_usage_info(&usage_value, previous_output_tokens);
             let raw_usage = Some(raw_usage_entries_from_value(
                 model_inference_id,
                 provider_type,
@@ -1487,7 +1490,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
         }
         AnthropicStreamMessage::MessageStart { message } => {
             if let Some(usage_info) = message.get("usage") {
-                let usage = parse_usage_info(usage_info);
+                let usage = parse_usage_info(usage_info, previous_output_tokens);
                 let raw_usage = Some(raw_usage_entries_from_value(
                     model_inference_id,
                     provider_type,
@@ -1582,15 +1585,18 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
     }
 }
 
-fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
+fn parse_usage_info(usage_info: &Value, previous_output_tokens: &mut u32) -> AnthropicUsage {
     let input_tokens = usage_info
         .get("input_tokens")
         .and_then(Value::as_u64)
         .unwrap_or(0) as u32;
-    let output_tokens = usage_info
+    let cumulative_output_tokens = usage_info
         .get("output_tokens")
         .and_then(Value::as_u64)
         .unwrap_or(0) as u32;
+    // Anthropic emits output token count cumulatively, TensorZero expects incremental.
+    let output_tokens = cumulative_output_tokens - *previous_output_tokens;
+    *previous_output_tokens = cumulative_output_tokens;
     AnthropicUsage {
         input_tokens,
         output_tokens,
@@ -2566,6 +2572,7 @@ mod tests {
         // Test ContentBlockDelta with TextDelta
         let mut current_tool_id = None;
         let mut current_tool_name = None;
+        let mut previous_output_tokens = 0;
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Normal(AnthropicContentBlockDelta::TextDelta {
                 text: "Hello".to_string(),
@@ -2579,6 +2586,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2600,6 +2608,7 @@ mod tests {
         // Test ContentBlockDelta with InputJsonDelta but no previous tool info
         let mut current_tool_id = None;
         let mut current_tool_name = None;
+        let mut previous_output_tokens = 0;
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Normal(AnthropicContentBlockDelta::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
@@ -2613,6 +2622,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2634,6 +2644,7 @@ mod tests {
         // Test ContentBlockDelta with InputJsonDelta and previous tool info
         let mut current_tool_id = Some("tool_id".to_string());
         let mut current_tool_name = Some("tool_name".to_string());
+        let mut previous_output_tokens = 0;
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Normal(AnthropicContentBlockDelta::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
@@ -2647,6 +2658,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2668,6 +2680,7 @@ mod tests {
         // Test ContentBlockStart with ToolUse
         let mut current_tool_id = None;
         let mut current_tool_name = None;
+        let mut previous_output_tokens = 0;
         let content_block_start = AnthropicStreamMessage::ContentBlockStart {
             content_block: FlattenUnknown::Normal(AnthropicContentBlock::ToolUse {
                 id: "tool1".to_string(),
@@ -2683,6 +2696,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2707,6 +2721,7 @@ mod tests {
         // Test ContentBlockStart with Text
         let mut current_tool_id = None;
         let mut current_tool_name = None;
+        let mut previous_output_tokens = 0;
         let content_block_start = AnthropicStreamMessage::ContentBlockStart {
             content_block: FlattenUnknown::Normal(AnthropicContentBlock::Text {
                 text: "Hello".to_string(),
@@ -2720,6 +2735,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2739,6 +2755,7 @@ mod tests {
 
         // Test ContentBlockStop
         let content_block_stop = AnthropicStreamMessage::ContentBlockStop { index: 2 };
+        let mut previous_output_tokens = 0;
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
@@ -2746,6 +2763,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2759,6 +2777,7 @@ mod tests {
         let error_message = AnthropicStreamMessage::Error {
             error: json!({"message": "Test error"}),
         };
+        let mut previous_output_tokens = 0;
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
@@ -2766,6 +2785,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2792,6 +2812,7 @@ mod tests {
             }),
             usage: json!({"input_tokens": 10, "output_tokens": 20}),
         };
+        let mut previous_output_tokens = 0;
         let latency = Duration::from_millis(140);
         let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
@@ -2799,6 +2820,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2815,10 +2837,38 @@ mod tests {
         assert_eq!(chunk.latency, latency);
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
+        // Test MessageDelta cumulative output token usage
+        let message_delta = AnthropicStreamMessage::MessageDelta {
+            delta: FlattenUnknown::Normal(AnthropicMessageDelta {
+                stop_reason: Some(AnthropicStopReason::EndTurn),
+                stop_sequence: None,
+            }),
+            usage: json!({"input_tokens": 10, "output_tokens": 30}),
+        };
+        let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
+            message_delta,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+            &mut previous_output_tokens,
+            false,
+            "test_model",
+            "test_provider",
+            PROVIDER_TYPE,
+            Uuid::now_v7(),
+        );
+        assert!(result.is_ok());
+        let chunk = result.unwrap().unwrap();
+        assert!(chunk.usage.is_some());
+        let usage = chunk.usage.unwrap();
+        assert_eq!(usage.output_tokens, Some(10));
+
         // Test MessageStart with usage
         let message_start = AnthropicStreamMessage::MessageStart {
             message: json!({"usage": {"input_tokens": 5, "output_tokens": 15}}),
         };
+        let mut previous_output_tokens = 0;
         let latency = Duration::from_millis(150);
         let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
@@ -2826,6 +2876,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2841,8 +2892,32 @@ mod tests {
         assert_eq!(usage.output_tokens, Some(15));
         assert_eq!(chunk.latency, latency);
 
+        // Test MessageStart cumulative output token usage
+        let message_start = AnthropicStreamMessage::MessageStart {
+            message: json!({"usage": {"input_tokens": 5, "output_tokens": 20}}),
+        };
+        let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
+            message_start,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+            &mut previous_output_tokens,
+            false,
+            "test_model",
+            "test_provider",
+            PROVIDER_TYPE,
+            Uuid::now_v7(),
+        );
+        assert!(result.is_ok());
+        let chunk = result.unwrap().unwrap();
+        assert!(chunk.usage.is_some());
+        let usage = chunk.usage.unwrap();
+        assert_eq!(usage.output_tokens, Some(5));
+
         // Test MessageStop
         let message_stop = AnthropicStreamMessage::MessageStop;
+        let mut previous_output_tokens = 0;
         let latency = Duration::from_millis(160);
         let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
@@ -2850,6 +2925,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2868,6 +2944,7 @@ mod tests {
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
+            &mut previous_output_tokens,
             false,
             "test_model",
             "test_provider",
@@ -2885,21 +2962,39 @@ mod tests {
             "input_tokens": 100,
             "output_tokens": 200
         });
-        let result = parse_usage_info(&usage_info);
+        let mut previous_output_tokens = 0;
+        let result = parse_usage_info(&usage_info, &mut previous_output_tokens);
         assert_eq!(result.input_tokens, 100);
         assert_eq!(result.output_tokens, 200);
+
+        // Test cumulative output tokens
+        let mut previous_output_tokens = 0;
+        let usage_info = json!({
+            "input_tokens": 100,
+            "output_tokens": 200
+        });
+        let _result = parse_usage_info(&usage_info, &mut previous_output_tokens);
+        let usage_info = json!({
+            "input_tokens": 100,
+            "output_tokens": 300
+        });
+        let result = parse_usage_info(&usage_info, &mut previous_output_tokens);
+        assert_eq!(result.input_tokens, 100);
+        assert_eq!(result.output_tokens, 100);
 
         // Test with missing fields
         let usage_info = json!({
             "input_tokens": 50
         });
-        let result = parse_usage_info(&usage_info);
+        let mut previous_output_tokens = 0;
+        let result = parse_usage_info(&usage_info, &mut previous_output_tokens);
         assert_eq!(result.input_tokens, 50);
         assert_eq!(result.output_tokens, 0);
 
         // Test with empty object
         let usage_info = json!({});
-        let result = parse_usage_info(&usage_info);
+        let mut previous_output_tokens = 0;
+        let result = parse_usage_info(&usage_info, &mut previous_output_tokens);
         assert_eq!(result.input_tokens, 0);
         assert_eq!(result.output_tokens, 0);
 
@@ -2908,7 +3003,8 @@ mod tests {
             "input_tokens": "not a number",
             "output_tokens": true
         });
-        let result = parse_usage_info(&usage_info);
+        let mut previous_output_tokens = 0;
+        let result = parse_usage_info(&usage_info, &mut previous_output_tokens);
         assert_eq!(result.input_tokens, 0);
         assert_eq!(result.output_tokens, 0);
     }
@@ -3152,6 +3248,7 @@ mod tests {
             Duration::from_secs(0),
             &mut Default::default(),
             &mut Default::default(),
+            &mut Default::default(),
             false,
             "test_model",
             "test_provider",
@@ -3186,6 +3283,7 @@ mod tests {
                 index: 0,
             },
             Duration::from_secs(0),
+            &mut Default::default(),
             &mut Default::default(),
             &mut Default::default(),
             true,
