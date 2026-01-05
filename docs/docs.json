@@ -76,6 +76,10 @@
             ]
           },
           {
+            "group": "Observability",
+            "pages": ["observability/query-historical-inferences"]
+          },
+          {
             "group": "Optimization",
             "pages": [
               "recipes/index",
