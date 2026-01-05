@@ -30,7 +30,7 @@ pub struct OpenAICompatibleResponseChunk {
     pub system_fingerprint: String,
     pub service_tier: Option<String>,
     pub object: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // OpenAI spec requires `usage` to be "object or null", not omitted
     pub usage: Option<OpenAICompatibleUsage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
