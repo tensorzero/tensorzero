@@ -545,10 +545,10 @@ mod error_tests {
         let tool_err: ToolError = task_err.into();
 
         match tool_err {
-            ToolError::ExecutionFailed(e) => {
-                assert_eq!(e.to_string(), "test error");
+            ToolError::User { message, .. } => {
+                assert_eq!(message, "test error");
             }
-            _ => panic!("Expected ExecutionFailed"),
+            _ => panic!("Expected User"),
         }
     }
 
@@ -575,15 +575,18 @@ mod error_tests {
     }
 
     #[test]
-    fn task_error_from_tool_error_execution_failed() {
-        let tool_err = ToolError::ExecutionFailed(anyhow::anyhow!("test error"));
+    fn task_error_from_tool_error_user() {
+        let tool_err = ToolError::User {
+            message: "test error".to_string(),
+            error_data: serde_json::json!({"kind": "TestError"}),
+        };
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::TaskInternal(e) => {
-                assert_eq!(e.to_string(), "test error");
+            TaskError::User { message, .. } => {
+                assert_eq!(message, "test error");
             }
-            _ => panic!("Expected TaskInternal"),
+            _ => panic!("Expected User"),
         }
     }
 
@@ -604,10 +607,10 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::TaskInternal(e) => {
-                assert!(e.to_string().contains("missing_tool"));
+            TaskError::User { message, .. } => {
+                assert!(message.contains("missing_tool"));
             }
-            _ => panic!("Expected TaskInternal"),
+            _ => panic!("Expected User"),
         }
     }
 
@@ -617,10 +620,10 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::TaskInternal(e) => {
-                assert!(e.to_string().contains("bad params"));
+            TaskError::User { message, .. } => {
+                assert!(message.contains("bad params"));
             }
-            _ => panic!("Expected TaskInternal"),
+            _ => panic!("Expected User"),
         }
     }
 

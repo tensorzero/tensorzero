@@ -15,7 +15,7 @@ use durable::SpawnOptions;
 use durable::WorkerOptions;
 use durable_tools::{
     ErasedSimpleTool, SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient,
-    TensorZeroClientError, ToolContext, ToolExecutor, ToolMetadata, ToolResult,
+    TensorZeroClientError, ToolContext, ToolError, ToolExecutor, ToolMetadata, ToolResult,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -398,7 +398,10 @@ impl SimpleTool for InferenceSimpleTool {
         let response = ctx
             .inference(inference_params)
             .await
-            .map_err(|e| anyhow::anyhow!("Inference failed: {e}"))?;
+            .map_err(|e| ToolError::User {
+                message: format!("Inference failed: {e}"),
+                error_data: serde_json::json!({"kind": "InferenceError", "message": e.to_string()}),
+            })?;
         let text = extract_text_from_response(&response);
 
         Ok(InferenceToolOutput { response: text })

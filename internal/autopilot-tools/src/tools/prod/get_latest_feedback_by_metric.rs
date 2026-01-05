@@ -4,6 +4,8 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
@@ -69,6 +71,8 @@ impl SimpleTool for GetLatestFeedbackByMetricTool {
         ctx.client()
             .get_latest_feedback_id_by_metric(llm_params.target_id)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| {
+                AutopilotToolError::client_error("get_latest_feedback_by_metric", e).into()
+            })
     }
 }

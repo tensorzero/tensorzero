@@ -43,7 +43,7 @@ pub trait ToolVisitor {
     where
         T: TaskTool + Default,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>;
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display;
 
     /// Visit a `SimpleTool`.
     ///
@@ -53,5 +53,5 @@ pub trait ToolVisitor {
     where
         T: SimpleTool + Default,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>;
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display;
 }

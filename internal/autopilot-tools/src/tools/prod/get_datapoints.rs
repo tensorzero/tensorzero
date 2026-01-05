@@ -4,6 +4,8 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::GetDatapointsResponse;
@@ -76,6 +78,6 @@ impl SimpleTool for GetDatapointsTool {
         ctx.client()
             .get_datapoints(llm_params.dataset_name, llm_params.ids)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("get_datapoints", e).into())
     }
 }

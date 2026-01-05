@@ -3,9 +3,9 @@
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
-use anyhow::Context;
 use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
+use autopilot_tools::AutopilotToolError;
 use durable_tools::{
     CreateEventGatewayRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool,
     TensorZeroClient, ToolAppState, ToolContext, ToolMetadata, ToolOutcome,
@@ -79,7 +79,7 @@ impl<T> TaskTool for ClientTaskToolWrapper<T>
 where
     T: TaskTool,
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
 {
     async fn execute(
         llm_params: Self::LlmParams,
@@ -88,13 +88,13 @@ where
     ) -> DurableToolResult<Self::Output> {
         let session_id = side_info.session_id;
         let tool_call_event_id = side_info.tool_call_event_id;
-        let side_info: T::SideInfo = side_info
-            .try_into()
-            .map_err(|e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
-                let e: anyhow::Error = e.into();
-                e
-            })
-            .with_context(|| "Failed to convert AutopilotSideInfo to tool SideInfo: {e}")?;
+        let side_info: T::SideInfo = side_info.try_into().map_err(
+            |e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
+                AutopilotToolError::validation(format!(
+                    "Failed to convert AutopilotSideInfo to tool SideInfo: {e}"
+                ))
+            },
+        )?;
         // Execute the underlying tool
         let result = T::execute(llm_params, side_info, ctx).await;
 
@@ -184,7 +184,7 @@ impl<T: SimpleTool> Default for ClientSimpleToolWrapper<T> {
 impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T>
 where
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
 {
     fn name() -> Cow<'static, str> {
         T::name()
@@ -214,7 +214,7 @@ struct SimpleToolStepParams<L, S> {
 impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T>
 where
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
 {
     async fn execute(
         llm_params: Self::LlmParams,
@@ -225,15 +225,13 @@ where
         let tool_call_event_id = side_info.tool_call_event_id;
         let session_id = side_info.session_id;
         // Convert AutopilotSideInfo to the underlying tool's SideInfo
-        let converted_side_info: T::SideInfo = side_info
-            .try_into()
-            .map_err(|e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
-                let e: anyhow::Error = e.into();
-                e
-            })
-            .with_context(|| {
-                format!("Failed to convert AutopilotSideInfo to tool SideInfo for tool {tool_name}")
-            })?;
+        let converted_side_info: T::SideInfo = side_info.try_into().map_err(
+            |e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
+                AutopilotToolError::validation(format!(
+                    "Failed to convert AutopilotSideInfo to tool SideInfo for tool {tool_name}: {e}"
+                ))
+            },
+        )?;
 
         // Execute the underlying simple tool within a checkpointed step.
         // The step returns Ok(Result<output, error_string>) so tool errors are

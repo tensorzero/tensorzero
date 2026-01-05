@@ -149,7 +149,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
     where
         T: TaskTool + Default,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
     {
         self.executor
             .register_task_tool::<ClientTaskToolWrapper<T>>()
@@ -161,7 +161,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
     where
         T: SimpleTool + Default,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
     {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
         self.executor

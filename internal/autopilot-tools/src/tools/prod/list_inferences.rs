@@ -4,6 +4,8 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
@@ -226,6 +228,6 @@ impl SimpleTool for ListInferencesTool {
         ctx.client()
             .list_inferences(llm_params.request)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("list_inferences", e).into())
     }
 }

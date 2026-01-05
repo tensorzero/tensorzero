@@ -8,6 +8,8 @@ use durable_tools::{
     CacheEnabledMode, RunEvaluationParams, RunEvaluationResponse, SimpleTool, SimpleToolContext,
     ToolError, ToolMetadata, ToolResult,
 };
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -150,6 +152,6 @@ impl SimpleTool for RunEvaluationTool {
         ctx.client()
             .run_evaluation(params)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
     }
 }

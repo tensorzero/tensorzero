@@ -5,6 +5,8 @@ use std::borrow::Cow;
 use async_trait::async_trait;
 use autopilot_client::AutopilotSideInfo;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
@@ -90,6 +92,8 @@ impl SimpleTool for CreateDatapointsFromInferencesTool {
         ctx.client()
             .create_datapoints_from_inferences(llm_params.dataset_name, llm_params.params)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| {
+                AutopilotToolError::client_error("create_datapoints_from_inferences", e).into()
+            })
     }
 }

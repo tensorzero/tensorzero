@@ -4,6 +4,8 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::GetConfigResponse;
@@ -53,6 +55,6 @@ impl SimpleTool for GetConfigTool {
         ctx.client()
             .get_config_snapshot(side_info.config_snapshot_hash)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("get_config", e).into())
     }
 }

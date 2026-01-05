@@ -5,6 +5,8 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointRequest, CreateDatapointsResponse};
@@ -142,6 +144,6 @@ impl SimpleTool for CreateDatapointsTool {
         ctx.client()
             .create_datapoints(llm_params.dataset_name, datapoints)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("create_datapoints", e).into())
     }
 }

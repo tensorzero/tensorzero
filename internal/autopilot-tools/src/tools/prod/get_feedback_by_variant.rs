@@ -9,6 +9,8 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -94,6 +96,6 @@ impl SimpleTool for GetFeedbackByVariantTool {
                 llm_params.variant_names,
             )
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("get_feedback_by_variant", e).into())
     }
 }

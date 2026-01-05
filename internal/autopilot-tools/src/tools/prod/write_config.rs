@@ -5,6 +5,8 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -126,10 +128,8 @@ impl SimpleTool for WriteConfigTool {
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
-        let config: UninitializedConfig =
-            serde_json::from_value(llm_params.config).map_err(|e| ToolError::Validation {
-                message: format!("Invalid `config`: {e}"),
-            })?;
+        let config: UninitializedConfig = serde_json::from_value(llm_params.config)
+            .map_err(|e| AutopilotToolError::validation(format!("Invalid `config`: {e}")))?;
 
         let request = WriteConfigRequest {
             config,
@@ -140,6 +140,6 @@ impl SimpleTool for WriteConfigTool {
         ctx.client()
             .write_config(request)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("write_config", e).into())
     }
 }

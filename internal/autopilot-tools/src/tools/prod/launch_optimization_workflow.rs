@@ -6,6 +6,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
 
+use crate::error::AutopilotToolError;
+
 use autopilot_client::OptimizationWorkflowSideInfo;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
@@ -208,11 +210,10 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
                     // Check timeout
                     let elapsed = ctx.now().await? - start;
                     if elapsed.num_seconds() > max_wait_secs {
-                        return Err(ToolError::Validation {
-                            message: format!(
-                                "Optimization timed out after {max_wait_secs} seconds"
-                            ),
-                        });
+                        return Err(AutopilotToolError::validation(format!(
+                            "Optimization timed out after {max_wait_secs} seconds"
+                        ))
+                        .into());
                     }
 
                     // Durable sleep before next poll
