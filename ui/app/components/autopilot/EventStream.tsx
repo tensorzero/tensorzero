@@ -125,6 +125,22 @@ function getMessageText(content: InputMessageContent[]) {
   return "Message content";
 }
 
+/**
+ * Format a tool error for display.
+ * Extracts a human-readable message from the structured error JSON.
+ */
+function formatToolError(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    const e = error as Record<string, unknown>;
+    // AutopilotToolError has a "message" field
+    if (typeof e.message === "string") {
+      return e.message;
+    }
+  }
+  // Fallback to JSON stringification
+  return JSON.stringify(error);
+}
+
 function summarizeEvent(event: Event): EventSummary {
   const { payload } = event;
 
@@ -156,7 +172,7 @@ function summarizeEvent(event: Event): EventSummary {
       }
       if (payload.outcome.type === "failure") {
         return {
-          description: payload.outcome.message,
+          description: formatToolError(payload.outcome.error),
         };
       }
       return {};

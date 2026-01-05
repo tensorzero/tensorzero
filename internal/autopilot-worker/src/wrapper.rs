@@ -108,7 +108,7 @@ where
                 })
             }
             Err(e) => ToolOutcome::Failure {
-                message: e.to_string(),
+                error: tool_error_to_json(e),
             },
         };
 
@@ -234,9 +234,9 @@ where
         )?;
 
         // Execute the underlying simple tool within a checkpointed step.
-        // The step returns Ok(Result<output, error_string>) so tool errors are
+        // The step returns Ok(Result<output, error_json>) so tool errors are
         // checkpointed, not retried.
-        let step_result: Result<T::Output, String> = ctx
+        let step_result: Result<T::Output, serde_json::Value> = ctx
             .step(
                 "execute_simple_tool",
                 SimpleToolStepParams {
@@ -250,16 +250,14 @@ where
             .await?;
 
         // Prepare the outcome for the autopilot API
-        let outcome = match &step_result {
+        let outcome = match step_result {
             Ok(output) => {
-                let result_json = serde_json::to_string(output)?;
+                let result_json = serde_json::to_string(&output)?;
                 ToolOutcome::Success(AutopilotToolResult {
                     result: result_json,
                 })
             }
-            Err(error_message) => ToolOutcome::Failure {
-                message: error_message.clone(),
-            },
+            Err(error) => ToolOutcome::Failure { error },
         };
 
         // Publish result to autopilot API (checkpointed)
@@ -279,14 +277,14 @@ where
 
 /// Step function to execute a simple tool.
 ///
-/// Returns `Ok(Result<output, error_message>)` where the inner result is either
+/// Returns `Ok(Result<output, error_json>)` where the inner result is either
 /// success or failure. This ensures tool errors are checkpointed rather than
-/// causing step retries. The error is converted to String since ToolError
-/// contains non-serializable types.
+/// causing step retries. The error is converted to structured JSON for
+/// programmatic parsing by the autopilot API.
 async fn execute_simple_tool_step<T: SimpleTool>(
     params: SimpleToolStepParams<T::LlmParams, T::SideInfo>,
     state: ToolAppState,
-) -> anyhow::Result<Result<T::Output, String>> {
+) -> anyhow::Result<Result<T::Output, serde_json::Value>> {
     let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client());
     let idempotency_key = format!(
         "simple_tool:{}:{}",
@@ -294,7 +292,7 @@ async fn execute_simple_tool_step<T: SimpleTool>(
     );
 
     // Wrap the result in Ok so tool errors are checkpointed, not retried.
-    // Convert ToolError to String since it contains non-serializable types.
+    // Convert ToolError to structured JSON for programmatic error handling.
     Ok(T::execute(
         params.llm_params,
         params.side_info,
@@ -302,7 +300,55 @@ async fn execute_simple_tool_step<T: SimpleTool>(
         &idempotency_key,
     )
     .await
-    .map_err(|e| e.to_string()))
+    .map_err(|e| tool_error_to_json(&e)))
+}
+
+/// Convert a `ToolError` to structured JSON for the autopilot API.
+///
+/// For `ToolError::User`, extracts the `error_data` field which contains
+/// the serialized `AutopilotToolError`. For other variants, creates a
+/// structured JSON object with a `kind` discriminator.
+fn tool_error_to_json(e: &durable_tools::ToolError) -> serde_json::Value {
+    use durable_tools::ToolError;
+
+    match e {
+        ToolError::User { error_data, .. } => error_data.clone(),
+        ToolError::ToolNotFound(name) => serde_json::json!({
+            "kind": "ToolNotFound",
+            "message": format!("Tool not found: {name}"),
+            "name": name,
+        }),
+        ToolError::InvalidParams(msg) => serde_json::json!({
+            "kind": "InvalidParams",
+            "message": format!("Parameter error: {msg}"),
+        }),
+        ToolError::Serialization(err) => serde_json::json!({
+            "kind": "Serialization",
+            "message": format!("Serialization error: {err}"),
+        }),
+        ToolError::Database(err) => serde_json::json!({
+            "kind": "Database",
+            "message": format!("Database error: {err}"),
+        }),
+        ToolError::Timeout { step_name } => serde_json::json!({
+            "kind": "Timeout",
+            "message": format!("Timed out waiting for '{step_name}'"),
+            "step_name": step_name,
+        }),
+        ToolError::Control(cf) => serde_json::json!({
+            "kind": "Control",
+            "message": format!("Control flow: {cf:?}"),
+        }),
+        ToolError::DuplicateToolName(name) => serde_json::json!({
+            "kind": "DuplicateToolName",
+            "message": format!("Tool '{name}' is already registered"),
+            "name": name,
+        }),
+        ToolError::SchemaGeneration(err) => serde_json::json!({
+            "kind": "SchemaGeneration",
+            "message": format!("Schema generation failed: {err}"),
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -593,8 +639,8 @@ mod tests {
                     &request.payload,
                     EventPayload::ToolResult {
                         tool_call_event_id: tceid,
-                        outcome: ToolOutcome::Failure { message },
-                    } if *tceid == expected_tool_call_event_id && message == "Tool execution failed"
+                        outcome: ToolOutcome::Failure { error },
+                    } if *tceid == expected_tool_call_event_id && error.get("message") == Some(&serde_json::json!("Tool execution failed"))
                 )
             })
             .returning(|sid, _| {
@@ -609,7 +655,7 @@ mod tests {
             tool_call_event_id,
             tool_name: "failing_tool".to_string(),
             outcome: ToolOutcome::Failure {
-                message: "Tool execution failed".to_string(),
+                error: serde_json::json!({ "kind": "TestError", "message": "Tool execution failed" }),
             },
         };
 
