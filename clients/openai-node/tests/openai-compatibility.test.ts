@@ -238,7 +238,7 @@ describe("OpenAI Compatibility", () => {
       } else {
         expect(chunk.choices[0].delta.content).toBeUndefined();
         // No usage information because we didn't set `include_usage`
-        expect(chunk.usage).toBeNull();
+        expect(chunk.usage).toBeUndefined();
         expect(chunk.choices[0].finish_reason).toBe("stop");
       }
     }
@@ -573,7 +573,7 @@ describe("OpenAI Compatibility", () => {
         expect(chunk.choices[0].delta.content).toBeUndefined();
         expect(chunk.choices[0].delta.tool_calls).toBeUndefined();
         // No usage information because we didn't set `include_usage`
-        expect(chunk.usage).toBeNull();
+        expect(chunk.usage).toBeUndefined();
         expect(chunk.choices[0].finish_reason).toBe("tool_calls");
       }
     }
@@ -667,7 +667,7 @@ describe("OpenAI Compatibility", () => {
       } else {
         expect(chunk.choices[0].delta.content).toBe("");
         // No usage information because we didn't set `include_usage`
-        expect(chunk.usage).toBeNull();
+        expect(chunk.usage).toBeUndefined();
       }
     }
   });
@@ -956,7 +956,7 @@ describe("OpenAI Compatibility", () => {
 
     const prevChunk = chunks[chunks.length - 2];
     expect(prevChunk.choices[0].finish_reason).toBe("stop");
-    expect(prevChunk.usage).toBeNull();
+    expect(prevChunk.usage).toBeUndefined();
 
     // Check final chunk (which contains usage)
     const finalChunk = chunks[chunks.length - 1];
