@@ -51,10 +51,7 @@ pub enum EventPayload {
     },
     ToolCall(AutopilotToolCall),
     ToolCallAuthorization(ToolCallAuthorization),
-    ToolResult {
-        tool_call_event_id: Uuid,
-        outcome: ToolOutcome,
-    },
+    ToolResult(ToolResult),
     #[serde(other)]
     Other,
 }
@@ -64,19 +61,15 @@ impl EventPayload {
     /// System-generated types (StatusUpdate, ToolCall) return false.
     pub fn is_client_writable(&self) -> bool {
         matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
-            || matches!(
-                self,
-                EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult { .. }
-            )
+            || matches!(self, EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult(_))
     }
 }
 
 /// A status update within a session.
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[ts(export, tag = "type", rename_all = "snake_case")]
-pub enum StatusUpdate {
-    Text { text: String },
+#[ts(export)]
+pub struct StatusUpdate {
+    pub text: String,
 }
 
 // =============================================================================
@@ -186,6 +179,12 @@ impl From<AutopilotSideInfo> for () {
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 pub struct AutopilotToolResult {
     pub result: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+pub struct ToolResult {
+    pub tool_call_event_id: Uuid,
+    pub outcome: ToolOutcome,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]

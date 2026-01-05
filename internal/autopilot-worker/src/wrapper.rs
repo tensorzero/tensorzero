@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use autopilot_client::AutopilotToolResult;
+use autopilot_client::{AutopilotToolResult, ToolResult as AutopilotToolResultPayload};
 use durable_tools::{
     CreateEventGatewayRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool,
     TensorZeroClient, ToolAppState, ToolContext, ToolMetadata, ToolOutcome,
@@ -141,14 +141,14 @@ async fn publish_result(
     params: PublishResultParams,
     t0_client: &dyn TensorZeroClient,
 ) -> anyhow::Result<()> {
-    t0_client
+        t0_client
         .create_autopilot_event(
             params.session_id,
             CreateEventGatewayRequest {
-                payload: EventPayload::ToolResult {
+                payload: EventPayload::ToolResult(AutopilotToolResultPayload {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
-                },
+                }),
                 previous_user_message_event_id: None,
             },
         )
@@ -553,10 +553,7 @@ mod tests {
                 *sid == expected_session_id
                     && matches!(
                         &request.payload,
-                        EventPayload::ToolResult {
-                            tool_call_event_id: tceid,
-                            outcome: ToolOutcome::Success(_),
-                        } if *tceid == expected_tool_call_event_id
+                        EventPayload::ToolResult(tr) if tr.tool_call_event_id == expected_tool_call_event_id && matches!(&tr.outcome, ToolOutcome::Success(_))
                     )
             })
             .returning(|sid, _| {
@@ -593,10 +590,13 @@ mod tests {
             .withf(move |_sid, request| {
                 matches!(
                     &request.payload,
-                    EventPayload::ToolResult {
-                        tool_call_event_id: tceid,
-                        outcome: ToolOutcome::Failure { message },
-                    } if *tceid == expected_tool_call_event_id && message == "Tool execution failed"
+                    EventPayload::ToolResult(tr) if tr.tool_call_event_id == expected_tool_call_event_id && matches!(&tr.outcome, ToolOutcome::Failure { .. } ) && {
+                        if let ToolOutcome::Failure { message } = &tr.outcome {
+                            message == "Tool execution failed"
+                        } else {
+                            false
+                        }
+                    }
                 )
             })
             .returning(|sid, _| {
