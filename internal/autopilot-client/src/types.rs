@@ -55,6 +55,7 @@ pub enum EventPayload {
         tool_call_event_id: Uuid,
         outcome: ToolOutcome,
     },
+    TurnComplete,
     #[serde(other)]
     Other,
 }

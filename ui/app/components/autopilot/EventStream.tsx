@@ -162,6 +162,9 @@ function summarizeEvent(event: Event): EventSummary {
       return {};
     case "other":
       return {};
+    case "turn_complete":
+      // TODO: handle appropriately in UI
+      return {};
     default:
       return {};
   }
@@ -262,6 +265,8 @@ function renderEventTitle(event: Event) {
             "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
           );
       }
+    case "turn_complete":
+      return "Turn Complete";
 
     case "other":
       return (
