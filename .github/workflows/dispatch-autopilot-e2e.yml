@@ -1,6 +1,7 @@
 name: Dispatch Autopilot E2E Tests
 
 on:
+  push:
   workflow_call:
     secrets:
       AUTOPILOT_DISPATCH_APP_ID:
