@@ -26,6 +26,7 @@ export type ListInferencesRequest = {
   /**
    * Source of the inference output. Determines whether to return the original
    * inference output or demonstration feedback (manually-curated output) if available.
+   * Defaults to `Inference` if not specified.
    */
   output_source: InferenceOutputSource;
   /**

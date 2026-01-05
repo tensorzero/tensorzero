@@ -16,11 +16,6 @@ export type AutopilotSideInfo = {
    */
   tool_call_event_id: string;
   /**
-   * TODO: remove
-   * The tool call ID for LLMs
-   */
-  tool_call_id: string;
-  /**
    * The session ID for this autopilot session.
    */
   session_id: string;
