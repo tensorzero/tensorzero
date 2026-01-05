@@ -21,7 +21,7 @@ async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
-tokio-util = "0.7.12"
+tokio-util = "0.7.18"
 
 # HTTP and web framework (needed for handlers)
 axum = { workspace = true }

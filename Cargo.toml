@@ -48,14 +48,14 @@ async-stream = "0.3.5"
 async-trait = "0.1.89"
 http = "1.4.0"
 infer = "0.19.0"
-tokio-stream = "0.1.15"
-tokio = { version = "1.48.0", features = ["full"] }
+tokio-stream = "0.1.18"
+tokio = { version = "1.49.0", features = ["full"] }
 tracing = { version = "0.1.43", features = ["log"] }
 pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.53", features = ["derive"] }
+clap = { version = "4.5.54", features = ["derive"] }
 futures = "0.3.30"
 thiserror = "2.0.17"
 lazy_static = { version = "1.5.0" }
@@ -70,7 +70,7 @@ minijinja = { version = "2.14.0", features = [
 url = "2.5.4"
 google-cloud-auth = "1.3.0"
 serde-untagged = "0.1.8"
-object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
+object_store = { version = "0.13.0", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
 ts-rs = { version = "11.1.0", features = [
     "serde-compat",
