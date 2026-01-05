@@ -37,6 +37,7 @@ pub enum AutopilotToolError {
     },
 
     /// Test tool error (for e2e testing).
+    #[cfg(any(test, feature = "e2e_tests"))]
     #[error("{message}")]
     TestError {
         /// The test error message.
@@ -61,6 +62,7 @@ impl AutopilotToolError {
     }
 
     /// Create a test error.
+    #[cfg(any(test, feature = "e2e_tests"))]
     pub fn test_error(message: impl Into<String>) -> Self {
         Self::TestError {
             message: message.into(),
