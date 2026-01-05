@@ -987,7 +987,7 @@ An array of raw provider-specific usage data. Each entry contains:
 - `model_inference_id`: UUID of the model inference.
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
-- `data` (optional): The raw usage object from the provider.
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
 </Tab>
 <Tab title="Streaming">
@@ -1059,7 +1059,7 @@ An array of raw provider-specific usage data. Each entry contains:
 - `model_inference_id`: UUID of the model inference.
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
-- `data` (optional): The raw usage object from the provider.
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
 </Tab>
 </Tabs>
@@ -1133,7 +1133,7 @@ An array of raw provider-specific usage data. Each entry contains:
 - `model_inference_id`: UUID of the model inference.
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
-- `data` (optional): The raw usage object from the provider.
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
 </Tab>
 <Tab title="Streaming">
@@ -1189,7 +1189,7 @@ An array of raw provider-specific usage data. Each entry contains:
 - `model_inference_id`: UUID of the model inference.
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
-- `data` (optional): The raw usage object from the provider.
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
 </Tab>
 </Tabs>
