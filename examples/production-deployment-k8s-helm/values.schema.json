@@ -153,15 +153,6 @@
                     "properties": {
                         "fsGroup": {
                             "type": "integer"
-                        },
-                        "runAsGroup": {
-                            "type": "integer"
-                        },
-                        "runAsNonRoot": {
-                            "type": "boolean"
-                        },
-                        "runAsUser": {
-                            "type": "integer"
                         }
                     }
                 },
@@ -360,15 +351,6 @@
                     "type": "object",
                     "properties": {
                         "fsGroup": {
-                            "type": "integer"
-                        },
-                        "runAsGroup": {
-                            "type": "integer"
-                        },
-                        "runAsNonRoot": {
-                            "type": "boolean"
-                        },
-                        "runAsUser": {
                             "type": "integer"
                         }
                     }

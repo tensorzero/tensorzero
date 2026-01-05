@@ -53,10 +53,10 @@ gateway:
 
   # Needed for persistence + filesystem object storage (writes a test file at startup) since the image runs as non-root.
   securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
-    fsGroup: 1000
+    fsGroup: 2000
+    # runAsNonRoot: true
+    # runAsUser: 2000
+    # runAsGroup: 2000
 
   nodeSelector: {}
 
@@ -114,10 +114,11 @@ ui:
       memory: 512Mi
 
   securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
-    fsGroup: 1000
+    fsGroup: 2000
+    # Optional: Specify non-root user and group IDs
+    # runAsNonRoot: true
+    # runAsUser: 2000
+    # runAsGroup: 2000
 
   nodeSelector: {}
 
