@@ -90,6 +90,7 @@ async fn test_cache_write_and_read() {
         model_name: "test_model",
         provider_name: "test_provider",
         otlp_config: &Default::default(),
+        model_inference_id: Uuid::now_v7(),
     };
 
     // Read (should be None)
@@ -220,6 +221,7 @@ async fn test_cache_stream_write_and_read() {
         model_name: "test_model",
         provider_name: "test_provider",
         otlp_config: &Default::default(),
+        model_inference_id: Uuid::now_v7(),
     };
 
     // Read (should be None)
@@ -243,6 +245,7 @@ async fn test_cache_stream_write_and_read() {
                 input_tokens: Some(20),
                 output_tokens: Some(40),
             }),
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(999),
             finish_reason: None,
@@ -257,6 +260,7 @@ async fn test_cache_stream_write_and_read() {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
             }),
+            raw_usage: None,
             raw_response: "raw response 2".to_string(),
             latency: Duration::from_secs(999),
             finish_reason: Some(FinishReason::Stop),
@@ -298,6 +302,7 @@ async fn test_cache_stream_write_and_read() {
             raw_response,
             latency,
             finish_reason,
+            ..
         } = &chunk;
         assert_eq!(content, &initial_chunks[i].content);
         // 'created' should be different (current timestamp is different)

@@ -9,9 +9,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
+use autopilot_client::OptimizationWorkflowSideInfo;
 use autopilot_tools::tools::{
     LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolParams,
-    OptimizationWorkflowSideInfo,
 };
 use common::MockTensorZeroClient;
 use durable::MIGRATOR;

@@ -4,8 +4,10 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use durable_tools::{SideInfo, TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use durable_tools::{TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
+
+use autopilot_client::OptimizationWorkflowSideInfo;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::inferences::InferenceOutputSource;
 use tensorzero_core::endpoints::stored_inferences::v1::types::{InferenceFilter, OrderBy};
@@ -45,37 +47,6 @@ pub struct LaunchOptimizationWorkflowToolParams {
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
-fn default_poll_interval_secs() -> u64 {
-    60
-}
-
-fn default_max_wait_secs() -> u64 {
-    86400
-}
-
-/// Side info for optimization workflow tool (hidden from LLM).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct OptimizationWorkflowSideInfo {
-    /// Polling interval in seconds (default: 60).
-    #[serde(default = "default_poll_interval_secs")]
-    pub poll_interval_secs: u64,
-
-    /// Maximum time to wait for completion in seconds (default: 86400 = 24 hours).
-    #[serde(default = "default_max_wait_secs")]
-    pub max_wait_secs: u64,
-}
-
-impl Default for OptimizationWorkflowSideInfo {
-    fn default() -> Self {
-        Self {
-            poll_interval_secs: default_poll_interval_secs(),
-            max_wait_secs: default_max_wait_secs(),
-        }
-    }
-}
-
-impl SideInfo for OptimizationWorkflowSideInfo {}
-
 /// Response from the optimization workflow tool.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LaunchOptimizationWorkflowToolOutput {
@@ -109,6 +80,67 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
 
     fn timeout() -> Duration {
         Duration::from_secs(default_max_wait_secs())
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Launch an optimization workflow using stored inferences.",
+            "properties": {
+                "function_name": {
+                    "type": "string",
+                    "description": "The function name to optimize."
+                },
+                "template_variant_name": {
+                    "type": "string",
+                    "description": "The variant name to use as a template for rendering inferences."
+                },
+                "query_variant_name": {
+                    "type": "string",
+                    "description": "Optional variant name to filter inferences by (defaults to all variants)."
+                },
+                "output_source": {
+                    "type": "string",
+                    "enum": ["inference_output", "demonstration"],
+                    "description": "Source of output data: 'inference_output' (model outputs) or 'demonstration' (human demonstrations)."
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of inferences to use."
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Offset for pagination."
+                },
+                "val_fraction": {
+                    "type": "number",
+                    "description": "Fraction of data for validation (0.0 to 1.0, exclusive)."
+                },
+                "optimizer_config": {
+                    "type": "object",
+                    "description": "The optimizer configuration.",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["sft", "dpo", "mipro_v2"],
+                            "description": "Optimizer type: 'sft' (supervised fine-tuning), 'dpo' (direct preference optimization), 'mipro_v2' (prompt optimization)."
+                        },
+                        "model_name": {
+                            "type": "string",
+                            "description": "Model to fine-tune (for SFT/DPO)."
+                        },
+                        "num_epochs": {
+                            "type": "integer",
+                            "description": "Number of training epochs (for SFT/DPO)."
+                        }
+                    },
+                    "required": ["type"]
+                }
+            },
+            "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 
@@ -192,4 +224,8 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
             }
         }
     }
+}
+
+fn default_max_wait_secs() -> u64 {
+    86400
 }

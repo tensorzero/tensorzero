@@ -9,6 +9,7 @@
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
   - Run unit tests with `cargo test-unit-fast` which uses `nextest` under the hood.
 - When writing tests, key assertions should include a custom message stating the expected behavior.
+- Use `#[expect(clippy::...)]` instead of `#[allow(clippy::...)]`.
 
 ## For APIs
 
@@ -47,10 +48,6 @@ We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 # CI/CD
 
 - Most GitHub Actions workflows run on Unix only, but some also run on Windows and macOS. For workflows that run on multiple operating systems, ensure any bash scripts are compatible with all three platforms. You can check which OS a workflow uses by looking at the `runs-on` field. Setting `shell: bash` in the job definition is often sufficient.
-
-# UI
-
-- After modifying UI code, run from the `ui/` directory: `pnpm run format`, `pnpm run lint`, `pnpm run typecheck`. All commands must pass.
 
 # Misc
 

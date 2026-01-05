@@ -318,6 +318,7 @@ dependencies = [
  "moka",
  "reqwest",
  "reqwest-eventsource",
+ "schemars 1.2.0",
  "secrecy",
  "serde",
  "serde_json",
@@ -336,6 +337,7 @@ version = "2025.12.6"
 dependencies = [
  "anyhow",
  "async-trait",
+ "autopilot-client",
  "durable",
  "durable-tools",
  "mockall",
@@ -1824,7 +1826,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=161e9e5479c1ba87d6310fcd8b276f4b9f7444d6#161e9e5479c1ba87d6310fcd8b276f4b9f7444d6"
+source = "git+https://github.com/tensorzero/durable?rev=ca986b6042829d924d413fc0f42d3bbd87b2df70#ca986b6042829d924d413fc0f42d3bbd87b2df70"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1853,6 +1855,7 @@ dependencies = [
  "chrono",
  "durable",
  "durable-tools-spawn",
+ "evaluations",
  "mockall",
  "moka",
  "schemars 1.2.0",
@@ -7774,9 +7777,9 @@ dependencies = [
 
 [[package]]
 name = "zmij"
-version = "1.0.4"
+version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77cc0158b0d3103d58e9e82bdbe9cf9289d80dbcf4e686ff16730eb9e5814d1a"
+checksum = "de9211a9f64b825911bdf0240f58b7a8dac217fe260fc61f080a07f61372fbd5"
 
 [[package]]
 name = "zstd"

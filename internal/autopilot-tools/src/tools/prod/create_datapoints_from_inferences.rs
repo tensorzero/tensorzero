@@ -3,12 +3,11 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
-
-use crate::types::AutopilotToolSideInfo;
 
 /// Parameters for the create_datapoints_from_inferences tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -28,7 +27,7 @@ pub struct CreateDatapointsFromInferencesToolParams {
 pub struct CreateDatapointsFromInferencesTool;
 
 impl ToolMetadata for CreateDatapointsFromInferencesTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsFromInferencesToolParams;
 
@@ -42,6 +41,41 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
              Specify either specific inference IDs or a query to find inferences. \
              Tags are inherited from the source inferences.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Create datapoints from existing inferences.",
+            "properties": {
+                "dataset_name": {
+                    "type": "string",
+                    "description": "The name of the dataset to create datapoints in."
+                },
+                "params": {
+                    "type": "object",
+                    "description": "Parameters specifying which inferences to use.",
+                    "properties": {
+                        "inference_ids": {
+                            "type": "array",
+                            "items": { "type": "string", "format": "uuid" },
+                            "description": "Specific inference IDs to create datapoints from (use this OR query parameters)."
+                        },
+                        "function_name": {
+                            "type": "string",
+                            "description": "Filter inferences by function name (for query mode)."
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of inferences to use (for query mode)."
+                        }
+                    }
+                }
+            },
+            "required": ["dataset_name", "params"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
     }
 }
 

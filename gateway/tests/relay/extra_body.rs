@@ -1,12 +1,10 @@
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 
 // ============================================================================
 // Extra Body / Extra Headers Forwarding Tests
 // ============================================================================
 
-mod common;
-
-use common::relay::start_relay_test_environment;
+use crate::common::relay::start_relay_test_environment;
 use reqwest::Client;
 use serde_json::json;
 use uuid::Uuid;

@@ -10,36 +10,32 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui/command";
-import clsx from "clsx";
 import { useCallback, useMemo } from "react";
-import type { IconProps } from "~/components/icons/Icons";
 import { ComboboxInput } from "./ComboboxInput";
 import { useCombobox } from "./use-combobox";
-
-type IconComponent = React.FC<IconProps>;
 
 type ComboboxProps = {
   selected: string | null;
   onSelect: (value: string) => void;
   items: string[];
-  icon: IconComponent;
+  getItemIcon?: (item: string | null) => React.ReactNode;
   placeholder: string;
   emptyMessage: string;
   disabled?: boolean;
-  monospace?: boolean;
   name?: string;
+  ariaLabel?: string;
 };
 
 export function Combobox({
   selected,
   onSelect,
   items,
-  icon: Icon,
+  getItemIcon,
   placeholder,
   emptyMessage,
   disabled = false,
-  monospace = false,
   name,
+  ariaLabel,
 }: ComboboxProps) {
   const {
     open,
@@ -67,6 +63,11 @@ export function Combobox({
     [onSelect, closeDropdown],
   );
 
+  const inputPrefix = useMemo(() => {
+    const item = selected && !searchValue ? selected : null;
+    return getItemIcon?.(item);
+  }, [selected, searchValue, getItemIcon]);
+
   return (
     <div className="w-full">
       {name && <input type="hidden" name={name} value={selected ?? ""} />}
@@ -80,9 +81,9 @@ export function Combobox({
             onBlur={handleBlur}
             placeholder={placeholder}
             disabled={disabled}
-            monospace={monospace}
             open={open}
-            icon={Icon}
+            prefix={inputPrefix}
+            ariaLabel={ariaLabel}
           />
         </PopoverAnchor>
         <PopoverContent
@@ -106,12 +107,8 @@ export function Combobox({
                       onSelect={() => handleSelect(item)}
                       className="flex items-center gap-2"
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span
-                        className={clsx("truncate", monospace && "font-mono")}
-                      >
-                        {item}
-                      </span>
+                      {getItemIcon?.(item)}
+                      <span className="truncate font-mono">{item}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

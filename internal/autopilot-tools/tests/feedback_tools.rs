@@ -5,6 +5,7 @@ mod common;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use serde_json::json;
@@ -12,7 +13,6 @@ use sqlx::PgPool;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use uuid::Uuid;
 
-use autopilot_tools::AutopilotToolSideInfo;
 use autopilot_tools::tools::{
     FeedbackTool, FeedbackToolParams, GetFeedbackByVariantTool, GetFeedbackByVariantToolParams,
     GetLatestFeedbackByMetricTool, GetLatestFeedbackByMetricToolParams,
@@ -30,7 +30,6 @@ async fn test_feedback_tool_comment(pool: PgPool) {
 
     let inference_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = FeedbackToolParams {
@@ -41,11 +40,11 @@ async fn test_feedback_tool_comment(pool: PgPool) {
         dryrun: Some(true),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -55,8 +54,10 @@ async fn test_feedback_tool_comment(pool: PgPool) {
             params.inference_id == Some(inference_id)
                 && params.metric_name == "comment"
                 && params.internal
-                && params.tags.get("autopilot_session_id") == Some(&session_id.to_string())
-                && params.tags.get("autopilot_tool_call_id") == Some(&tool_call_id.to_string())
+                && params.tags.get("tensorzero::autopilot::session_id")
+                    == Some(&session_id.to_string())
+                && params.tags.get("tensorzero::autopilot::tool_call_event_id")
+                    == Some(&tool_call_event_id.to_string())
         })
         .return_once(move |_| Ok(mock_response));
 
@@ -88,7 +89,6 @@ async fn test_feedback_tool_float_metric(pool: PgPool) {
 
     let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = FeedbackToolParams {
@@ -99,11 +99,11 @@ async fn test_feedback_tool_float_metric(pool: PgPool) {
         dryrun: Some(true),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -141,7 +141,6 @@ async fn test_feedback_tool_boolean_metric(pool: PgPool) {
 
     let inference_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = FeedbackToolParams {
@@ -152,11 +151,11 @@ async fn test_feedback_tool_boolean_metric(pool: PgPool) {
         dryrun: Some(true),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -196,11 +195,11 @@ async fn test_feedback_tool_error(pool: PgPool) {
         dryrun: Some(true),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -229,9 +228,7 @@ async fn test_feedback_tool_error(pool: PgPool) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_get_latest_feedback_by_metric_tool_success(pool: PgPool) {
     let target_id = Uuid::now_v7();
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let mut expected_map = HashMap::new();
@@ -240,11 +237,11 @@ async fn test_get_latest_feedback_by_metric_tool_success(pool: PgPool) {
 
     let llm_params = GetLatestFeedbackByMetricToolParams { target_id };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -282,18 +279,16 @@ async fn test_get_latest_feedback_by_metric_tool_success(pool: PgPool) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_get_latest_feedback_by_metric_tool_empty_result(pool: PgPool) {
     let target_id = Uuid::now_v7();
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = GetLatestFeedbackByMetricToolParams { target_id };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -333,11 +328,11 @@ async fn test_get_latest_feedback_by_metric_tool_error(pool: PgPool) {
         target_id: Uuid::now_v7(),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -365,9 +360,7 @@ async fn test_get_latest_feedback_by_metric_tool_error(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_get_feedback_by_variant_tool_success(pool: PgPool) {
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let mock_response = vec![
@@ -381,11 +374,11 @@ async fn test_get_feedback_by_variant_tool_success(pool: PgPool) {
         variant_names: None,
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -419,9 +412,7 @@ async fn test_get_feedback_by_variant_tool_success(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_get_feedback_by_variant_tool_with_variant_filter(pool: PgPool) {
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let mock_response = vec![create_mock_feedback_by_variant("variant_a", 0.85, 100)];
@@ -432,11 +423,11 @@ async fn test_get_feedback_by_variant_tool_with_variant_filter(pool: PgPool) {
         variant_names: Some(vec!["variant_a".to_string()]),
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -471,9 +462,7 @@ async fn test_get_feedback_by_variant_tool_with_variant_filter(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_get_feedback_by_variant_tool_empty_result(pool: PgPool) {
-    let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
-    let tool_call_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = GetFeedbackByVariantToolParams {
@@ -482,11 +471,11 @@ async fn test_get_feedback_by_variant_tool_empty_result(pool: PgPool) {
         variant_names: None,
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id,
-        session_id,
-        tool_call_id,
+    let side_info = AutopilotSideInfo {
         tool_call_event_id,
+        session_id,
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -521,11 +510,11 @@ async fn test_get_feedback_by_variant_tool_error(pool: PgPool) {
         variant_names: None,
     };
 
-    let side_info = AutopilotToolSideInfo {
-        episode_id: Uuid::now_v7(),
-        session_id: Uuid::now_v7(),
-        tool_call_id: Uuid::now_v7(),
+    let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: None,
+        optimization: OptimizationWorkflowSideInfo::default(),
     };
 
     let mut mock_client = MockTensorZeroClient::new();

@@ -1,5 +1,3 @@
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
-
 use crate::inference::types::extra_headers::{
     DynamicExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };

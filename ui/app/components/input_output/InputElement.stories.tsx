@@ -5,18 +5,15 @@ import type { Input, Role } from "~/types/tensorzero";
 import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
 import { getBase64File } from "./content_blocks/FileContentBlock.stories";
 import { GlobalToastProvider } from "~/providers/global-toast-provider";
-import { TooltipProvider } from "~/components/ui/tooltip";
 
 const meta = {
   title: "Input Output/InputElement",
   component: InputElement,
   decorators: [
     (Story) => (
-      <TooltipProvider>
-        <GlobalToastProvider>
-          <Story />
-        </GlobalToastProvider>
-      </TooltipProvider>
+      <GlobalToastProvider>
+        <Story />
+      </GlobalToastProvider>
     ),
   ],
 } satisfies Meta<typeof InputElement>;

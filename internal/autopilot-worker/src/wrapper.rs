@@ -3,8 +3,9 @@
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
+use anyhow::Context;
 use async_trait::async_trait;
-use autopilot_client::ToolResult as AutopilotToolResult;
+use autopilot_client::AutopilotToolResult;
 use durable_tools::{
     CreateEventGatewayRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool,
     TensorZeroClient, ToolAppState, ToolContext, ToolMetadata, ToolOutcome,
@@ -14,14 +15,13 @@ use schemars::Schema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::side_info::AutopilotSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the publish_result step.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PublishResultParams {
     session_id: Uuid,
     tool_call_event_id: Uuid,
-    tool_call_id: String,
     tool_name: String,
     outcome: ToolOutcome,
 }
@@ -68,7 +68,7 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
     }
 
     type LlmParams = T::LlmParams;
-    type SideInfo = AutopilotSideInfo<T::SideInfo>;
+    type SideInfo = AutopilotSideInfo;
     /// The wrapped tool "returns" by writing to the autopilot API
     /// so for our purposes the output of the tool is ()
     type Output = ();
@@ -78,15 +78,25 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
 impl<T> TaskTool for ClientTaskToolWrapper<T>
 where
     T: TaskTool,
-    T::SideInfo: Default + PartialEq,
+    T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
 {
     async fn execute(
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
     ) -> DurableToolResult<Self::Output> {
+        let session_id = side_info.session_id;
+        let tool_call_event_id = side_info.tool_call_event_id;
+        let side_info: T::SideInfo = side_info
+            .try_into()
+            .map_err(|e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
+                let e: anyhow::Error = e.into();
+                e
+            })
+            .with_context(|| "Failed to convert AutopilotSideInfo to tool SideInfo: {e}")?;
         // Execute the underlying tool
-        let result = T::execute(llm_params, side_info.inner, ctx).await;
+        let result = T::execute(llm_params, side_info, ctx).await;
 
         // Prepare the outcome for the autopilot API
         let tool_name = T::name().to_string();
@@ -94,9 +104,7 @@ where
             Ok(output) => {
                 let result_json = serde_json::to_string(output)?;
                 ToolOutcome::Success(AutopilotToolResult {
-                    name: tool_name.clone(),
                     result: result_json,
-                    id: side_info.tool_call_id.clone(),
                 })
             }
             Err(e) => ToolOutcome::Failure {
@@ -106,9 +114,8 @@ where
 
         // Publish result to autopilot API (checkpointed)
         let publish_params = PublishResultParams {
-            session_id: side_info.session_id,
-            tool_call_event_id: side_info.tool_call_event_id,
-            tool_call_id: side_info.tool_call_id,
+            session_id,
+            tool_call_event_id,
             tool_name,
             outcome,
         };
@@ -174,7 +181,11 @@ impl<T: SimpleTool> Default for ClientSimpleToolWrapper<T> {
     }
 }
 
-impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T> {
+impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T>
+where
+    T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+{
     fn name() -> Cow<'static, str> {
         T::name()
     }
@@ -184,7 +195,7 @@ impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T> {
     }
 
     type LlmParams = T::LlmParams;
-    type SideInfo = AutopilotSideInfo<T::SideInfo>;
+    type SideInfo = AutopilotSideInfo;
     /// The wrapped tool "returns" by writing to the autopilot API
     /// so for our purposes the output of the tool is ()
     type Output = ();
@@ -200,13 +211,29 @@ struct SimpleToolStepParams<L, S> {
 }
 
 #[async_trait]
-impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
+impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T>
+where
+    T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+{
     async fn execute(
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
     ) -> DurableToolResult<Self::Output> {
         let tool_name = T::name().to_string();
+        let tool_call_event_id = side_info.tool_call_event_id;
+        let session_id = side_info.session_id;
+        // Convert AutopilotSideInfo to the underlying tool's SideInfo
+        let converted_side_info: T::SideInfo = side_info
+            .try_into()
+            .map_err(|e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
+                let e: anyhow::Error = e.into();
+                e
+            })
+            .with_context(|| {
+                format!("Failed to convert AutopilotSideInfo to tool SideInfo for tool {tool_name}")
+            })?;
 
         // Execute the underlying simple tool within a checkpointed step.
         // The step returns Ok(Result<output, error_string>) so tool errors are
@@ -216,9 +243,9 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
                 "execute_simple_tool",
                 SimpleToolStepParams {
                     llm_params,
-                    side_info: side_info.inner,
+                    side_info: converted_side_info,
                     tool_name: tool_name.clone(),
-                    tool_call_event_id: side_info.tool_call_event_id,
+                    tool_call_event_id,
                 },
                 execute_simple_tool_step::<T>,
             )
@@ -229,9 +256,7 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
             Ok(output) => {
                 let result_json = serde_json::to_string(output)?;
                 ToolOutcome::Success(AutopilotToolResult {
-                    name: tool_name.clone(),
                     result: result_json,
-                    id: side_info.tool_call_id.clone(),
                 })
             }
             Err(error_message) => ToolOutcome::Failure {
@@ -241,9 +266,8 @@ impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T> {
 
         // Publish result to autopilot API (checkpointed)
         let publish_params = PublishResultParams {
-            session_id: side_info.session_id,
-            tool_call_event_id: side_info.tool_call_event_id,
-            tool_call_id: side_info.tool_call_id,
+            session_id,
+            tool_call_event_id,
             tool_name,
             outcome,
         };
@@ -293,8 +317,9 @@ mod tests {
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
         CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-        GetDatapointsResponse, GetInferencesResponse, InferenceResponse, ListDatapointsRequest,
-        ListInferencesRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
+        GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
+        ListDatapointsRequest, ListInferencesRequest, UpdateDatapointRequest,
+        UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -341,6 +366,16 @@ mod tests {
                 snapshot_hash: SnapshotHash,
                 params: ActionInput,
             ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+            async fn get_config_snapshot(
+                &self,
+                hash: Option<String>,
+            ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+            async fn write_config(
+                &self,
+                request: WriteConfigRequest,
+            ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
             async fn create_datapoints(
                 &self,
@@ -405,6 +440,11 @@ mod tests {
                 function_name: String,
                 variant_names: Option<Vec<String>>,
             ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
+
+            async fn run_evaluation(
+                &self,
+                params: durable_tools::RunEvaluationParams,
+            ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
         }
     }
 
@@ -499,7 +539,6 @@ mod tests {
     async fn test_publish_result_success_outcome() {
         let session_id = Uuid::now_v7();
         let tool_call_event_id = Uuid::now_v7();
-        let tool_call_id = "call_123".to_string();
         let tool_name = "test_tool".to_string();
 
         let mut mock_client = MockTensorZeroClient::new();
@@ -530,12 +569,9 @@ mod tests {
         let params = PublishResultParams {
             session_id,
             tool_call_event_id,
-            tool_call_id,
             tool_name,
             outcome: ToolOutcome::Success(AutopilotToolResult {
-                name: "test_tool".to_string(),
                 result: r#"{"result":"success"}"#.to_string(),
-                id: "call_123".to_string(),
             }),
         };
 
@@ -573,7 +609,6 @@ mod tests {
         let params = PublishResultParams {
             session_id,
             tool_call_event_id,
-            tool_call_id: "call_456".to_string(),
             tool_name: "failing_tool".to_string(),
             outcome: ToolOutcome::Failure {
                 message: "Tool execution failed".to_string(),
@@ -595,12 +630,9 @@ mod tests {
         let params = PublishResultParams {
             session_id: Uuid::now_v7(),
             tool_call_event_id: Uuid::now_v7(),
-            tool_call_id: "call_789".to_string(),
             tool_name: "some_tool".to_string(),
             outcome: ToolOutcome::Success(AutopilotToolResult {
-                name: "some_tool".to_string(),
                 result: "{}".to_string(),
-                id: "call_789".to_string(),
             }),
         };
 
@@ -644,14 +676,14 @@ mod tests {
     fn test_client_tool_wrapper_side_info_type() {
         // Verify that the wrapper wraps the SideInfo with AutopilotSideInfo
         // This is a compile-time check - if it compiles, the types are correct
-        fn assert_side_info_type<T: ToolMetadata<SideInfo = AutopilotSideInfo<()>>>() {}
+        fn assert_side_info_type<T: ToolMetadata<SideInfo = AutopilotSideInfo>>() {}
         assert_side_info_type::<ClientTaskToolWrapper<TestTaskTool>>();
     }
 
     #[test]
     fn test_client_simple_tool_wrapper_side_info_type() {
         // Verify that the wrapper wraps the SideInfo with AutopilotSideInfo
-        fn assert_side_info_type<T: ToolMetadata<SideInfo = AutopilotSideInfo<()>>>() {}
+        fn assert_side_info_type<T: ToolMetadata<SideInfo = AutopilotSideInfo>>() {}
         assert_side_info_type::<ClientSimpleToolWrapper<TestSimpleTool>>();
     }
 }

@@ -11,9 +11,10 @@ use sqlx::types::chrono::Utc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetDatapointsResponse, GetInferencesResponse, InferenceResponse, ListDatapointsRequest,
-    ListInferencesRequest, Role, StoredChatInference, StoredInference, UpdateDatapointRequest,
-    UpdateDatapointsResponse, Usage,
+    GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
+    ListDatapointsRequest, ListInferencesRequest, Role, StoredChatInference, StoredInference,
+    UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
+    WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -67,6 +68,16 @@ mock! {
             snapshot_hash: SnapshotHash,
             input: tensorzero::ActionInput,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+        async fn get_config_snapshot(
+            &self,
+            hash: Option<String>,
+        ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+        async fn write_config(
+            &self,
+            request: WriteConfigRequest,
+        ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
         async fn create_datapoints(
             &self,
@@ -130,6 +141,11 @@ mock! {
             function_name: String,
             variant_names: Option<Vec<String>>,
         ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
+
+        async fn run_evaluation(
+            &self,
+            params: durable_tools::RunEvaluationParams,
+        ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
     }
 }
 
@@ -151,6 +167,7 @@ pub fn create_mock_chat_response(text: &str) -> InferenceResponse {
             input_tokens: Some(10),
             output_tokens: Some(5),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     })

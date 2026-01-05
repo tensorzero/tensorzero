@@ -1,4 +1,42 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// The type of API used for a model inference.
+/// Used in raw usage reporting to help consumers interpret provider-specific usage data.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiType {
+    ChatCompletions,
+    Responses,
+    Embeddings,
+}
+
+/// A single entry in the raw usage array, representing usage data from one model inference.
+/// This preserves the original provider-specific usage object for fields that TensorZero
+/// normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct RawUsageEntry {
+    pub model_inference_id: Uuid,
+    pub provider_type: String,
+    pub api_type: ApiType,
+    pub data: serde_json::Value,
+}
+
+pub fn raw_usage_entries_from_value(
+    model_inference_id: Uuid,
+    provider_type: &str,
+    api_type: ApiType,
+    usage: serde_json::Value,
+) -> Vec<RawUsageEntry> {
+    vec![RawUsageEntry {
+        model_inference_id,
+        provider_type: provider_type.to_string(),
+        api_type,
+        data: usage,
+    }]
+}
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
@@ -138,5 +176,53 @@ mod tests {
         let sum = Usage::sum_iter_strict(usages.into_iter());
         assert_eq!(sum.input_tokens, Some(10));
         assert_eq!(sum.output_tokens, Some(20));
+    }
+
+    #[test]
+    fn test_api_type_serialization() {
+        assert_eq!(
+            serde_json::to_string(&ApiType::ChatCompletions).unwrap(),
+            "\"chat_completions\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ApiType::Responses).unwrap(),
+            "\"responses\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ApiType::Embeddings).unwrap(),
+            "\"embeddings\""
+        );
+    }
+
+    #[test]
+    fn test_raw_usage_entry_serialization() {
+        let entry = RawUsageEntry {
+            model_inference_id: Uuid::nil(),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: serde_json::json!({
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "reasoning_tokens": 30
+            }),
+        };
+        let json = serde_json::to_value(&entry).unwrap();
+        assert_eq!(json["provider_type"], "openai");
+        assert_eq!(json["api_type"], "chat_completions");
+        assert_eq!(json["data"]["prompt_tokens"], 100);
+        assert_eq!(json["data"]["reasoning_tokens"], 30);
+    }
+
+    #[test]
+    fn test_raw_usage_entry_null_data() {
+        let entry = RawUsageEntry {
+            model_inference_id: Uuid::nil(),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: serde_json::Value::Null,
+        };
+        let json = serde_json::to_value(&entry).unwrap();
+        // data field should be present as null
+        assert_eq!(json["data"], serde_json::Value::Null, "data should be null");
     }
 }

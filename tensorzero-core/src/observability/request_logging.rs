@@ -11,6 +11,7 @@ use http_body::{Frame, SizeHint};
 use metrics::Label;
 use tracing::{Level, Span};
 use tracing_futures::Instrument;
+use uuid::Uuid;
 
 use crate::observability::overhead_timing::{
     OverheadSpanExt, TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME,
@@ -177,6 +178,9 @@ pub async fn request_logging_middleware(
         None
     };
 
+    // Generate a random ID so that we can associate log lines with this request
+    let request_id = Uuid::now_v7();
+
     let span = if let Some(latency_span) = &latency_span {
         tracing::info_span!(
             target: "gateway",
@@ -185,6 +189,7 @@ pub async fn request_logging_middleware(
             method = %request.method(),
             uri = %request.uri(),
             version = ?request.version(),
+            request_id = %request_id,
         )
     } else {
         tracing::info_span!(
@@ -193,6 +198,7 @@ pub async fn request_logging_middleware(
             method = %request.method(),
             uri = %request.uri(),
             version = ?request.version(),
+            request_id = %request_id,
         )
     };
     span.in_scope(|| {
