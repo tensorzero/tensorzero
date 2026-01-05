@@ -1245,7 +1245,9 @@ async fn test_topk_variant_failure_threshold() {
 ///
 /// This test verifies that:
 /// 1. Progress events are emitted after each batch via `topk_progress:{task_id}:{batch_idx}`
-/// 2. Completion events are emitted at the end via `topk_completed:{task_id}`
+/// 2. Completion events are emitted via both:
+///    - `topk_completed:{task_id}`
+///    - `topk_progress:{task_id}:{N}` (where N is the number of batches)
 /// 3. The event payloads contain correct data (variant summaries, statuses, etc.)
 ///
 /// Setup is similar to test_topk_found_topk. We verify events by querying the durable
@@ -1393,8 +1395,10 @@ async fn test_topk_emit_event_streaming() {
         progress_results.len()
     );
 
-    // Verify each batch has valid data and num_datapoints_processed increases
+    // Verify each batch has valid data and num_datapoints_processed increases.
+    // The last event in the sequence should be a Completed event (at batch index N).
     let mut prev_datapoints_processed = 0;
+    let num_progress_events = progress_results.len();
     for (idx, (event_name, payload)) in progress_results.iter().enumerate() {
         // Verify event name has correct batch index
         let expected_event_name = format!("{progress_event_prefix}{idx}");
@@ -1406,8 +1410,14 @@ async fn test_topk_emit_event_streaming() {
         let progress_update: TopKUpdate =
             serde_json::from_value(payload.clone()).expect("Failed to deserialize progress event");
 
+        let is_last = idx == num_progress_events - 1;
+
         match progress_update {
             TopKUpdate::BatchProgress(batch) => {
+                assert!(
+                    !is_last,
+                    "Last event should be Completed, not BatchProgress"
+                );
                 assert_ne!(
                     batch.evaluation_run_id,
                     uuid::Uuid::nil(),
@@ -1439,7 +1449,18 @@ async fn test_topk_emit_event_streaming() {
                     "Should have 3 variant statuses"
                 );
             }
-            TopKUpdate::Completed(_) => panic!("Expected BatchProgress event, got Completed"),
+            TopKUpdate::Completed(completed) => {
+                // The batch-style completion event should be the last one
+                assert!(
+                    is_last,
+                    "Completed event should only appear at the last index, but found at {idx}"
+                );
+                assert_ne!(
+                    completed.evaluation_run_id,
+                    uuid::Uuid::nil(),
+                    "Batch-style completion event should have a valid evaluation_run_id"
+                );
+            }
         }
     }
 
