@@ -48,9 +48,6 @@ use crate::{
 /// Default batch size for top-k evaluation
 const DEFAULT_BATCH_SIZE: usize = 20;
 
-/// Maximum allowed concurrency to prevent accidental resource exhaustion
-const MAX_CONCURRENCY: usize = 1000;
-
 /// Default confidence sequence resolution (grid points for mean estimation)
 const DEFAULT_CS_RESOLUTION: usize = 1001;
 
@@ -1275,14 +1272,6 @@ impl Task<TopKTaskState> for TopKTask {
                 message: "concurrency must be > 0".to_string(),
             });
         }
-        if params.concurrency > MAX_CONCURRENCY {
-            return Err(durable::TaskError::Validation {
-                message: format!(
-                    "concurrency ({}) must be <= {MAX_CONCURRENCY}",
-                    params.concurrency
-                ),
-            });
-        }
 
         let batch_size = params.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
@@ -1489,7 +1478,7 @@ impl Task<TopKTaskState> for TopKTask {
             "Top-k evaluation complete"
         );
 
-        // Emit completion event for streaming consumers
+        // Emit completion event for streaming consumers.
         let completed_update = CompletedUpdate {
             evaluation_run_id,
             stopping_reason: stopping_reason.clone(),
@@ -1498,6 +1487,14 @@ impl Task<TopKTaskState> for TopKTask {
         };
         ctx.emit_event(
             &format!("topk_completed:{}", ctx.task_id),
+            &TopKUpdate::Completed(completed_update.clone()),
+        )
+        .await?;
+
+        // Also emit with batch-style name so clients awaiting sequential batch
+        // events will receive it. progress.batch_index is `N` when there are N batches.
+        ctx.emit_event(
+            &format!("topk_progress:{}:{}", ctx.task_id, progress.batch_index),
             &TopKUpdate::Completed(completed_update),
         )
         .await?;

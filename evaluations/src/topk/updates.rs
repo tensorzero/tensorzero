@@ -17,8 +17,13 @@ use crate::betting_confidence_sequences::MeanBettingConfidenceSequence;
 /// Update type for streaming top-k evaluation progress.
 ///
 /// Events are emitted with these naming conventions:
-/// - `topk_progress:{task_id}` - Latest batch progress (first-writer-wins)
-/// - `topk_completed:{task_id}` - Task completion (final)
+/// - `topk_progress:{task_id}:{batch_idx}` - Batch progress (0, 1, 2, ..., N-1)
+/// - `topk_progress:{task_id}:{N}` - Task completion (also emitted at batch index N)
+/// - `topk_completed:{task_id}` - Task completion (same payload as above)
+///
+/// The completion event is emitted under both names so that clients can either:
+/// 1. Await `topk_completed:{task_id}` directly for completion, or
+/// 2. Poll sequential batch events and receive completion at index N
 ///
 /// Note: The `task_id` is the durable task ID (from `spawn_result.task_id`), which is
 /// known externally before the task starts. The payload contains `evaluation_run_id`
