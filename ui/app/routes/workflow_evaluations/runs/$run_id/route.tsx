@@ -89,7 +89,10 @@ export default function WorkflowEvaluationRunSummaryPage({
 
   return (
     <PageLayout>
-      <PageHeader heading={`Workflow Evaluation Run `} />
+      <PageHeader
+        label="Workflow Evaluation Run"
+        name={workflowEvaluationRun.id}
+      />
       <BasicInfo workflowEvaluationRun={workflowEvaluationRun} count={count} />
       <SectionLayout>
         <WorkflowEvaluationRunEpisodesTable

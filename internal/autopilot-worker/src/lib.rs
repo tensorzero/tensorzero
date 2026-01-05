@@ -3,18 +3,17 @@
 //! This crate provides infrastructure for running TensorZero Autopilot tools
 //! in a durable execution environment alongside the gateway.
 
-mod side_info;
 mod worker;
 mod wrapper;
 
-pub use side_info::AutopilotSideInfo;
 pub use worker::{
     AutopilotWorker, AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker,
 };
-pub use wrapper::ClientToolWrapper;
+pub use wrapper::ClientTaskToolWrapper;
 
-// Re-export useful types from durable-tools
+// Re-export useful types from durable-tools and autopilot-tools
 pub use durable_tools::{
-    SideInfo, SimpleTool, SimpleToolContext, TaskTool, ToolContext, ToolError, ToolMetadata,
-    ToolResult,
+    SimpleTool, SimpleToolContext, TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult,
 };
+
+pub use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};

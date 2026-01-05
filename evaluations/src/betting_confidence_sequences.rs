@@ -13,6 +13,7 @@
 //! has not exceeded the threshold 1/α, where α is the confidence level.
 
 use anyhow::{Result, bail};
+use serde::{Deserialize, Serialize};
 
 const DEFAULT_M_RESOLUTION: usize = 1001;
 const BET_TRUNCATION_LEVEL: f64 = 0.5;
@@ -20,7 +21,7 @@ const BET_TRUNCATION_LEVEL: f64 = 0.5;
 /// Specifies the grid of candidate mean values where the wealth processes will be tracked.
 ///
 /// Finer grids mean more precise (less conservative) confidence sequences.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WealthProcessGridPoints {
     /// Custom grid of candidate mean values (for unequally spaced points).
     MValues(Vec<f64>),
@@ -129,7 +130,7 @@ fn find_cs_upper(
 /// The confidence set is defined as {m : wealth_hedged(m) < 1/α}, where
 /// wealth_hedged is a combination of the upper and lower wealth processes.
 /// These processes are evaluated on a grid of candidate mean values.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WealthProcesses {
     /// Grid specification for candidate mean values.
     pub grid: WealthProcessGridPoints,
@@ -144,7 +145,7 @@ pub struct WealthProcesses {
 /// This struct maintains the state needed to incrementally update a confidence
 /// sequence as new observations arrive. The confidence interval [cs_lower, cs_upper]
 /// is valid at any stopping time with coverage probability at least 1 - α.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeanBettingConfidenceSequence {
     /// Identifier for this sequence (e.g., variant or evaluator name).
     pub name: String,
@@ -164,6 +165,34 @@ pub struct MeanBettingConfidenceSequence {
     pub alpha: f32,
     /// Underlying wealth processes used to construct the confidence set.
     pub wealth: WealthProcesses,
+}
+
+impl MeanBettingConfidenceSequence {
+    /// Create a new confidence sequence with no observations.
+    ///
+    /// The sequence starts with wide bounds [0, 1] and neutral priors.
+    ///
+    /// # Arguments
+    /// * `name` - Identifier for this sequence (e.g., variant or evaluator name)
+    /// * `resolution` - Number of grid points for the wealth process (higher = more precise)
+    /// * `alpha` - Significance level (e.g., 0.05 for 95% confidence)
+    pub fn new(name: String, resolution: usize, alpha: f32) -> Self {
+        Self {
+            name,
+            mean_regularized: 0.5,
+            variance_regularized: 0.25,
+            count: 0,
+            mean_est: 0.5,
+            cs_lower: 0.0,
+            cs_upper: 1.0,
+            alpha,
+            wealth: WealthProcesses {
+                grid: WealthProcessGridPoints::Resolution(resolution),
+                wealth_upper: vec![1.0; resolution],
+                wealth_lower: vec![1.0; resolution],
+            },
+        }
+    }
 }
 
 /// Update a confidence sequence with new observations.

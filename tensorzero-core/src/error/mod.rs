@@ -1723,6 +1723,12 @@ impl From<autopilot_client::AutopilotError> for Error {
                     status_code: None,
                 })
             }
+            autopilot_client::AutopilotError::ToolCallNotFound(id) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Tool call not found: {id}"),
+                    status_code: None,
+                })
+            }
         }
     }
 }

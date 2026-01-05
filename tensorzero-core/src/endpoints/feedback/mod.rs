@@ -53,7 +53,7 @@ const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1000);
 const FEEDBACK_TARGET_POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)
@@ -166,12 +166,6 @@ pub async fn feedback(
 
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
-        counter!(
-            "request_count",
-            "endpoint" => "feedback",
-            "metric_name" => params.metric_name.to_string()
-        )
-        .increment(1);
         counter!(
             "tensorzero_requests_total",
             "endpoint" => "feedback",

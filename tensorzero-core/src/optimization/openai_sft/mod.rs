@@ -1,5 +1,6 @@
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -20,7 +21,7 @@ pub struct OpenAISFTConfig {
 /// Uninitialized OpenAI SFT Config (per-job settings only).
 /// Provider-level settings (credentials) come from
 /// `provider_types.openai` defaults in the gateway config.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
 pub struct UninitializedOpenAISFTConfig {

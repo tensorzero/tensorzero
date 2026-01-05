@@ -12,16 +12,33 @@ use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use futures::stream::StreamExt;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
 use autopilot_client::{
-    AutopilotClient, CreateEventRequest, CreateEventResponse, Event, ListEventsParams,
-    ListEventsResponse, ListSessionsParams, ListSessionsResponse, StreamEventsParams,
+    AutopilotClient, CreateEventRequest, CreateEventResponse, Event, EventPayload,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    StreamEventsParams,
 };
 
+use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+
+/// HTTP request body for creating an event.
+///
+/// This is the request type used by the HTTP handler. The `deployment_id` is
+/// injected from the gateway's app state, so it's not included in this request.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct CreateEventGatewayRequest {
+    pub payload: EventPayload,
+    /// Used for idempotency when adding events to an existing session.
+    #[ts(optional)]
+    #[serde(default)]
+    pub previous_user_message_event_id: Option<Uuid>,
+}
 
 // =============================================================================
 // Core Functions
@@ -114,14 +131,30 @@ pub async fn list_events_handler(
 /// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/events`
 ///
 /// Creates an event in a session via the Autopilot API.
+/// The deployment_id is injected from the gateway's app state.
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.create_event", skip_all, fields(session_id = %session_id))]
 pub async fn create_event_handler(
     State(app_state): AppState,
     Path(session_id): Path<Uuid>,
-    StructuredJson(request): StructuredJson<CreateEventRequest>,
+    StructuredJson(http_request): StructuredJson<CreateEventGatewayRequest>,
 ) -> Result<Json<CreateEventResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
+
+    // Get deployment_id from app state
+    let deployment_id = app_state
+        .deployment_id
+        .clone()
+        .ok_or_else(|| Error::new(ErrorDetails::AutopilotUnavailable))?;
+
+    // Construct the full request with deployment_id
+    let request = CreateEventRequest {
+        deployment_id,
+        tensorzero_version: TENSORZERO_VERSION.to_string(),
+        payload: http_request.payload,
+        previous_user_message_event_id: http_request.previous_user_message_event_id,
+    };
+
     let response = create_event(&client, session_id, request).await?;
     Ok(Json(response))
 }

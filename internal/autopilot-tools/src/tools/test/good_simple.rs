@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the good simple tool (visible to LLM).
@@ -29,6 +29,7 @@ pub struct GoodSimpleTool;
 impl ToolMetadata for GoodSimpleTool {
     type SideInfo = ();
     type Output = GoodSimpleOutput;
+    type LlmParams = GoodSimpleParams;
 
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("good_simple")
@@ -39,12 +40,6 @@ impl ToolMetadata for GoodSimpleTool {
             "Echoes back the input message. A SimpleTool for testing basic success cases.",
         )
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(GoodSimpleParams))
-    }
-
-    type LlmParams = GoodSimpleParams;
 }
 
 #[async_trait]
