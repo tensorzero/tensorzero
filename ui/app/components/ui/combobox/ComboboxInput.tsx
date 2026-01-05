@@ -47,6 +47,7 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
           onBlur={onBlur}
           placeholder={placeholder}
           disabled={disabled}
+          role="combobox"
           aria-expanded={open}
           aria-label={ariaLabel}
           className={clsx(
