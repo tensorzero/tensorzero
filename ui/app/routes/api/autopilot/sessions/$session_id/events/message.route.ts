@@ -21,28 +21,29 @@ type MessageRequest = {
 export async function action({ params, request }: ActionFunctionArgs) {
   const sessionId = params.session_id;
   if (!sessionId) {
-    return new Response("Session ID is required", { status: 400 });
+    return Response.json({ error: "Session ID is required" }, { status: 400 });
   }
 
   if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
 
   let body: MessageRequest;
   try {
     body = (await request.json()) as MessageRequest;
   } catch {
-    return new Response("Invalid JSON body", { status: 400 });
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   if (!body.text || typeof body.text !== "string") {
-    return new Response("text is required and must be a string", {
-      status: 400,
-    });
+    return Response.json(
+      { error: "text is required and must be a string" },
+      { status: 400 },
+    );
   }
 
   if (body.text.trim().length === 0) {
-    return new Response("text cannot be empty", { status: 400 });
+    return Response.json({ error: "text cannot be empty" }, { status: 400 });
   }
 
   const client = getAutopilotClient();
@@ -65,8 +66,6 @@ export async function action({ params, request }: ActionFunctionArgs) {
     return Response.json(response);
   } catch (error) {
     logger.error("Failed to create user message event:", error);
-    return new Response("Failed to send message", {
-      status: 500,
-    });
+    return Response.json({ error: "Failed to send message" }, { status: 500 });
   }
 }

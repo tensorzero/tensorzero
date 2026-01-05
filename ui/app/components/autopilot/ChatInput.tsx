@@ -7,8 +7,13 @@ import {
   useMemo,
   type KeyboardEvent,
 } from "react";
+import { useFetcher } from "react-router";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "~/utils/common";
+
+type MessageResponse =
+  | { event_id: string; session_id: string; error?: never }
+  | { error: string; event_id?: never; session_id?: never };
 
 const MIN_HEIGHT = 44;
 const MAX_HEIGHT = MIN_HEIGHT * 3; // 3x initial height
@@ -39,9 +44,12 @@ export function ChatInput({
   isNewSession = false,
 }: ChatInputProps) {
   const [text, setText] = useState("");
-  const [isSending, setIsSending] = useState(false);
+  const fetcher = useFetcher<MessageResponse>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);
+  const pendingTextRef = useRef<string>("");
+
+  const isSubmitting = fetcher.state === "submitting";
 
   // Reset idempotency cursor when session changes
   useEffect(() => {
@@ -76,48 +84,41 @@ export function ChatInput({
     adjustTextareaHeight();
   }, [text, adjustTextareaHeight]);
 
-  const handleSend = useCallback(async () => {
-    const trimmedText = text.trim();
-    if (!trimmedText || isSending) return;
-
-    setIsSending(true);
-
-    try {
-      const response = await fetch(
-        `/api/autopilot/sessions/${sessionId}/events/message`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: trimmedText,
-            previous_user_message_event_id:
-              previousUserMessageEventIdRef.current,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to send message");
+  // Handle fetcher response
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data) {
+      const data = fetcher.data;
+      if ("error" in data) {
+        onMessageFailed?.(new Error(data.error));
+      } else {
+        // Success - update idempotency ref, clear text, call callback
+        previousUserMessageEventIdRef.current = data.event_id;
+        setText("");
+        onMessageSent?.(data, pendingTextRef.current);
       }
-
-      const data = (await response.json()) as {
-        event_id: string;
-        session_id: string;
-      };
-
-      // Store for idempotency on next message
-      previousUserMessageEventIdRef.current = data.event_id;
-
-      setText("");
-      onMessageSent?.(data, trimmedText);
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error("Unknown error");
-      onMessageFailed?.(err);
-    } finally {
-      setIsSending(false);
     }
-  }, [text, isSending, sessionId, onMessageSent, onMessageFailed]);
+  }, [fetcher.state, fetcher.data, onMessageSent, onMessageFailed]);
+
+  const handleSend = useCallback(() => {
+    const trimmedText = text.trim();
+    if (!trimmedText || isSubmitting) return;
+
+    pendingTextRef.current = trimmedText;
+
+    fetcher.submit(
+      {
+        text: trimmedText,
+        ...(previousUserMessageEventIdRef.current && {
+          previous_user_message_event_id: previousUserMessageEventIdRef.current,
+        }),
+      },
+      {
+        method: "POST",
+        action: `/api/autopilot/sessions/${sessionId}/events/message`,
+        encType: "application/json",
+      },
+    );
+  }, [text, isSubmitting, sessionId, fetcher]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -129,7 +130,7 @@ export function ChatInput({
     [handleSend],
   );
 
-  const canSend = text.trim().length > 0 && !isSending && !disabled;
+  const canSend = text.trim().length > 0 && !isSubmitting && !disabled;
 
   return (
     <div className={cn("flex items-end gap-2", className)}>
@@ -139,7 +140,7 @@ export function ChatInput({
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={disabled || isSending}
+        disabled={disabled || isSubmitting}
         className="resize-none overflow-y-auto"
         style={{ minHeight: MIN_HEIGHT, maxHeight: MAX_HEIGHT }}
         rows={1}
@@ -156,7 +157,7 @@ export function ChatInput({
         )}
         aria-label="Send message"
       >
-        {isSending ? (
+        {isSubmitting ? (
           <Loader2 className="h-5 w-5 animate-spin" />
         ) : (
           <SendHorizontal className="h-5 w-5" />
