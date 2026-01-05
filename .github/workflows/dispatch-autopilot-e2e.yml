@@ -48,10 +48,10 @@ jobs:
 
           sleep 10
 
-          # Find the workflow run by name (correlates to our specific dispatch)
+          # Find the workflow run by display_title (correlates to our specific dispatch)
           for i in {1..120}; do
             RUN_ID=$(gh api repos/tensorzero/autopilot/actions/runs \
-              -q ".workflow_runs[] | select(.name==\"$EXPECTED_NAME\") | .id")
+              -q ".workflow_runs[] | select(.display_title==\"$EXPECTED_NAME\") | .id")
 
             if [ -n "$RUN_ID" ]; then
               break
