@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   data,
   isRouteErrorResponse,
@@ -20,9 +21,11 @@ import {
 import { AppSidebar } from "./components/layout/app.sidebar";
 import { GatewayAuthFailedState } from "./components/ui/error/GatewayAuthFailedState";
 import { GatewayRequiredState } from "./components/ui/error/GatewayRequiredState";
+import { RouteNotFoundState } from "./components/ui/error/RouteNotFoundState";
 import {
   isAuthenticationError,
   isGatewayConnectionError,
+  isRouteNotFoundError,
 } from "./utils/tensorzero/errors";
 import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
@@ -126,7 +129,18 @@ export default function App({ loaderData }: Route.ComponentProps) {
 }
 
 // Fallback Error Boundary
+//
+// This is the first step in a larger overhaul of error handling in the UI.
+// The goal is to provide a consistent, dismissible error experience that:
+// - Keeps the sidebar visible so users can navigate even when errors occur
+// - Shows errors in a modal overlay that can be dismissed
+// - Provides actionable troubleshooting guidance
+//
+// This PR focuses specifically on route-not-found errors (#5504).
+// Follow-up PRs will extend this pattern to other error types.
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const [dismissed, setDismissed] = React.useState(false);
+
   // Check if this is a gateway connection error (wrapped with data() or raw)
   if (
     isRouteErrorResponse(error) &&
@@ -149,6 +163,64 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     return <GatewayAuthFailedState />;
   }
 
+  // Route not found errors (gateway API 404s) use a dismissible modal overlay.
+  // This keeps the sidebar visible so users can still navigate the app.
+  if (isRouteNotFoundError(error)) {
+    // Extract route info from error message if available
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "object" &&
+            error !== null &&
+            "message" in error &&
+            typeof error.message === "string"
+          ? error.message
+          : "";
+    const routeMatch = errorMessage.match(/Route not found: (\w+) (.+)/);
+    const routeInfo = routeMatch ? `${routeMatch[1]} ${routeMatch[2]}` : null;
+
+    return (
+      <ReactQueryProvider>
+        <GlobalToastProvider>
+          <SidebarProvider>
+            <TooltipProvider>
+              <div className="fixed inset-0 flex">
+                <AppSidebar />
+                <ContentLayout />
+              </div>
+              {!dismissed && (
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 pb-24"
+                  onClick={() => setDismissed(true)}
+                >
+                  <div
+                    className="max-h-[90vh] overflow-auto"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <RouteNotFoundState
+                      routeInfo={routeInfo}
+                      onDismiss={() => setDismissed(true)}
+                    />
+                  </div>
+                </div>
+              )}
+              {dismissed && (
+                <button
+                  onClick={() => setDismissed(false)}
+                  className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white shadow-lg hover:bg-red-600"
+                >
+                  <span className="h-2 w-2 rounded-full bg-white" />1 Error
+                </button>
+              )}
+            </TooltipProvider>
+          </SidebarProvider>
+          <Toaster />
+        </GlobalToastProvider>
+      </ReactQueryProvider>
+    );
+  }
+
+  // Generic error fallback (including client 404s)
   let message = "Oops!";
   let details = "An unexpected error occurred.";
   let stack: string | undefined;

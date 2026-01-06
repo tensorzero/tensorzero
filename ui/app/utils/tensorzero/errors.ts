@@ -45,6 +45,32 @@ export function isAuthenticationError(error: unknown): boolean {
 }
 
 /**
+ * Check if an error indicates a route not found from the gateway.
+ * This typically happens when the UI version doesn't match the gateway version.
+ */
+export function isRouteNotFoundError(error: unknown): boolean {
+  if (error instanceof TensorZeroServerError.RouteNotFound) {
+    return true;
+  }
+  // Check serialized object properties (works if thrown from server loader)
+  // Also check the message for "Route not found" since the error might be a generic TensorZeroServerError
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "TensorZeroServerError"
+  ) {
+    const hasRouteNotFoundStatus = "status" in error && error.status === 404;
+    const hasRouteNotFoundMessage =
+      "message" in error &&
+      typeof error.message === "string" &&
+      error.message.includes("Route not found");
+    return hasRouteNotFoundStatus && hasRouteNotFoundMessage;
+  }
+  return false;
+}
+
+/**
  * Check if an error indicates that Autopilot is not configured.
  * The gateway returns 501 NOT_IMPLEMENTED when autopilot is not implemented,
  * or 401 UNAUTHORIZED when the autopilot API key is not configured.
