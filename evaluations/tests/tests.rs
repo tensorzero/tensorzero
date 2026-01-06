@@ -1687,7 +1687,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: None,
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -2686,7 +2686,7 @@ async fn test_evaluation_with_dynamic_variant() {
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path.clone()),
         clickhouse_url: None,
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

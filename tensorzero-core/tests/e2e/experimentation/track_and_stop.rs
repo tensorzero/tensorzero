@@ -6,7 +6,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tempfile::NamedTempFile;
-use tensorzero::{Client, ClientBuilder, ClientBuilderMode};
+use tensorzero::{Client, ClientBuilder, ClientBuilderMode, PostgresConfig};
 use tensorzero::{
     ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse, Input, InputMessage,
     InputMessageContent, Role,
@@ -50,7 +50,7 @@ async fn make_embedded_gateway_with_clean_clickhouse(
     let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(clickhouse_url_string),
-        postgres_url: Some(postgres_url),
+        postgres_config: Some(PostgresConfig::Url(postgres_url)),
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -84,7 +84,7 @@ async fn make_embedded_gateway_with_existing_clickhouse(
     let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(clickhouse_url_string),
-        postgres_url: Some(postgres_url),
+        postgres_config: Some(PostgresConfig::Url(postgres_url)),
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -456,7 +456,7 @@ async fn expect_config_error(config: &str) -> String {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL.clone()),
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
