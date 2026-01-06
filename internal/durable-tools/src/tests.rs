@@ -339,7 +339,7 @@ mod registry_tests {
         // Second registration should fail
         let result = registry.register_task_tool::<EchoTaskTool>();
         match result {
-            Err(ToolError::Error(SerializableToolError::DuplicateToolName { name })) => {
+            Err(ToolError::Serializable(SerializableToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -359,7 +359,7 @@ mod registry_tests {
         // Second registration should fail
         let result = registry.register_simple_tool::<EchoSimpleTool>();
         match result {
-            Err(ToolError::Error(SerializableToolError::DuplicateToolName { name })) => {
+            Err(ToolError::Serializable(SerializableToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_simple");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -412,7 +412,7 @@ mod registry_tests {
         // Registering a SimpleTool with the same name should fail
         let result = registry.register_simple_tool::<ConflictingSimpleTool>();
         match result {
-            Err(ToolError::Error(SerializableToolError::DuplicateToolName { name })) => {
+            Err(ToolError::Serializable(SerializableToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -547,7 +547,7 @@ mod error_tests {
         let tool_err: ToolError = task_err.into();
 
         match tool_err {
-            ToolError::Error(SerializableToolError::Internal { message }) => {
+            ToolError::Serializable(SerializableToolError::Internal { message }) => {
                 assert_eq!(message, "test error");
             }
             _ => panic!("Expected Internal"),
@@ -580,7 +580,7 @@ mod error_tests {
     fn task_error_from_tool_error_user() {
         use crate::error::SerializableToolError;
 
-        let tool_err = ToolError::Error(SerializableToolError::User {
+        let tool_err = ToolError::Serializable(SerializableToolError::User {
             message: "test error".to_string(),
             error_data: serde_json::json!({"kind": "TestError"}),
         });
@@ -609,7 +609,7 @@ mod error_tests {
     fn task_error_from_tool_error_tool_not_found() {
         use crate::error::SerializableToolError;
 
-        let tool_err = ToolError::Error(SerializableToolError::ToolNotFound {
+        let tool_err = ToolError::Serializable(SerializableToolError::ToolNotFound {
             name: "missing_tool".to_string(),
         });
         let task_err: TaskError = tool_err.into();
@@ -626,7 +626,7 @@ mod error_tests {
     fn task_error_from_tool_error_invalid_params() {
         use crate::error::SerializableToolError;
 
-        let tool_err = ToolError::Error(SerializableToolError::InvalidParams {
+        let tool_err = ToolError::Serializable(SerializableToolError::InvalidParams {
             message: "bad params".to_string(),
         });
         let task_err: TaskError = tool_err.into();
@@ -641,13 +641,8 @@ mod error_tests {
 
     #[test]
     fn task_error_from_tool_error_serialization() {
-        use crate::error::SerializableToolError;
-
         let json_err = serde_json::from_str::<String>("not valid json").unwrap_err();
-        let tool_err = ToolError::Error(SerializableToolError::Serialization {
-            message: json_err.to_string(),
-            source: json_err,
-        });
+        let tool_err = ToolError::Serialization(json_err);
         let task_err: TaskError = tool_err.into();
 
         match task_err {

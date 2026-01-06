@@ -7,12 +7,13 @@ use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use autopilot_tools::AutopilotToolError;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool,
-    TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
+    CreateEventGatewayRequest, EventPayload, SerializableToolError, SimpleTool, SimpleToolContext,
+    TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
     ToolResult as DurableToolResult,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
+use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
@@ -100,9 +101,9 @@ where
 
         // Prepare the outcome for the autopilot API
         let tool_name = T::name().to_string();
-        let outcome = match &result {
+        let outcome = match result {
             Ok(output) => {
-                let result_json = serde_json::to_string(output)?;
+                let result_json = serde_json::to_string(&output)?;
                 ToolOutcome::Success(AutopilotToolResult {
                     result: result_json,
                 })
@@ -300,7 +301,7 @@ async fn execute_simple_tool_step<T: SimpleTool>(
         &idempotency_key,
     )
     .await
-    .map_err(|e| tool_error_to_json(&e)))
+    .map_err(tool_error_to_json))
 }
 
 /// Convert a `ToolError` to structured JSON for the autopilot API.
@@ -308,22 +309,64 @@ async fn execute_simple_tool_step<T: SimpleTool>(
 /// For `ToolError::Error`, serializes the `SerializableToolError` directly.
 /// For `ToolError::Control`, returns a control flow error (this should not
 /// normally happen as control flow errors are internal).
-fn tool_error_to_json(e: &ToolError) -> serde_json::Value {
+fn tool_error_to_json(e: ToolError) -> serde_json::Value {
     match e {
         ToolError::Control(cf) => {
             // Control flow errors should not be serialized - this is a bug if it happens
-            serde_json::json!({
-                "kind": "control",
-                "message": format!("Unexpected control flow signal: {cf:?}"),
+            let failure = ToolFailure::Control {
+                message: format!("Unexpected control flow signal: {cf:?}"),
+            };
+            serde_json::to_value(failure).unwrap_or_else(|e| {
+                serde_json::json!({
+                    "kind": "serialization",
+                    "message": format!("Failed to serialize control flow error: {e}"),
+                })
             })
         }
-        ToolError::Error(serializable) => serde_json::to_value(serializable).unwrap_or_else(|e| {
-            serde_json::json!({
-                "kind": "serialization",
-                "message": format!("Failed to serialize error: {e}"),
+        ToolError::Database(db_error) => {
+            let failure = ToolFailure::Database {
+                message: db_error.to_string(),
+            };
+            serde_json::to_value(failure).unwrap_or_else(|e| {
+                serde_json::json!({
+                    "kind": "serialization",
+                    "message": format!("Failed to serialize database error: {e}"),
+                })
             })
-        }),
+        }
+        ToolError::Serializable(serializable_error) => {
+            let failure = ToolFailure::Tool {
+                error: serializable_error,
+            };
+            serde_json::to_value(failure).unwrap_or_else(|e| {
+                serde_json::json!({
+                    "kind": "serialization",
+                    "message": format!("Failed to serialize tool error: {e}"),
+                })
+            })
+        }
+        ToolError::Serialization(err) => {
+            let failure = ToolFailure::Serialization {
+                message: err.to_string(),
+            };
+            serde_json::to_value(failure).unwrap_or_else(|e| {
+                serde_json::json!({
+                    "kind": "serialization",
+                    "message": format!("Failed to serialize serialization error: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                })
+            })
+        }
     }
+}
+
+/// This is the type that we write in ToolOutcome::Failure for tool errors.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum ToolFailure {
+    Control { message: String },
+    Serialization { message: String },
+    Tool { error: SerializableToolError },
+    Database { message: String },
 }
 
 #[cfg(test)]

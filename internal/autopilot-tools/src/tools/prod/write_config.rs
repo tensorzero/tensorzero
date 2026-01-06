@@ -121,7 +121,6 @@ impl ToolMetadata for WriteConfigTool {
         serde_json::from_value(schema).map_err(|e| {
             SerializableToolError::SchemaGeneration {
                 message: e.to_string(),
-                source: e.into(),
             }
             .into()
         })
