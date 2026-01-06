@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use futures::StreamExt;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -11,6 +11,7 @@ use tensorzero_core::endpoints::internal::evaluations::types::GetEvaluationStati
 use tensorzero_core::endpoints::internal::evaluations::{
     GetEvaluationResultsResponse, GetEvaluationRunInfosResponse,
 };
+use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -669,7 +670,6 @@ async fn test_get_evaluation_results_default_pagination() {
         "Expected results with default pagination"
     );
 }
-
 // ============================================================================
 // run_evaluation SSE streaming endpoint tests
 // ============================================================================
@@ -1102,5 +1102,404 @@ async fn test_run_evaluation_streaming_invalid_inference_cache() {
     assert!(
         body.get("error").is_some(),
         "Response should contain an error"
+    );
+}
+
+// ============================================================================
+// get_human_feedback endpoint tests
+// ============================================================================
+
+/// Test that get_human_feedback returns feedback when it exists.
+/// This test creates an inference, submits human feedback with the required tags,
+/// and then verifies the endpoint returns the correct feedback.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_returns_feedback_when_exists() {
+    let http_client = Client::new();
+
+    // First, run an inference to get an inference_id
+    let inference_payload = json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
+        },
+        "stream": false,
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        response.status().is_success(),
+        "inference request failed: {:?}",
+        response.status()
+    );
+    let response_json: Value = response.json().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let serialized_inference_output =
+        serde_json::to_string(response_json.get("output").unwrap()).unwrap();
+
+    // Create datapoint_id and evaluator_inference_id
+    let datapoint_id = Uuid::now_v7();
+    let evaluator_inference_id = Uuid::now_v7();
+
+    // Submit human feedback with required tags
+    let feedback_payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "brevity_score",
+        "value": 0.85,
+        "internal": true,
+        "tags": {
+            "tensorzero::human_feedback": "true",
+            "tensorzero::datapoint_id": datapoint_id.to_string(),
+            "tensorzero::evaluator_inference_id": evaluator_inference_id.to_string()
+        }
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&feedback_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "feedback request failed: {:?}",
+        response.status()
+    );
+
+    // Wait for ClickHouse to process the data
+    sleep(Duration::from_secs(1)).await;
+
+    // Now call the get_human_feedback endpoint
+    let resp = http_client
+        .post(get_gateway_endpoint(&format!(
+            "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+        )))
+        .json(&json!({
+            "metric_name": "brevity_score",
+            "output": serialized_inference_output
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_human_feedback request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: serde_json::Value = resp.json().await.unwrap();
+
+    assert!(
+        response.get("feedback").is_some(),
+        "Expected feedback to be present"
+    );
+
+    let feedback = response.get("feedback").unwrap();
+    assert_eq!(feedback.get("value").unwrap(), &json!(0.85));
+    assert_eq!(
+        feedback
+            .get("evaluator_inference_id")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        evaluator_inference_id.to_string()
+    );
+}
+
+/// Test that get_human_feedback returns None when no feedback exists.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_returns_none_when_not_exists() {
+    let http_client = Client::new();
+
+    let nonexistent_datapoint_id = Uuid::now_v7();
+
+    let resp = http_client
+        .post(get_gateway_endpoint(&format!(
+            "/internal/evaluations/datapoints/{nonexistent_datapoint_id}/get_human_feedback"
+        )))
+        .json(&json!({
+            "metric_name": "task_success",
+            "output": "some_output"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_human_feedback request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: serde_json::Value = resp.json().await.unwrap();
+
+    // When feedback is None, the field is omitted from the response
+    assert!(
+        response.get("feedback").is_none() || response.get("feedback").unwrap().is_null(),
+        "Expected feedback to be None for nonexistent metric"
+    );
+}
+
+/// Test that get_human_feedback works with boolean feedback values.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_with_boolean_value() {
+    let http_client = Client::new();
+
+    // First, run an inference to get an inference_id
+    let inference_payload = json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
+        },
+        "stream": false,
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json: Value = response.json().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let serialized_inference_output =
+        serde_json::to_string(response_json.get("output").unwrap()).unwrap();
+
+    // Create datapoint_id and evaluator_inference_id
+    let datapoint_id = Uuid::now_v7();
+    let evaluator_inference_id = Uuid::now_v7();
+
+    // Submit boolean human feedback with required tags
+    let feedback_payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "task_success",
+        "value": true,
+        "internal": true,
+        "tags": {
+            "tensorzero::human_feedback": "true",
+            "tensorzero::datapoint_id": datapoint_id.to_string(),
+            "tensorzero::evaluator_inference_id": evaluator_inference_id.to_string()
+        }
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&feedback_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Wait for ClickHouse to process the data
+    sleep(Duration::from_secs(1)).await;
+
+    // Now call the get_human_feedback endpoint
+    let resp = http_client
+        .post(get_gateway_endpoint(&format!(
+            "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+        )))
+        .json(&json!({
+            "metric_name": "task_success",
+            "output": serialized_inference_output
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+
+    let response: serde_json::Value = resp.json().await.unwrap();
+
+    assert!(response.get("feedback").is_some());
+
+    let feedback = response.get("feedback").unwrap();
+    assert_eq!(feedback.get("value").unwrap(), &json!(true));
+    assert_eq!(
+        feedback
+            .get("evaluator_inference_id")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        evaluator_inference_id.to_string()
+    );
+}
+
+/// Test that get_human_feedback returns the correct feedback when output doesn't match.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_output_mismatch() {
+    let http_client = Client::new();
+
+    // First, run an inference to get an inference_id
+    let inference_payload = json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
+        },
+        "stream": false,
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json: Value = response.json().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let serialized_inference_output =
+        serde_json::to_string(response_json.get("output").unwrap()).unwrap();
+
+    // Create datapoint_id and evaluator_inference_id
+    let datapoint_id = Uuid::now_v7();
+    let evaluator_inference_id = Uuid::now_v7();
+
+    // Submit human feedback
+    let feedback_payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "brevity_score",
+        "value": 0.5,
+        "internal": true,
+        "tags": {
+            "tensorzero::human_feedback": "true",
+            "tensorzero::datapoint_id": datapoint_id.to_string(),
+            "tensorzero::evaluator_inference_id": evaluator_inference_id.to_string()
+        }
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&feedback_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Wait for ClickHouse to process the data
+    sleep(Duration::from_secs(1)).await;
+
+    // Query with correct output - should find feedback
+    let url = get_gateway_endpoint(&format!(
+        "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+    ));
+
+    let resp = http_client
+        .post(url.clone())
+        .json(&json!({
+            "metric_name": "brevity_score",
+            "output": serialized_inference_output
+        }))
+        .send()
+        .await
+        .unwrap();
+    let response: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        response.get("feedback").is_some() && !response.get("feedback").unwrap().is_null(),
+        "Should find feedback with matching output"
+    );
+
+    // Query with different output - should not find feedback
+    let resp = http_client
+        .post(url)
+        .json(&json!({
+            "metric_name": "brevity_score",
+            "output": "different_output"
+        }))
+        .send()
+        .await
+        .unwrap();
+    let response: serde_json::Value = resp.json().await.unwrap();
+    // When feedback is None, the field is omitted from the response
+    assert!(
+        response.get("feedback").is_none() || response.get("feedback").unwrap().is_null(),
+        "Should not find feedback with different output"
+    );
+}
+
+/// Test that get_human_feedback handles invalid UUID in datapoint_id.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_invalid_uuid() {
+    let http_client = Client::new();
+
+    let resp = http_client
+        .post(get_gateway_endpoint(
+            "/internal/evaluations/datapoints/not-a-uuid/get_human_feedback",
+        ))
+        .json(&json!({
+            "metric_name": "test_metric",
+            "output": "test_output"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "Expected client error for invalid UUID, got status={:?}",
+        resp.status()
+    );
+}
+
+/// Test that get_human_feedback requires all parameters.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_missing_parameters() {
+    let http_client = Client::new();
+    let datapoint_id = Uuid::now_v7();
+
+    let url = get_gateway_endpoint(&format!(
+        "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+    ));
+
+    // Missing metric_name
+    let resp = http_client
+        .post(url.clone())
+        .json(&json!({
+            "output": "test_output"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "Expected client error for missing metric_name, got status={:?}",
+        resp.status()
+    );
+
+    // Missing output
+    let resp = http_client
+        .post(url.clone())
+        .json(&json!({
+            "metric_name": "test_metric"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "Expected client error for missing output, got status={:?}",
+        resp.status()
+    );
+
+    // Empty body
+    let resp = http_client.post(url).json(&json!({})).send().await.unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "Expected client error for empty body, got status={:?}",
+        resp.status()
     );
 }

@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use super::ClickHouseConnectionInfo;
+use super::escape_string_for_clickhouse_literal;
 use super::select_queries::{parse_count, parse_json_rows};
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::db::evaluation_queries::EvaluationResultRow;
@@ -13,6 +14,7 @@ use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::db::evaluation_queries::EvaluationStatisticsRow;
+use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
 use crate::statistics_util::{wald_confint, wilson_confint};
@@ -554,6 +556,38 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
 
         let response = self.run_query_synchronous(sql_query, &params).await?;
         parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_inference_evaluation_human_feedback(
+        &self,
+        metric_name: &str,
+        datapoint_id: &uuid::Uuid,
+        output: &str,
+    ) -> Result<Option<InferenceEvaluationHumanFeedbackRow>, Error> {
+        let sql_query = r"
+            SELECT value, evaluator_inference_id
+            FROM StaticEvaluationHumanFeedback
+            WHERE metric_name = {metric_name:String}
+            AND datapoint_id = {datapoint_id:UUID}
+            AND output = {output:String}
+            LIMIT 1
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let metric_name_str = metric_name.to_string();
+        let datapoint_id_str = datapoint_id.to_string();
+        let escaped_output = escape_string_for_clickhouse_literal(output);
+
+        let mut params = HashMap::new();
+        params.insert("metric_name", metric_name_str.as_str());
+        params.insert("datapoint_id", datapoint_id_str.as_str());
+        params.insert("output", escaped_output.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        let rows: Vec<InferenceEvaluationHumanFeedbackRow> =
+            parse_json_rows(response.response.as_str())?;
+        Ok(rows.into_iter().next())
     }
 }
 
@@ -1953,5 +1987,153 @@ mod tests {
         assert_eq!(result[0].metric_value, Some("true".to_string()));
         assert_eq!(result[1].metric_name, Some("metric2".to_string()));
         assert_eq!(result[1].metric_value, Some("0.95".to_string()));
+    }
+
+    // ============================================================================
+    // get_inference_evaluation_human_feedback tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_found() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(
+                    query,
+                    "SELECT value, evaluator_inference_id
+                    FROM StaticEvaluationHumanFeedback
+                    WHERE metric_name = {metric_name:String}
+                    AND datapoint_id = {datapoint_id:UUID}
+                    AND output = {output:String}
+                    LIMIT 1
+                    FORMAT JSONEachRow",
+                );
+                assert_eq!(params.get("metric_name"), Some(&"test_metric"));
+                assert_eq!(
+                    params.get("datapoint_id"),
+                    Some(&"0196ee9c-d808-74f3-8000-02ec7409b95d")
+                );
+                assert_eq!(params.get("output"), Some(&r#"{"raw":"test output"}"#));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"value":"0.95","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95e"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback(
+                "test_metric",
+                &datapoint_id,
+                r#"{"raw":"test output"}"#,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let feedback = result.unwrap();
+        assert_eq!(feedback.value, serde_json::json!(0.95));
+        assert_eq!(
+            feedback.evaluator_inference_id,
+            Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_not_found() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback(
+                "nonexistent_metric",
+                &datapoint_id,
+                r#"{"raw":"test output"}"#,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_boolean_value() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"value":"true","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95e"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback("test_metric", &datapoint_id, "test output")
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let feedback = result.unwrap();
+        assert_eq!(feedback.value, serde_json::json!(true));
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_object_value() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"value":"{\"score\":0.8,\"reason\":\"good\"}","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95e"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback("test_metric", &datapoint_id, "test output")
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let feedback = result.unwrap();
+        assert_eq!(
+            feedback.value,
+            serde_json::json!({"score": 0.8, "reason": "good"})
+        );
     }
 }
