@@ -54,9 +54,9 @@ jobs:
       - name: Check coordinated edits
         run: python3 ci/check_coordinated_edits.py
 
-  # Like 'check-docker-compose', but loads the freshly built 'gateway' and 'ui' container images first
+  # Like `check-docker-compose-released`, but loads the freshly built `gateway` and `ui` container images first
   # This checks that all of our docker-compose files work with the changes in the PR
-  check-latest-docker-compose:
+  check-docker-compose-commit:
     needs: [build-gateway-container, build-ui-container]
     permissions:
       # Permission to checkout the repository
@@ -90,41 +90,10 @@ jobs:
           mkdir -p examples/multimodal-vision-finetuning/object_storage
           chmod 777 examples/multimodal-vision-finetuning/object_storage
 
-      - name: Apply Postgres migrations for the enforce-custom-rate-limits example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/operations/enforce-custom-rate-limits
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for the set-up-auth-for-tensorzero example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/operations/set-up-auth-for-tensorzero
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for the run-adaptive-ab-tests example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/experimentation/run-adaptive-ab-tests
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
-        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/blog/bandits-in-your-llm-gateway
-          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          ANTHROPIC_API_KEY=dummy docker compose down
-
       - name: Apply Postgres migrations for the centralize-auth-rate-limits-and-more/auth example
         # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
         # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        # Note: This uses relay-gateway instead of gateway, so it requires explicit handling here
         run: |
           cd examples/docs/guides/operations/centralize-auth-rate-limits-and-more/auth
           OPENAI_API_KEY=dummy docker compose run --rm relay-gateway --run-postgres-migrations
@@ -133,9 +102,9 @@ jobs:
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
 
-  # Checks our docker-compose files against the most recent published 'gateway' and 'ui' container images
+  # Checks our docker-compose files against the most recent published `gateway` and `ui` container images
   # (not the ones built for this PR)
-  check-docker-compose:
+  check-docker-compose-released:
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -168,41 +137,10 @@ jobs:
           mkdir -p examples/multimodal-vision-finetuning/object_storage
           chmod 777 examples/multimodal-vision-finetuning/object_storage
 
-      - name: Apply Postgres migrations for the enforce-custom-rate-limits example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/operations/enforce-custom-rate-limits
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for the set-up-auth-for-tensorzero example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/operations/set-up-auth-for-tensorzero
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for the run-adaptive-ab-tests example
-        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/docs/guides/experimentation/run-adaptive-ab-tests
-          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          OPENAI_API_KEY=dummy docker compose down
-
-      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
-        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
-        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
-        run: |
-          cd examples/blog/bandits-in-your-llm-gateway
-          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
-          ANTHROPIC_API_KEY=dummy docker compose down
-
       - name: Apply Postgres migrations for the centralize-auth-rate-limits-and-more/auth example
         # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
         # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        # Note: This uses relay-gateway instead of gateway, so it requires explicit handling here
         run: |
           cd examples/docs/guides/operations/centralize-auth-rate-limits-and-more/auth
           OPENAI_API_KEY=dummy docker compose run --rm relay-gateway --run-postgres-migrations
@@ -728,6 +666,9 @@ jobs:
       - name: Run cargo-deny
         run: cargo deny check
 
+      - name: Check durable dependencies
+        run: ./ci/check-durable-deps.sh
+
       - name: Run cargo fmt
         run: cargo fmt --all --check
 
@@ -1209,6 +1150,16 @@ jobs:
     needs: [build-mock-provider-api-container]
     secrets: inherit
 
+  autopilot-e2e:
+    permissions:
+      contents: read
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    needs: [build-gateway-e2e-container]
+    uses: ./.github/workflows/dispatch-autopilot-e2e.yml
+    secrets:
+      AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
+      AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
@@ -1218,8 +1169,8 @@ jobs:
         check-version-consistency,
         check-production-docker-container,
         check-if-edited-then-edit,
-        check-docker-compose,
-        check-latest-docker-compose,
+        check-docker-compose-released,
+        check-docker-compose-commit,
         check-python-client-build,
         check-node-bindings,
         check-python-schemas,
@@ -1242,6 +1193,7 @@ jobs:
         ui-tests-e2e-regen-model-inference-cache,
         mock-optimization-tests,
         run-merge-queue-checks,
+        autopilot-e2e,
       ]
     runs-on: ubuntu-latest
     steps:

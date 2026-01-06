@@ -360,6 +360,7 @@ async fn process_embedding_batch(
         // We don't currently use API keys for optimization workflows
         scope_info: ScopeInfo::new(tags.clone(), None),
         relay: None,
+        include_raw_usage: false,
     };
 
     let response = embedding_model_config

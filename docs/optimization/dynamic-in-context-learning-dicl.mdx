@@ -14,11 +14,26 @@ Here's how it works:
 2. TensorZero inserts these examples into your prompt and sends the request to the LLM.
 3. The LLM generates a response using the enhanced prompt.
 
+<Frame>
+
 ![Diagram: Dynamic In-Context Learning](./dynamic-in-context-learning-dicl-diagram.png)
 
-<Tip>
+</Frame>
 
-**When should you use DICL?**
+## When should you use DICL?
+
+DICL is particularly useful if you have limited high-quality data.
+
+| Criterion            | Impact   | Details                                                  |
+| -------------------- | -------- | -------------------------------------------------------- |
+| Complexity           | Low      | Requires data curation; few parameters                   |
+| Data Efficiency      | High     | Achieves good results with limited data                  |
+| Optimization Ceiling | Moderate | Plateaus quickly with more data; prompt only but dynamic |
+| Optimization Cost    | Low      | Generates embeddings for curated examples                |
+| Inference Cost       | High     | Scales input tokens proportional to `k`                  |
+| Inference Latency    | Moderate | Requires embedding and retrieval before LLM call         |
+
+<Tip>
 
 DICL tends to work best when:
 
@@ -26,7 +41,10 @@ DICL tends to work best when:
   - If less: you should label a few dozen datapoints manually.
   - If more: DICL still works well, but you should consider supervised fine-tuning instead.
 - The inference inputs are reasonably sized. Large inputs inflate the context and limit `k` (see below), degrading performance.
-  - If very large: [configure prompt templates](/gateway/create-a-prompt-template) to remove boilerplate from the inputs if appropriate; otherwise consider other techniques.
+  - If prompts have a lot of boilerplate: see [configure prompt templates](/gateway/create-a-prompt-template) to mitigate impact.
+  - If still very large: consider supervised fine-tuning instead.
+- Inference cost (and to a lesser extent, latency) is not a bottleneck. Optimization is relatively cheap (generating embeddings), but DICL materially increases input tokens at inference time.
+  - If inference cost matters: consider supervised fine-tuning instead, which shifts the marginal cost to a one-time optimization workflow.
 
 </Tip>
 
@@ -54,6 +72,12 @@ model = "openai::gpt-5-mini"
 templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 ```
+
+<Tip>
+
+If your prompt has a lot of boilerplate, [configure prompt templates](/gateway/create-a-prompt-template). DICL operates on template variables, so it'll improve retrieval (and therefore inference quality) and mitigate the marginal cost and latency. Set `system_instructions` in your variant configuration with the boilerplate instead.
+
+</Tip>
 
 <Accordion title="Example: Data Extraction (Named Entity Recognition) — Configuration">
 
@@ -173,7 +197,7 @@ optimization_config = DICLOptimizationConfig(
     function_name="extract_entities",
     variant_name="dicl",
     embedding_model="openai::text_embedding_3_small",
-    k=10,  # How many examples are retrieved and injected as context
+    k=10,  # how many examples are retrieved and injected as context
     model="openai::gpt-5-mini",  # LLM that will generate outputs using the retrieved examples
 )
 ```
@@ -183,7 +207,13 @@ You can also [define a custom embedding model in your configuration](/gateway/ge
 <Tip>
 
 You should experiment with different choices of `k`.
-Typically values are 3-10, with smaller values when inputs tend to be larger.
+Typical values are 3-10, with smaller values when inputs tend to be larger.
+
+</Tip>
+
+<Tip>
+
+If you see inferences with irrelevant examples, consider setting a `max_distance` in your variant configuration later. With this setting, the retrieval step can return less than `k` examples if they don't meet a cosine distance threshold. Make sure to tune the value according to your embedding model.
 
 </Tip>
 
@@ -244,21 +274,43 @@ You can run experiments comparing your baseline and DICL variants using [adaptiv
 
 Configure DICL optimization by creating a `DICLOptimizationConfig` object with the following parameters:
 
-### Required Parameters
+{/* Required Parameters */}
 
-| Parameter         | Type  | Description                                  |
-| ----------------- | ----- | -------------------------------------------- |
-| `function_name`   | `str` | Name of the TensorZero function to optimize. |
-| `variant_name`    | `str` | Name to use for the DICL variant.            |
-| `embedding_model` | `str` | Name of the embedding model to use.          |
+<ParamField body="embedding_model" type="str" required>
+  Name of the embedding model to use.
+</ParamField>
 
-### Optional Parameters
+<ParamField body="function_name" type="str" required>
+  Name of the TensorZero function to optimize.
+</ParamField>
 
-| Parameter                     | Type   | Default                | Description                                                                                        |
-| ----------------------------- | ------ | ---------------------- | -------------------------------------------------------------------------------------------------- |
-| `k`                           | `int`  | `10`                   | Number of nearest neighbors to retrieve at inference time.                                         |
-| `model`                       | `str`  | `"openai::gpt-5-mini"` | Model to use for the DICL variant.                                                                 |
-| `dimensions`                  | `int`  | `None`                 | Embedding dimensions. If `None`, uses the embedding model's default.                               |
-| `batch_size`                  | `int`  | `128`                  | Batch size for embedding generation.                                                               |
-| `max_concurrency`             | `int`  | `10`                   | Maximum concurrent embedding requests.                                                             |
-| `append_to_existing_variants` | `bool` | `False`                | Whether to append to existing variants. If `False`, raises an error if the variant already exists. |
+<ParamField body="variant_name" type="str" required>
+  Name to use for the DICL variant.
+</ParamField>
+
+{/* Optional Parameters */}
+
+<ParamField body="append_to_existing_variants" type="bool" default={false}>
+  Whether to append to existing variants. If `false`, raises an error if the
+  variant already exists.
+</ParamField>
+
+<ParamField body="batch_size" type="int" default={128}>
+  Batch size for embedding generation.
+</ParamField>
+
+<ParamField body="dimensions" type="int">
+  Embedding dimensions. If not specified, uses the embedding model's default.
+</ParamField>
+
+<ParamField body="k" type="int" default={10}>
+  Number of nearest neighbors to retrieve at inference time.
+</ParamField>
+
+<ParamField body="max_concurrency" type="int" default={10}>
+  Maximum concurrent embedding requests.
+</ParamField>
+
+<ParamField body="model" type="str" default="openai::gpt-5-mini">
+  Model to use for the DICL variant.
+</ParamField>

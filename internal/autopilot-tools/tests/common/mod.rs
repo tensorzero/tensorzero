@@ -7,16 +7,27 @@ use std::collections::HashMap;
 
 use durable_tools::{TensorZeroClient, TensorZeroClientError};
 use mockall::mock;
+use sqlx::types::chrono::Utc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, GetDatapointsResponse, InferenceResponse,
-    ListDatapointsRequest, Role, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
+    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
+    GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
+    ListDatapointsRequest, ListInferencesRequest, Role, StoredChatInference, StoredInference,
+    UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
+    WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
-use tensorzero_core::inference::types::{ContentBlockChatOutput, Input, InputMessage, Text};
+use tensorzero_core::inference::types::{
+    ContentBlockChatOutput, Input, InputMessage, StoredInput, StoredInputMessage,
+    StoredInputMessageContent, Text,
+};
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use uuid::Uuid;
 
 // Generate mock using mockall's mock! macro
@@ -30,10 +41,15 @@ mock! {
             params: ClientInferenceParams,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
 
+        async fn feedback(
+            &self,
+            params: FeedbackParams,
+        ) -> Result<FeedbackResponse, TensorZeroClientError>;
+
         async fn create_autopilot_event(
             &self,
             session_id: Uuid,
-            request: durable_tools::CreateEventRequest,
+            request: durable_tools::CreateEventGatewayRequest,
         ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError>;
 
         async fn list_autopilot_events(
@@ -52,6 +68,16 @@ mock! {
             snapshot_hash: SnapshotHash,
             input: tensorzero::ActionInput,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+        async fn get_config_snapshot(
+            &self,
+            hash: Option<String>,
+        ) -> Result<GetConfigResponse, TensorZeroClientError>;
+
+        async fn write_config(
+            &self,
+            request: WriteConfigRequest,
+        ) -> Result<WriteConfigResponse, TensorZeroClientError>;
 
         async fn create_datapoints(
             &self,
@@ -88,7 +114,44 @@ mock! {
             dataset_name: String,
             ids: Vec<Uuid>,
         ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
+        async fn list_inferences(
+            &self,
+            request: ListInferencesRequest,
+        ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+        async fn launch_optimization_workflow(
+            &self,
+            params: LaunchOptimizationWorkflowParams,
+        ) -> Result<OptimizationJobHandle, TensorZeroClientError>;
+
+        async fn poll_optimization(
+            &self,
+            job_handle: &OptimizationJobHandle,
+        ) -> Result<OptimizationJobInfo, TensorZeroClientError>;
+
+        async fn get_latest_feedback_id_by_metric(
+            &self,
+            target_id: Uuid,
+        ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+        async fn get_feedback_by_variant(
+            &self,
+            metric_name: String,
+            function_name: String,
+            variant_names: Option<Vec<String>>,
+        ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
+
+        async fn run_evaluation(
+            &self,
+            params: durable_tools::RunEvaluationParams,
+        ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
     }
+}
+
+/// Create a mock feedback response with the given ID.
+pub fn create_mock_feedback_response(feedback_id: Uuid) -> FeedbackResponse {
+    FeedbackResponse { feedback_id }
 }
 
 /// Create a mock chat inference response with the given text content.
@@ -104,6 +167,7 @@ pub fn create_mock_chat_response(text: &str) -> InferenceResponse {
             input_tokens: Some(10),
             output_tokens: Some(5),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     })
@@ -178,5 +242,53 @@ pub fn create_test_input(text: &str) -> Input {
                 }),
             ],
         }],
+    }
+}
+
+/// Create a mock stored chat inference for testing.
+pub fn create_mock_stored_chat_inference(
+    inference_id: Uuid,
+    function_name: &str,
+    variant_name: &str,
+) -> StoredInference {
+    StoredInference::Chat(StoredChatInference {
+        function_name: function_name.to_string(),
+        variant_name: variant_name.to_string(),
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "test input".to_string(),
+                })],
+            }],
+        },
+        output: vec![ContentBlockChatOutput::Text(Text {
+            text: "test output".to_string(),
+        })],
+        dispreferred_outputs: vec![],
+        timestamp: Utc::now(),
+        episode_id: Uuid::now_v7(),
+        inference_id,
+        tool_params: DynamicToolParams::default(),
+        tags: HashMap::new(),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: Some(100),
+        ttft_ms: Some(50),
+    })
+}
+
+/// Create a mock FeedbackByVariant response for testing.
+pub fn create_mock_feedback_by_variant(
+    variant_name: &str,
+    mean: f32,
+    count: u64,
+) -> FeedbackByVariant {
+    FeedbackByVariant {
+        variant_name: variant_name.to_string(),
+        mean,
+        variance: if count > 1 { Some(0.1) } else { None },
+        count,
     }
 }

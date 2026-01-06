@@ -137,7 +137,7 @@ pub use streams::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
     UnknownChunk, collect_chunks,
 };
-pub use usage::Usage;
+pub use usage::{ApiType, RawUsageEntry, Usage};
 
 /*
  * Data flow in TensorZero
@@ -1177,6 +1177,9 @@ pub struct ProviderInferenceResponse {
     pub usage: Usage,
     pub latency: Latency,
     pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    /// Constructed from provider raw usage entries or passed through from relay.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl ProviderInferenceResponse {
@@ -1228,6 +1231,8 @@ pub struct ModelInferenceResponse {
     pub model_provider_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1253,6 +1258,8 @@ pub struct ModelInferenceResponseWithMetadata {
     pub model_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1548,6 +1555,7 @@ impl ModelInferenceResponse {
             finish_reason: provider_inference_response.finish_reason,
             model_provider_name,
             cached,
+            raw_usage: provider_inference_response.raw_usage,
         }
     }
 
@@ -1574,6 +1582,8 @@ impl ModelInferenceResponse {
             finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
             cached: true,
+            // TensorZero cache hits are excluded from raw_usage list
+            raw_usage: None,
         }
     }
 }
@@ -1596,6 +1606,7 @@ impl ModelInferenceResponseWithMetadata {
             model_provider_name: model_inference_response.model_provider_name,
             model_name,
             cached: model_inference_response.cached,
+            raw_usage: model_inference_response.raw_usage,
         }
     }
 }
@@ -1679,15 +1690,18 @@ pub struct ProviderInferenceResponseArgs {
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub latency: Latency,
     pub finish_reason: Option<FinishReason>,
+    pub id: Uuid,
 }
 
 impl ProviderInferenceResponse {
     pub fn new(args: ProviderInferenceResponseArgs) -> Self {
         let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
+
         Self {
-            id: Uuid::now_v7(),
+            id: args.id,
             created: current_timestamp(),
             output: args.output,
             system: args.system,
@@ -1697,6 +1711,7 @@ impl ProviderInferenceResponse {
             usage: args.usage,
             latency: args.latency,
             finish_reason: args.finish_reason,
+            raw_usage: args.raw_usage,
         }
     }
 }
@@ -1983,6 +1998,27 @@ impl ProviderInferenceResponseChunk {
             content,
             created: current_timestamp(),
             usage,
+            raw_usage: None,
+            raw_response,
+            latency,
+            finish_reason,
+        }
+    }
+
+    /// Creates a new chunk with raw_usage passthrough (relay or synthesized streams)
+    pub fn new_with_raw_usage(
+        content: Vec<ContentBlockChunk>,
+        usage: Option<Usage>,
+        raw_response: String,
+        latency: Duration,
+        finish_reason: Option<FinishReason>,
+        raw_usage: Option<Vec<RawUsageEntry>>,
+    ) -> Self {
+        Self {
+            content,
+            created: current_timestamp(),
+            usage,
+            raw_usage,
             raw_response,
             latency,
             finish_reason,
@@ -2141,6 +2177,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2190,6 +2227,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2242,6 +2280,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2290,6 +2329,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2358,6 +2398,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2444,6 +2485,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2539,6 +2581,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2590,6 +2633,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2665,6 +2709,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2722,6 +2767,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2919,6 +2965,7 @@ mod tests {
                 model_provider_name: "test_provider".into(),
                 model_name: "test_model".into(),
                 cached,
+                raw_usage: None,
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly

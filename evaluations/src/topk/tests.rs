@@ -131,6 +131,7 @@ fn mock_success(
             input_tokens: Some(0),
             output_tokens: Some(0),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     });
@@ -1346,11 +1347,11 @@ fn test_update_variant_statuses_marks_failed() {
     .into_iter()
     .collect();
 
-    // high_failure has cs_lower = 0.3 (above 0.2 threshold)
-    // low_failure has cs_lower = 0.1 (below 0.2 threshold)
+    // high_failure has cs_lower = 0.1 (above 0.05 threshold)
+    // low_failure has cs_lower = 0.02 (below 0.05 threshold)
     let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_bounds("high_failure", 0.3, 0.5), // cs_lower = 0.3 > 0.2
-        mock_cs_with_bounds("low_failure", 0.1, 0.3),  // cs_lower = 0.1 < 0.2
+        mock_cs_with_bounds("high_failure", 0.1, 0.2), // cs_lower = 0.1 > 0.05
+        mock_cs_with_bounds("low_failure", 0.02, 0.04), // cs_lower = 0.02 < 0.05
     ]
     .into_iter()
     .collect();
@@ -1359,7 +1360,7 @@ fn test_update_variant_statuses_marks_failed() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: 0.2,
+        variant_failure_threshold: 0.05,
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1485,8 +1486,8 @@ fn test_update_variant_statuses_failure_takes_priority() {
 
     // "best_but_failing" has high failure rate
     let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_bounds("best_but_failing", 0.3, 0.5), // cs_lower = 0.3 > 0.2 threshold
-        mock_cs_with_bounds("healthy", 0.05, 0.15),        // cs_lower = 0.05 < 0.2 threshold
+        mock_cs_with_bounds("best_but_failing", 0.1, 0.2), // cs_lower = 0.1 > 0.05 threshold
+        mock_cs_with_bounds("healthy", 0.02, 0.04),        // cs_lower = 0.02 < 0.05 threshold
     ]
     .into_iter()
     .collect();
@@ -1495,7 +1496,7 @@ fn test_update_variant_statuses_failure_takes_priority() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: 0.2,
+        variant_failure_threshold: 0.05,
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1652,7 +1653,7 @@ fn test_update_variant_statuses_missing_failure_cs() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: 0.2,
+        variant_failure_threshold: 0.05,
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1967,8 +1968,8 @@ fn test_check_global_stopping_filters_failed_variants() {
 // Check that the evaluator failure condition triggers and takes precedence over variant failures
 fn test_check_global_stopping_evaluators_failed() {
     let variant_names = vec!["a", "b", "c", "d"];
-    let mut params = default_params_with_variants(variant_names.clone());
-    params.evaluator_failure_threshold = 0.2;
+    let params = default_params_with_variants(variant_names.clone());
+    // params uses default evaluator_failure_threshold = 0.05
     let mut progress = empty_progress(&variant_names);
     progress.variant_status = [
         ("a".to_string(), VariantStatus::Failed),
@@ -1981,11 +1982,11 @@ fn test_check_global_stopping_evaluators_failed() {
     progress.evaluator_failures = [
         (
             "eval_one".to_string(),
-            mock_cs_with_bounds("eval_one", 0.25, 0.3),
+            mock_cs_with_bounds("eval_one", 0.1, 0.15), // cs_lower = 0.1 > 0.05
         ),
         (
             "eval_two".to_string(),
-            mock_cs_with_bounds("eval_two", 0.4, 0.5),
+            mock_cs_with_bounds("eval_two", 0.2, 0.3), // cs_lower = 0.2 > 0.05
         ),
     ]
     .into_iter()
@@ -1999,7 +2000,7 @@ fn test_check_global_stopping_evaluators_failed() {
         })
         .collect();
 
-    // Both evaluator failure rates exceed 0.2, so EvaluatorsFailed should win even though too many
+    // Both evaluator failure rates exceed 0.05, so EvaluatorsFailed should win even though too many
     // variants have also failed.
     let reason = check_global_stopping(&progress, &params);
     match reason {
