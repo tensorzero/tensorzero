@@ -106,7 +106,7 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 blake3 = "1.8.2"
 moka = { version = "0.12.10", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "8a9ffc63516ebdc9f0a49fef8c5eeeac23d2c93b" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "8ceb3c447ea8c77b7f6faef4e717602ad149a0f4" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
