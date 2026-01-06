@@ -331,7 +331,7 @@ mod registry_tests {
 
     #[test]
     fn register_task_tool_errors_on_duplicate() {
-        use crate::error::{SerializableToolError, ToolError};
+        use crate::error::{InnerToolError, ToolError};
 
         let mut registry = ToolRegistry::new();
         registry.register_task_tool::<EchoTaskTool>().unwrap();
@@ -339,7 +339,7 @@ mod registry_tests {
         // Second registration should fail
         let result = registry.register_task_tool::<EchoTaskTool>();
         match result {
-            Err(ToolError::Serializable(SerializableToolError::DuplicateToolName { name })) => {
+            Err(ToolError::Serializable(InnerToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -351,7 +351,7 @@ mod registry_tests {
 
     #[test]
     fn register_simple_tool_errors_on_duplicate() {
-        use crate::error::{SerializableToolError, ToolError};
+        use crate::error::{InnerToolError, ToolError};
 
         let mut registry = ToolRegistry::new();
         registry.register_simple_tool::<EchoSimpleTool>().unwrap();
@@ -359,7 +359,7 @@ mod registry_tests {
         // Second registration should fail
         let result = registry.register_simple_tool::<EchoSimpleTool>();
         match result {
-            Err(ToolError::Serializable(SerializableToolError::DuplicateToolName { name })) => {
+            Err(ToolError::Serializable(InnerToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_simple");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -371,7 +371,7 @@ mod registry_tests {
 
     #[test]
     fn register_tools_with_same_name_errors() {
-        use crate::error::{SerializableToolError, ToolError};
+        use crate::error::{InnerToolError, ToolError};
         use std::borrow::Cow;
 
         // Create a SimpleTool with the same name as EchoTaskTool
@@ -412,7 +412,7 @@ mod registry_tests {
         // Registering a SimpleTool with the same name should fail
         let result = registry.register_simple_tool::<ConflictingSimpleTool>();
         match result {
-            Err(ToolError::Serializable(SerializableToolError::DuplicateToolName { name })) => {
+            Err(ToolError::Serializable(InnerToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -541,13 +541,13 @@ mod error_tests {
 
     #[test]
     fn tool_error_from_task_error_task_internal() {
-        use crate::error::SerializableToolError;
+        use crate::error::InnerToolError;
 
         let task_err = TaskError::TaskInternal(anyhow::anyhow!("test error"));
         let tool_err: ToolError = task_err.into();
 
         match tool_err {
-            ToolError::Serializable(SerializableToolError::Internal { message }) => {
+            ToolError::Serializable(InnerToolError::Internal { message }) => {
                 assert_eq!(message, "test error");
             }
             _ => panic!("Expected Internal"),
@@ -578,9 +578,9 @@ mod error_tests {
 
     #[test]
     fn task_error_from_tool_error_user() {
-        use crate::error::SerializableToolError;
+        use crate::error::InnerToolError;
 
-        let tool_err = ToolError::Serializable(SerializableToolError::User {
+        let tool_err = ToolError::Serializable(InnerToolError::User {
             message: "test error".to_string(),
             error_data: serde_json::json!({"kind": "TestError"}),
         });
@@ -607,9 +607,9 @@ mod error_tests {
 
     #[test]
     fn task_error_from_tool_error_tool_not_found() {
-        use crate::error::SerializableToolError;
+        use crate::error::InnerToolError;
 
-        let tool_err = ToolError::Serializable(SerializableToolError::ToolNotFound {
+        let tool_err = ToolError::Serializable(InnerToolError::ToolNotFound {
             name: "missing_tool".to_string(),
         });
         let task_err: TaskError = tool_err.into();
@@ -624,9 +624,9 @@ mod error_tests {
 
     #[test]
     fn task_error_from_tool_error_invalid_params() {
-        use crate::error::SerializableToolError;
+        use crate::error::InnerToolError;
 
-        let tool_err = ToolError::Serializable(SerializableToolError::InvalidParams {
+        let tool_err = ToolError::Serializable(InnerToolError::InvalidParams {
             message: "bad params".to_string(),
         });
         let task_err: TaskError = tool_err.into();

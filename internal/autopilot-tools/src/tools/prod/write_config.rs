@@ -4,9 +4,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use durable_tools::{
-    SerializableToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult,
-};
+use durable_tools::{InnerToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
@@ -119,7 +117,7 @@ impl ToolMetadata for WriteConfigTool {
         });
 
         serde_json::from_value(schema).map_err(|e| {
-            SerializableToolError::SchemaGeneration {
+            InnerToolError::SchemaGeneration {
                 message: e.to_string(),
             }
             .into()

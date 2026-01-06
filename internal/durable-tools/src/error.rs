@@ -24,7 +24,7 @@ pub enum ToolError {
 
     /// A serializable tool error.
     #[error(transparent)]
-    Serializable(#[from] SerializableToolError),
+    Serializable(#[from] InnerToolError),
 }
 
 /// Serializable error type for tool execution.
@@ -34,7 +34,7 @@ pub enum ToolError {
 /// define their own error types and convert them to `SerializableToolError::User`.
 #[derive(Debug, Deserialize, Error, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum SerializableToolError {
+pub enum InnerToolError {
     /// Tool was not found in the registry.
     #[error("Tool not found: {name}")]
     ToolNotFound { name: String },
@@ -107,28 +107,26 @@ impl From<TaskError> for ToolError {
             TaskError::Database(e) => ToolError::Database(e),
             TaskError::Serialization(e) => ToolError::Serialization(e),
             TaskError::Timeout { step_name } => {
-                ToolError::Serializable(SerializableToolError::Timeout { step_name })
+                ToolError::Serializable(InnerToolError::Timeout { step_name })
             }
             TaskError::User {
                 message,
                 error_data,
-            } => ToolError::Serializable(SerializableToolError::User {
+            } => ToolError::Serializable(InnerToolError::User {
                 message,
                 error_data,
             }),
             TaskError::Validation { message } => {
-                ToolError::Serializable(SerializableToolError::Validation { message })
+                ToolError::Serializable(InnerToolError::Validation { message })
             }
-            TaskError::TaskInternal(e) => {
-                ToolError::Serializable(SerializableToolError::Internal {
-                    message: e.to_string(),
-                })
-            }
+            TaskError::TaskInternal(e) => ToolError::Serializable(InnerToolError::Internal {
+                message: e.to_string(),
+            }),
             TaskError::ChildFailed { step_name, message } => {
-                ToolError::Serializable(SerializableToolError::ChildFailed { step_name, message })
+                ToolError::Serializable(InnerToolError::ChildFailed { step_name, message })
             }
             TaskError::ChildCancelled { step_name } => {
-                ToolError::Serializable(SerializableToolError::ChildCancelled { step_name })
+                ToolError::Serializable(InnerToolError::ChildCancelled { step_name })
             }
         }
     }
@@ -145,27 +143,25 @@ impl From<ToolError> for TaskError {
     }
 }
 
-impl From<SerializableToolError> for TaskError {
-    fn from(err: SerializableToolError) -> Self {
+impl From<InnerToolError> for TaskError {
+    fn from(err: InnerToolError) -> Self {
         match err {
-            SerializableToolError::Timeout { step_name } => TaskError::Timeout { step_name },
-            SerializableToolError::User {
+            InnerToolError::Timeout { step_name } => TaskError::Timeout { step_name },
+            InnerToolError::User {
                 message,
                 error_data,
             } => TaskError::User {
                 message,
                 error_data,
             },
-            SerializableToolError::Validation { message } => TaskError::Validation { message },
-            SerializableToolError::Internal { message } => {
+            InnerToolError::Validation { message } => TaskError::Validation { message },
+            InnerToolError::Internal { message } => {
                 TaskError::TaskInternal(anyhow::anyhow!("{message}"))
             }
-            SerializableToolError::ChildFailed { step_name, message } => {
+            InnerToolError::ChildFailed { step_name, message } => {
                 TaskError::ChildFailed { step_name, message }
             }
-            SerializableToolError::ChildCancelled { step_name } => {
-                TaskError::ChildCancelled { step_name }
-            }
+            InnerToolError::ChildCancelled { step_name } => TaskError::ChildCancelled { step_name },
             // For all other variants, use the Serialize impl to generate error_data
             other => {
                 let error_data = serde_json::to_value(&other).unwrap_or_else(|e| {
@@ -190,21 +186,19 @@ impl From<DurableError> for ToolError {
             DurableError::Database(e) => ToolError::Database(e),
             DurableError::Serialization(e) => ToolError::Serialization(e),
             DurableError::TaskNotRegistered { task_name } => {
-                ToolError::Serializable(SerializableToolError::ToolNotFound { name: task_name })
+                ToolError::Serializable(InnerToolError::ToolNotFound { name: task_name })
             }
             DurableError::TaskAlreadyRegistered { task_name } => {
-                ToolError::Serializable(SerializableToolError::DuplicateToolName {
-                    name: task_name,
-                })
+                ToolError::Serializable(InnerToolError::DuplicateToolName { name: task_name })
             }
             DurableError::InvalidConfiguration { reason } => {
-                ToolError::Serializable(SerializableToolError::InvalidConfiguration { reason })
+                ToolError::Serializable(InnerToolError::InvalidConfiguration { reason })
             }
             DurableError::ReservedHeaderPrefix { key } => {
-                ToolError::Serializable(SerializableToolError::ReservedHeaderPrefix { key })
+                ToolError::Serializable(InnerToolError::ReservedHeaderPrefix { key })
             }
             DurableError::InvalidEventName { reason } => {
-                ToolError::Serializable(SerializableToolError::InvalidEventName { reason })
+                ToolError::Serializable(InnerToolError::InvalidEventName { reason })
             }
         }
     }

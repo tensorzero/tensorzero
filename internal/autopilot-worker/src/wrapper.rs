@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use autopilot_tools::AutopilotToolError;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, SerializableToolError, SimpleTool, SimpleToolContext,
+    CreateEventGatewayRequest, EventPayload, InnerToolError, SimpleTool, SimpleToolContext,
     TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
     ToolResult as DurableToolResult,
 };
@@ -365,7 +365,7 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
 pub enum ToolFailure {
     Control { message: String },
     Serialization { message: String },
-    Tool { error: SerializableToolError },
+    Tool { error: InnerToolError },
     Database { message: String },
 }
 

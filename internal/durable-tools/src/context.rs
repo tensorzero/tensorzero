@@ -8,7 +8,7 @@ use std::time::Duration;
 use tensorzero::{ClientInferenceParams, InferenceResponse};
 use uuid::Uuid;
 
-use crate::error::{SerializableToolError, ToolResult};
+use crate::error::{InnerToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
@@ -261,7 +261,7 @@ impl<'a> ToolContext<'a> {
             registry.validate_params(tool_name, &llm_params, &side_info)?;
             registry
                 .is_durable(tool_name)
-                .ok_or_else(|| SerializableToolError::ToolNotFound {
+                .ok_or_else(|| InnerToolError::ToolNotFound {
                     name: tool_name.to_string(),
                 })?
         };
@@ -356,7 +356,7 @@ impl<'a> ToolContext<'a> {
                         .read()
                         .await
                         .get_simple_tool(&tool_name)
-                        .ok_or_else(|| SerializableToolError::ToolNotFound {
+                        .ok_or_else(|| InnerToolError::ToolNotFound {
                             name: tool_name.clone(),
                         })?
                 };
