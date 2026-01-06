@@ -46,6 +46,9 @@ pub struct Event {
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     Message(InputMessage),
+    Error {
+        message: String,
+    },
     StatusUpdate {
         status_update: StatusUpdate,
     },
