@@ -13,8 +13,8 @@ use crate::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTe
 use crate::endpoints::shared_types::OrderDirection;
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
-    DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams,
+    DatasetMetadata, DatasetQueries, FunctionDatapointCount, GetDatapointParams,
+    GetDatapointsParams, GetDatasetMetadataParams,
 };
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
@@ -151,6 +151,45 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             })
         })?;
         Ok(count)
+    }
+
+    async fn count_datapoints_by_function(
+        &self,
+        dataset_name: &str,
+    ) -> Result<Vec<FunctionDatapointCount>, Error> {
+        let query = "
+            SELECT
+                function_name,
+                toUInt64(count()) as datapoint_count
+            FROM (
+                SELECT function_name FROM ChatInferenceDatapoint FINAL
+                WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
+                UNION ALL
+                SELECT function_name FROM JsonInferenceDatapoint FINAL
+                WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
+            )
+            GROUP BY function_name
+            ORDER BY datapoint_count DESC
+            FORMAT JSONEachRow
+        ";
+
+        let query_params = HashMap::from([("dataset_name", dataset_name)]);
+        let response = self
+            .run_query_synchronous(query.to_string(), &query_params)
+            .await?;
+
+        response
+            .response
+            .trim()
+            .lines()
+            .map(|row| {
+                serde_json::from_str(row).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize FunctionDatapointCount: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error> {
@@ -1885,6 +1924,58 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, 42, "Should return 42 datapoints");
+    }
+
+    #[tokio::test]
+    async fn test_count_datapoints_by_function_executes_successfully() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                assert_query_contains(
+                    query,
+                    "SELECT
+                function_name,
+                toUInt64(count()) as datapoint_count
+            FROM (
+                SELECT function_name FROM ChatInferenceDatapoint FINAL
+                WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
+                UNION ALL
+                SELECT function_name FROM JsonInferenceDatapoint FINAL
+                WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
+            )
+            GROUP BY function_name
+            ORDER BY datapoint_count DESC",
+                );
+
+                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(
+                        r#"{"function_name":"func_a","datapoint_count":"100"}
+{"function_name":"func_b","datapoint_count":"50"}"#,
+                    ),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .count_datapoints_by_function("test_dataset")
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2, "Should return 2 functions");
+        assert_eq!(result[0].function_name, "func_a");
+        assert_eq!(result[0].datapoint_count, 100);
+        assert_eq!(result[1].function_name, "func_b");
+        assert_eq!(result[1].datapoint_count, 50);
     }
 
     #[tokio::test]
