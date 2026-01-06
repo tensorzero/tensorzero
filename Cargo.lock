@@ -3154,6 +3154,7 @@ version = "0.34.0"
 source = "git+https://github.com/Aaron1011/tracing-opentelemetry-instrumentation-sdk?rev=c240499e464c2c787dedda2b870ae50747a95e6f#c240499e464c2c787dedda2b870ae50747a95e6f"
 dependencies = [
  "opentelemetry",
+ "opentelemetry-aws",
  "opentelemetry_sdk",
  "thiserror 2.0.17",
  "tracing",
@@ -4042,6 +4043,16 @@ dependencies = [
  "pin-project-lite",
  "thiserror 2.0.17",
  "tracing",
+]
+
+[[package]]
+name = "opentelemetry-aws"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09fbe9af6b9403e7fe43c11cc341d320d7cf5e779c6708b41415228af1921045"
+dependencies = [
+ "opentelemetry",
+ "opentelemetry_sdk",
 ]
 
 [[package]]
