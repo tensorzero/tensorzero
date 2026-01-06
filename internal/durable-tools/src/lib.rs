@@ -186,7 +186,7 @@ pub mod spawn {
 // Re-export main types
 pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext, ToolHandle};
 pub use durable_tools_spawn::TaskToolParams;
-pub use error::{ToolError, ToolResult};
+pub use error::{SerializableToolError, ToolError, ToolResult};
 pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 pub use simple_tool::SimpleTool;

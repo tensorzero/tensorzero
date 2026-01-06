@@ -4,7 +4,9 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{
+    SerializableToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult,
+};
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
@@ -90,7 +92,13 @@ impl ToolMetadata for CreateDatapointsTool {
             "required": ["dataset_name", "datapoints"]
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            SerializableToolError::SchemaGeneration {
+                message: e.to_string(),
+                source: e.into(),
+            }
+            .into()
+        })
     }
 }
 

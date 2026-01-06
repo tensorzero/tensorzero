@@ -8,7 +8,7 @@ use autopilot_client::AutopilotToolResult;
 use autopilot_tools::AutopilotToolError;
 use durable_tools::{
     CreateEventGatewayRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool,
-    TensorZeroClient, ToolAppState, ToolContext, ToolMetadata, ToolOutcome,
+    TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
     ToolResult as DurableToolResult,
 };
 use schemars::Schema;
@@ -305,48 +305,23 @@ async fn execute_simple_tool_step<T: SimpleTool>(
 
 /// Convert a `ToolError` to structured JSON for the autopilot API.
 ///
-/// For `ToolError::User`, extracts the `error_data` field which contains
-/// the serialized `AutopilotToolError`. For other variants, creates a
-/// structured JSON object with a `kind` discriminator.
-fn tool_error_to_json(e: &durable_tools::ToolError) -> serde_json::Value {
-    use durable_tools::ToolError;
-
+/// For `ToolError::Error`, serializes the `SerializableToolError` directly.
+/// For `ToolError::Control`, returns a control flow error (this should not
+/// normally happen as control flow errors are internal).
+fn tool_error_to_json(e: &ToolError) -> serde_json::Value {
     match e {
-        ToolError::User { error_data, .. } => error_data.clone(),
-        ToolError::ToolNotFound(name) => serde_json::json!({
-            "kind": "ToolNotFound",
-            "message": format!("Tool not found: {name}"),
-            "name": name,
-        }),
-        ToolError::InvalidParams(msg) => serde_json::json!({
-            "kind": "InvalidParams",
-            "message": format!("Parameter error: {msg}"),
-        }),
-        ToolError::Serialization(err) => serde_json::json!({
-            "kind": "Serialization",
-            "message": format!("Serialization error: {err}"),
-        }),
-        ToolError::Database(err) => serde_json::json!({
-            "kind": "Database",
-            "message": format!("Database error: {err}"),
-        }),
-        ToolError::Timeout { step_name } => serde_json::json!({
-            "kind": "Timeout",
-            "message": format!("Timed out waiting for '{step_name}'"),
-            "step_name": step_name,
-        }),
-        ToolError::Control(cf) => serde_json::json!({
-            "kind": "Control",
-            "message": format!("Control flow: {cf:?}"),
-        }),
-        ToolError::DuplicateToolName(name) => serde_json::json!({
-            "kind": "DuplicateToolName",
-            "message": format!("Tool '{name}' is already registered"),
-            "name": name,
-        }),
-        ToolError::SchemaGeneration(err) => serde_json::json!({
-            "kind": "SchemaGeneration",
-            "message": format!("Schema generation failed: {err}"),
+        ToolError::Control(cf) => {
+            // Control flow errors should not be serialized - this is a bug if it happens
+            serde_json::json!({
+                "kind": "control",
+                "message": format!("Unexpected control flow signal: {cf:?}"),
+            })
+        }
+        ToolError::Error(serializable) => serde_json::to_value(serializable).unwrap_or_else(|e| {
+            serde_json::json!({
+                "kind": "serialization",
+                "message": format!("Failed to serialize error: {e}"),
+            })
         }),
     }
 }

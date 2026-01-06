@@ -4,7 +4,7 @@
 //! Errors are serialized to JSON for persistence in durable's fail_run table
 //! and can be deserialized back for programmatic error handling.
 
-use durable_tools::ToolError;
+use durable_tools::{SerializableToolError, ToolError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use thiserror::Error;
@@ -72,10 +72,11 @@ impl AutopilotToolError {
 
 impl From<AutopilotToolError> for ToolError {
     fn from(e: AutopilotToolError) -> ToolError {
-        ToolError::User {
+        SerializableToolError::User {
             message: e.to_string(),
             error_data: serde_json::to_value(&e).unwrap_or(JsonValue::Null),
         }
+        .into()
     }
 }
 
