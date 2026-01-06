@@ -1,6 +1,12 @@
 //! E2E tests for the evaluation endpoints.
 
+use std::time::Duration;
+
+use futures::StreamExt;
 use reqwest::Client;
+use reqwest_eventsource::{Event, RequestBuilderExt};
+use serde_json::{Value, json};
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::endpoints::internal::evaluations::types::GetEvaluationStatisticsResponse;
 use tensorzero_core::endpoints::internal::evaluations::{
     GetEvaluationResultsResponse, GetEvaluationRunInfosResponse,
@@ -661,5 +667,440 @@ async fn test_get_evaluation_results_default_pagination() {
     assert!(
         !response.results.is_empty(),
         "Expected results with default pagination"
+    );
+}
+
+// ============================================================================
+// run_evaluation SSE streaming endpoint tests
+// ============================================================================
+
+/// Helper function to create a chat datapoint for testing evaluations
+async fn create_test_chat_datapoint(
+    client: &Client,
+    dataset_name: &str,
+    datapoint_id: Uuid,
+) -> Value {
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {
+                "system": { "assistant_name": "TestBot" },
+                "messages": [{
+                    "role": "user",
+                    "content": [{ "type": "text", "text": "Hello, write me a haiku" }]
+                }]
+            },
+            "output": [{ "type": "text", "text": "Test output response" }],
+            "is_custom": true,
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "Failed to create datapoint: {:?}",
+        resp.status()
+    );
+
+    resp.json().await.unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_success() {
+    let http_client = Client::new();
+    let _clickhouse = get_clickhouse().await;
+
+    // Create a unique dataset with test datapoints
+    let dataset_name = format!("test-eval-dataset-{}", Uuid::now_v7());
+    let datapoint_id1 = Uuid::now_v7();
+    let datapoint_id2 = Uuid::now_v7();
+
+    // Create test datapoints
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id1).await;
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
+
+    // Wait for data to be available in ClickHouse
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Build the evaluation request payload
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {
+                "exact_match_eval": {
+                    "type": "exact_match",
+                }
+            }
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation_streaming",
+        "dataset_name": dataset_name,
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "off",
+        "max_datapoints": 2,
+    });
+
+    // Make the SSE request
+    let mut event_stream = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut events: Vec<Value> = Vec::new();
+    let mut start_received = false;
+    let mut complete_received = false;
+    let mut success_count = 0;
+    let mut error_count = 0;
+
+    // Collect events from the stream
+    while let Some(event_result) = event_stream.next().await {
+        match event_result {
+            Ok(Event::Open) => continue,
+            Ok(Event::Message(message)) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+
+                let event: Value = serde_json::from_str(&message.data).unwrap();
+                let event_type = event.get("type").and_then(|t| t.as_str());
+
+                match event_type {
+                    Some("start") => {
+                        start_received = true;
+                        assert!(
+                            event.get("evaluation_run_id").is_some(),
+                            "Start event should have evaluation_run_id"
+                        );
+                        assert!(
+                            event.get("num_datapoints").is_some(),
+                            "Start event should have num_datapoints"
+                        );
+                    }
+                    Some("success") => {
+                        success_count += 1;
+                        assert!(
+                            event.get("datapoint").is_some(),
+                            "Success event should have datapoint"
+                        );
+                        assert!(
+                            event.get("response").is_some(),
+                            "Success event should have response"
+                        );
+                        assert!(
+                            event.get("evaluations").is_some(),
+                            "Success event should have evaluations"
+                        );
+                    }
+                    Some("error") => {
+                        error_count += 1;
+                    }
+                    Some("complete") => {
+                        complete_received = true;
+                        assert!(
+                            event.get("evaluation_run_id").is_some(),
+                            "Complete event should have evaluation_run_id"
+                        );
+                    }
+                    Some("fatal_error") => {
+                        panic!("Received fatal_error event: {:?}", event.get("message"));
+                    }
+                    _ => {}
+                }
+
+                events.push(event);
+            }
+            Err(reqwest_eventsource::Error::StreamEnded) => break,
+            Err(e) => panic!("SSE stream error: {e:?}"),
+        }
+    }
+
+    assert!(start_received, "Should receive start event");
+    assert!(complete_received, "Should receive complete event");
+    // We expect either success or error for each datapoint
+    assert!(
+        success_count + error_count > 0,
+        "Should receive at least one success or error event"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_missing_variant() {
+    let http_client = Client::new();
+
+    // Request without variant_name or internal_dynamic_variant_config
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {}
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation",
+        "dataset_name": "some_dataset",
+        // Missing variant_name and internal_dynamic_variant_config
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Should return 400 for missing variant"
+    );
+
+    let body: Value = resp.json().await.unwrap();
+    assert!(
+        body.get("error").is_some(),
+        "Response should contain an error"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_nonexistent_dataset() {
+    let http_client = Client::new();
+
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {}
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation",
+        "dataset_name": format!("nonexistent-dataset-{}", Uuid::now_v7()),
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    // The request should start streaming. We should get a start event with 0 datapoints,
+    // then a complete event.
+    let mut event_stream = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut found_error_or_empty = false;
+
+    while let Some(event_result) = event_stream.next().await {
+        match event_result {
+            Ok(Event::Open) => continue,
+            Ok(Event::Message(message)) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                let event: Value = serde_json::from_str(&message.data).unwrap();
+                let event_type = event.get("type").and_then(|t| t.as_str());
+
+                match event_type {
+                    Some("start") => {
+                        let num_datapoints = event.get("num_datapoints").and_then(|n| n.as_u64());
+                        if num_datapoints == Some(0) {
+                            found_error_or_empty = true;
+                        }
+                    }
+                    Some("fatal_error") => {
+                        found_error_or_empty = true;
+                        break;
+                    }
+                    Some("complete") => {
+                        found_error_or_empty = true;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            Err(reqwest_eventsource::Error::StreamEnded) => break,
+            Err(_) => {
+                found_error_or_empty = true;
+                break;
+            }
+        }
+    }
+
+    assert!(
+        found_error_or_empty,
+        "Should report error or empty dataset for nonexistent dataset"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
+    let http_client = Client::new();
+    let _clickhouse = get_clickhouse().await;
+
+    // Create a unique dataset with test datapoints
+    let dataset_name = format!("test-eval-ids-dataset-{}", Uuid::now_v7());
+    let datapoint_id1 = Uuid::now_v7();
+    let datapoint_id2 = Uuid::now_v7();
+    let datapoint_id3 = Uuid::now_v7();
+
+    // Create test datapoints
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id1).await;
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id3).await;
+
+    // Wait for data to be available
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Only evaluate specific datapoint IDs (2 out of 3)
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {
+                "exact_match_eval": {
+                    "type": "exact_match",
+                }
+            }
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation_datapoint_ids",
+        "datapoint_ids": [datapoint_id1.to_string(), datapoint_id2.to_string()],
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    let mut event_stream = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut num_datapoints_reported = None;
+    let mut start_received = false;
+
+    while let Some(event_result) = event_stream.next().await {
+        match event_result {
+            Ok(Event::Open) => continue,
+            Ok(Event::Message(message)) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+
+                let event: Value = serde_json::from_str(&message.data).unwrap();
+                let event_type = event.get("type").and_then(|t| t.as_str());
+
+                match event_type {
+                    Some("start") => {
+                        start_received = true;
+                        num_datapoints_reported =
+                            event.get("num_datapoints").and_then(|n| n.as_u64());
+                    }
+                    Some("complete") => break,
+                    Some("fatal_error") => {
+                        panic!("Received fatal_error event: {:?}", event.get("message"));
+                    }
+                    _ => {}
+                }
+            }
+            Err(reqwest_eventsource::Error::StreamEnded) => break,
+            Err(e) => panic!("SSE stream error: {e:?}"),
+        }
+    }
+
+    assert!(start_received, "Should receive start event");
+    assert_eq!(
+        num_datapoints_reported,
+        Some(2),
+        "Should report exactly 2 datapoints for the 2 specific IDs"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_conflicting_variant_config() {
+    let http_client = Client::new();
+
+    // Provide both variant_name AND internal_dynamic_variant_config (should fail)
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {}
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation",
+        "dataset_name": "some_dataset",
+        "variant_name": "test",
+        "internal_dynamic_variant_config": {
+            "type": "chat_completion",
+            "model": "test",
+            "active": true,
+        },
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Should return 400 when both variant_name and internal_dynamic_variant_config are provided"
+    );
+
+    let body: Value = resp.json().await.unwrap();
+    assert!(
+        body.get("error").is_some(),
+        "Response should contain an error"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_invalid_inference_cache() {
+    let http_client = Client::new();
+
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {}
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation",
+        "dataset_name": "some_dataset",
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "invalid_cache_mode",  // Invalid value
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Should return 400 for invalid inference_cache setting"
+    );
+
+    let body: Value = resp.json().await.unwrap();
+    assert!(
+        body.get("error").is_some(),
+        "Response should contain an error"
     );
 }

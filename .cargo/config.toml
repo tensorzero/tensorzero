@@ -124,5 +124,8 @@ tsbuild = [
     "-p",
     "autopilot-client",
     "-p",
-    "tensorzero-types"
+    "tensorzero-types",
+    # TODO(shuyangli): Remove `gateway` when we redesign evaluations crate.
+    "-p",
+    "gateway"
 ] # Export Typescript bindings for TensorZero

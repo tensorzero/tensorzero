@@ -9,7 +9,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use evaluations::stats::EvaluationStats;
 use evaluations::types::{EvaluationCoreArgs, EvaluationVariant};
-use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_core_streaming};
+use evaluations::{
+    ClientInferenceExecutor, EvaluationUpdate, OutputFormat, run_evaluation_core_streaming,
+};
 use tensorzero::{
     ActionResponse, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
     CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
@@ -464,8 +466,11 @@ impl TensorZeroClient for EmbeddedClient {
 
         let evaluation_run_id = Uuid::now_v7();
 
+        // Wrap the client in ClientInferenceExecutor for use with evaluations
+        let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
         let core_args = EvaluationCoreArgs {
-            tensorzero_client,
+            inference_executor,
             clickhouse_client: self.app_state.clickhouse_connection_info.clone(),
             evaluation_config,
             function_configs,
