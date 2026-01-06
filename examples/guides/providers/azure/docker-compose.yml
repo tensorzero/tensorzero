@@ -8,7 +8,10 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      AZURE_API_KEY: ${AZURE_API_KEY:?Environment variable AZURE_API_KEY must be set.}
+      # TODO (#5530): Replace the variables:
+      # AZURE_API_KEY: ${AZURE_API_KEY:?Environment variable AZURE_API_KEY must be set.}
+      AZURE_API_KEY: ${AZURE_API_KEY}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
     ports:
       - "3000:3000"
     extra_hosts:
