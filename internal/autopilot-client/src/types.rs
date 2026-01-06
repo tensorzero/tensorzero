@@ -40,6 +40,26 @@ pub struct Event {
     pub created_at: DateTime<Utc>,
 }
 
+/// The UX-relevant status of the Autopilot.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(rename_all = "snake_case", tag = "status")]
+pub enum AutopilotStatus {
+    Idle,
+    ServerSideProcessing,
+    WaitingForToolCallAuthorization,
+    WaitingForToolExecution,
+    WaitingForRetry,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct StreamUpdate {
+    pub event: Event,
+    pub status: AutopilotStatus,
+}
+
 /// The payload of an event.
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -297,6 +317,9 @@ pub struct ListEventsResponse {
     pub events: Vec<Event>,
     /// The most recent `message` event with role `user` in this session.
     pub previous_user_message_event_id: Uuid,
+    /// The current status of the Autopilot in this session.
+    /// Ignores pagination parameters.
+    pub status: AutopilotStatus,
     /// All tool calls in Event history that do not have responses.
     /// These may be duplicates of some of the values in events.
     /// All EventPayloads in these Events should be of type ToolCall.
