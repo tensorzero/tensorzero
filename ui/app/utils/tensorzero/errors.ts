@@ -2,6 +2,53 @@ import { StatusCodes as HttpStatusCode } from "http-status-codes";
 import { isErrorLike } from "~/utils/common";
 
 /**
+ * Enum-like constants for categorizing errors that survive serialization
+ * across the React Router server/client boundary.
+ *
+ * Use with React Router's `data()` helper:
+ * ```ts
+ * throw data({ errorType: BoundaryErrorType.GatewayUnavailable }, { status: 503 });
+ * ```
+ */
+export const BoundaryErrorType = {
+  GatewayUnavailable: "GATEWAY_UNAVAILABLE",
+  GatewayAuthFailed: "GATEWAY_AUTH_FAILED",
+  RouteNotFound: "ROUTE_NOT_FOUND",
+  ClickHouseConnection: "CLICKHOUSE_CONNECTION",
+  ServerError: "SERVER_ERROR",
+} as const;
+
+export type BoundaryErrorType =
+  (typeof BoundaryErrorType)[keyof typeof BoundaryErrorType];
+
+/**
+ * Type for error data passed via React Router's `data()` helper.
+ * This structure survives serialization and enables type-safe error handling.
+ */
+export interface BoundaryErrorData {
+  errorType: BoundaryErrorType;
+  message?: string;
+  routeInfo?: string;
+}
+
+/**
+ * Type guard to check if a value is BoundaryErrorData.
+ */
+export function isBoundaryErrorData(
+  value: unknown,
+): value is BoundaryErrorData {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "errorType" in value &&
+    typeof value.errorType === "string" &&
+    Object.values(BoundaryErrorType).includes(
+      value.errorType as BoundaryErrorType,
+    )
+  );
+}
+
+/**
  * Error thrown when the UI cannot connect to the TensorZero gateway.
  * This is distinct from TensorZeroServerError which represents errors
  * returned by the gateway itself.
@@ -42,6 +89,72 @@ export function isAuthenticationError(error: unknown): boolean {
     "status" in error &&
     error.status === 401
   );
+}
+
+/**
+ * Check if an error indicates a route not found from the gateway.
+ * This typically happens when the UI version doesn't match the gateway version.
+ *
+ * Supports both:
+ * - Direct TensorZeroServerError.RouteNotFound instances (server-side)
+ * - Message pattern matching (for serialized errors)
+ */
+export function isRouteNotFoundError(error: unknown): boolean {
+  if (error instanceof TensorZeroServerError.RouteNotFound) {
+    return true;
+  }
+
+  // Check message pattern - this works even after serialization
+  // The message format is: "Route not found: METHOD /path"
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.startsWith("Route not found:")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if an error indicates a ClickHouse connection or query failure.
+ */
+export function isClickHouseError(error: unknown): boolean {
+  if (
+    error instanceof TensorZeroServerError.ClickHouseConnection ||
+    error instanceof TensorZeroServerError.ClickHouseQuery ||
+    error instanceof TensorZeroServerError.ClickHouseDeserialization ||
+    error instanceof TensorZeroServerError.ClickHouseMigration
+  ) {
+    return true;
+  }
+
+  // Check serialized error name pattern
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    typeof error.name === "string" &&
+    error.name.startsWith("ClickHouse")
+  ) {
+    return true;
+  }
+
+  // Check message pattern for ClickHouse errors
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.toLowerCase().includes("clickhouse")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

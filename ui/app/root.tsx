@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   data,
   isRouteErrorResponse,
@@ -18,11 +19,20 @@ import {
   checkAutopilotAvailable,
 } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
-import { GatewayAuthFailedState } from "./components/ui/error/GatewayAuthFailedState";
-import { GatewayRequiredState } from "./components/ui/error/GatewayRequiredState";
+import { GatewayAuthErrorContent } from "./components/ui/error/GatewayAuthErrorContent";
+import { GatewayUnavailableErrorContent } from "./components/ui/error/GatewayUnavailableErrorContent";
+import { RouteNotFoundErrorContent } from "./components/ui/error/RouteNotFoundErrorContent";
+import { ServerErrorContent } from "./components/ui/error/ServerErrorContent";
+import { ClickHouseErrorContent } from "./components/ui/error/ClickHouseErrorContent";
+import { ErrorBoundaryLayout } from "./components/ui/error/ErrorBoundaryLayout";
+import { ErrorDialog } from "./components/ui/error/ErrorDialog";
 import {
+  BoundaryErrorType,
+  isBoundaryErrorData,
   isAuthenticationError,
   isGatewayConnectionError,
+  isRouteNotFoundError,
+  isClickHouseError,
 } from "./utils/tensorzero/errors";
 import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
@@ -53,9 +63,6 @@ export const links: Route.LinksFunction = () => [
 
 export const middleware: Route.MiddlewareFunction[] = [readOnlyMiddleware];
 
-const GATEWAY_UNAVAILABLE_ERROR = "TensorZero Gateway Unavailable";
-const GATEWAY_AUTH_FAILED_ERROR = "TensorZero Gateway Authentication Failed";
-
 export async function loader() {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
@@ -69,10 +76,23 @@ export async function loader() {
     return { config, isReadOnly, autopilotAvailable };
   } catch (e) {
     if (isGatewayConnectionError(e)) {
-      throw data({ errorType: GATEWAY_UNAVAILABLE_ERROR }, { status: 503 });
+      throw data(
+        { errorType: BoundaryErrorType.GatewayUnavailable },
+        { status: 503 },
+      );
     }
     if (isAuthenticationError(e)) {
-      throw data({ errorType: GATEWAY_AUTH_FAILED_ERROR }, { status: 401 });
+      throw data(
+        { errorType: BoundaryErrorType.GatewayAuthFailed },
+        { status: 401 },
+      );
+    }
+    if (isClickHouseError(e)) {
+      const message = e instanceof Error ? e.message : undefined;
+      throw data(
+        { errorType: BoundaryErrorType.ClickHouseConnection, message },
+        { status: 503 },
+      );
     }
     throw e;
   }
@@ -125,54 +145,148 @@ export default function App({ loaderData }: Route.ComponentProps) {
   );
 }
 
-// Fallback Error Boundary
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  // Check if this is a gateway connection error (wrapped with data() or raw)
-  if (
-    isRouteErrorResponse(error) &&
-    error.data?.errorType === GATEWAY_UNAVAILABLE_ERROR
-  ) {
-    return <GatewayRequiredState />;
+/**
+ * Classifies an error into a BoundaryErrorType for consistent handling.
+ */
+function classifyError(error: unknown): {
+  type: BoundaryErrorType;
+  message?: string;
+  routeInfo?: string;
+} {
+  // Check for serialized BoundaryErrorData (from data() throws)
+  if (isRouteErrorResponse(error) && isBoundaryErrorData(error.data)) {
+    return {
+      type: error.data.errorType,
+      message: error.data.message,
+      routeInfo: error.data.routeInfo,
+    };
   }
+
+  // Gateway connection error
   if (isGatewayConnectionError(error)) {
-    return <GatewayRequiredState />;
+    return { type: BoundaryErrorType.GatewayUnavailable };
   }
 
-  // Check if this is a gateway authentication error (wrapped with data() or raw)
-  if (
-    isRouteErrorResponse(error) &&
-    error.data?.errorType === GATEWAY_AUTH_FAILED_ERROR
-  ) {
-    return <GatewayAuthFailedState />;
-  }
+  // Authentication error
   if (isAuthenticationError(error)) {
-    return <GatewayAuthFailedState />;
+    return { type: BoundaryErrorType.GatewayAuthFailed };
   }
 
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
-  let stack: string | undefined;
+  // Route not found error
+  if (isRouteNotFoundError(error)) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "object" &&
+            error !== null &&
+            "message" in error &&
+            typeof error.message === "string"
+          ? error.message
+          : "";
+    const routeMatch = errorMessage.match(/Route not found: (\w+) (.+)/);
+    const routeInfo = routeMatch
+      ? `${routeMatch[1]} ${routeMatch[2]}`
+      : undefined;
+    return { type: BoundaryErrorType.RouteNotFound, routeInfo };
+  }
 
+  // ClickHouse error
+  if (isClickHouseError(error)) {
+    const message = error instanceof Error ? error.message : undefined;
+    return { type: BoundaryErrorType.ClickHouseConnection, message };
+  }
+
+  // Default: server error
+  let message: string | undefined;
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error";
-    details =
-      error.status === 404
-        ? "The requested page could not be found."
-        : error.statusText || details;
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
-    stack = error.stack;
+    message = error.statusText || undefined;
+  } else if (error instanceof Error) {
+    message = error.message;
   }
+  return { type: BoundaryErrorType.ServerError, message };
+}
+
+/**
+ * Renders the appropriate error content based on error type.
+ */
+function ErrorContent({
+  type,
+  message,
+  routeInfo,
+  status,
+}: {
+  type: BoundaryErrorType;
+  message?: string;
+  routeInfo?: string;
+  status?: number;
+}) {
+  switch (type) {
+    case BoundaryErrorType.GatewayUnavailable:
+      return <GatewayUnavailableErrorContent />;
+    case BoundaryErrorType.GatewayAuthFailed:
+      return <GatewayAuthErrorContent />;
+    case BoundaryErrorType.RouteNotFound:
+      return <RouteNotFoundErrorContent routeInfo={routeInfo} />;
+    case BoundaryErrorType.ClickHouseConnection:
+      return <ClickHouseErrorContent message={message} />;
+    case BoundaryErrorType.ServerError:
+    default:
+      return <ServerErrorContent status={status} message={message} />;
+  }
+}
+
+/**
+ * Root error boundary that provides a consistent, dismissible error experience.
+ *
+ * Design principles:
+ * - Keeps the sidebar visible so users can navigate even when errors occur
+ * - Shows errors in a modal overlay that can be dismissed
+ * - Provides actionable troubleshooting guidance
+ * - Uses enum-based error typing for reliable classification
+ *
+ * Error handling:
+ * - Client 404s (page not found): inline display, not modal
+ * - All other errors: dismissible modal overlay
+ */
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const [open, setOpen] = React.useState(true);
+
+  // Client 404s (page not found in React Router) - show inline, not modal
+  // This is the only error type that doesn't use the modal pattern
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    // Ensure this is actually a client 404, not a gateway route not found
+    if (!isBoundaryErrorData(error.data)) {
+      return (
+        <ErrorBoundaryLayout>
+          <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
+            <h1 className="text-4xl font-bold">404</h1>
+            <p className="text-muted-foreground">
+              The requested page could not be found.
+            </p>
+          </main>
+        </ErrorBoundaryLayout>
+      );
+    }
+  }
+
+  // All other errors use the dismissible modal pattern
+  const classified = classifyError(error);
+  const status = isRouteErrorResponse(error) ? error.status : undefined;
 
   return (
-    <main className="container mx-auto p-4 pt-16">
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre className="w-full overflow-x-auto p-4">
-          <code>{stack}</code>
-        </pre>
-      )}
-    </main>
+    <ErrorBoundaryLayout>
+      <ErrorDialog
+        open={open}
+        onDismiss={() => setOpen(false)}
+        onReopen={() => setOpen(true)}
+      >
+        <ErrorContent
+          type={classified.type}
+          message={classified.message}
+          routeInfo={classified.routeInfo}
+          status={status}
+        />
+      </ErrorDialog>
+    </ErrorBoundaryLayout>
   );
 }
