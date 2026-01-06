@@ -1163,6 +1163,7 @@ jobs:
   publish-dev-docker-hub-images:
     permissions:
       contents: read
+      actions: read
       attestations: write
       id-token: write
       packages: write
