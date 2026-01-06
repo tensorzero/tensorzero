@@ -82,7 +82,10 @@
               {
                 "group": "Guides",
                 "expanded": true,
-                "pages": ["optimization/gepa", "optimization/dicl"]
+                "pages": [
+                  "optimization/dynamic-in-context-learning-dicl",
+                  "optimization/gepa"
+                ]
               }
             ]
           },

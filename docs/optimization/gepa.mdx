@@ -9,13 +9,13 @@ You can run GEPA using TensorZero to optimize the prompt templates of any [Tenso
 GEPA works by repeatedly sampling prompt templates, running evaluations, having an LLM analyze what went well or poorly, and then having an LLM mutate the prompt template based on that analysis.
 Mutated templates that improve on the evaluation metrics define a Pareto frontier and can be sampled at later iterations for further refinement.
 
+## Optimize your prompt templates with GEPA
+
 <Tip>
 
 You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/optimization/gepa/) of this guide on GitHub.
 
 </Tip>
-
-## Optimize your prompt templates with GEPA
 
 <Steps>
 
@@ -68,29 +68,6 @@ Please return the entities in the following JSON format:
 
 <Tabs>
 
-<Tab title="Historical Inferences">
-
-After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
-TensorZero automatically collects structured data about those inferences, which can later be used as training examples for GEPA.
-
-```python
-from tensorzero import ListInferencesRequest
-
-inferences_response = t0.list_inferences(
-    request=ListInferencesRequest(
-        function_name="extract_entities",
-        output_source="inference",
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=inferences_response.inferences,
-    variants={"extract_entities": "baseline"},
-)
-```
-
-</Tab>
-
 <Tab title="TensorZero Dataset">
 
 After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) for the `extract_entities` function you configured.
@@ -108,6 +85,29 @@ datapoints = t0.list_datapoints(
 
 rendered_samples = t0.experimental_render_samples(
     stored_samples=datapoints.datapoints,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+</Tab>
+
+<Tab title="Historical Inferences">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
+TensorZero automatically collects structured data about those inferences, which can later be used as training examples for GEPA.
+
+```python
+from tensorzero import ListInferencesRequest
+
+inferences_response = t0.list_inferences(
+    request=ListInferencesRequest(
+        function_name="extract_entities",
+        output_source="inference",
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=inferences_response.inferences,
     variants={"extract_entities": "baseline"},
 )
 ```

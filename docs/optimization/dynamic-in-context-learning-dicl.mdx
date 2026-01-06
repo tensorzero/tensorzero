@@ -1,0 +1,264 @@
+---
+title: Dynamic In-Context Learning (DICL)
+sidebarTitle: Dynamic In-Context Learning
+description: Learn how to use Dynamic In-Context Learning to optimize your LLM applications.
+---
+
+Dynamic In-Context Learning (DICL) is an inference-time optimization that improves LLM performance by incorporating relevant historical examples into your prompt.
+Instead of incorporating static examples manually in your prompts, DICL selects the most relevant examples at inference time.
+
+Here's how it works:
+
+0. Before inference: You curate examples of good LLM behavior. TensorZero embeds them using an embedding model and stores them in your database.
+1. TensorZero embeds inference inputs before sending them to the LLM and retrieves similar curated examples from your database.
+2. TensorZero inserts these examples into your prompt and sends the request to the LLM.
+3. The LLM generates a response using the enhanced prompt.
+
+![Diagram: Dynamic In-Context Learning](./dynamic-in-context-learning-dicl-diagram.png)
+
+<Tip>
+
+**When should you use DICL?**
+
+DICL tends to work best when:
+
+- You have dozens to thousands of curated examples of good LLM behavior.
+  - If less: you should label a few dozen datapoints manually.
+  - If more: DICL still works well, but you should consider supervised fine-tuning instead.
+- The inference inputs are reasonably sized. Large inputs inflate the context and limit `k` (see below), degrading performance.
+  - If very large: [configure prompt templates](/gateway/create-a-prompt-template) to remove boilerplate from the inputs if appropriate; otherwise consider other techniques.
+
+</Tip>
+
+## Optimize your LLM inferences with Dynamic In-Context Learning
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/optimization/dicl/) of this guide on GitHub.
+
+</Tip>
+<Steps>
+
+<Step title="Configure your LLM application">
+
+Define a [function with a baseline variant](/gateway/configure-functions-and-variants) for your application.
+
+```toml title="tensorzero.toml"
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+```
+
+<Accordion title="Example: Data Extraction (Named Entity Recognition) — Configuration">
+
+```text title="system_template.minijinja"
+You are an assistant that is performing a named entity recognition task.
+Your job is to extract entities from a given text.
+
+The entities you are extracting are:
+
+- people
+- organizations
+- locations
+- miscellaneous other entities
+
+Please return the entities in the following JSON format:
+
+{
+"person": ["person1", "person2", ...],
+"organization": ["organization1", "organization2", ...],
+"location": ["location1", "location2", ...],
+"miscellaneous": ["miscellaneous1", "miscellaneous2", ...]
+}
+```
+
+</Accordion>
+
+</Step>
+
+<Step title="Collect your optimization data">
+
+<Tabs>
+
+<Tab title="TensorZero Dataset">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) of good examples for the `extract_entities` function you configured.
+You can create datapoints from historical inferences or external/synthetic datasets.
+
+```python
+from tensorzero import ListDatapointsRequest
+
+datapoints = t0.list_datapoints(
+    dataset_name="extract_entities_dataset",
+    request=ListDatapointsRequest(
+        function_name="extract_entities",
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=datapoints.datapoints,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+</Tab>
+
+<Tab title="Historical Inferences">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
+TensorZero automatically collects structured data about those inferences, which can later be used as training examples for DICL.
+
+You can curate good examples in multiple ways:
+
+- **Collecting demonstrations:** Collect demonstrations of good behavior (or labels) from human annotation or other sources.
+- **Filtering with metrics:** Query inferences that scored well on your metrics (e.g. `output_source="inference"` with a filter for high scores).
+- **Examples from an expensive model:** Run inferences with a powerful model (e.g. GPT-5) and use those outputs as demonstrations for a smaller model (e.g. GPT-5 Mini).
+
+<Tip>
+
+The performance of DICL degrades as the curated examples become noisier with bad behavior.
+There is a trade-off between dataset size and quality of datapoints.
+
+</Tip>
+
+For this example, we'll use demonstrations.
+You can submit demonstration feedback using the `demonstration` metric:
+
+```python
+t0.feedback(
+    metric_name="demonstration",
+    value=corrected_output,  # Provide the ideal output for that inference
+    inference_id=response.inference_id,
+)
+```
+
+Then, query inferences with `output_source="demonstration"` to get examples where the output has been corrected:
+
+```python
+from tensorzero import ListInferencesRequest
+
+inferences_response = t0.list_inferences(
+    request=ListInferencesRequest(
+        function_name="extract_entities",
+        output_source="demonstration",  # Retrieve demonstrations instead of historical outputs
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=inferences_response.inferences,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+<Step title="Configure DICL">
+
+Configure DICL by specifying the name of your function, variant, and embedding model.
+
+```python
+from tensorzero import DICLOptimizationConfig
+
+optimization_config = DICLOptimizationConfig(
+    function_name="extract_entities",
+    variant_name="dicl",
+    embedding_model="openai::text_embedding_3_small",
+    k=10,  # How many examples are retrieved and injected as context
+    model="openai::gpt-5-mini",  # LLM that will generate outputs using the retrieved examples
+)
+```
+
+You can also [define a custom embedding model in your configuration](/gateway/generate-embeddings#define-a-custom-embedding-model).
+
+<Tip>
+
+You should experiment with different choices of `k`.
+Typically values are 3-10, with smaller values when inputs tend to be larger.
+
+</Tip>
+
+</Step>
+
+<Step title="Launch DICL">
+
+You can now launch your DICL optimization job using the TensorZero Gateway:
+
+```python
+job_handle = t0.experimental_launch_optimization(
+    train_samples=rendered_samples,
+    optimization_config=optimization_config,
+)
+
+job_info = t0.experimental_poll_optimization(
+    job_handle=job_handle
+)
+```
+
+DICL will embed all your training samples and store them in ClickHouse.
+
+</Step>
+
+<Step title="Update your configuration">
+
+After optimization completes, add the DICL variant to your configuration:
+
+```toml title="tensorzero.toml"
+[functions.extract_entities.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "openai::text_embedding_3_small"
+k = 10
+model = "openai::gpt-5-mini"
+json_mode = "strict"
+```
+
+<Warning>
+
+The `embedding_model` in the configuration must match the embedding model you used during optimization.
+
+</Warning>
+
+That's it!
+At inference time, the DICL variant will retrieve the `k` most similar examples from your training data and include them as context for in-context learning.
+
+</Step>
+
+</Steps>
+
+<Tip>
+
+You can run experiments comparing your baseline and DICL variants using [adaptive A/B testing](/experimentation/run-adaptive-ab-tests).
+
+</Tip>
+
+## `DICLOptimizationConfig`
+
+Configure DICL optimization by creating a `DICLOptimizationConfig` object with the following parameters:
+
+### Required Parameters
+
+| Parameter         | Type  | Description                                  |
+| ----------------- | ----- | -------------------------------------------- |
+| `function_name`   | `str` | Name of the TensorZero function to optimize. |
+| `variant_name`    | `str` | Name to use for the DICL variant.            |
+| `embedding_model` | `str` | Name of the embedding model to use.          |
+
+### Optional Parameters
+
+| Parameter                     | Type   | Default                | Description                                                                                        |
+| ----------------------------- | ------ | ---------------------- | -------------------------------------------------------------------------------------------------- |
+| `k`                           | `int`  | `10`                   | Number of nearest neighbors to retrieve at inference time.                                         |
+| `model`                       | `str`  | `"openai::gpt-5-mini"` | Model to use for the DICL variant.                                                                 |
+| `dimensions`                  | `int`  | `None`                 | Embedding dimensions. If `None`, uses the embedding model's default.                               |
+| `batch_size`                  | `int`  | `128`                  | Batch size for embedding generation.                                                               |
+| `max_concurrency`             | `int`  | `10`                   | Maximum concurrent embedding requests.                                                             |
+| `append_to_existing_variants` | `bool` | `False`                | Whether to append to existing variants. If `False`, raises an error if the variant already exists. |
