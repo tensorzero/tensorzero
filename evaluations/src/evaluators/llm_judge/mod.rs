@@ -105,6 +105,7 @@ pub async fn run_llm_judge_evaluator(
         input: judge_input,
         stream: Some(false),
         include_original_response: false,
+        include_raw_usage: false,
         params: InferenceParams::default(),
         variant_name: None,
         dryrun: Some(false),
@@ -131,7 +132,7 @@ pub async fn run_llm_judge_evaluator(
         otlp_traces_extra_resources: HashMap::new(),
         api_key: None,
     };
-    let result = clients.tensorzero_client.inference(params).await?;
+    let result = clients.inference_executor.inference(params).await?;
     let response = match result {
         InferenceOutput::NonStreaming(response) => response,
         InferenceOutput::Streaming(..) => {
@@ -578,6 +579,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 variant_name: "foo".to_string(),
                 usage: Usage::default(),
+                raw_usage: None,
                 original_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
@@ -647,6 +649,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 variant_name: "foo".to_string(),
                 usage: Usage::default(),
+                raw_usage: None,
                 original_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
@@ -1042,6 +1045,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 variant_name: "model".to_string(),
                 usage: Usage::default(),
+                raw_usage: None,
                 original_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
@@ -1153,6 +1157,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 variant_name: "model".to_string(),
                 usage: Usage::default(),
+                raw_usage: None,
                 original_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),

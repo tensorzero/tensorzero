@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used)]
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -24,7 +24,8 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
-use crate::inference::types::{ContentBlock, FinishReason};
+use crate::inference::types::usage::{ApiType, RawUsageEntry};
+use crate::inference::types::{ContentBlock, FinishReason, Role};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -107,6 +108,7 @@ impl DummyProvider {
         &self,
         thinking_chunks: Vec<&'static str>,
         response_chunks: Vec<&'static str>,
+        model_inference_id: Uuid,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let thinking_chunks = thinking_chunks.into_iter().map(|chunk| {
             ContentBlockChunk::Thought(ThoughtChunk {
@@ -136,6 +138,7 @@ impl DummyProvider {
                     created,
                     content: vec![chunk],
                     usage: None,
+                    raw_usage: None,
                     raw_response: String::new(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     finish_reason: None,
@@ -145,6 +148,12 @@ impl DummyProvider {
                 created,
                 content: vec![],
                 usage: Some(self.get_model_usage(total_tokens)),
+                raw_usage: Some(vec![RawUsageEntry {
+                    model_inference_id,
+                    provider_type: "dummy".to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
+                }]),
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: String::new(),
                 latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
@@ -281,6 +290,7 @@ impl InferenceProvider for DummyProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id: _,
         }: ModelProviderRequest<'a>,
         _http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -568,6 +578,29 @@ impl InferenceProvider for DummyProvider {
             "llm_judge::false" => vec![r#"{"score": false}"#.to_string().into()],
             "llm_judge::zero" => vec![r#"{"score": 0}"#.to_string().into()],
             "llm_judge::one" => vec![r#"{"score": 1}"#.to_string().into()],
+            // Echo model: returns the text content of the last user message
+            "echo" => {
+                let text = request
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == Role::User)
+                    .and_then(|m| {
+                        m.content.iter().find_map(|block| {
+                            if let ContentBlock::Text(text_block) = block {
+                                Some(text_block.text.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .unwrap_or_default();
+                vec![ContentBlockOutput::Text(Text { text })]
+            }
+            // Empty model: always returns an empty string
+            "empty" => vec![ContentBlockOutput::Text(Text {
+                text: String::new(),
+            })],
             "llm_judge::error" => {
                 return Err(ErrorDetails::InferenceClient {
                     message: "Dummy error in inference".to_string(),
@@ -617,6 +650,12 @@ impl InferenceProvider for DummyProvider {
             system,
             input_messages,
             finish_reason,
+            raw_usage: Some(vec![RawUsageEntry {
+                model_inference_id: id,
+                provider_type: "dummy".to_string(),
+                api_type: ApiType::ChatCompletions,
+                data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
+            }]),
         })
     }
 
@@ -627,6 +666,7 @@ impl InferenceProvider for DummyProvider {
             provider_name: _,
             model_name: _,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
@@ -666,6 +706,7 @@ impl InferenceProvider for DummyProvider {
                 .create_streaming_reasoning_response(
                     DUMMY_STREAMING_THINKING.to_vec(),
                     DUMMY_STREAMING_RESPONSE.to_vec(),
+                    model_inference_id,
                 )
                 .await;
         }
@@ -674,12 +715,17 @@ impl InferenceProvider for DummyProvider {
                 .create_streaming_reasoning_response(
                     DUMMY_STREAMING_THINKING.to_vec(),
                     DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
+                    model_inference_id,
                 )
                 .await;
         }
         if self.model_name == "json" {
             return self
-                .create_streaming_reasoning_response(vec![], DUMMY_STREAMING_JSON_RESPONSE.to_vec())
+                .create_streaming_reasoning_response(
+                    vec![],
+                    DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
+                    model_inference_id,
+                )
                 .await;
         }
 
@@ -771,6 +817,7 @@ impl InferenceProvider for DummyProvider {
                         })
                     }],
                     usage: None,
+                    raw_usage: None,
                     finish_reason: None,
                     raw_response: chunk.to_string(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
@@ -782,6 +829,12 @@ impl InferenceProvider for DummyProvider {
             created,
             content: vec![],
             usage: Some(self.get_model_usage(content_chunk_len as u32)),
+            raw_usage: Some(vec![RawUsageEntry {
+                model_inference_id,
+                provider_type: "dummy".to_string(),
+                api_type: ApiType::ChatCompletions,
+                data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
+            }]),
             finish_reason,
             raw_response: String::new(),
             latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
@@ -904,6 +957,7 @@ impl EmbeddingProvider for DummyProvider {
             raw_response,
             usage,
             latency,
+            raw_usage: None,
         })
     }
 }

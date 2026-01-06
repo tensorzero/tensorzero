@@ -604,6 +604,22 @@ routing = ["good"]
 type = "dummy"
 model_name = "good"
 
+# Echo model: returns the input text (for exact_match testing)
+[models.echo]
+routing = ["echo"]
+
+[models.echo.providers.echo]
+type = "dummy"
+model_name = "echo"
+
+# Empty model: always returns empty string (for exact_match testing)
+[models.empty]
+routing = ["empty"]
+
+[models.empty.providers.empty]
+type = "dummy"
+model_name = "empty"
+
 [models.error]
 routing = ["error"]
 

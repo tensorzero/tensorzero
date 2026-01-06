@@ -196,6 +196,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     api_key_public_id: None,
                 },
                 relay: None,
+                include_raw_usage: false,
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_provider_api() {

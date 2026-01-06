@@ -29,7 +29,7 @@ use crate::tool_metadata::ToolMetadata;
 ///
 /// ```ignore
 /// use durable_tools::{TaskTool, ToolContext, ToolResult, ToolMetadata, async_trait};
-/// use schemars::{schema_for, JsonSchema, Schema};
+/// use schemars::JsonSchema;
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
 ///
@@ -46,6 +46,10 @@ use crate::tool_metadata::ToolMetadata;
 /// struct ResearchTool;
 ///
 /// impl ToolMetadata for ResearchTool {
+///     type SideInfo = ();
+///     type Output = ResearchResult;
+///     type LlmParams = ResearchParams;
+///
 ///     fn name() -> Cow<'static, str> {
 ///         Cow::Borrowed("research")
 ///     }
@@ -53,14 +57,7 @@ use crate::tool_metadata::ToolMetadata;
 ///     fn description() -> Cow<'static, str> {
 ///         Cow::Borrowed("Research a topic")
 ///     }
-///
-///     fn parameters_schema() -> ToolResult<Schema> {
-///         Ok(schema_for!(ResearchParams))
-///     }
-///
-///     type LlmParams = ResearchParams;
-///     type SideInfo = ();
-///     type Output = ResearchResult;
+///     // parameters_schema() is automatically derived from LlmParams
 /// }
 ///
 /// #[async_trait]
@@ -71,7 +68,7 @@ use crate::tool_metadata::ToolMetadata;
 ///         ctx: &mut ToolContext<'_>,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Call other tools
-///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic})).await?;
+///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null)).await?;
 ///
 ///         // Use checkpointed steps
 ///         let analysis = ctx
@@ -89,7 +86,7 @@ use crate::tool_metadata::ToolMetadata;
 ///
 /// ```ignore
 /// use durable_tools::{TaskTool, ToolContext, ToolResult, ToolMetadata, SideInfo, async_trait};
-/// use schemars::{schema_for, JsonSchema, Schema};
+/// use schemars::JsonSchema;
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
 ///
@@ -109,6 +106,10 @@ use crate::tool_metadata::ToolMetadata;
 /// struct GitHubSearchTool;
 ///
 /// impl ToolMetadata for GitHubSearchTool {
+///     type LlmParams = GitHubSearchParams;
+///     type SideInfo = GitHubCredentials;
+///     type Output = Vec<String>;
+///
 ///     fn name() -> Cow<'static, str> {
 ///         Cow::Borrowed("github_search")
 ///     }
@@ -116,14 +117,7 @@ use crate::tool_metadata::ToolMetadata;
 ///     fn description() -> Cow<'static, str> {
 ///         Cow::Borrowed("Search GitHub")
 ///     }
-///
-///     fn parameters_schema() -> ToolResult<Schema> {
-///         Ok(schema_for!(GitHubSearchParams))  // Only LlmParams in schema
-///     }
-///
-///     type LlmParams = GitHubSearchParams;
-///     type SideInfo = GitHubCredentials;
-///     type Output = Vec<String>;
+///     // parameters_schema() is automatically derived from LlmParams
 /// }
 ///
 /// #[async_trait]

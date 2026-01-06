@@ -375,6 +375,18 @@ weight = 0
 model = "json"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+[functions.best_of_n.variants.openai_variant0]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n.variants.openai_variant1]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
 [functions.best_of_n.variants.best_of_n_variant]
 type = "experimental_best_of_n_sampling"
 weight = 1
@@ -382,6 +394,15 @@ candidates = ["variant0", "variant1"]
 
 [functions.best_of_n.variants.best_of_n_variant.evaluator]
 model = "gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n.variants.best_of_n_variant_openai]
+type = "experimental_best_of_n_sampling"
+weight = 0
+candidates = ["openai_variant0", "openai_variant1"]
+
+[functions.best_of_n.variants.best_of_n_variant_openai.evaluator]
+model = "gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.best_of_n_variant_extra_body]
@@ -598,38 +619,6 @@ type = "chat_completion"
 model = "openai::gpt-4o-mini"
 system_template = "../../../fixtures/config/functions/multi_hop_rag_agent/baseline/system_template.txt"
 
-[functions.write_haiku]
-type = "chat"
-user_schema = "../../../fixtures/config/functions/write_haiku/user_schema.json"
-
-[functions.write_haiku.variants.gpt_4o_mini]
-type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
-system_template = "../../../fixtures/config/functions/write_haiku/initial_prompt/system_template.minijinja"
-user_template = "../../../fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
-
-[functions.write_haiku.variants.aws_bedrock]
-weight = 0
-type = "chat_completion"
-model = "claude-3-haiku-20240307-aws-bedrock"
-user_template = "../../../fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
-
-[functions.extract_entities]
-type = "json"
-output_schema = "../../../fixtures/config/functions/extract_entities/output_schema.json"
-
-[functions.extract_entities.variants.gpt_4o_mini]
-type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
-system_template = "../../../fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
-json_mode = "strict"
-
-[functions.extract_entities.variants.dummy_error]
-type = "chat_completion"
-model = "dummy::error"
-system_template = "../../../fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
-json_mode = "strict"
-
 [functions.mixture_of_n_json_repeated]
 type = "json"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
@@ -721,13 +710,6 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 retries = { num_retries = 4, max_delay_s = 10 }
-
-[functions.image_judger]
-type = "chat"
-
-[functions.image_judger.variants.honest_answer]
-type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
 
 [functions.openai_responses_gpt5]
 type = "chat"

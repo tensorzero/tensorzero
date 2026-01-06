@@ -8,7 +8,8 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
+use crate::inference::types::usage::raw_usage_entries_from_value;
+use crate::inference::types::{ApiType, ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::inference::types::{
     Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, batch::StartBatchProviderInferenceResponse,
@@ -22,8 +23,10 @@ use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
+use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
+use uuid::Uuid;
 
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, SystemOrDeveloper, get_chat_url,
@@ -139,6 +142,7 @@ impl InferenceProvider for HyperbolicProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -209,6 +213,7 @@ impl InferenceProvider for HyperbolicProvider {
                 raw_response,
                 raw_request,
                 generic_request: request,
+                model_inference_id,
             }
             .try_into()?)
         } else {
@@ -239,6 +244,7 @@ impl InferenceProvider for HyperbolicProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -277,6 +283,7 @@ impl InferenceProvider for HyperbolicProvider {
 
         let stream = stream_openai(
             PROVIDER_TYPE.to_string(),
+            model_inference_id,
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
             None,
@@ -427,6 +434,7 @@ struct HyperbolicResponseWithMetadata<'a> {
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -438,6 +446,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
             raw_response,
             raw_request,
             generic_request,
+            model_inference_id,
         } = value;
 
         if response.choices.len() != 1 {
@@ -453,7 +462,6 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
             .into());
         }
 
-        let usage = response.usage.into();
         let OpenAIResponseChoice {
             message,
             finish_reason,
@@ -477,6 +485,15 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
             }
         }
 
+        let raw_usage = hyperbolic_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -487,11 +504,19 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_request,
                 raw_response: raw_response.clone(),
                 usage,
+                raw_usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
+                id: model_inference_id,
             },
         ))
     }
+}
+
+fn hyperbolic_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 #[cfg(test)]
@@ -631,6 +656,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response: ProviderInferenceResponse =
             hyperbolic_response_with_metadata.try_into().unwrap();

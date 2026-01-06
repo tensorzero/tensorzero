@@ -1,7 +1,7 @@
 import { BaseTensorZeroClient } from "./base-client";
 import type {
   Event,
-  CreateEventRequest,
+  CreateEventGatewayRequest,
   CreateEventResponse,
   ListEventsParams,
   ListEventsResponse,
@@ -61,7 +61,7 @@ export class AutopilotClient extends BaseTensorZeroClient {
    */
   async createAutopilotEvent(
     sessionId: string,
-    request: CreateEventRequest,
+    request: CreateEventGatewayRequest,
   ): Promise<CreateEventResponse> {
     const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events`;
     const response = await this.fetch(endpoint, {

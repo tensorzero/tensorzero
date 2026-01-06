@@ -1,0 +1,6 @@
+[functions.image_judger]
+type = "chat"
+
+[functions.image_judger.variants.honest_answer]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"

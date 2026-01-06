@@ -11,6 +11,7 @@ use http_body::{Frame, SizeHint};
 use metrics::Label;
 use tracing::{Level, Span};
 use tracing_futures::Instrument;
+use uuid::Uuid;
 
 use crate::observability::overhead_timing::{
     OverheadSpanExt, TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME,
@@ -145,7 +146,7 @@ impl http_body::Body for GuardBodyWrapper {
 /// See the `inference` route handler for an example of how to use this.
 #[derive(Clone)]
 pub struct HttpMetricData {
-    /// Extra labels to add to the `tensorzero_inference_latency_overhead_seconds` histogram metric.
+    /// Extra labels to add to the `tensorzero_inference_latency_overhead_seconds` metric.
     /// We currently use this to attach `function_name`, `variant_name`, and `model_name` labels
     /// when recording the overhead of `/inference` requests
     pub extra_overhead_labels: Vec<Label>,
@@ -177,6 +178,9 @@ pub async fn request_logging_middleware(
         None
     };
 
+    // Generate a random ID so that we can associate log lines with this request
+    let request_id = Uuid::now_v7();
+
     let span = if let Some(latency_span) = &latency_span {
         tracing::info_span!(
             target: "gateway",
@@ -185,6 +189,7 @@ pub async fn request_logging_middleware(
             method = %request.method(),
             uri = %request.uri(),
             version = ?request.version(),
+            request_id = %request_id,
         )
     } else {
         tracing::info_span!(
@@ -193,6 +198,7 @@ pub async fn request_logging_middleware(
             method = %request.method(),
             uri = %request.uri(),
             version = ?request.version(),
+            request_id = %request_id,
         )
     };
     span.in_scope(|| {

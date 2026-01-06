@@ -1,4 +1,4 @@
-#![allow(clippy::print_stderr, clippy::print_stdout, clippy::unwrap_used)]
+#![expect(clippy::print_stdout, clippy::unwrap_used)]
 use std::time::{Duration, Instant};
 
 use reqwest::Client;
@@ -101,35 +101,36 @@ async fn test_prometheus_metrics_inference_helper(stream: bool) {
 
     println!("Metrics: {metrics:#?}");
 
+    // Histogram metrics with default buckets [0.001, 0.01, 0.1]
     assert_eq!(
         metrics[r#"tensorzero_inference_latency_overhead_seconds_count{function_name="tensorzero::default",variant_name="dummy::slow"}"#],
         count.to_string()
     );
 
-    let pct_50 = metrics[r#"tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="dummy::slow",quantile="0.5"}"#]
+    // Verify histogram sum is reasonable (> 1ms but < 200ms, excluding the 5-second model sleep)
+    let sum = metrics[r#"tensorzero_inference_latency_overhead_seconds_sum{function_name="tensorzero::default",variant_name="dummy::slow"}"#]
         .parse::<f64>()
         .unwrap();
     assert!(
-        pct_50 > 0.001,
-        "50th percentile overhead should be greater than 1ms"
+        sum > 0.001,
+        "Histogram sum should be greater than 1ms, got {sum}s"
     );
     // We have observability disabled, so we expect the overhead to be low (even though this is a debug build)
     // Notably, it does *not* include the 5-second sleep in the 'dummy::slow' model
     // This test can be slow on CI, so we give a generous 200ms margin
-    assert!(
-        pct_50 < 0.2,
-        "Unexpectedly high 50th percentile overhead: {pct_50}s"
-    );
+    assert!(sum < 0.2, "Unexpectedly high histogram sum: {sum}s");
 
-    // Histogram metric should not be reported
-    assert!(
-        !metrics.keys().any(|k| k.contains("histogram")),
-        "Histogram metric should not be reported, but found: {:#?}",
-        metrics
-            .keys()
-            .filter(|k| k.contains("histogram"))
-            .collect::<Vec<_>>()
-    );
+    // Verify default buckets are present
+    let expected_buckets = ["0.001", "0.01", "0.1", "+Inf"];
+    for bucket in expected_buckets {
+        let key = format!(
+            r#"tensorzero_inference_latency_overhead_seconds_bucket{{function_name="tensorzero::default",variant_name="dummy::slow",le="{bucket}"}}"#
+        );
+        assert!(
+            metrics.contains_key(&key),
+            "Expected bucket with le=\"{bucket}\" not found"
+        );
+    }
 }
 
 #[tokio::test]
@@ -140,7 +141,7 @@ async fn test_prometheus_metrics_custom_histogram_buckets() {
 observability.enabled = false
 
 [gateway.metrics]
-tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.0001, 1.0, 10]
+tensorzero_inference_latency_overhead_seconds_buckets = [0.0001, 1.0, 10]
 ",
         None,
     )
@@ -177,15 +178,14 @@ tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.0001, 1.0, 
 
     for bucket in expected_buckets {
         let key = format!(
-            r#"tensorzero_inference_latency_overhead_seconds_histogram_bucket{{function_name="tensorzero::default",variant_name="dummy::slow",le="{bucket}"}}"#
+            r#"tensorzero_inference_latency_overhead_seconds_bucket{{function_name="tensorzero::default",variant_name="dummy::slow",le="{bucket}"}}"#
         );
         assert!(
             metrics.contains_key(&key),
             "Expected bucket with le=\"{bucket}\" not found in metrics. Available keys: {:#?}",
             metrics
                 .keys()
-                .filter(|k| k
-                    .contains("tensorzero_inference_latency_overhead_seconds_histogram_bucket"))
+                .filter(|k| k.contains("tensorzero_inference_latency_overhead_seconds_bucket"))
                 .collect::<Vec<_>>()
         );
 
@@ -197,17 +197,8 @@ tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.0001, 1.0, 
         );
     }
 
-    // Quantile metrics should still be reported
-    let pct_50 = metrics[r#"tensorzero_inference_latency_overhead_seconds{function_name="tensorzero::default",variant_name="dummy::slow",quantile="0.5"}"#]
-        .parse::<f64>()
-        .unwrap();
-    assert!(
-        pct_50 > 0.001,
-        "50th percentile overhead should be greater than 1ms"
-    );
-
     // Verify that the count metric exists
-    let count_key = r#"tensorzero_inference_latency_overhead_seconds_histogram_count{function_name="tensorzero::default",variant_name="dummy::slow"}"#;
+    let count_key = r#"tensorzero_inference_latency_overhead_seconds_count{function_name="tensorzero::default",variant_name="dummy::slow"}"#;
     assert!(
         metrics.contains_key(count_key),
         "Expected count metric not found"
@@ -215,7 +206,7 @@ tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.0001, 1.0, 
     assert_eq!(metrics[count_key], "1");
 
     // Verify that the sum metric exists
-    let sum_key = r#"tensorzero_inference_latency_overhead_seconds_histogram_sum{function_name="tensorzero::default",variant_name="dummy::slow"}"#;
+    let sum_key = r#"tensorzero_inference_latency_overhead_seconds_sum{function_name="tensorzero::default",variant_name="dummy::slow"}"#;
     assert!(
         metrics.contains_key(sum_key),
         "Expected sum metric not found"
@@ -224,7 +215,7 @@ tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.0001, 1.0, 
     assert!(sum > 0.0, "Sum should be greater than 0");
 
     // The latency should be between 0.0001 and 1 second
-    let target_bucket = metrics[r#"tensorzero_inference_latency_overhead_seconds_histogram_bucket{function_name="tensorzero::default",variant_name="dummy::slow",le="1"}"#]
+    let target_bucket = metrics[r#"tensorzero_inference_latency_overhead_seconds_bucket{function_name="tensorzero::default",variant_name="dummy::slow",le="1"}"#]
     .parse::<f64>()
     .unwrap();
     assert_eq!(target_bucket, 1.0, "Target bucket should have one entry");
@@ -303,18 +294,16 @@ model = "dummy::slow"
         count.to_string()
     );
 
-    let pct_50 = metrics[r#"tensorzero_inference_latency_overhead_seconds{function_name="multi_variant",quantile="0.5"}"#]
+    // Verify histogram sum is reasonable (> 1ms but < 200ms, excluding the 5-second model sleep)
+    let sum = metrics[r#"tensorzero_inference_latency_overhead_seconds_sum{function_name="multi_variant"}"#]
         .parse::<f64>()
         .unwrap();
     assert!(
-        pct_50 > 0.001,
-        "50th percentile overhead should be greater than 1ms"
+        sum > 0.001,
+        "Histogram sum should be greater than 1ms, got {sum}s"
     );
     // We have observability disabled, so we expect the overhead to be low (even though this is a debug build)
     // Notably, it does *not* include the 5-second sleep in the 'dummy::slow' model
     // This test can be slow on CI, so we give a generous 200ms margin
-    assert!(
-        pct_50 < 0.2,
-        "Unexpectedly high 50th percentile overhead: {pct_50}s"
-    );
+    assert!(sum < 0.2, "Unexpectedly high histogram sum: {sum}s");
 }

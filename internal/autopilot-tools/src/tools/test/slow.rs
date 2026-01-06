@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the slow tool (visible to LLM).
@@ -34,6 +34,7 @@ pub struct SlowTool;
 impl ToolMetadata for SlowTool {
     type SideInfo = ();
     type Output = SlowToolOutput;
+    type LlmParams = SlowToolParams;
 
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("slow")
@@ -44,12 +45,6 @@ impl ToolMetadata for SlowTool {
             "Sleeps for the specified duration before returning. Used for testing timeout behavior.",
         )
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(SlowToolParams))
-    }
-
-    type LlmParams = SlowToolParams;
 }
 
 #[async_trait]

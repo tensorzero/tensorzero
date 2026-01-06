@@ -12,6 +12,7 @@ required-features = ["e2e_tests"]
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
+async-trait = { workspace = true }
 clap = { workspace = true }
 url = { workspace = true }
 tracing = { workspace = true }
@@ -24,6 +25,9 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
 indicatif = "0.18.2"
+durable = { workspace = true }
+rand = { workspace = true }
+sqlx.workspace = true
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }

@@ -187,7 +187,7 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
+    # Keep this running to make `check-docker-compose.sh` detect that all containers are healthy
     command:
       [
         "bash",
