@@ -1160,6 +1160,14 @@ jobs:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
 
+  publish-dev-docker-hub-images:
+    permissions:
+      contents: read
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    uses: ./.github/workflows/docker-hub-publish.yml
+    with:
+      is_dev: true
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
@@ -1180,6 +1188,7 @@ jobs:
         build-gateway-e2e-container,
         build-mock-provider-api-container,
         mocked-batch-tests,
+        publish-dev-docker-hub-images,
         minikube,
         rust-build,
         rust-test,

@@ -4,10 +4,15 @@ name: Publish docker images
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      is_dev:
+        description: 'Whether to use -dev suffix for container names'
+        type: boolean
+        required: false
+        default: true
   release:
     types: [released]
-  push:
-    branches: ["main"]
 
 env:
   DOCKERHUB_USER: tensorzero
@@ -25,14 +30,14 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: linux/arm64
         container:
-          # Set the container name to a '-dev' name when this workflow is invoked by a push event
+          # Set the container name to a '-dev' name when this workflow is invoked by workflow_call with is_dev=true
           # Otherwise, use the unsuffixed name (which will be invoked by a release or manual dispatch)
           # Unfortunately, we can't use 'env' in 'strategy.matrix'
-          - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
+          - name: ${{ inputs.is_dev && 'ui-dev' || 'ui' }}
             path: ui
-          - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
+          - name: ${{ inputs.is_dev && 'gateway-dev' || 'gateway' }}
             path: gateway
-          - name: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
+          - name: ${{ inputs.is_dev && 'evaluations-dev' || 'evaluations' }}
             path: evaluations
 
     permissions:
@@ -101,9 +106,9 @@ jobs:
     strategy:
       matrix:
         container:
-          - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
-          - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
-          - name: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
+          - name: ${{ inputs.is_dev && 'ui-dev' || 'ui' }}
+          - name: ${{ inputs.is_dev && 'gateway-dev' || 'gateway' }}
+          - name: ${{ inputs.is_dev && 'evaluations-dev' || 'evaluations' }}
     runs-on: ubuntu-latest
     needs:
       - build
@@ -133,7 +138,7 @@ jobs:
             latest=false
           tags: |
             type=ref,event=tag,
-            type=sha,format=long,enable=${{ github.event_name == 'push' }}
+            type=sha,format=long,enable=${{ inputs.is_dev }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.prerelease == false }}
 
       - name: Create manifest list and push
