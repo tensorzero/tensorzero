@@ -21,7 +21,8 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::Input;
 use tensorzero_core::client::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams, InferenceOutput,
-    InferenceParams, InferenceResponse, input_handling::resolved_input_to_client_input,
+    InferenceParams, InferenceResponse, PostgresConfig,
+    input_handling::resolved_input_to_client_input,
 };
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::endpoints::datasets::v1::{
@@ -172,7 +173,7 @@ pub async fn run_evaluation(
         }
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
-            postgres_url,
+            postgres_config: postgres_url.map(PostgresConfig::Url),
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
             verify_credentials: true,
