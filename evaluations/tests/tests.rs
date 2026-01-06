@@ -4,9 +4,9 @@
 )]
 mod common;
 use clap::Parser;
-use evaluations::Clients;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
 use evaluations::stopping::MIN_DATAPOINTS;
+use evaluations::{ClientInferenceExecutor, Clients};
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{Input, InputMessage, InputMessageContent};
@@ -521,9 +521,12 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
     // Test: Both datapoint_ids and max_datapoints provided should fail
     let core_args = EvaluationCoreArgs {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse,
         evaluation_config,
         function_configs,
@@ -1695,8 +1698,9 @@ async fn test_run_llm_judge_evaluator_chat() {
     .build()
     .await
     .unwrap();
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: get_clickhouse().await,
     });
     let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
@@ -1872,8 +1876,9 @@ async fn test_run_llm_judge_evaluator_chat() {
 async fn test_run_llm_judge_evaluator_json() {
     init_tracing_for_tests();
     let tensorzero_client = get_tensorzero_client().await;
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: get_clickhouse().await,
     });
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
@@ -2744,8 +2749,11 @@ async fn test_evaluation_with_dynamic_variant() {
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
     let core_args = EvaluationCoreArgs {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse,
         evaluation_config,
         function_configs,
@@ -2805,9 +2813,12 @@ async fn test_max_datapoints_parameter() {
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
+
     // Test with max_datapoints = 3 (should only process 3 datapoints)
     let core_args = EvaluationCoreArgs {
-        tensorzero_client: tensorzero_client.clone(),
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
         evaluation_config,
         function_configs,
@@ -2884,6 +2895,9 @@ async fn test_precision_targets_parameter() {
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
+
     // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10
     // topic_starts_with_f: CI half-width <= 0.13
@@ -2892,7 +2906,7 @@ async fn test_precision_targets_parameter() {
     precision_targets.insert("topic_starts_with_f".to_string(), 0.13);
 
     let core_args = EvaluationCoreArgs {
-        tensorzero_client: tensorzero_client.clone(),
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
         evaluation_config,
         function_configs,

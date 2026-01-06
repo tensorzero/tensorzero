@@ -268,6 +268,7 @@ export * from "./ResolvedTomlPathData";
 export * from "./ResolvedTomlPathDirectory";
 export * from "./RetryConfig";
 export * from "./Role";
+export * from "./RunEvaluationRequest";
 export * from "./SGLangProvider";
 export * from "./SchemaData";
 export * from "./SchemaWithMetadata";

@@ -132,7 +132,7 @@ pub async fn run_llm_judge_evaluator(
         otlp_traces_extra_resources: HashMap::new(),
         api_key: None,
     };
-    let result = clients.tensorzero_client.inference(params).await?;
+    let result = clients.inference_executor.inference(params).await?;
     let response = match result {
         InferenceOutput::NonStreaming(response) => response,
         InferenceOutput::Streaming(..) => {

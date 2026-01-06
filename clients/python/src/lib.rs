@@ -12,8 +12,8 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use evaluations::{
-    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
-    run_evaluation_core_streaming,
+    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationFunctionConfig,
+    EvaluationFunctionConfigTable, EvaluationVariant, run_evaluation_core_streaming,
 };
 use futures::StreamExt;
 use pyo3::{
@@ -1488,8 +1488,11 @@ impl TensorZeroGateway {
             .collect();
         let function_configs = Arc::new(function_configs);
 
+        // Wrap the client in ClientInferenceExecutor for use with evaluations
+        let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
+
         let core_args = EvaluationCoreArgs {
-            tensorzero_client: client.clone(),
+            inference_executor,
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
             evaluation_config,
             function_configs,
@@ -2743,8 +2746,11 @@ impl AsyncTensorZeroGateway {
                 .collect();
             let function_configs = Arc::new(function_configs);
 
+            // Wrap the client in ClientInferenceExecutor for use with evaluations
+            let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
+
             let core_args = EvaluationCoreArgs {
-                tensorzero_client: client.clone(),
+                inference_executor,
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
                 evaluation_config,
                 function_configs,
