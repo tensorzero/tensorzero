@@ -176,6 +176,9 @@ function summarizeEvent(event: Event): EventSummary {
         };
       }
       return {};
+    case "error":
+      // TODO: handle errors
+      return {};
     case "other":
       return {};
     default:
@@ -278,7 +281,9 @@ function renderEventTitle(event: Event) {
             "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
           );
       }
-
+    case "error":
+      // TODO: handle errors better
+      return "Error";
     case "other":
       return (
         <span className="inline-flex items-center gap-2">
