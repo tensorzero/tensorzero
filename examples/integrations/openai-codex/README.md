@@ -8,7 +8,7 @@ Why?
   [Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/anthropic),
   [AWS Bedrock](https://www.tensorzero.com/docs/gateway/guides/providers/aws-bedrock),
   [AWS SageMaker](https://www.tensorzero.com/docs/gateway/guides/providers/aws-sagemaker),
-  [Azure OpenAI Service](https://www.tensorzero.com/docs/gateway/guides/providers/azure),
+  [Azure](https://www.tensorzero.com/docs/gateway/guides/providers/azure),
   [DeepSeek](https://www.tensorzero.com/docs/gateway/guides/providers/deepseek),
   [Fireworks](https://www.tensorzero.com/docs/gateway/guides/providers/fireworks),
   [GCP Vertex AI Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic),
