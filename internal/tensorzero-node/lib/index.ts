@@ -1,14 +1,6 @@
 import { createRequire } from "module";
-import type {
-  LaunchOptimizationWorkflowParams,
-  OptimizationJobHandle,
-  OptimizationJobInfo,
-  KeyInfo,
-} from "./bindings";
-import type {
-  TensorZeroClient as NativeTensorZeroClientType,
-  PostgresClient as NativePostgresClientType,
-} from "../index";
+import type { KeyInfo } from "./bindings";
+import type { PostgresClient as NativePostgresClientType } from "../index";
 
 // Re-export types from bindings
 export type * from "./bindings";
@@ -17,65 +9,8 @@ export { createLogger } from "./utils/logger";
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
 
-const {
-  TensorZeroClient: NativeTensorZeroClient,
-  PostgresClient: NativePostgresClient,
-  getQuantiles,
-} = require("../index.cjs") as typeof import("../index");
-
-// Wrapper class for type safety and convenience
-// since the interface is string in string out
-// In each method we stringify the params and return the result as a string from the
-// Rust codebase.
-// However, since we generate types with TS-RS `pnpm build-bindings` we can
-// just parse the JSON and it should be type safe to use the types we generated.
-export class TensorZeroClient {
-  private nativeClient: NativeTensorZeroClientType;
-
-  constructor(client: NativeTensorZeroClientType) {
-    this.nativeClient = client;
-  }
-
-  static async buildHttp(gatewayUrl: string): Promise<TensorZeroClient> {
-    const nativeClient = await NativeTensorZeroClient.buildHttp(gatewayUrl);
-    return new TensorZeroClient(nativeClient);
-  }
-
-  async experimentalLaunchOptimizationWorkflow(
-    params: LaunchOptimizationWorkflowParams,
-  ): Promise<OptimizationJobHandle> {
-    const paramsString = safeStringify(params);
-    const jobHandleString =
-      await this.nativeClient.experimentalLaunchOptimizationWorkflow(
-        paramsString,
-      );
-    return JSON.parse(jobHandleString) as OptimizationJobHandle;
-  }
-
-  async experimentalPollOptimization(
-    jobHandle: OptimizationJobHandle,
-  ): Promise<OptimizationJobInfo> {
-    const jobHandleString = safeStringify(jobHandle);
-    const statusString =
-      await this.nativeClient.experimentalPollOptimization(jobHandleString);
-    return JSON.parse(statusString) as OptimizationJobInfo;
-  }
-}
-
-export default TensorZeroClient;
-
-// Export quantiles array from migration_0035
-export { getQuantiles };
-
-function safeStringify(obj: unknown) {
-  try {
-    return JSON.stringify(obj, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    );
-  } catch {
-    return "null";
-  }
-}
+const { PostgresClient: NativePostgresClient } =
+  require("../index.cjs") as typeof import("../index");
 
 /**
  * Wrapper class for type safety and convenience

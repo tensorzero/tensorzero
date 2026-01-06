@@ -20,11 +20,6 @@ pub const QUANTILES: &[f64] = &[
     0.992, 0.993, 0.994, 0.995, 0.996, 0.997, 0.998, 0.999,
 ];
 
-/// Programmatic length of the quantile set.
-pub const fn quantiles_len() -> usize {
-    QUANTILES.len()
-}
-
 /// Join quantiles into a comma-separated list suitable for ClickHouse,
 /// e.g. "0.001, 0.005, 0.01, ..., 0.999".
 pub fn quantiles_sql_args() -> String {

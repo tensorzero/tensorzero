@@ -1,14 +1,14 @@
-import { TensorZeroClient } from "tensorzero-node";
 import { describe, it } from "vitest";
+import { TensorZeroClient } from "../tensorzero/tensorzero";
 import { createFilters } from "./client";
 
 const gatewayUrl = process.env.TENSORZERO_GATEWAY_URL;
 if (!gatewayUrl) {
   throw new Error("TENSORZERO_GATEWAY_URL is not set");
 }
-const client = await TensorZeroClient.buildHttp(gatewayUrl);
+const client = new TensorZeroClient(gatewayUrl);
 
-describe("native sft", () => {
+describe("sft via HTTP client", () => {
   // NOTE: This test hits a fake server so you can run it anytime without paying OpenAI
   it("should launch a job and poll it", async () => {
     const metric = "exact_match";

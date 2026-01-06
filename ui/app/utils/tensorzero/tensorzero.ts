@@ -59,6 +59,9 @@ import type {
   GetWorkflowEvaluationRunStatisticsResponse,
   GetWorkflowEvaluationRunsResponse,
   InferenceCountByVariant,
+  LaunchOptimizationWorkflowParams,
+  OptimizationJobHandle,
+  OptimizationJobInfo,
   InferenceCountResponse,
   InferenceWithFeedbackCountResponse,
   LatestFeedbackIdByMetricResponse,
@@ -1789,6 +1792,57 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     } finally {
       reader.releaseLock();
     }
+  }
+
+  /**
+   * Launches an experimental optimization workflow.
+   * @param params - The optimization workflow parameters
+   * @returns A promise that resolves with the job handle (opaque base64-encoded string)
+   * @throws Error if the request fails
+   */
+  async experimentalLaunchOptimizationWorkflow(
+    params: LaunchOptimizationWorkflowParams,
+  ): Promise<OptimizationJobHandle> {
+    const response = await this.fetch("/experimental_optimization_workflow", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    const encodedJobHandle = await response.text();
+
+    // TODO(shuyangli): We should avoid decoding the job handle, but the UI needs to decode
+    // it for the job URL from the provider.
+    const decoded = Buffer.from(encodedJobHandle, "base64url").toString(
+      "utf-8",
+    );
+    return JSON.parse(decoded) as OptimizationJobHandle;
+  }
+
+  /**
+   * Polls for the status of an experimental optimization job.
+   * @param jobHandle - The opaque job handle string returned from experimentalLaunchOptimizationWorkflow
+   * @returns A promise that resolves with the optimization job info
+   * @throws Error if the request fails
+   */
+  async experimentalPollOptimization(
+    jobHandle: OptimizationJobHandle,
+  ): Promise<OptimizationJobInfo> {
+    const encodedJobHandle = Buffer.from(JSON.stringify(jobHandle)).toString(
+      "base64url",
+    );
+    const response = await this.fetch(
+      `/experimental_optimization/${encodeURIComponent(encodedJobHandle)}`,
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as OptimizationJobInfo;
   }
 }
 
