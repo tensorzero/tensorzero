@@ -203,55 +203,20 @@ impl From<SerializableToolError> for TaskError {
             SerializableToolError::ChildCancelled { step_name } => {
                 TaskError::ChildCancelled { step_name }
             }
-            SerializableToolError::ToolNotFound { name } => TaskError::User {
-                message: format!("Tool not found: {name}"),
-                error_data: serde_json::json!({
-                    "kind": "tool_not_found",
-                    "name": name,
-                }),
-            },
-            SerializableToolError::DuplicateToolName { name } => TaskError::User {
-                message: format!("Tool '{name}' is already registered"),
-                error_data: serde_json::json!({
-                    "kind": "duplicate_tool_name",
-                    "name": name,
-                }),
-            },
-            SerializableToolError::InvalidParams { message } => TaskError::User {
-                message: format!("Parameter error: {message}"),
-                error_data: serde_json::json!({
-                    "kind": "invalid_params",
-                    "message": message,
-                }),
-            },
-            SerializableToolError::SchemaGeneration { message, .. } => TaskError::User {
-                message: format!("Schema generation failed: {message}"),
-                error_data: serde_json::json!({
-                    "kind": "schema_generation",
-                    "message": message,
-                }),
-            },
-            SerializableToolError::InvalidConfiguration { reason } => TaskError::User {
-                message: format!("Invalid configuration: {reason}"),
-                error_data: serde_json::json!({
-                    "kind": "invalid_configuration",
-                    "reason": reason,
-                }),
-            },
-            SerializableToolError::ReservedHeaderPrefix { key } => TaskError::User {
-                message: format!("Header key '{key}' uses reserved prefix 'durable::'"),
-                error_data: serde_json::json!({
-                    "kind": "reserved_header_prefix",
-                    "key": key,
-                }),
-            },
-            SerializableToolError::InvalidEventName { reason } => TaskError::User {
-                message: format!("Invalid event name: {reason}"),
-                error_data: serde_json::json!({
-                    "kind": "invalid_event_name",
-                    "reason": reason,
-                }),
-            },
+            // For all other variants, use the Serialize impl to generate error_data
+            other => {
+                let error_data = serde_json::to_value(&other).unwrap_or_else(|e| {
+                    serde_json::json!({
+                        "kind": "error_serialization_failed",
+                        "serialization_error": e.to_string(),
+                    })
+                });
+                let message = other.to_string();
+                TaskError::User {
+                    message,
+                    error_data,
+                }
+            }
         }
     }
 }
