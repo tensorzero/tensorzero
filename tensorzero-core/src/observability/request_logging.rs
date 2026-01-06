@@ -190,6 +190,7 @@ pub async fn request_logging_middleware(
             uri = %request.uri(),
             version = ?request.version(),
             request_id = %request_id,
+            x_amzn_trace_id = tracing::field::Empty,
         )
     } else {
         tracing::info_span!(
@@ -199,8 +200,16 @@ pub async fn request_logging_middleware(
             uri = %request.uri(),
             version = ?request.version(),
             request_id = %request_id,
+            x_amzn_trace_id = tracing::field::Empty,
         )
     };
+    if let Some(x_amzn_trace_id) = request
+        .headers()
+        .get("x-amzn-trace-id")
+        .and_then(|h| h.to_str().ok())
+    {
+        span.record("x_amzn_trace_id", x_amzn_trace_id);
+    }
     span.in_scope(|| {
         tracing::debug!("started processing request");
     });
