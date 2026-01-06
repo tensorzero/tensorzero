@@ -235,7 +235,7 @@ model_name = "mock-finetune-1234"
       .click();
 
     // Select a GCP model from the default list
-    const modelInput = page.getByPlaceholder("Select model...");
+    const modelInput = page.getByPlaceholder("Select model");
     await modelInput.click();
     await page.getByRole("option", { name: "gemini-2.5-flash-lite" }).click();
 
