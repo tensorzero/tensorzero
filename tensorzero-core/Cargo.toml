@@ -99,7 +99,8 @@ opentelemetry-otlp = { version = "0.31.0", features = [
     "tls-roots",
 ] }
 opentelemetry-semantic-conventions = "0.31.0"
-init-tracing-opentelemetry = "0.34.0"
+# TODO - switch back to a released version once https://github.com/davidB/tracing-opentelemetry-instrumentation-sdk/pull/309 is merged
+init-tracing-opentelemetry = { git = "https://github.com/Aaron1011/tracing-opentelemetry-instrumentation-sdk", rev = "c240499e464c2c787dedda2b870ae50747a95e6f" }
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
     "http",
