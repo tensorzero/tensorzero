@@ -9,13 +9,26 @@ You can run GEPA using TensorZero to optimize the prompt templates of any [Tenso
 GEPA works by repeatedly sampling prompt templates, running evaluations, having an LLM analyze what went well or poorly, and then having an LLM mutate the prompt template based on that analysis.
 Mutated templates that improve on the evaluation metrics define a Pareto frontier and can be sampled at later iterations for further refinement.
 
+## When should you use GEPA?
+
+GEPA is particularly useful if you have high-quality inference evaluations to optimize against.
+
+| Criterion            | Impact   | Details                                                    |
+| -------------------- | -------- | ---------------------------------------------------------- |
+| Complexity           | Moderate | Requires inference evaluation and prompt templates         |
+| Data Efficiency      | High     | Achieves good results with limited data                    |
+| Optimization Ceiling | Moderate | Limited to static prompt improvements                      |
+| Optimization Cost    | Moderate | Requires many evaluation runs                              |
+| Inference Cost       | Low      | Generated prompt templates tend to be longer than original |
+| Inference Latency    | Low      | Generated prompt templates tend to be longer than original |
+
+## Optimize your prompt templates with GEPA
+
 <Tip>
 
 You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/optimization/gepa/) of this guide on GitHub.
 
 </Tip>
-
-## Optimize your prompt templates with GEPA
 
 <Steps>
 
@@ -68,29 +81,6 @@ Please return the entities in the following JSON format:
 
 <Tabs>
 
-<Tab title="Historical Inferences">
-
-After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
-TensorZero automatically collects structured data about those inferences, which can later be used as training examples for GEPA.
-
-```python
-from tensorzero import ListInferencesRequest
-
-inferences_response = t0.list_inferences(
-    request=ListInferencesRequest(
-        function_name="extract_entities",
-        output_source="inference",
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=inferences_response.inferences,
-    variants={"extract_entities": "baseline"},
-)
-```
-
-</Tab>
-
 <Tab title="TensorZero Dataset">
 
 After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) for the `extract_entities` function you configured.
@@ -108,6 +98,29 @@ datapoints = t0.list_datapoints(
 
 rendered_samples = t0.experimental_render_samples(
     stored_samples=datapoints.datapoints,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+</Tab>
+
+<Tab title="Historical Inferences">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
+TensorZero automatically collects structured data about those inferences, which can later be used as training examples for GEPA.
+
+```python
+from tensorzero import ListInferencesRequest
+
+inferences_response = t0.list_inferences(
+    request=ListInferencesRequest(
+        function_name="extract_entities",
+        output_source="inference",
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=inferences_response.inferences,
     variants={"extract_entities": "baseline"},
 )
 ```
@@ -384,26 +397,68 @@ You can roll out your new variants with confidence using [adaptive A/B testing](
 
 Configure GEPA optimization by creating a `GEPAConfig` object with the following parameters:
 
-### Required Parameters
+{/* Required Parameters */}
 
-| Parameter         | Type  | Description                                                                      |
-| ----------------- | ----- | -------------------------------------------------------------------------------- |
-| `function_name`   | `str` | Name of the TensorZero function to optimize.                                     |
-| `evaluation_name` | `str` | Name of the evaluation used to score candidate variants.                         |
-| `analysis_model`  | `str` | Model used to analyze inference results (e.g. `"anthropic::claude-sonnet-4-5"`). |
-| `mutation_model`  | `str` | Model used to generate prompt mutations (e.g. `"anthropic::claude-sonnet-4-5"`). |
+<ParamField body="analysis_model" type="str" required>
+  Model used to analyze inference results (e.g.
+  `"anthropic::claude-sonnet-4-5"`).
+</ParamField>
 
-### Optional Parameters
+<ParamField body="evaluation_name" type="str" required>
+  Name of the evaluation used to score candidate variants.
+</ParamField>
 
-| Parameter                        | Type          | Default      | Description                                                                                                                                                                             |
-| -------------------------------- | ------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `initial_variants`               | `list[str]`   | All variants | List of variant names to initialize GEPA with. If not specified, uses all variants defined for the function.                                                                            |
-| `variant_prefix`                 | `str`         | `None`       | Prefix for naming newly generated variants.                                                                                                                                             |
-| `batch_size`                     | `int`         | `5`          | Number of training samples to analyze per iteration.                                                                                                                                    |
-| `max_iterations`                 | `int`         | `1`          | Maximum number of optimization iterations.                                                                                                                                              |
-| `max_concurrency`                | `int`         | `10`         | Maximum number of concurrent inference calls.                                                                                                                                           |
-| `seed`                           | `int`         | `None`       | Random seed for reproducibility.                                                                                                                                                        |
-| `timeout`                        | `int`         | `300`        | Client timeout in seconds for TensorZero gateway operations.                                                                                                                            |
-| `include_inference_for_mutation` | `bool`        | `True`       | Whether to include inference input/output in the analysis passed to the mutation model. Useful for few-shot examples but can cause context overflow with long conversations or outputs. |
-| `retries`                        | `RetryConfig` | `None`       | Retry configuration for inference calls during optimization.                                                                                                                            |
-| `max_tokens`                     | `int`         | `None`       | Maximum tokens for analysis and mutation model calls. Required for Anthropic models.                                                                                                    |
+<ParamField body="function_name" type="str" required>
+  Name of the TensorZero function to optimize.
+</ParamField>
+
+<ParamField body="mutation_model" type="str" required>
+  Model used to generate prompt mutations (e.g.
+  `"anthropic::claude-sonnet-4-5"`).
+</ParamField>
+
+{/* Optional Parameters */}
+
+<ParamField body="batch_size" type="int" default={5}>
+  Number of training samples to analyze per iteration.
+</ParamField>
+
+<ParamField body="include_inference_for_mutation" type="bool" default={true}>
+  Whether to include inference input/output in the analysis passed to the
+  mutation model. Useful for few-shot examples but can cause context overflow
+  with long conversations or outputs.
+</ParamField>
+
+<ParamField body="initial_variants" type="list[str]">
+  List of variant names to initialize GEPA with. If not specified, uses all
+  variants defined for the function.
+</ParamField>
+
+<ParamField body="max_concurrency" type="int" default={10}>
+  Maximum number of concurrent inference calls.
+</ParamField>
+
+<ParamField body="max_iterations" type="int" default={1}>
+  Maximum number of optimization iterations.
+</ParamField>
+
+<ParamField body="max_tokens" type="int">
+  Maximum tokens for analysis and mutation model calls. Required for Anthropic
+  models.
+</ParamField>
+
+<ParamField body="retries" type="RetryConfig">
+  Retry configuration for inference calls during optimization.
+</ParamField>
+
+<ParamField body="seed" type="int">
+  Random seed for reproducibility.
+</ParamField>
+
+<ParamField body="timeout" type="int" default={300}>
+  Client timeout in seconds for TensorZero gateway operations.
+</ParamField>
+
+<ParamField body="variant_prefix" type="str">
+  Prefix for naming newly generated variants.
+</ParamField>
