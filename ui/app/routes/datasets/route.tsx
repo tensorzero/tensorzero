@@ -9,7 +9,6 @@ import {
 } from "~/components/layout/PageLayout";
 import { DatasetsActions } from "./DatasetsActions";
 import { logger } from "~/utils/logger";
-import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader() {
@@ -33,9 +32,9 @@ export async function action({ request }: Route.ActionArgs) {
     if (typeof datasetName !== "string") {
       throw data("Dataset name is required", { status: 400 });
     }
-    const client = await getNativeTensorZeroClient();
-    const staleDataset = await client.staleDataset(datasetName);
-    return staleDataset;
+    const client = await getTensorZeroClient();
+    const deleteDatasetResponse = await client.deleteDataset(datasetName);
+    return deleteDatasetResponse;
   }
   return null;
 }

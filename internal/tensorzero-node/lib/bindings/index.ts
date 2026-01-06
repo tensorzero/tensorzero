@@ -144,6 +144,7 @@ export * from "./GetInferencesResponse";
 export * from "./GetModelInferencesResponse";
 export * from "./GetModelLatencyResponse";
 export * from "./GetModelUsageResponse";
+export * from "./GetVariantSamplingProbabilitiesResponse";
 export * from "./GetWorkflowEvaluationProjectCountResponse";
 export * from "./GetWorkflowEvaluationProjectsResponse";
 export * from "./GetWorkflowEvaluationRunEpisodesWithFeedbackResponse";
