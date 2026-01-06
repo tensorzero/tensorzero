@@ -41,7 +41,7 @@ pub struct Event {
 }
 
 /// The UX-relevant status of the Autopilot.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS, PartialEq)]
 #[ts(export)]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum AutopilotStatus {
