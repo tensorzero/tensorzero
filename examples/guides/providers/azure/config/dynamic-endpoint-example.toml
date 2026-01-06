@@ -8,9 +8,9 @@ type = "azure"
 deployment_id = "gpt-4o"
 
 # Option 1: Environment variable endpoint
-# endpoint = "env::AZURE_OPENAI_API_BASE"
+# endpoint = "env::AZURE_API_BASE"
 # Option 2: Dynamic endpoint - resolved at runtime from request credentials
-endpoint = "dynamic::AZURE_OPENAI_API_BASE"
+endpoint = "dynamic::azure_api_base"
 # Option 3: Static endpoint (current way)
 # endpoint = "https://your-endpoint.openai.azure.com"
 

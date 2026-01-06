@@ -26,21 +26,15 @@ if [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
     exit 1
 fi
 
-export AZURE_OPENAI_API_BASE=$(buildkite-agent secret get AZURE_OPENAI_API_BASE)
-if [ -z "$AZURE_OPENAI_API_BASE" ]; then
-    echo "Error: AZURE_OPENAI_API_BASE is not set"
+export AZURE_API_BASE=$(buildkite-agent secret get AZURE_API_BASE)
+if [ -z "$AZURE_API_BASE" ]; then
+    echo "Error: AZURE_API_BASE is not set"
     exit 1
 fi
 
 export AZURE_API_KEY=$(buildkite-agent secret get AZURE_API_KEY)
 if [ -z "$AZURE_API_KEY" ]; then
-    export AZURE_OPENAI_API_KEY=$(buildkite-agent secret get AZURE_OPENAI_API_KEY)
-    if [ -z "$AZURE_OPENAI_API_KEY" ]; then
-        echo "Warning: Neither AZURE_API_KEY nor AZURE_OPENAI_API_KEY is set. Azure tests will be skipped."
-    else
-        echo "Warning: Using deprecated AZURE_OPENAI_API_KEY. Please use AZURE_API_KEY instead."
-    fi
-fi
+    echo "Error: AZURE_API_KEY is not set"
     exit 1
 fi
 
@@ -53,12 +47,6 @@ fi
 export AZURE_AI_FOUNDRY_API_KEY=$(buildkite-agent secret get AZURE_AI_FOUNDRY_API_KEY)
 if [ -z "$AZURE_AI_FOUNDRY_API_KEY" ]; then
     echo "Error: AZURE_AI_FOUNDRY_API_KEY is not set"
-    exit 1
-fi
-
-export AZURE_OPENAI_DEPLOYMENT_ID=$(buildkite-agent secret get AZURE_OPENAI_DEPLOYMENT_ID)
-if [ -z "$AZURE_OPENAI_DEPLOYMENT_ID" ]; then
-    echo "Error: AZURE_OPENAI_DEPLOYMENT_ID is not set"
     exit 1
 fi
 

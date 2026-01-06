@@ -9,10 +9,9 @@ use std::{
 
 use crate::{
     config::{
-        provider_types::{AzureDefaults, ProviderTypesConfig},
-        skip_credential_validation,
-        e2e_skip_credential_validation, provider_types::ProviderTypesConfig,
-        skip_credential_validation, with_skip_credential_validation,
+        e2e_skip_credential_validation, provider_types::AzureDefaults,
+        provider_types::ProviderTypesConfig, skip_credential_validation,
+        with_skip_credential_validation,
     },
     error::{Error, ErrorDetails},
     model::{
@@ -694,7 +693,7 @@ fn load_credential_with_fallback(
             if *location_with_fallback == azure_default && env::var("AZURE_OPENAI_API_KEY").is_ok()
             {
                 tracing::warn!(
-                    "Deprecation Warning: The environment variable `AZURE_OPENAI_API_KEY` is deprecated \
+                    "Deprecation Warning (#5530 / 2026.4+): The environment variable `AZURE_OPENAI_API_KEY` is deprecated \
                     and will be removed in a future release. Please set `AZURE_API_KEY` instead."
                 );
             }

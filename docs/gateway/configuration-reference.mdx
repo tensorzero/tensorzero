@@ -796,7 +796,7 @@ You only need to set the `deployment_id` and `endpoint` fields.
 - **Type:** string or object
 - **Required:** no (default: `env::AZURE_API_KEY` unless set otherwise in `provider_type.azure.defaults.api_key_location`)
 
-Defines the location of the API key for the Azure OpenAI provider.
+Defines the location of the API key for the Azure provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
@@ -819,9 +819,9 @@ api_key_location = "dynamic::azure_api_key"
 - **Type:** string
 - **Required:** yes
 
-Defines the deployment ID of the Azure OpenAI deployment.
+Defines the deployment ID of the Azure deployment.
 
-See <a href="https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models" target="_blank">Azure OpenAI's documentation</a> for the list of available models.
+See <a href="https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models" target="_blank">Azure AI's documentation</a> for the list of available models.
 
 ```toml title="tensorzero.toml"
 [models.gpt-4o-mini.providers.azure]
@@ -836,7 +836,7 @@ deployment_id = "gpt4o-mini-20240718"
 - **Type:** string
 - **Required:** yes
 
-Defines the endpoint of the Azure OpenAI deployment (protocol and hostname).
+Defines the endpoint of the Azure deployment (protocol and hostname).
 
 ```toml title="tensorzero.toml"
 [models.gpt-4o-mini.providers.azure]

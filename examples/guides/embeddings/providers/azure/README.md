@@ -1,4 +1,4 @@
-# Guide: How to use Azure OpenAI Service embedding models with TensorZero
+# Guide: How to use Azure embedding models with TensorZero
 
 ## Running the Example
 

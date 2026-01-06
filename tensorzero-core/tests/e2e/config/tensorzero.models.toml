@@ -71,7 +71,7 @@ routing = ["azure"]
 type = "azure"
 deployment_id = "gpt4o-mini-20240718"
 endpoint = "https://t0-azure-openai-east.openai.azure.com"
-api_key_location = "dynamic::azure_openai_api_key"
+api_key_location = "dynamic::azure_api_key"
 
 [models."llama-3.3-70b-instruct-azure"]
 routing = ["azure"]

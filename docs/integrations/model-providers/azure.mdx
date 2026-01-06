@@ -1,14 +1,14 @@
 ---
-title: Getting Started with Azure OpenAI Service & Azure AI Foundry
+title: Getting Started with Azure
 sidebarTitle: Azure
-description: "Learn how to use TensorZero with Azure OpenAI Service and Azure AI Foundry LLMs: open-source gateway, observability, optimization, evaluations, and experimentation."
+description: "Learn how to use TensorZero with Azure: open-source gateway, observability, optimization, evaluations, and experimentation."
 ---
 
 TensorZero's `azure` provider supports both **Azure OpenAI Service** and **Azure AI Foundry**. Both use the same OpenAI-compatible API, so configuration is nearly identical—just use different endpoint URLs.
 
-This guide shows how to set up a minimal deployment to use the TensorZero Gateway with Azure OpenAI Service and Azure AI Foundry.
+This guide shows how to set up a minimal deployment to use the TensorZero Gateway with Azure.
 
-## Azure OpenAI Service
+## Azure
 
 ### Setup
 
@@ -108,7 +108,7 @@ curl -X POST http://localhost:3000/inference \
 
 #### Generate embeddings
 
-The Azure OpenAI Service model provider supports generating embeddings.
+The Azure model provider supports generating embeddings.
 You can find a [complete code example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/embeddings/providers/azure).
 
 #### Azure AI Foundry
@@ -117,7 +117,7 @@ Azure AI Foundry provides access to models from multiple providers (Meta Llama, 
 
 The same `azure` provider works with Azure AI Foundry.
 The key difference is the endpoint URL.
-All other configuration options (credentials, Docker Compose, inference) work the same as Azure OpenAI Service above.
+All other configuration options (credentials, Docker Compose, inference) work the same as Azure above.
 
 ## Call the OpenAI Responses API with Azure
 

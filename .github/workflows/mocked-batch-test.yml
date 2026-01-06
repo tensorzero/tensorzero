@@ -6,9 +6,7 @@ env:
   AWS_ACCESS_KEY_ID: "fake_aws_access_key"
   AWS_REGION: "us-east-1"
   AWS_SECRET_ACCESS_KEY: "fake_aws_secret_key"
-  AZURE_OPENAI_API_BASE: "https://fake.openai.azure.com"
-  AZURE_OPENAI_API_KEY: "fake_azure_openai_key"
-  AZURE_OPENAI_DEPLOYMENT_ID: "fake_deployment_id"
+  AZURE_API_KEY: "fake_deployment_id"
   DEEPSEEK_API_KEY: "fake_deepseek_key"
   FIREWORKS_API_KEY: "fake_fireworks_key"
   FORCE_COLOR: 1
