@@ -15,11 +15,9 @@ use std::sync::Arc;
 use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
 use tensorzero_core::endpoints::TensorzeroAuthMiddlewareState;
 use tensorzero_core::observability::TracerWrapper;
+use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
-use tower_http::{
-    decompression::RequestDecompressionLayer,
-    metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter},
-};
+use tower_http::decompression::RequestDecompressionLayer;
 
 /// Builds the final Axum router for the gateway,
 /// which can be passed to `axum::serve` to start the server.
@@ -28,7 +26,7 @@ pub fn build_axum_router(
     otel_tracer: Option<Arc<TracerWrapper>>,
     app_state: AppStateData,
     metrics_handle: PrometheusHandle,
-) -> (Router, InFlightRequestsCounter) {
+) -> (Router, InFlightRequestsData) {
     let api_routes = build_api_routes(otel_tracer, metrics_handle);
     // The path was just `/` (or multiple slashes)
     let mut router = if base_path.is_empty() {
@@ -36,8 +34,6 @@ pub fn build_axum_router(
     } else {
         Router::new().nest(base_path, api_routes)
     };
-
-    let (in_flight_requests_layer, in_flight_requests_counter) = InFlightRequestsLayer::pair();
 
     router = router.fallback(endpoints::fallback::handle_404);
 
@@ -53,22 +49,25 @@ pub fn build_axum_router(
             tensorzero_auth::middleware::tensorzero_auth_middleware,
         ));
     }
+
+    let in_flight_requests_data =
+        tensorzero_core::observability::request_logging::InFlightRequestsData::new();
     // Everything added from this point onwards does *NOT* have authentication applied - that is,
     // it wraps the authentication middleware
     // increase the default body limit from 2MB to 100MB
     let final_router = router
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
-        .layer(axum::middleware::from_fn(
-            tensorzero_core::observability::request_logging::request_logging_middleware,
-        ))
         // Accept encoded requests and transparently decompress them.
         // Supported encodings: gzip, br, zstd.
         .layer(RequestDecompressionLayer::new())
         // This should always be the very last layer in the stack, so that we start counting as soon as we begin processing a request
-        .layer(in_flight_requests_layer)
+        .layer(axum::middleware::from_fn_with_state(
+            in_flight_requests_data.clone(),
+            tensorzero_core::observability::request_logging::request_logging_middleware,
+        ))
         .with_state(app_state.clone());
-    (final_router, in_flight_requests_counter)
+    (final_router, in_flight_requests_data)
 }
 
 /// Routes that should not require authentication

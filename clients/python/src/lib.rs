@@ -12,8 +12,8 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use evaluations::{
-    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
-    run_evaluation_core_streaming,
+    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationFunctionConfig,
+    EvaluationFunctionConfigTable, EvaluationVariant, run_evaluation_core_streaming,
 };
 use futures::StreamExt;
 use pyo3::{
@@ -69,8 +69,8 @@ use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
     ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
     InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
-    Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    ListInferencesParams, OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference,
+    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -677,7 +677,7 @@ impl TensorZeroGateway {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
-            postgres_url,
+            postgres_config: postgres_url.map(PostgresConfig::Url),
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -1488,8 +1488,11 @@ impl TensorZeroGateway {
             .collect();
         let function_configs = Arc::new(function_configs);
 
+        // Wrap the client in ClientInferenceExecutor for use with evaluations
+        let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
+
         let core_args = EvaluationCoreArgs {
-            tensorzero_client: client.clone(),
+            inference_executor,
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
             evaluation_config,
             function_configs,
@@ -1881,7 +1884,7 @@ impl AsyncTensorZeroGateway {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
-            postgres_url,
+            postgres_config: postgres_url.map(PostgresConfig::Url),
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -2743,8 +2746,11 @@ impl AsyncTensorZeroGateway {
                 .collect();
             let function_configs = Arc::new(function_configs);
 
+            // Wrap the client in ClientInferenceExecutor for use with evaluations
+            let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
+
             let core_args = EvaluationCoreArgs {
-                tensorzero_client: client.clone(),
+                inference_executor,
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
                 evaluation_config,
                 function_configs,
