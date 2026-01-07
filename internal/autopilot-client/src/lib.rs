@@ -54,6 +54,6 @@ pub use types::{
     InputMessageContent, ListEventsParams, ListEventsResponse, ListSessionsParams,
     ListSessionsResponse, ObjectStoragePointer, OptimizationWorkflowSideInfo, RawText, Role,
     Session, StatusUpdate, StreamEventsParams, Template, Text, Thought, ToolCallAuthorization,
-    ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper, ToolOutcome, Unknown,
+    ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper, ToolOutcome, ToolResult, Unknown,
     UrlFile,
 };
