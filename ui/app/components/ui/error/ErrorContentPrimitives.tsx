@@ -68,11 +68,15 @@ export function TroubleshootingSection({
   );
 }
 
-interface InlineCodeProps {
+interface ErrorInlineCodeProps {
   children: React.ReactNode;
 }
 
-export function InlineCode({ children }: InlineCodeProps) {
+/**
+ * Inline code styling for dark-themed error dialogs.
+ * Uses neutral-800 background for visibility against dark backgrounds.
+ */
+export function ErrorInlineCode({ children }: ErrorInlineCodeProps) {
   return (
     <code className="rounded bg-neutral-800 px-1 py-0.5 font-mono text-xs">
       {children}

@@ -12,7 +12,7 @@ import {
 import {
   ErrorContentCard,
   ErrorContentHeader,
-  InlineCode,
+  ErrorInlineCode,
   StackTraceContent,
   TroubleshootingSection,
 } from "./ErrorContentPrimitives";
@@ -57,8 +57,8 @@ function GatewayUnavailableContent() {
       <TroubleshootingSection heading="Troubleshooting steps:">
         <>Ensure the Gateway is running and accessible</>
         <>
-          Verify the <InlineCode>TENSORZERO_GATEWAY_URL</InlineCode> environment
-          variable
+          Verify the <ErrorInlineCode>TENSORZERO_GATEWAY_URL</ErrorInlineCode>{" "}
+          environment variable
         </>
         <>Check for network connectivity issues</>
       </TroubleshootingSection>
@@ -76,7 +76,8 @@ function GatewayAuthContent() {
       />
       <TroubleshootingSection>
         <>
-          Verify <InlineCode>TENSORZERO_API_KEY</InlineCode> is set correctly
+          Verify <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode> is set
+          correctly
         </>
         <>Ensure the API key has not expired or been revoked</>
         <>Check Gateway logs for authentication details</>
@@ -117,7 +118,8 @@ function ClickHouseContent({ message }: { message?: string }) {
       <TroubleshootingSection>
         <>Verify ClickHouse is running and accessible</>
         <>
-          Check the <InlineCode>CLICKHOUSE_URL</InlineCode> environment variable
+          Check the <ErrorInlineCode>CLICKHOUSE_URL</ErrorInlineCode>{" "}
+          environment variable
         </>
         <>Review Gateway logs for connection details</>
       </TroubleshootingSection>

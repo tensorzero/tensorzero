@@ -19,11 +19,7 @@ import {
   checkAutopilotAvailable,
 } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
-import {
-  ErrorBoundaryLayout,
-  ErrorContent,
-  ErrorDialog,
-} from "./components/ui/error";
+import { ErrorContent, ErrorDialog } from "./components/ui/error";
 import {
   BoundaryErrorType,
   isBoundaryErrorData,
@@ -230,29 +226,26 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const [open, setOpen] = React.useState(true);
 
   // Client 404s (page not found in React Router) - show inline, not modal
-  // This is the only error type that doesn't use the modal pattern
   if (isRouteErrorResponse(error) && error.status === 404) {
     // Ensure this is actually a client 404, not a gateway route not found
     if (!isBoundaryErrorData(error.data)) {
       return (
-        <ErrorBoundaryLayout>
-          <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
-            <h1 className="text-4xl font-bold">404</h1>
-            <p className="text-muted-foreground">
-              The requested page could not be found.
-            </p>
-          </main>
-        </ErrorBoundaryLayout>
+        <main className="bg-background flex min-h-screen flex-col items-center justify-center gap-4 p-8">
+          <h1 className="text-4xl font-bold">404</h1>
+          <p className="text-muted-foreground">
+            The requested page could not be found.
+          </p>
+        </main>
       );
     }
   }
 
-  // All other errors use the dismissible modal pattern
+  // All other errors use the dismissible modal pattern on a simple dark background
   const classified = classifyError(error);
   const label = getErrorLabel(classified.type);
 
   return (
-    <ErrorBoundaryLayout>
+    <div className="bg-background flex min-h-screen items-center justify-center">
       <ErrorDialog
         open={open}
         onDismiss={() => setOpen(false)}
@@ -261,7 +254,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       >
         <ErrorContent error={classified} />
       </ErrorDialog>
-    </ErrorBoundaryLayout>
+    </div>
   );
 }
 
