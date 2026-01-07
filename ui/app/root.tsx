@@ -145,9 +145,6 @@ export default function App({ loaderData }: Route.ComponentProps) {
   );
 }
 
-/**
- * Classifies an error into a BoundaryErrorType for consistent handling.
- */
 function classifyError(error: unknown): {
   type: BoundaryErrorType;
   message?: string;
@@ -206,9 +203,6 @@ function classifyError(error: unknown): {
   return { type: BoundaryErrorType.ServerError, message };
 }
 
-/**
- * Renders the appropriate error content based on error type.
- */
 function ErrorContent({
   type,
   message,
@@ -230,24 +224,14 @@ function ErrorContent({
     case BoundaryErrorType.ClickHouseConnection:
       return <ClickHouseErrorContent message={message} />;
     case BoundaryErrorType.ServerError:
-    default:
       return <ServerErrorContent status={status} message={message} />;
+    default: {
+      const _exhaustiveCheck: never = type;
+      return <ServerErrorContent status={status} message={message} />;
+    }
   }
 }
 
-/**
- * Root error boundary that provides a consistent, dismissible error experience.
- *
- * Design principles:
- * - Keeps the sidebar visible so users can navigate even when errors occur
- * - Shows errors in a modal overlay that can be dismissed
- * - Provides actionable troubleshooting guidance
- * - Uses enum-based error typing for reliable classification
- *
- * Error handling:
- * - Client 404s (page not found): inline display, not modal
- * - All other errors: dismissible modal overlay
- */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const [open, setOpen] = React.useState(true);
 
@@ -272,6 +256,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   // All other errors use the dismissible modal pattern
   const classified = classifyError(error);
   const status = isRouteErrorResponse(error) ? error.status : undefined;
+  const label = getErrorLabel(classified.type);
 
   return (
     <ErrorBoundaryLayout>
@@ -279,6 +264,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         open={open}
         onDismiss={() => setOpen(false)}
         onReopen={() => setOpen(true)}
+        label={label}
       >
         <ErrorContent
           type={classified.type}
@@ -289,4 +275,23 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </ErrorDialog>
     </ErrorBoundaryLayout>
   );
+}
+
+function getErrorLabel(type: BoundaryErrorType): string {
+  switch (type) {
+    case BoundaryErrorType.GatewayUnavailable:
+      return "Connection Error";
+    case BoundaryErrorType.GatewayAuthFailed:
+      return "Auth Error";
+    case BoundaryErrorType.RouteNotFound:
+      return "Route Error";
+    case BoundaryErrorType.ClickHouseConnection:
+      return "Database Error";
+    case BoundaryErrorType.ServerError:
+      return "Server Error";
+    default: {
+      const _exhaustiveCheck: never = type;
+      return "Server Error";
+    }
+  }
 }

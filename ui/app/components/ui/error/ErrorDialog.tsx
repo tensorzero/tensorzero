@@ -13,6 +13,7 @@ interface ErrorDialogProps {
   open: boolean;
   onDismiss: () => void;
   onReopen: () => void;
+  label?: string;
 }
 
 /**
@@ -25,6 +26,7 @@ export function ErrorDialog({
   open,
   onDismiss,
   onReopen,
+  label = "Error",
 }: ErrorDialogProps) {
   const dismissed = !open;
 
@@ -54,10 +56,10 @@ export function ErrorDialog({
         <Button
           onClick={onReopen}
           variant="destructive"
-          className="fixed right-4 bottom-4 z-50 shadow-lg"
+          className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-full shadow-lg"
           slotLeft={<span className="h-2 w-2 rounded-full bg-white" />}
         >
-          Error
+          {label}
         </Button>
       )}
     </>
