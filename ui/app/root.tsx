@@ -20,7 +20,11 @@ import {
 } from "./utils/config/index.server";
 import { AlertTriangle } from "lucide-react";
 import { AppSidebar } from "./components/layout/app.sidebar";
-import { ErrorContent, ErrorDialog } from "./components/ui/error";
+import {
+  RootErrorBoundaryLayout,
+  ErrorContent,
+  ErrorDialog,
+} from "./components/ui/error";
 import {
   ErrorContentCard,
   ErrorContentHeader,
@@ -178,17 +182,14 @@ function classifyError(error: unknown): ClassifiedError {
     }
   }
 
-  // Gateway connection error
   if (isGatewayConnectionError(error)) {
     return { type: BoundaryErrorType.GatewayUnavailable };
   }
 
-  // Authentication error
   if (isAuthenticationError(error)) {
     return { type: BoundaryErrorType.GatewayAuthFailed };
   }
 
-  // Route not found error
   if (isRouteNotFoundError(error)) {
     const errorMessage = extractErrorMessage(error);
     const routeMatch = errorMessage.match(/Route not found: (\w+) (.+)/);
@@ -198,13 +199,11 @@ function classifyError(error: unknown): ClassifiedError {
     return { type: BoundaryErrorType.RouteNotFound, routeInfo };
   }
 
-  // ClickHouse error
   if (isClickHouseError(error)) {
     const message = error instanceof Error ? error.message : undefined;
     return { type: BoundaryErrorType.ClickHouseConnection, message };
   }
 
-  // Default: server error
   const message = isRouteErrorResponse(error)
     ? error.statusText || undefined
     : error instanceof Error
@@ -250,12 +249,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     }
   }
 
-  // All other errors use the dismissible modal pattern on a simple dark background
+  // All other errors use the dismissible modal pattern with sidebar visible
   const classified = classifyError(error);
   const label = getErrorLabel(classified.type);
 
   return (
-    <div className="bg-background flex min-h-screen items-center justify-center">
+    <RootErrorBoundaryLayout>
       <ErrorDialog
         open={open}
         onDismiss={() => setOpen(false)}
@@ -264,7 +263,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       >
         <ErrorContent error={classified} />
       </ErrorDialog>
-    </div>
+    </RootErrorBoundaryLayout>
   );
 }
 

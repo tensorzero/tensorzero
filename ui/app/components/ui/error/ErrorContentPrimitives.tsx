@@ -18,8 +18,8 @@ interface ErrorContentCardProps {
 
 /**
  * Container card for error content.
- * - dark: dark background for modal overlay
- * - light: standard card with border for content area
+ * - light: standard card with border for content area (default)
+ * - dark: for modal overlay (e.g., root error boundary for gateway/auth failures)
  */
 export function ErrorContentCard({
   children,
@@ -152,9 +152,6 @@ interface ErrorInlineCodeProps {
   variant?: ErrorStyle;
 }
 
-/**
- * Inline code styling for error messages.
- */
 export function ErrorInlineCode({
   children,
   variant = ErrorStyle.Dark,
@@ -176,9 +173,6 @@ interface StackTraceContentProps {
   variant?: ErrorStyle;
 }
 
-/**
- * Scrollable stack trace display.
- */
 export function StackTraceContent({
   stack,
   variant = ErrorStyle.Dark,
@@ -204,9 +198,6 @@ interface SimpleErrorContentProps {
   variant?: ErrorStyle;
 }
 
-/**
- * Simple message content for errors without troubleshooting steps.
- */
 export function SimpleErrorContent({
   message,
   variant = ErrorStyle.Dark,

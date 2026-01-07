@@ -31,10 +31,6 @@ interface RouteErrorContentProps {
   error: unknown;
 }
 
-/**
- * Light-themed error display for route-level errors.
- * Renders within the content area, preserving sidebar visibility.
- */
 export function RouteErrorContent({ error }: RouteErrorContentProps) {
   const { title, message, status } = extractErrorInfo(error);
 
