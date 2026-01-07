@@ -80,7 +80,7 @@ pub struct UnknownChunk {
     pub provider_name: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ChatInferenceResultChunk {
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
@@ -93,7 +93,7 @@ pub struct ChatInferenceResultChunk {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct JsonInferenceResultChunk {
     pub raw: Option<String>,
     pub thought: Option<String>,
@@ -129,6 +129,13 @@ impl InferenceResultChunk {
         }
     }
 
+    pub fn set_usage(&mut self, usage: Option<Usage>) {
+        match self {
+            InferenceResultChunk::Chat(chunk) => chunk.usage = usage,
+            InferenceResultChunk::Json(chunk) => chunk.usage = usage,
+        }
+    }
+
     pub fn raw_usage(&self) -> Option<&Vec<RawUsageEntry>> {
         match self {
             InferenceResultChunk::Chat(chunk) => chunk.raw_usage.as_ref(),
@@ -147,6 +154,13 @@ impl InferenceResultChunk {
         match self {
             InferenceResultChunk::Chat(chunk) => chunk.finish_reason.as_ref(),
             InferenceResultChunk::Json(chunk) => chunk.finish_reason.as_ref(),
+        }
+    }
+
+    pub fn set_finish_reason(&mut self, finish_reason: Option<FinishReason>) {
+        match self {
+            InferenceResultChunk::Chat(chunk) => chunk.finish_reason = finish_reason,
+            InferenceResultChunk::Json(chunk) => chunk.finish_reason = finish_reason,
         }
     }
 
@@ -236,6 +250,10 @@ pub struct CollectChunksArgs {
     pub fetch_and_encode_input_files_before_inference: bool,
     /// Pre-generated model inference ID for streaming (to match raw_usage entries)
     pub model_inference_id: Uuid,
+    /// The final (aggregated) `Usage` we streamed to the client
+    pub usage: Usage,
+    /// The final `FinishReason` we streamed to the client
+    pub finish_reason: Option<FinishReason>,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -263,6 +281,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         extra_body,
         extra_headers,
         model_inference_id,
+        usage,
+        finish_reason,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -287,10 +307,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
             .collect::<Vec<&str>>()
             .join("\n")
     });
-    // `usage` is `None` until we receive a chunk with usage information
-    let mut usage: Option<Usage> = None;
     // Collect raw_usage entries from chunks (relay or provider streaming)
-    let mut raw_usage_entries: Option<Vec<RawUsageEntry>> = None;
+    let mut raw_usage: Option<Vec<RawUsageEntry>> = None;
     let response_time = value
         .last()
         .ok_or_else(|| {
@@ -301,8 +319,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
             })
         })?
         .latency();
-    // We'll take the finish reason from the last chunk
-    let mut finish_reason: Option<FinishReason> = None;
 
     // Maps a chunk id to a map of summary ids to summary texts
     // This is used to build up a thought summary list for each thought,
@@ -319,28 +335,13 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     })?;
 
     for chunk in value {
-        if let Some(chunk_usage) = chunk.usage() {
-            // `usage` will be `None` if this is the first chunk with usage information....
-            if usage.is_none() {
-                // ... so initialize it to zero ...
-                usage = Some(Usage::zero());
-            }
-            // ...and then add the chunk usage to it (handling `None` fields)
-            if let Some(ref mut u) = usage {
-                u.sum_strict(chunk_usage);
-            }
-        }
-        // Accumulate raw_usage entries from relay or synthesized streams
         if let Some(chunk_raw_usage) = chunk.raw_usage() {
-            raw_usage_entries
+            raw_usage
                 .get_or_insert_with(Vec::new)
                 .extend(chunk_raw_usage.iter().cloned());
         }
         match chunk {
             InferenceResultChunk::Chat(chunk) => {
-                if let Some(chunk_finish_reason) = chunk.finish_reason {
-                    finish_reason = Some(chunk_finish_reason);
-                }
                 for content in chunk.content {
                     match content {
                         ContentBlockChunk::Text(text) => {
@@ -537,9 +538,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                 }
             }
             InferenceResultChunk::Json(chunk) => {
-                if let Some(chunk_finish_reason) = chunk.finish_reason {
-                    finish_reason = Some(chunk_finish_reason);
-                }
                 match blocks.get_mut(&(ContentBlockOutputType::Text, String::new())) {
                     // If there is already a text block, append to it
                     Some(ContentBlockOutput::Text(Text {
@@ -594,9 +592,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         input_messages,
         raw_request,
         raw_response,
-        // `usage` will be None if we don't see usage in any chunks, in which case we take the default value (fields as `None`)
-        usage: usage.unwrap_or_default(),
-        raw_usage: raw_usage_entries,
+        usage,
+        raw_usage,
         latency: latency.clone(),
         finish_reason,
         id: model_inference_id,
@@ -831,6 +828,7 @@ mod tests {
             _ => panic!("Expected thought block"),
         }
     }
+
     #[tokio::test]
     async fn test_collect_chunks() {
         // Test case 1: empty chunks (should error)
@@ -863,6 +861,8 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage::default(),
+            finish_reason: None,
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -932,6 +932,11 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage {
+                input_tokens: Some(2),
+                output_tokens: Some(4),
+            },
+            finish_reason: Some(FinishReason::Stop),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -1033,6 +1038,11 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage {
+                input_tokens: Some(15),
+                output_tokens: Some(15),
+            },
+            finish_reason: Some(FinishReason::Stop),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1117,6 +1127,8 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage,
+            finish_reason: Some(FinishReason::ToolCall),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1210,6 +1222,8 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage,
+            finish_reason: Some(FinishReason::Stop),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1329,6 +1343,11 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage {
+                input_tokens: Some(15),
+                output_tokens: Some(15),
+            },
+            finish_reason: Some(FinishReason::Stop),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1442,6 +1461,11 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage {
+                input_tokens: Some(15),
+                output_tokens: Some(15),
+            },
+            finish_reason: Some(FinishReason::ToolCall),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1622,6 +1646,11 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage {
+                input_tokens: Some(2),
+                output_tokens: Some(4),
+            },
+            finish_reason: Some(FinishReason::Stop),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1758,6 +1787,8 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage::default(),
+            finish_reason: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1848,6 +1879,8 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage::default(),
+            finish_reason: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1929,6 +1962,8 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage::default(),
+            finish_reason: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2014,6 +2049,8 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage::default(),
+            finish_reason: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2082,6 +2119,8 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage::default(),
+            finish_reason: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2204,6 +2243,8 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
+            usage: Usage::default(),
+            finish_reason: None,
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();

@@ -98,6 +98,7 @@ use crate::inference::types::resolved_input::{
 };
 use crate::inference::types::storage::{StorageKind, StorageKindExt};
 use crate::inference::types::stored_input::StoredFile;
+use crate::inference::types::usage::aggregate_usage_across_model_inferences;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
     RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
@@ -1766,7 +1767,7 @@ impl InferenceResult {
     /// Aggregates the usage of all model inference results, considering cached results.
     /// If any of the values are None, the total usage is considered as None (via `sum_usage_strict`).
     pub fn usage_considering_cached(&self) -> Usage {
-        Usage::sum_iter_strict(
+        aggregate_usage_across_model_inferences(
             self.model_inference_results()
                 .iter()
                 .map(ModelInferenceResponseWithMetadata::usage_considering_cached),
