@@ -86,17 +86,13 @@ function GatewayAuthContent() {
   );
 }
 
-function RouteNotFoundContent({ routeInfo }: { routeInfo?: string }) {
+function RouteNotFoundContent({ routeInfo }: { routeInfo: string }) {
   return (
     <ErrorContentCard>
       <ErrorContentHeader
         icon={Server}
         title="API Route Not Found"
-        description={
-          routeInfo
-            ? `The Gateway returned 404 for: ${routeInfo}`
-            : "The Gateway returned 404 for an internal API route."
-        }
+        description={`The Gateway returned 404 for: ${routeInfo}`}
       />
       <TroubleshootingSection>
         <>Ensure the UI and Gateway versions are compatible</>

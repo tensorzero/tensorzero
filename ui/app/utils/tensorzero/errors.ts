@@ -29,7 +29,7 @@ export type BoundaryErrorType =
 export type BoundaryErrorData =
   | { errorType: typeof BoundaryErrorType.GatewayUnavailable }
   | { errorType: typeof BoundaryErrorType.GatewayAuthFailed }
-  | { errorType: typeof BoundaryErrorType.RouteNotFound; routeInfo?: string }
+  | { errorType: typeof BoundaryErrorType.RouteNotFound; routeInfo: string }
   | {
       errorType: typeof BoundaryErrorType.ClickHouseConnection;
       message?: string;
@@ -44,7 +44,7 @@ export type BoundaryErrorData =
 export type ClassifiedError =
   | { type: typeof BoundaryErrorType.GatewayUnavailable }
   | { type: typeof BoundaryErrorType.GatewayAuthFailed }
-  | { type: typeof BoundaryErrorType.RouteNotFound; routeInfo?: string }
+  | { type: typeof BoundaryErrorType.RouteNotFound; routeInfo: string }
   | { type: typeof BoundaryErrorType.ClickHouseConnection; message?: string }
   | {
       type: typeof BoundaryErrorType.ServerError;

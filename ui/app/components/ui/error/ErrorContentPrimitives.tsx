@@ -18,7 +18,7 @@ interface ErrorContentCardProps {
 
 /**
  * Container card for error content.
- * - dark: transparent background for modal overlay
+ * - dark: dark background for modal overlay
  * - light: standard card with border for content area
  */
 export function ErrorContentCard({
@@ -31,7 +31,7 @@ export function ErrorContentCard({
       className={cn(
         "max-w-lg shadow-none",
         variant === ErrorVariant.Dark
-          ? "border-0 bg-transparent"
+          ? "border-neutral-800 bg-neutral-950"
           : "bg-card border",
         className,
       )}

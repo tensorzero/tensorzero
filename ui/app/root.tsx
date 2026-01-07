@@ -158,8 +158,7 @@ function classifyError(error: unknown): ClassifiedError {
       case BoundaryErrorType.RouteNotFound:
         return {
           type: BoundaryErrorType.RouteNotFound,
-          routeInfo:
-            "routeInfo" in error.data ? error.data.routeInfo : undefined,
+          routeInfo: error.data.routeInfo,
         };
       case BoundaryErrorType.ClickHouseConnection:
         return {
@@ -195,7 +194,7 @@ function classifyError(error: unknown): ClassifiedError {
     const routeMatch = errorMessage.match(/Route not found: (\w+) (.+)/);
     const routeInfo = routeMatch
       ? `${routeMatch[1]} ${routeMatch[2]}`
-      : undefined;
+      : errorMessage;
     return { type: BoundaryErrorType.RouteNotFound, routeInfo };
   }
 

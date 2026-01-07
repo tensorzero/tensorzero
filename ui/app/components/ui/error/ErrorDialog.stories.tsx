@@ -74,13 +74,6 @@ export const RouteNotFound: Story = {
   },
 };
 
-export const RouteNotFoundWithoutInfo: Story = {
-  args: {
-    error: { type: BoundaryErrorType.RouteNotFound },
-    label: "Route Error",
-  },
-};
-
 export const ServerError: Story = {
   args: {
     error: {
