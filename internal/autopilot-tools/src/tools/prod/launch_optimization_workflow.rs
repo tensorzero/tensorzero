@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use durable_tools::{TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, TaskTool, ToolContext, ToolMetadata, ToolResult};
 
 use autopilot_client::OptimizationWorkflowSideInfo;
 use schemars::{JsonSchema, Schema};
@@ -140,7 +140,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
             "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"]
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema)
+            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
     }
 }
 
@@ -208,11 +209,12 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
                     // Check timeout
                     let elapsed = ctx.now().await? - start;
                     if elapsed.num_seconds() > max_wait_secs {
-                        return Err(ToolError::Validation {
+                        return Err(NonControlToolError::Validation {
                             message: format!(
                                 "Optimization timed out after {max_wait_secs} seconds"
                             ),
-                        });
+                        }
+                        .into());
                     }
 
                     // Durable sleep before next poll

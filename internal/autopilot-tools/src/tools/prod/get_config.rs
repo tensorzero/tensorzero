@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::GetConfigResponse;
@@ -38,7 +38,8 @@ impl ToolMetadata for GetConfigTool {
             "properties": {}
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema)
+            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
     }
 }
 
@@ -53,6 +54,6 @@ impl SimpleTool for GetConfigTool {
         ctx.client()
             .get_config_snapshot(side_info.config_snapshot_hash)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| NonControlToolError::ExecutionFailed(e.into()).into())
     }
 }
