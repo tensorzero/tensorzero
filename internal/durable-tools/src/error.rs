@@ -66,6 +66,12 @@ impl From<TaskError> for ToolError {
             TaskError::ChildFailed { step_name, message } => ToolError::ExecutionFailed(
                 anyhow::anyhow!("child task failed at '{step_name}': {message}"),
             ),
+            TaskError::User {
+                message,
+                error_data,
+            } => {
+                ToolError::ExecutionFailed(anyhow::anyhow!("user error: {message} {error_data:?}"))
+            }
             TaskError::ChildCancelled { step_name } => ToolError::ExecutionFailed(anyhow::anyhow!(
                 "child task was cancelled at '{step_name}'"
             )),
