@@ -592,15 +592,9 @@ impl TensorZeroClient for Client {
         params: RunEvaluationParams,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError> {
         match self.mode() {
-            ClientMode::HTTPGateway(_) => {
-                // HTTP mode is not supported because the /internal/evaluations/run endpoint
-                // requires resolved EvaluationConfig and EvaluationFunctionConfig, but
-                // get_config_snapshot only returns UninitializedConfig with paths to schemas
-                // rather than resolved schemas.
-                Err(TensorZeroClientError::NotSupported(
-                    "run_evaluation is only supported in embedded gateway mode".to_string(),
-                ))
-            }
+            ClientMode::HTTPGateway(_) => Err(TensorZeroClientError::NotSupported(
+                "run_evaluation is only supported in embedded gateway mode".to_string(),
+            )),
             ClientMode::EmbeddedGateway {
                 gateway,
                 timeout: _,
