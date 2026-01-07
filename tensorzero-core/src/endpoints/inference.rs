@@ -916,6 +916,13 @@ fn create_stream(
         // This is used for client emission. Initialized to None so first chunk values are taken.
         let mut streamed_usage: Option<Usage> = None;
 
+        // Track finish_reason from streamed chunks. Some providers send finish_reason in a
+        // metadata-only final chunk (with usage but no content). Since we strip usage from
+        // intermediate chunks, such a chunk becomes raw=None, usage=None and gets discarded
+        // by InferenceResponseChunk::new. We need to capture the finish_reason before that
+        // happens and include it in the synthetic usage chunk at stream end.
+        let mut streamed_finish_reason: Option<FinishReason> = None;
+
         // Build raw_usage entries from previous model inferences if requested.
         // Returns Some(entries) if requested (even if empty), None if not requested.
         let mut extra_raw_usage = if metadata.include_raw_usage {
@@ -947,6 +954,12 @@ fn create_stream(
                         }
                     }
 
+                    // Capture finish_reason from the stream. Some providers send this in a
+                    // metadata-only final chunk that would be discarded after we strip usage.
+                    if let Some(fr) = chunk.finish_reason() {
+                        streamed_finish_reason = Some(*fr);
+                    }
+
                     // Buffer the original chunk (with usage intact) for database writes.
                     // collect_chunks will use max_strict to compute correct cumulative usage.
                     buffer.push(chunk.clone());
@@ -975,13 +988,15 @@ fn create_stream(
         };
 
         // Emit final usage chunk to client (but NOT to buffer - buffer is for DB only)
+        // Include finish_reason captured from the stream - this is important because some providers
+        // send finish_reason in a metadata-only chunk that gets discarded after we strip usage.
         if let Some(final_usage) = final_usage {
             let usage_chunk = match &*function {
                 FunctionConfig::Chat(_model_provider) => {
                     InferenceResultChunk::Chat(ChatInferenceResultChunk {
                         created: 0,
                         content: vec![],
-                        finish_reason: None,
+                        finish_reason: streamed_finish_reason,
                         latency: Duration::from_millis(0),
                         raw_response: String::new(),
                         usage: Some(final_usage),
@@ -997,7 +1012,7 @@ fn create_stream(
                         latency: Duration::from_millis(0),
                         raw: None,
                         raw_response: String::new(),
-                        finish_reason: None,
+                        finish_reason: streamed_finish_reason,
                     })
                 }
             };
@@ -1450,17 +1465,21 @@ impl InferenceResponseChunk {
         json_mode: Option<JsonMode>,
         include_raw_usage: bool,
     ) -> Option<Self> {
-        let mut result_usage = if cached {
-            // When our outer inference result is cached, don't
-            // add `extra_usage` to it. We'll append a final usage chunk
-            // in `create_stream` if needed
+        // Usage handling for streaming chunks:
+        // - If the chunk has explicit usage (e.g., final usage chunk from create_stream),
+        //   use it directly. This preserves usage we've already computed (including extra_usage
+        //   from previous model inferences).
+        // - If the chunk has no usage:
+        //   - For cached results: emit (0, 0) to indicate no billed tokens for this inference
+        //   - For non-cached results: emit None (usage will be in the final chunk)
+        let mut result_usage = inference_result.usage().copied().or(if cached {
             Some(Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
             })
         } else {
-            inference_result.usage().copied()
-        };
+            None
+        });
         // The first time we encounter an empty chunk that already has usage information set,
         // add `extra_usage` to the chunk.
         // If we never encounter any empty chunks with usage, we'll append one ourselves
@@ -2573,5 +2592,330 @@ mod tests {
         }
 
         assert!(extra_raw_usage.is_none(), "extra_raw_usage should be taken");
+    }
+
+    // ============================================================================
+    // Cached Usage Handling Tests
+    // ============================================================================
+    // These tests verify that usage is correctly handled for cached inferences.
+    //
+    // The key scenarios:
+    // 1. Cached chunk WITH explicit usage (e.g., final usage chunk from create_stream)
+    //    → Should preserve the explicit usage (contains extra_usage from previous inferences)
+    // 2. Cached chunk WITHOUT usage (e.g., intermediate chunk with stripped usage)
+    //    → Should emit (0, 0) to indicate no billed tokens for this inference
+    // 3. Non-cached chunk WITH usage → Should use chunk's usage
+    // 4. Non-cached chunk WITHOUT usage → Should emit None
+    // ============================================================================
+
+    fn create_cached_test_metadata() -> InferenceMetadata {
+        let mut metadata = create_test_metadata();
+        metadata.cached = true;
+        metadata
+    }
+
+    #[test]
+    fn test_cached_chunk_with_explicit_usage_preserves_usage() {
+        // This test verifies the fix for: when cached inference has previous non-cached
+        // inferences (e.g., best_of_n_sampling candidates), the extra_usage from those
+        // previous inferences should be preserved in the final usage chunk.
+        //
+        // Scenario: best_of_n_sampling with 2 non-cached candidates + 1 cached final result
+        // - Candidate 1: 100 input, 50 output
+        // - Candidate 2: 100 input, 60 output
+        // - Final (cached): create_stream computes final_usage = (200, 110)
+        //
+        // The final usage chunk has explicit usage = (200, 110), which should be preserved.
+        let metadata = create_cached_test_metadata();
+
+        // Final usage chunk with explicit usage (computed in create_stream as extra_usage + streamed_usage)
+        let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![], // Empty chunk (usage-only)
+            created: 0,
+            usage: Some(Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(110),
+            }),
+            raw_usage: None,
+            raw_response: String::new(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+        });
+
+        let result = prepare_response_chunk(&metadata, chunk, &mut None, &mut None).unwrap();
+
+        match result {
+            InferenceResponseChunk::Chat(c) => {
+                assert_eq!(
+                    c.usage,
+                    Some(Usage {
+                        input_tokens: Some(200),
+                        output_tokens: Some(110),
+                    }),
+                    "Cached chunk with explicit usage should preserve the usage (extra_usage from previous inferences)"
+                );
+            }
+            InferenceResponseChunk::Json(_) => panic!("Expected Chat chunk"),
+        }
+    }
+
+    #[test]
+    fn test_cached_chunk_without_usage_emits_zero() {
+        // Cached intermediate chunks (with no usage) should emit (0, 0) to indicate
+        // no billed tokens for this inference.
+        let metadata = create_cached_test_metadata();
+
+        // Intermediate chunk with content but no usage (stripped in create_stream)
+        let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "Hello".to_string(),
+                id: "0".to_string(),
+            })],
+            created: 0,
+            usage: None, // Stripped
+            raw_usage: None,
+            raw_response: String::new(),
+            latency: Duration::from_millis(100),
+            finish_reason: None,
+        });
+
+        let result = prepare_response_chunk(&metadata, chunk, &mut None, &mut None).unwrap();
+
+        match result {
+            InferenceResponseChunk::Chat(c) => {
+                assert_eq!(
+                    c.usage,
+                    Some(Usage {
+                        input_tokens: Some(0),
+                        output_tokens: Some(0),
+                    }),
+                    "Cached chunk without usage should emit (0, 0)"
+                );
+            }
+            InferenceResponseChunk::Json(_) => panic!("Expected Chat chunk"),
+        }
+    }
+
+    #[test]
+    fn test_non_cached_chunk_with_explicit_usage() {
+        // Non-cached chunk with explicit usage should use the chunk's usage
+        let metadata = create_test_metadata();
+
+        let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![],
+            created: 0,
+            usage: Some(Usage {
+                input_tokens: Some(50),
+                output_tokens: Some(25),
+            }),
+            raw_usage: None,
+            raw_response: String::new(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+        });
+
+        let result = prepare_response_chunk(&metadata, chunk, &mut None, &mut None).unwrap();
+
+        match result {
+            InferenceResponseChunk::Chat(c) => {
+                assert_eq!(
+                    c.usage,
+                    Some(Usage {
+                        input_tokens: Some(50),
+                        output_tokens: Some(25),
+                    }),
+                    "Non-cached chunk with explicit usage should use chunk's usage"
+                );
+            }
+            InferenceResponseChunk::Json(_) => panic!("Expected Chat chunk"),
+        }
+    }
+
+    #[test]
+    fn test_non_cached_chunk_without_usage_emits_none() {
+        // Non-cached intermediate chunks (with no usage) should emit None
+        let metadata = create_test_metadata();
+
+        let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "Hello".to_string(),
+                id: "0".to_string(),
+            })],
+            created: 0,
+            usage: None,
+            raw_usage: None,
+            raw_response: String::new(),
+            latency: Duration::from_millis(100),
+            finish_reason: None,
+        });
+
+        let result = prepare_response_chunk(&metadata, chunk, &mut None, &mut None).unwrap();
+
+        match result {
+            InferenceResponseChunk::Chat(c) => {
+                assert!(
+                    c.usage.is_none(),
+                    "Non-cached chunk without usage should emit None"
+                );
+            }
+            InferenceResponseChunk::Json(_) => panic!("Expected Chat chunk"),
+        }
+    }
+
+    #[test]
+    fn test_cached_json_chunk_with_explicit_usage_preserves_usage() {
+        // Same as above but for JSON chunks
+        let metadata = create_cached_test_metadata();
+
+        let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw: None, // Empty chunk
+            thought: None,
+            created: 0,
+            usage: Some(Usage {
+                input_tokens: Some(150),
+                output_tokens: Some(75),
+            }),
+            raw_usage: None,
+            raw_response: String::new(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+        });
+
+        let result = prepare_response_chunk(&metadata, chunk, &mut None, &mut None).unwrap();
+
+        match result {
+            InferenceResponseChunk::Json(j) => {
+                assert_eq!(
+                    j.usage,
+                    Some(Usage {
+                        input_tokens: Some(150),
+                        output_tokens: Some(75),
+                    }),
+                    "Cached JSON chunk with explicit usage should preserve the usage"
+                );
+            }
+            InferenceResponseChunk::Chat(_) => panic!("Expected Json chunk"),
+        }
+    }
+
+    // ============================================================================
+    // Finish Reason Preservation Tests
+    // ============================================================================
+    // These tests verify that finish_reason is correctly handled when stripping usage
+    // from streaming chunks. The key scenarios:
+    //
+    // 1. JSON chunk with only metadata (finish_reason + usage, no content) gets discarded
+    //    by prepare_response_chunk after usage is stripped. This verifies why we need to
+    //    capture finish_reason in create_stream before stripping.
+    //
+    // 2. Synthetic usage chunk with explicit usage and finish_reason preserves both.
+    //    This verifies that the fix in create_stream works correctly.
+    // ============================================================================
+
+    #[test]
+    fn test_json_metadata_only_chunk_discarded_after_usage_stripped() {
+        // This test documents why we need to capture finish_reason in create_stream:
+        // A JSON chunk with only finish_reason and usage (no content) gets discarded
+        // after we strip the usage, because InferenceResponseChunk::new returns None
+        // for JSON chunks where raw.is_none() && usage.is_none().
+        let metadata = create_test_metadata();
+
+        // Metadata-only chunk: has finish_reason and usage, but no content
+        // After stripping usage, this becomes: raw=None, usage=None, finish_reason=Some(Stop)
+        let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw: None,
+            thought: None,
+            created: 0,
+            usage: None, // Already stripped
+            raw_usage: None,
+            raw_response: String::new(),
+            latency: Duration::from_millis(100),
+            finish_reason: Some(FinishReason::Stop),
+        });
+
+        // This chunk gets discarded because raw.is_none() && usage.is_none()
+        let result = prepare_response_chunk(&metadata, chunk, &mut None, &mut None);
+
+        assert!(
+            result.is_none(),
+            "JSON chunk with no content and no usage should be discarded (even if it has finish_reason)"
+        );
+    }
+
+    #[test]
+    fn test_synthetic_usage_chunk_preserves_finish_reason() {
+        // This test verifies that the synthetic usage chunk (created at stream end)
+        // correctly preserves finish_reason that was captured from the stream.
+        // This is the fix for the bug where finish_reason was lost when the provider
+        // sent it in a metadata-only final chunk.
+        let metadata = create_test_metadata();
+
+        // Synthetic usage chunk with finish_reason (as created in create_stream after the fix)
+        let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw: None,
+            thought: None,
+            created: 0,
+            usage: Some(Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+            }),
+            raw_usage: None,
+            raw_response: String::new(),
+            latency: Duration::from_millis(0),
+            finish_reason: Some(FinishReason::Length), // Captured from stream
+        });
+
+        let result = prepare_response_chunk(&metadata, chunk, &mut None, &mut None).unwrap();
+
+        match result {
+            InferenceResponseChunk::Json(j) => {
+                assert_eq!(
+                    j.finish_reason,
+                    Some(FinishReason::Length),
+                    "Synthetic usage chunk should preserve finish_reason captured from stream"
+                );
+                assert_eq!(
+                    j.usage,
+                    Some(Usage {
+                        input_tokens: Some(100),
+                        output_tokens: Some(50),
+                    }),
+                    "Synthetic usage chunk should have usage"
+                );
+            }
+            InferenceResponseChunk::Chat(_) => panic!("Expected Json chunk"),
+        }
+    }
+
+    #[test]
+    fn test_chat_chunk_finish_reason_preserved() {
+        // Chat chunks with finish_reason should preserve it
+        let metadata = create_test_metadata();
+
+        let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![],
+            created: 0,
+            usage: Some(Usage {
+                input_tokens: Some(50),
+                output_tokens: Some(25),
+            }),
+            raw_usage: None,
+            raw_response: String::new(),
+            latency: Duration::from_millis(0),
+            finish_reason: Some(FinishReason::Stop),
+        });
+
+        let result = prepare_response_chunk(&metadata, chunk, &mut None, &mut None).unwrap();
+
+        match result {
+            InferenceResponseChunk::Chat(c) => {
+                assert_eq!(
+                    c.finish_reason,
+                    Some(FinishReason::Stop),
+                    "Chat chunk should preserve finish_reason"
+                );
+            }
+            InferenceResponseChunk::Json(_) => panic!("Expected Chat chunk"),
+        }
     }
 }
