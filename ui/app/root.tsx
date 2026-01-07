@@ -31,6 +31,7 @@ import {
   isGatewayConnectionError,
   isRouteNotFoundError,
   isClickHouseError,
+  type ClassifiedError,
 } from "./utils/tensorzero/errors";
 import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
@@ -143,18 +144,37 @@ export default function App({ loaderData }: Route.ComponentProps) {
   );
 }
 
-function classifyError(error: unknown): {
-  type: BoundaryErrorType;
-  message?: string;
-  routeInfo?: string;
-} {
+function classifyError(error: unknown): ClassifiedError {
   // Check for serialized BoundaryErrorData (from data() throws)
   if (isRouteErrorResponse(error) && isBoundaryErrorData(error.data)) {
-    return {
-      type: error.data.errorType,
-      message: error.data.message,
-      routeInfo: error.data.routeInfo,
-    };
+    const { errorType } = error.data;
+    switch (errorType) {
+      case BoundaryErrorType.GatewayUnavailable:
+        return { type: BoundaryErrorType.GatewayUnavailable };
+      case BoundaryErrorType.GatewayAuthFailed:
+        return { type: BoundaryErrorType.GatewayAuthFailed };
+      case BoundaryErrorType.RouteNotFound:
+        return {
+          type: BoundaryErrorType.RouteNotFound,
+          routeInfo:
+            "routeInfo" in error.data ? error.data.routeInfo : undefined,
+        };
+      case BoundaryErrorType.ClickHouseConnection:
+        return {
+          type: BoundaryErrorType.ClickHouseConnection,
+          message: "message" in error.data ? error.data.message : undefined,
+        };
+      case BoundaryErrorType.ServerError:
+        return {
+          type: BoundaryErrorType.ServerError,
+          message: "message" in error.data ? error.data.message : undefined,
+          status: error.status,
+        };
+      default: {
+        const _exhaustiveCheck: never = errorType;
+        return { type: BoundaryErrorType.ServerError, status: error.status };
+      }
+    }
   }
 
   // Gateway connection error
@@ -169,15 +189,7 @@ function classifyError(error: unknown): {
 
   // Route not found error
   if (isRouteNotFoundError(error)) {
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : typeof error === "object" &&
-            error !== null &&
-            "message" in error &&
-            typeof error.message === "string"
-          ? error.message
-          : "";
+    const errorMessage = extractErrorMessage(error);
     const routeMatch = errorMessage.match(/Route not found: (\w+) (.+)/);
     const routeInfo = routeMatch
       ? `${routeMatch[1]} ${routeMatch[2]}`
@@ -192,13 +204,26 @@ function classifyError(error: unknown): {
   }
 
   // Default: server error
-  let message: string | undefined;
-  if (isRouteErrorResponse(error)) {
-    message = error.statusText || undefined;
-  } else if (error instanceof Error) {
-    message = error.message;
+  const message = isRouteErrorResponse(error)
+    ? error.statusText || undefined
+    : error instanceof Error
+      ? error.message
+      : undefined;
+  const status = isRouteErrorResponse(error) ? error.status : undefined;
+  return { type: BoundaryErrorType.ServerError, message, status };
+}
+
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
   }
-  return { type: BoundaryErrorType.ServerError, message };
+  return "";
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -224,7 +249,6 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 
   // All other errors use the dismissible modal pattern
   const classified = classifyError(error);
-  const status = isRouteErrorResponse(error) ? error.status : undefined;
   const label = getErrorLabel(classified.type);
 
   return (
@@ -235,12 +259,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         onReopen={() => setOpen(true)}
         label={label}
       >
-        <ErrorContent
-          type={classified.type}
-          message={classified.message}
-          routeInfo={classified.routeInfo}
-          status={status}
-        />
+        <ErrorContent error={classified} />
       </ErrorDialog>
     </ErrorBoundaryLayout>
   );

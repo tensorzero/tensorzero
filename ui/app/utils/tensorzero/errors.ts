@@ -22,14 +22,36 @@ export type BoundaryErrorType =
   (typeof BoundaryErrorType)[keyof typeof BoundaryErrorType];
 
 /**
- * Type for error data passed via React Router's `data()` helper.
- * This structure survives serialization and enables type-safe error handling.
+ * Discriminated union for error data passed via React Router's `data()` helper.
+ * Each variant only includes fields relevant to that error type, enforcing
+ * valid combinations at compile time.
  */
-export interface BoundaryErrorData {
-  errorType: BoundaryErrorType;
-  message?: string;
-  routeInfo?: string;
-}
+export type BoundaryErrorData =
+  | { errorType: typeof BoundaryErrorType.GatewayUnavailable }
+  | { errorType: typeof BoundaryErrorType.GatewayAuthFailed }
+  | { errorType: typeof BoundaryErrorType.RouteNotFound; routeInfo?: string }
+  | {
+      errorType: typeof BoundaryErrorType.ClickHouseConnection;
+      message?: string;
+    }
+  | { errorType: typeof BoundaryErrorType.ServerError; message?: string };
+
+/**
+ * Discriminated union for classified errors used in error rendering.
+ * Mirrors BoundaryErrorData but uses 'type' for consistency with component props,
+ * and includes additional fields like 'status' for HTTP status codes.
+ */
+export type ClassifiedError =
+  | { type: typeof BoundaryErrorType.GatewayUnavailable }
+  | { type: typeof BoundaryErrorType.GatewayAuthFailed }
+  | { type: typeof BoundaryErrorType.RouteNotFound; routeInfo?: string }
+  | { type: typeof BoundaryErrorType.ClickHouseConnection; message?: string }
+  | {
+      type: typeof BoundaryErrorType.ServerError;
+      message?: string;
+      status?: number;
+      stack?: string;
+    };
 
 /**
  * Type guard to check if a value is BoundaryErrorData.

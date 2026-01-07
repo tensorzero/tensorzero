@@ -5,7 +5,10 @@ import {
   Server,
   Unplug,
 } from "lucide-react";
-import { BoundaryErrorType } from "~/utils/tensorzero/errors";
+import {
+  BoundaryErrorType,
+  type ClassifiedError,
+} from "~/utils/tensorzero/errors";
 import {
   ErrorContentCard,
   ErrorContentHeader,
@@ -16,38 +19,30 @@ import {
 } from "./ErrorContentPrimitives";
 
 interface ErrorContentProps {
-  type: BoundaryErrorType;
-  message?: string;
-  routeInfo?: string;
-  status?: number;
-  stack?: string;
+  error: ClassifiedError;
 }
 
-export function ErrorContent({
-  type,
-  message,
-  routeInfo,
-  status,
-  stack,
-}: ErrorContentProps) {
-  switch (type) {
+export function ErrorContent({ error }: ErrorContentProps) {
+  switch (error.type) {
     case BoundaryErrorType.GatewayUnavailable:
       return <GatewayUnavailableContent />;
     case BoundaryErrorType.GatewayAuthFailed:
       return <GatewayAuthContent />;
     case BoundaryErrorType.RouteNotFound:
-      return <RouteNotFoundContent routeInfo={routeInfo} />;
+      return <RouteNotFoundContent routeInfo={error.routeInfo} />;
     case BoundaryErrorType.ClickHouseConnection:
-      return <ClickHouseContent message={message} />;
+      return <ClickHouseContent message={error.message} />;
     case BoundaryErrorType.ServerError:
       return (
-        <ServerErrorContent status={status} message={message} stack={stack} />
+        <ServerErrorContent
+          status={error.status}
+          message={error.message}
+          stack={error.stack}
+        />
       );
     default: {
-      const _exhaustiveCheck: never = type;
-      return (
-        <ServerErrorContent status={status} message={message} stack={stack} />
-      );
+      const _exhaustiveCheck: never = error;
+      return <ServerErrorContent />;
     }
   }
 }
