@@ -26,15 +26,9 @@ if [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
     exit 1
 fi
 
-export AZURE_OPENAI_API_BASE=$(buildkite-agent secret get AZURE_OPENAI_API_BASE)
-if [ -z "$AZURE_OPENAI_API_BASE" ]; then
-    echo "Error: AZURE_OPENAI_API_BASE is not set"
-    exit 1
-fi
-
-export AZURE_OPENAI_API_KEY=$(buildkite-agent secret get AZURE_OPENAI_API_KEY)
-if [ -z "$AZURE_OPENAI_API_KEY" ]; then
-    echo "Error: AZURE_OPENAI_API_KEY is not set"
+export AZURE_API_KEY=$(buildkite-agent secret get AZURE_API_KEY)
+if [ -z "$AZURE_API_KEY" ]; then
+    echo "Error: AZURE_API_KEY is not set"
     exit 1
 fi
 
