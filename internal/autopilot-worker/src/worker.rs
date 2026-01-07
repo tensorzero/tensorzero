@@ -86,6 +86,7 @@ impl AutopilotWorker {
     }
 
     /// Register all autopilot tools with the executor.
+    #[allow(clippy::unused_async, clippy::allow_attributes)]
     pub async fn register_tools(&self) -> Result<()> {
         let visitor = LocalToolVisitor {
             executor: &self.executor,
