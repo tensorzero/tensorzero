@@ -5,6 +5,8 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -114,8 +116,12 @@ impl ToolMetadata for WriteConfigTool {
             "required": ["config"]
         });
 
-        serde_json::from_value(schema)
-            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -127,12 +133,8 @@ impl SimpleTool for WriteConfigTool {
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
-        let config: UninitializedConfig =
-            serde_json::from_value(llm_params.config).map_err(|e| {
-                NonControlToolError::Validation {
-                    message: format!("Invalid `config`: {e}"),
-                }
-            })?;
+        let config: UninitializedConfig = serde_json::from_value(llm_params.config)
+            .map_err(|e| AutopilotToolError::validation(format!("Invalid `config`: {e}")))?;
 
         let request = WriteConfigRequest {
             config,
@@ -143,6 +145,6 @@ impl SimpleTool for WriteConfigTool {
         ctx.client()
             .write_config(request)
             .await
-            .map_err(|e| NonControlToolError::ExecutionFailed(e.into()).into())
+            .map_err(|e| AutopilotToolError::client_error("write_config", e).into())
     }
 }

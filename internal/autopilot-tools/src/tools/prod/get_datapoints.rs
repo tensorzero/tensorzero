@@ -4,6 +4,8 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::GetDatapointsResponse;
@@ -61,8 +63,12 @@ impl ToolMetadata for GetDatapointsTool {
             "required": ["ids"]
         });
 
-        serde_json::from_value(schema)
-            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -77,6 +83,6 @@ impl SimpleTool for GetDatapointsTool {
         ctx.client()
             .get_datapoints(llm_params.dataset_name, llm_params.ids)
             .await
-            .map_err(|e| NonControlToolError::ExecutionFailed(e.into()).into())
+            .map_err(|e| AutopilotToolError::client_error("get_datapoints", e).into())
     }
 }

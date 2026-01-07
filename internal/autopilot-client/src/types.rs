@@ -66,6 +66,9 @@ pub struct StreamUpdate {
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     Message(InputMessage),
+    Error {
+        message: String,
+    },
     StatusUpdate {
         status_update: StatusUpdate,
     },
@@ -233,7 +236,10 @@ pub enum ToolCallAuthorizationStatus {
 pub enum ToolOutcome {
     Success(AutopilotToolResult),
     Failure {
-        message: String,
+        /// Structured error data from the tool.
+        /// For autopilot tools, this is typically a serialized `AutopilotToolError`
+        /// with a `kind` field discriminator (e.g., "ClientError", "Validation").
+        error: serde_json::Value,
     },
     Missing,
     #[serde(other)]

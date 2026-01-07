@@ -5,6 +5,8 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointRequest, CreateDatapointsResponse};
@@ -92,8 +94,12 @@ impl ToolMetadata for CreateDatapointsTool {
             "required": ["dataset_name", "datapoints"]
         });
 
-        serde_json::from_value(schema)
-            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -147,6 +153,6 @@ impl SimpleTool for CreateDatapointsTool {
         ctx.client()
             .create_datapoints(llm_params.dataset_name, datapoints)
             .await
-            .map_err(|e| NonControlToolError::ExecutionFailed(e.into()).into())
+            .map_err(|e| AutopilotToolError::client_error("create_datapoints", e).into())
     }
 }

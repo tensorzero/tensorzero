@@ -8,6 +8,8 @@ use durable_tools::{
     CacheEnabledMode, NonControlToolError, RunEvaluationParams, RunEvaluationResponse, SimpleTool,
     SimpleToolContext, ToolMetadata, ToolResult,
 };
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -124,8 +126,12 @@ impl ToolMetadata for RunEvaluationTool {
             "required": ["evaluation_name", "variant_name"]
         });
 
-        serde_json::from_value(schema)
-            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -151,6 +157,6 @@ impl SimpleTool for RunEvaluationTool {
         ctx.client()
             .run_evaluation(params)
             .await
-            .map_err(|e| NonControlToolError::ExecutionFailed(e.into()).into())
+            .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
     }
 }

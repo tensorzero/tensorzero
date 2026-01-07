@@ -205,7 +205,7 @@ const mixedEvents: Event[] = [
         tool_call_event_id: "rejected-tool-call-event-id",
         outcome: {
           type: "failure",
-          message: "Authorization denied",
+          error: { kind: "Validation", message: "Authorization denied" },
         },
       },
     },
