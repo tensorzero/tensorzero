@@ -2315,7 +2315,13 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     provider: &E2ETestProvider,
     stream: bool,
 ) {
-    // Inject randomness to prevent this from being cached, since provider-proxy will ignore the (invalid) auth header
+    // NOTE: This test expects error responses (auth failures), which provider-proxy
+    // does not cache. Therefore, this test will always hit live providers.
+    // Consider moving to periodic live tests if this causes merge queue instability.
+    // See: https://github.com/tensorzero/tensorzero/issues/5380
+    //
+    // We inject randomness since provider-proxy sanitizes auth headers for cache key computation,
+    // so without randomness we'd potentially get a cached success response from another test.
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {

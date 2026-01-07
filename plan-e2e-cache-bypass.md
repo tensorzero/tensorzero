@@ -24,6 +24,7 @@ GitHub Issue #5380 addresses provider-side changes blocking merge queues. The te
    - Modes: `ReadOnly`, `ReadWrite`, `ReadOldWriteNew`
    - Default mode: `ReadOldWriteNew` (reads old entries, rewrites on miss)
    - Cache stored in R2 and synced during CI
+   - **Important**: Error responses are NOT cached by provider-proxy
 
 ### CI Pipeline
 
@@ -33,186 +34,94 @@ GitHub Issue #5380 addresses provider-side changes blocking merge queues. The te
 
 ---
 
-## Tests That Bypass Cache
+## Implementation Summary
 
-### Category 1: Randomized Seeds/Content (Provider-Proxy Cache Bypass)
+### Changes Made
 
-These tests inject randomness to ensure they hit live providers, not cached responses.
+#### 1. Raw Usage Tests - Fixed (6 tests)
 
-| File | Test | Line | Bypass Method | Purpose |
-|------|------|------|---------------|---------|
-| `e2e/cache.rs` | `test_cache_write_and_read` | 63 | `rand::random::<u32>()` in seed | Test cache write/read cycle |
-| `e2e/cache.rs` | `test_cache_stream_write_and_read` | 194 | `rand::random::<u32>()` in seed | Test streaming cache write/read |
-| `e2e/cache.rs` | `test_streaming_cache_with_err` | 478 | `rand::rng().random_range()` | Test error handling prevents cache write |
-| `e2e/cache.rs` | `test_streaming_cache_without_err` | 492 | `rand::rng().random_range()` | Test successful streaming cache |
-| `e2e/cache.rs` | `test_dont_cache_invalid_tool_call` | 368 | `Uuid::now_v7()` in message | Test cache skip on invalid tools |
-| `e2e/cache.rs` | `test_dont_cache_tool_call_schema_error` | 418 | `Uuid::now_v7()` in message | Test cache skip on schema error |
-| `e2e/providers/anthropic.rs` | `test_thinking_rejected_128k` | 186 | `Uuid::now_v7()` in message | Test current Anthropic behavior |
-| `e2e/providers/common.rs` | `test_bad_auth_extra_headers_with_provider_and_stream` | 2333 | `Uuid::now_v7()` in message | Test auth error handling |
+**File: `tensorzero-core/tests/e2e/raw_usage/cache.rs`**
 
-### Category 2: Explicit Gateway Cache Disable
+Changed from dynamic UUIDs to fixed test-specific strings for deterministic provider-proxy caching:
 
-| File | Test | Line | Setting | Purpose |
-|------|------|------|---------|---------|
-| `e2e/raw_usage/cache.rs` | `test_raw_usage_cache_disabled` | 207 | `"enabled": "off"` | Test raw_usage without cache |
-| `e2e/raw_usage/cache.rs` | `test_raw_usage_cache_disabled_streaming` | 251 | `"enabled": "off"` | Streaming variant |
-| `e2e/raw_usage/cache.rs` | `test_raw_usage_cache_openai_compatible_non_streaming` | 396 | `"enabled": "off"` | OpenAI-compatible variant |
-| `e2e/raw_usage/cache.rs` | `test_raw_usage_cache_openai_compatible_streaming` | 426 | `"enabled": "off"` | OpenAI-compatible streaming |
+| Test | Before | After |
+|------|--------|-------|
+| `test_raw_usage_cache_behavior_non_streaming` | `Uuid::now_v7()` | Fixed string `..._v1` |
+| `test_raw_usage_cache_behavior_streaming` | `Uuid::now_v7()` | Fixed string `..._v1` |
+| `test_raw_usage_cache_disabled` | `Uuid::now_v7()` | Fixed string `..._v1` |
+| `test_raw_usage_cache_disabled_streaming` | `Uuid::now_v7()` | Fixed string `..._v1` |
+| `test_raw_usage_cache_openai_compatible_non_streaming` | `Uuid::now_v7()` | Fixed string `..._v1` |
+| `test_raw_usage_cache_openai_compatible_streaming` | `Uuid::now_v7()` | Fixed string `..._v1` |
 
-### Category 3: Evaluation Tests (Explicit Cache Disable)
+**Rationale**: These tests expect SUCCESS responses which ARE cached by provider-proxy. Using fixed strings allows cache hits across CI runs. Gateway cache (ClickHouse) is fresh each CI run, so first request within a test will still be a cache miss.
 
-| File | Test | Line | Setting | Purpose |
-|------|------|------|---------|---------|
-| `e2e/endpoints/internal/evaluations.rs` | `test_run_evaluation_streaming_success` | 713 | `"inference_cache": "off"` | Evaluations need fresh inferences |
-| `e2e/endpoints/internal/evaluations.rs` | `test_run_evaluation_streaming_missing_variant` | 834 | `"inference_cache": "off"` | Error handling test |
-| `e2e/endpoints/internal/evaluations.rs` | `test_run_evaluation_streaming_nonexistent_dataset` | 873 | `"inference_cache": "off"` | Error handling test |
-| `e2e/endpoints/internal/evaluations.rs` | `test_run_evaluation_streaming_with_specific_datapoint_ids` | 943 | `"inference_cache": "off"` | Datapoint filtering test |
-| `e2e/endpoints/internal/evaluations.rs` | `test_run_evaluation_streaming_conflicting_variant_config` | 1027 | `"inference_cache": "off"` | Validation logic test |
-
-### Category 4: Raw Usage Cache Tests with UUID
-
-| File | Test | Line | Bypass Method | Purpose |
-|------|------|------|---------------|---------|
-| `e2e/raw_usage/cache.rs` | `test_raw_usage_cache_behavior_non_streaming` | 125 | `Uuid::now_v7()` in unique_input | Test first call is cache miss |
-| `e2e/raw_usage/cache.rs` | `test_raw_usage_cache_behavior_streaming` | 154 | `Uuid::now_v7()` in unique_input | Streaming variant |
-
----
-
-## Recommended Actions
-
-### Phase 1: High-Priority Fixes (Remove Randomness for Deterministic Tests)
-
-These tests inject randomness but don't actually need live provider responses - they just need deterministic, unique cache keys per test run.
-
-#### 1.1 Cache Tests - Use Fixed Seeds
-
-**File: `tensorzero-core/tests/e2e/cache.rs`**
-
-For tests that need unique cache entries but not live responses:
-- Replace `rand::random::<u32>()` with fixed test-specific seeds
-- Replace `Uuid::now_v7()` with deterministic UUIDs or fixed strings
-- Each test can use a unique but fixed string that ensures no cache collisions between tests
-
-```rust
-// Before:
-let seed = rand::random::<u32>();
-
-// After:
-const TEST_SEED: u32 = 12345; // Or use test name hash
-```
-
-**Tests to fix:**
-- `test_cache_write_and_read` (line 63)
-- `test_cache_stream_write_and_read` (line 194)
-- `test_streaming_cache_with_err` (line 478)
-- `test_streaming_cache_without_err` (line 492)
-- `test_dont_cache_invalid_tool_call` (line 368)
-- `test_dont_cache_tool_call_schema_error` (line 418)
-
-#### 1.2 Provider Tests - Use Fixed Identifiers
+#### 2. Provider Error Tests - Documented
 
 **File: `tensorzero-core/tests/e2e/providers/anthropic.rs`**
 
-The test `test_thinking_rejected_128k` uses `Uuid::now_v7()` to bypass provider-proxy cache and verify current Anthropic behavior. This test should:
-- Either use a fixed identifier and rely on cached response
-- Or be moved to a periodic live-only test suite
+- `test_thinking_rejected_128k`: Added documentation explaining this test expects an error response (BAD_GATEWAY), which provider-proxy does NOT cache. The test will always hit live providers.
 
 **File: `tensorzero-core/tests/e2e/providers/common.rs`**
 
-The test `test_bad_auth_extra_headers_with_provider_and_stream` uses `Uuid::now_v7()` for auth error testing. This should:
-- Use a fixed identifier since error responses are deterministic
-- Provider-proxy already doesn't cache error responses
+- `test_bad_auth_extra_headers_with_provider_and_stream`: Added documentation explaining this test expects auth error responses, which provider-proxy does NOT cache.
 
-### Phase 2: Evaluation Tests - Require Special Handling
+**Rationale**: Error responses are not cached by provider-proxy, so these tests cannot benefit from caching. They should be moved to periodic live tests if they cause merge queue instability.
 
-The evaluation tests explicitly disable caching because evaluations need fresh model inferences. Options:
+#### 3. Cache Tests - No Changes Needed
 
-1. **Create deterministic evaluation fixtures**: Pre-populate cache with expected inference responses
-2. **Mock the evaluation endpoint**: Use mock-provider-api for deterministic responses
-3. **Move to periodic live tests**: Run these only in scheduled CI, not merge queue
+**File: `tensorzero-core/tests/e2e/cache.rs`**
 
-Recommended: Option 2 (use mock-provider-api) for tests that primarily verify evaluation logic, not model behavior.
+These tests use dummy providers (`model = "test"`, `model = "dummy::*"`), so they don't hit live providers. The random seeds are for gateway cache uniqueness, not provider-proxy cache bypass.
 
-### Phase 3: Raw Usage Tests - Already Partially Correct
+#### 4. Evaluation Tests - No Changes Needed
 
-These tests use `Uuid::now_v7()` but the first call intentionally needs to be a cache miss to test the raw_usage behavior difference. However:
+**File: `tensorzero-core/tests/e2e/endpoints/internal/evaluations.rs`**
 
-- `test_raw_usage_cache_behavior_*` - Could use fixed unique strings per test
-- `test_raw_usage_cache_disabled*` - Need live responses; move to periodic tests or use mocks
+These tests use dummy providers (`variant_name: "test"` which uses `model = "test"`). The `inference_cache: "off"` only disables gateway cache, not provider-proxy cache.
 
-### Phase 4: CI Pipeline Changes
+#### 5. CI Configuration - Updated
 
-1. **Merge Queue Configuration**:
-   - Change provider-proxy mode from `ReadOldWriteNew` to `ReadOnly`
-   - This ensures merge queue never hits live providers
-   - Tests will fail if cache is missing (good - forces fixture regeneration)
+**File: `ci/run-provider-proxy.sh`**
 
-2. **New Periodic Live Test Job**:
-   - Create separate workflow that runs with `ReadWrite` mode
-   - Schedule: Daily or on-demand
-   - Does not block merge queue
-   - Sends Slack alerts on failure instead of failing CI
+Added support for `PROVIDER_PROXY_CACHE_MODE` environment variable:
+- Default: `read-old-write-new` (current behavior)
+- Options: `read-old-write-new`, `read-only`, `read-write`
 
-3. **Cache Regeneration Workflow**:
-   - Manual trigger to refresh provider-proxy cache
-   - Runs all tests with live providers
-   - Uploads new cache to R2
+**File: `tensorzero-core/tests/e2e/docker-compose.live.yml`**
+
+Added support for `PROVIDER_PROXY_CACHE_MODE` environment variable in docker-compose command.
 
 ---
 
-## Implementation Checklist
+## Tests That Still Hit Live Providers
 
-### Immediate (No Code Changes)
+These tests expect error responses which are NOT cached by provider-proxy:
 
-- [ ] Document which tests MUST use live providers vs. can use cached
-- [ ] Inventory all tests with randomization patterns
+| File | Test | Reason |
+|------|------|--------|
+| `providers/anthropic.rs` | `test_thinking_rejected_128k` | Expects BAD_GATEWAY error |
+| `providers/common.rs` | `test_bad_auth_extra_headers_with_provider_and_stream` | Expects auth errors |
 
-### Code Changes Required
+**Recommendation**: Move these to periodic live tests or skip in merge queue to avoid blocking on provider issues.
 
-#### `tensorzero-core/tests/e2e/cache.rs`
-- [ ] Replace `rand::random::<u32>()` with fixed seeds (4 tests)
-- [ ] Replace `Uuid::now_v7()` with fixed strings (2 tests)
+---
 
-#### `tensorzero-core/tests/e2e/providers/anthropic.rs`
-- [ ] Change `test_thinking_rejected_128k` to use fixed identifier
-- [ ] Or mark as `#[ignore]` for merge queue, run in periodic tests
+## Future Work
 
-#### `tensorzero-core/tests/e2e/providers/common.rs`
-- [ ] Change `test_bad_auth_extra_headers_with_provider_and_stream` to use fixed identifier
+1. **Enable ReadOnly Mode for Merge Queue**: Set `PROVIDER_PROXY_CACHE_MODE=read-only` in merge queue CI to prevent cache misses from hitting live providers. Tests will fail if cache is missing (good - forces explicit cache regeneration).
 
-#### `tensorzero-core/tests/e2e/raw_usage/cache.rs`
-- [ ] Replace `Uuid::now_v7()` with fixed unique strings (2 tests)
-- [ ] Consider mocking for `cache_disabled` tests (4 tests)
+2. **Create Cache Regeneration Workflow**: Manual trigger to refresh provider-proxy cache by running all tests with live providers and uploading to R2.
 
-#### `tensorzero-core/tests/e2e/endpoints/internal/evaluations.rs`
-- [ ] Either mock provider responses or move to periodic tests (5 tests)
-
-### CI Changes
-
-#### `.github/workflows/merge-queue.yml`
-- [ ] Add provider-proxy `--mode read-only` flag for merge queue runs
-- [ ] Remove `ReadOldWriteNew` behavior for merge queue
-
-#### New Workflow: `.github/workflows/live-provider-tests.yml`
-- [ ] Create scheduled workflow for live provider testing
-- [ ] Configure Slack notifications for failures
-- [ ] Run with `--mode read-write` to refresh cache
+3. **Move Error Tests to Periodic**: Create a separate workflow for tests that expect error responses, running periodically with Slack alerts instead of blocking merge queue.
 
 ---
 
 ## Summary
 
-**Total tests requiring changes: ~20 tests across 5 files**
-
-| Category | Test Count | Recommended Action |
-|----------|------------|-------------------|
-| Cache tests with random seeds | 6 | Use fixed seeds |
-| Provider tests with UUIDs | 2 | Use fixed identifiers or move to periodic |
-| Raw usage tests with UUIDs | 2 | Use fixed unique strings |
-| Raw usage cache disabled | 4 | Use mocks or move to periodic |
-| Evaluation tests | 5 | Use mocks or move to periodic |
-
-**CI Changes:**
-- Merge queue: Switch to `ReadOnly` cache mode
-- New periodic live test workflow
-- Cache regeneration workflow
+| Category | Test Count | Action Taken |
+|----------|------------|--------------|
+| Raw usage tests with UUIDs | 6 | ✅ Changed to fixed strings |
+| Provider error tests | 2 | ✅ Documented (can't cache errors) |
+| Cache tests with random seeds | 6 | ✅ No changes (use dummy providers) |
+| Evaluation tests | 5 | ✅ No changes (use dummy providers) |
+| CI configuration | - | ✅ Added configurable cache mode |

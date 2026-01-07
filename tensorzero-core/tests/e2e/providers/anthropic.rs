@@ -181,8 +181,10 @@ async fn test_thinking_rejected_128k() {
     // This ensures that our remaining extra-headers tests actually test something
     // that has an effect
 
-    // We inject randomness to ensure that we don't get a cache hit in provider-proxy-cache,
-    // since we want to test the current Anthropic behavior.
+    // NOTE: This test expects an error response (BAD_GATEWAY), which provider-proxy
+    // does not cache. Therefore, this test will always hit live providers.
+    // Consider moving to periodic live tests if this causes merge queue instability.
+    // See: https://github.com/tensorzero/tensorzero/issues/5380
     let random = Uuid::now_v7();
     let payload = json!({
         "model_name": "anthropic::claude-sonnet-4-5-20250929",
