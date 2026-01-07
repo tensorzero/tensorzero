@@ -278,6 +278,72 @@ pub async fn run_evaluation(
     Ok(())
 }
 
+/// Run an evaluation using the gateway's `AppStateData` directly.
+///
+/// This is a higher-level function that sets up the evaluation infrastructure and
+/// calls `run_evaluation_core_streaming`. It's used by:
+/// - The gateway HTTP handler (`run_evaluation_handler`)
+/// - Embedded mode in durable-tools
+///
+/// This function:
+/// 1. Creates a fresh ClickHouse client for the evaluation (with independent batch writer)
+/// 2. Creates an `AppStateInferenceExecutor` to call inference/feedback endpoints directly
+/// 3. Builds the function configs table
+/// 4. Generates a new evaluation run ID
+/// 5. Calls `run_evaluation_core_streaming` with the prepared args
+///
+/// ## Returns
+///
+/// Returns `EvaluationStreamResult` containing:
+/// - `receiver`: Channel receiver for consuming `EvaluationUpdate` messages
+/// - `run_info`: Metadata (evaluation_run_id, num_datapoints)
+/// - `evaluation_config`: The evaluation configuration
+#[instrument(skip_all, fields(evaluation_name = %params.evaluation_name, dataset_name = ?params.dataset_name, variant = ?params.variant, concurrency = %params.concurrency))]
+pub async fn run_evaluation_with_app_state(
+    app_state: tensorzero_core::utils::gateway::AppStateData,
+    params: RunEvaluationWithAppStateParams,
+) -> Result<EvaluationStreamResult> {
+    // Create a fresh ClickHouse client for the evaluation (with independent batch writer)
+    let clickhouse_client = app_state
+        .clickhouse_connection_info
+        .recreate()
+        .await
+        .map_err(|e| anyhow!("Failed to create ClickHouse client for evaluation: {e}"))?;
+
+    // Create AppStateInferenceExecutor to call handlers directly without HTTP overhead
+    let inference_executor = Arc::new(AppStateInferenceExecutor::new(app_state));
+
+    // Extract function name from evaluation config
+    let EvaluationConfig::Inference(ref inference_eval_config) = params.evaluation_config;
+    let function_name = inference_eval_config.function_name.clone();
+
+    // Build function configs table
+    let mut function_configs = EvaluationFunctionConfigTable::new();
+    function_configs.insert(function_name, params.function_config);
+    let function_configs = Arc::new(function_configs);
+
+    // Generate a new evaluation run ID
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Build the core args
+    let core_args = EvaluationCoreArgs {
+        inference_executor,
+        clickhouse_client,
+        evaluation_config: Arc::new(params.evaluation_config),
+        function_configs,
+        dataset_name: params.dataset_name,
+        datapoint_ids: params.datapoint_ids,
+        variant: params.variant,
+        evaluation_name: params.evaluation_name,
+        evaluation_run_id,
+        inference_cache: params.cache_mode,
+        concurrency: params.concurrency,
+    };
+
+    // Run the evaluation
+    run_evaluation_core_streaming(core_args, params.max_datapoints, params.precision_targets).await
+}
+
 /// Core streaming evaluation function with optional adaptive stopping.
 ///
 /// This function runs an evaluation and streams results as they complete via an mpsc channel.
@@ -449,6 +515,9 @@ pub async fn run_evaluation_core_streaming(
     // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
     let cancellation_tokens_arc = Arc::new(stopping_manager.get_tokens().clone());
 
+    // Save clickhouse_client before moving clients into batch_params
+    let clickhouse_client_for_result = clients.clickhouse_client.clone();
+
     // Build batch processing params
     let batch_params = ProcessBatchParams {
         clients,
@@ -520,6 +589,7 @@ pub async fn run_evaluation_core_streaming(
         receiver,
         run_info,
         evaluation_config: evaluators,
+        clickhouse_client: clickhouse_client_for_result,
     })
 }
 
