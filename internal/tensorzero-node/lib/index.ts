@@ -4,7 +4,6 @@ import type { PostgresClient as NativePostgresClientType } from "../index";
 
 // Re-export types from bindings
 export type * from "./bindings";
-export { createLogger } from "./utils/logger";
 
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
