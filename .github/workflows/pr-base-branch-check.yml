@@ -1,8 +1,8 @@
 name: PR Base Branch Check
 permissions:
   contents: read
-  pull-requests: write  # Required for adding/removing labels
-  statuses: write       # Required for creating commit statuses
+  pull-requests: write # Required for adding/removing labels
+  statuses: write # Required for creating commit statuses
 
 on:
   # Using pull_request_target instead of pull_request so that we have write access
@@ -109,7 +109,7 @@ jobs:
                 sha: sha,
                 state: 'pending',
                 context: 'Stacked PR',
-                description: `Base is '${baseBranch}'. Merge parent PR first, or remove `stacked-pr-blocked-on-base-pr` label to override.`
+                description: `Base is '${baseBranch}'. Merge parent PR first, or remove 'stacked-pr-blocked-on-base-pr' label to override.`
                 });
-              core.notice(`Stacked PR detected (base: '${baseBranch}'). Remove `stacked-pr-blocked-on-base-pr` label to allow merging.`);
+              core.notice(`Stacked PR detected (base: '${baseBranch}'). Remove 'stacked-pr-blocked-on-base-pr' label to allow merging.`);
             }
