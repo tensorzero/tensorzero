@@ -515,8 +515,8 @@ pub async fn run_evaluation_core_streaming(
     // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
     let cancellation_tokens_arc = Arc::new(stopping_manager.get_tokens().clone());
 
-    // Save clickhouse_client before moving clients into batch_params
-    let clickhouse_client_for_result = clients.clickhouse_client.clone();
+    // Save batcher_join_handle before moving clients into batch_params
+    let batcher_join_handle = clients.clickhouse_client.batcher_join_handle();
 
     // Build batch processing params
     let batch_params = ProcessBatchParams {
@@ -589,7 +589,7 @@ pub async fn run_evaluation_core_streaming(
         receiver,
         run_info,
         evaluation_config: evaluators,
-        clickhouse_client: clickhouse_client_for_result,
+        batcher_join_handle,
     })
 }
 

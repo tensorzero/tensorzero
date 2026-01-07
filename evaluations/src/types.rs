@@ -11,6 +11,7 @@ use tensorzero_core::{
         ClientInferenceParams, FeedbackParams, FeedbackResponse, InferenceOutput, TensorZeroError,
     },
     config::UninitializedVariantInfo,
+    db::clickhouse::BatchWriterHandle,
     db::clickhouse::ClickHouseConnectionInfo,
     error::Error,
     evaluations::{EvaluationConfig, EvaluationFunctionConfigTable},
@@ -208,9 +209,9 @@ pub struct EvaluationStreamResult {
     pub receiver: mpsc::Receiver<EvaluationUpdate>,
     pub run_info: RunInfo,
     pub evaluation_config: Arc<EvaluationConfig>,
-    /// The ClickHouse client used for this evaluation.
+    /// The join handle for the ClickHouse batch writer.
     /// The caller may want to wait for the batch writer to finish.
-    pub clickhouse_client: ClickHouseConnectionInfo,
+    pub batcher_join_handle: Option<BatchWriterHandle>,
 }
 
 /// Parameters for running an evaluation using the app state directly.

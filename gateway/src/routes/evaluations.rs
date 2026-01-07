@@ -19,7 +19,7 @@ use evaluations::{
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::UninitializedVariantInfo;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::db::clickhouse::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -162,7 +162,7 @@ struct EvaluationStreamParams {
     dataset_name: Option<String>,
     variant_name: Option<String>,
     receiver: mpsc::Receiver<EvaluationUpdate>,
-    clickhouse_client: ClickHouseConnectionInfo,
+    batcher_join_handle: Option<BatchWriterHandle>,
 }
 
 fn create_evaluation_stream(
@@ -175,7 +175,7 @@ fn create_evaluation_stream(
         dataset_name,
         variant_name,
         mut receiver,
-        clickhouse_client,
+        batcher_join_handle,
     } = params;
 
     async_stream::stream! {
@@ -235,10 +235,7 @@ fn create_evaluation_stream(
         }
 
         // Wait for ClickHouse batch writer to finish
-        let join_handle = clickhouse_client.batcher_join_handle();
-        drop(clickhouse_client);
-
-        if let Some(handle) = join_handle
+        if let Some(handle) = batcher_join_handle
             && let Err(e) = handle.await
         {
             let error_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
@@ -377,7 +374,7 @@ pub async fn run_evaluation_handler(
         dataset_name: dataset_name_for_event,
         variant_name: variant_name_for_event,
         receiver: result.receiver,
-        clickhouse_client: result.clickhouse_client,
+        batcher_join_handle: result.batcher_join_handle,
     });
 
     Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))
