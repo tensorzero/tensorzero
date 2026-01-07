@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
@@ -55,29 +55,106 @@ impl ToolMetadata for ListDatapointsTool {
                     "type": "string",
                     "description": "Filter by function name (optional)."
                 },
-                "tags": {
-                    "type": "object",
-                    "additionalProperties": { "type": "string" },
-                    "description": "Filter by tags (optional)."
-                },
                 "limit": {
                     "type": "integer",
-                    "description": "Maximum number of datapoints to return (default: 100)."
+                    "description": "Maximum number of datapoints to return (default: 20)."
                 },
                 "offset": {
                     "type": "integer",
                     "description": "Number of datapoints to skip (for pagination)."
                 },
+                "filter": {
+                    "description": "Optional filter to apply when querying datapoints. Supports filtering by tags, time, and logical combinations (AND/OR/NOT).",
+                    "oneOf": [
+                        {
+                            "type": "object",
+                            "description": "Filter by tag key-value pair.",
+                            "properties": {
+                                "type": { "const": "tag" },
+                                "key": { "type": "string", "description": "Tag key." },
+                                "value": { "type": "string", "description": "Tag value." },
+                                "comparison_operator": {
+                                    "type": "string",
+                                    "enum": ["=", "!="],
+                                    "description": "Comparison operator."
+                                }
+                            },
+                            "required": ["type", "key", "value", "comparison_operator"]
+                        },
+                        {
+                            "type": "object",
+                            "description": "Filter by timestamp.",
+                            "properties": {
+                                "type": { "const": "time" },
+                                "time": { "type": "string", "format": "date-time", "description": "Timestamp to compare against (ISO 8601 format)." },
+                                "comparison_operator": {
+                                    "type": "string",
+                                    "enum": ["<", "<=", "=", ">", ">=", "!="],
+                                    "description": "Comparison operator."
+                                }
+                            },
+                            "required": ["type", "time", "comparison_operator"]
+                        },
+                        {
+                            "type": "object",
+                            "description": "Logical AND of multiple filters.",
+                            "properties": {
+                                "type": { "const": "and" },
+                                "children": { "type": "array", "description": "Array of filters to AND together.", "items": { "type": "object" } }
+                            },
+                            "required": ["type", "children"]
+                        },
+                        {
+                            "type": "object",
+                            "description": "Logical OR of multiple filters.",
+                            "properties": {
+                                "type": { "const": "or" },
+                                "children": { "type": "array", "description": "Array of filters to OR together.", "items": { "type": "object" } }
+                            },
+                            "required": ["type", "children"]
+                        },
+                        {
+                            "type": "object",
+                            "description": "Logical NOT of a filter.",
+                            "properties": {
+                                "type": { "const": "not" },
+                                "child": { "type": "object", "description": "Filter to negate." }
+                            },
+                            "required": ["type", "child"]
+                        }
+                    ]
+                },
                 "order_by": {
+                    "type": "array",
+                    "description": "Optional ordering criteria for the results.",
+                    "items": {
+                        "type": "object",
+                        "description": "A single ordering criterion.",
+                        "properties": {
+                            "by": {
+                                "type": "string",
+                                "enum": ["timestamp", "search_relevance"],
+                                "description": "The property to order by. 'timestamp' orders by creation time, 'search_relevance' orders by search query relevance (requires search_query_experimental)."
+                            },
+                            "direction": {
+                                "type": "string",
+                                "enum": ["ascending", "descending"],
+                                "description": "The ordering direction."
+                            }
+                        },
+                        "required": ["by", "direction"]
+                    }
+                },
+                "search_query_experimental": {
                     "type": "string",
-                    "enum": ["created_at_asc", "created_at_desc"],
-                    "description": "Sort order (default: created_at_desc)."
+                    "description": "EXPERIMENTAL: Text query for case-insensitive substring search over input and output. Requires exact substring match. May be slow without other filters."
                 }
             },
             "required": ["dataset_name"]
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema)
+            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
     }
 }
 
@@ -92,6 +169,6 @@ impl SimpleTool for ListDatapointsTool {
         ctx.client()
             .list_datapoints(llm_params.dataset_name, llm_params.request)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| NonControlToolError::ExecutionFailed(e.into()).into())
     }
 }
