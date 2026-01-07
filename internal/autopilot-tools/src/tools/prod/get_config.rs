@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{InnerToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
@@ -14,7 +14,7 @@ use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_config tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct GetConfigToolParams;
+pub struct GetConfigToolParams {}
 
 /// Tool for retrieving config snapshots.
 #[derive(Default)]
@@ -41,7 +41,7 @@ impl ToolMetadata for GetConfigTool {
         });
 
         serde_json::from_value(schema).map_err(|e| {
-            InnerToolError::SchemaGeneration {
+            NonControlToolError::SchemaGeneration {
                 message: e.to_string(),
             }
             .into()

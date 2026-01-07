@@ -11,14 +11,16 @@ use async_trait::async_trait;
 use autopilot_client::AutopilotError;
 use evaluations::stats::EvaluationStats;
 use evaluations::types::{EvaluationCoreArgs, EvaluationVariant};
-use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_core_streaming};
+use evaluations::{
+    ClientInferenceExecutor, EvaluationUpdate, OutputFormat, run_evaluation_core_streaming,
+};
 use tensorzero::{
-    Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams, ClientMode,
-    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
-    DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetConfigResponse,
-    GetDatapointsResponse, GetInferencesResponse, InferenceOutput, InferenceResponse,
-    ListDatapointsRequest, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
-    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
+    Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
+    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -596,7 +598,10 @@ impl TensorZeroClient for Client {
             ClientMode::HTTPGateway(_) => Err(TensorZeroClientError::NotSupported(
                 "run_evaluation is only supported in embedded gateway mode".to_string(),
             )),
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => {
                 let app_state = &gateway.handle.app_state;
 
                 // Look up the evaluation config
@@ -623,24 +628,11 @@ impl TensorZeroClient for Client {
                     .collect();
                 let function_configs = Arc::new(function_configs);
 
-                // Build a Client from our existing components
-                let tensorzero_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
-                    config: app_state.config.clone(),
-                    clickhouse_connection_info: app_state.clickhouse_connection_info.clone(),
-                    postgres_connection_info: app_state.postgres_connection_info.clone(),
-                    http_client: app_state.http_client.clone(),
-                    timeout: *timeout,
-                })
-                .build()
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::Evaluation(format!("Failed to build client: {e}"))
-                })?;
-
+                let inference_executor = Arc::new(ClientInferenceExecutor::new(self.clone()));
                 let evaluation_run_id = Uuid::now_v7();
 
                 let core_args = EvaluationCoreArgs {
-                    tensorzero_client,
+                    inference_executor,
                     clickhouse_client: app_state.clickhouse_connection_info.clone(),
                     evaluation_config,
                     function_configs,

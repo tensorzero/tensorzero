@@ -3,18 +3,146 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tensorzero_core::{
     cache::CacheEnabledMode,
-    client::Client,
+    client::{
+        ClientInferenceParams, FeedbackParams, FeedbackResponse, InferenceOutput, TensorZeroError,
+    },
     config::UninitializedVariantInfo,
     db::clickhouse::ClickHouseConnectionInfo,
+    error::Error,
     evaluations::{EvaluationConfig, EvaluationFunctionConfigTable},
+    inference::types::storage::StoragePath,
+    utils::gateway::AppStateData,
 };
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::EvaluationUpdate;
+
+/// Trait for executing inference and feedback requests during evaluations.
+///
+/// This abstraction allows evaluations to run both:
+/// - Inside the gateway (via direct handler calls)
+/// - Outside the gateway (via HTTP client or embedded gateway)
+#[async_trait]
+pub trait EvaluationsInferenceExecutor: Send + Sync {
+    /// Execute an inference request and return the result.
+    async fn inference(
+        &self,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceOutput, TensorZeroError>;
+
+    /// Submit feedback for an inference.
+    async fn feedback(&self, params: FeedbackParams) -> Result<FeedbackResponse, TensorZeroError>;
+
+    /// Resolve a storage path to get the actual data (for file inputs stored in object storage).
+    async fn resolve_storage_path(&self, storage_path: StoragePath) -> Result<String, Error>;
+}
+
+/// Wrapper around `Client` that implements `EvaluationsInferenceExecutor`.
+/// Use this for CLI tools or when calling evaluations from outside the gateway.
+pub struct ClientInferenceExecutor {
+    client: tensorzero_core::client::Client,
+}
+
+impl ClientInferenceExecutor {
+    pub fn new(client: tensorzero_core::client::Client) -> Self {
+        Self { client }
+    }
+}
+
+#[async_trait]
+impl EvaluationsInferenceExecutor for ClientInferenceExecutor {
+    async fn inference(
+        &self,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceOutput, TensorZeroError> {
+        self.client.inference(params).await
+    }
+
+    async fn feedback(&self, params: FeedbackParams) -> Result<FeedbackResponse, TensorZeroError> {
+        self.client.feedback(params).await
+    }
+
+    async fn resolve_storage_path(&self, storage_path: StoragePath) -> Result<String, Error> {
+        use tensorzero_core::inference::types::stored_input::StoragePathResolver;
+        self.client.resolve(storage_path).await
+    }
+}
+
+/// Executor that calls gateway handlers directly without HTTP overhead.
+/// This is used when running evaluations from within the gateway or embedded mode.
+pub struct AppStateInferenceExecutor {
+    app_state: AppStateData,
+}
+
+impl AppStateInferenceExecutor {
+    pub fn new(app_state: AppStateData) -> Self {
+        Self { app_state }
+    }
+}
+
+#[async_trait]
+impl EvaluationsInferenceExecutor for AppStateInferenceExecutor {
+    async fn inference(
+        &self,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceOutput, TensorZeroError> {
+        use tensorzero_core::endpoints::inference::Params as InferenceParams;
+
+        // Convert ClientInferenceParams to endpoint Params
+        let endpoint_params: InferenceParams = params
+            .try_into()
+            .map_err(|e: Error| TensorZeroError::Other { source: e.into() })?;
+
+        // Call the inference endpoint directly
+        let result = Box::pin(tensorzero_core::endpoints::inference::inference(
+            self.app_state.config.clone(),
+            &self.app_state.http_client,
+            self.app_state.clickhouse_connection_info.clone(),
+            self.app_state.postgres_connection_info.clone(),
+            self.app_state.deferred_tasks.clone(),
+            endpoint_params,
+            None, // No API key for internal calls
+        ))
+        .await
+        .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+
+        Ok(result.output)
+    }
+
+    async fn feedback(&self, params: FeedbackParams) -> Result<FeedbackResponse, TensorZeroError> {
+        // Call the feedback endpoint directly
+        tensorzero_core::endpoints::feedback::feedback(self.app_state.clone(), params, None)
+            .await
+            .map_err(|e| TensorZeroError::Other { source: e.into() })
+    }
+
+    async fn resolve_storage_path(&self, storage_path: StoragePath) -> Result<String, Error> {
+        // Use the object storage endpoint directly
+        let response = tensorzero_core::endpoints::object_storage::get_object(
+            self.app_state.config.object_store_info.as_ref(),
+            storage_path,
+        )
+        .await?;
+        Ok(response.data)
+    }
+}
+
+/// Wrapper type that implements `StoragePathResolver` using an `EvaluationsInferenceExecutor`.
+/// This is needed because we can't implement a foreign trait for `Arc<dyn EvaluationsInferenceExecutor>`.
+pub struct ExecutorStorageResolver(pub Arc<dyn EvaluationsInferenceExecutor>);
+
+impl tensorzero_core::inference::types::stored_input::StoragePathResolver
+    for ExecutorStorageResolver
+{
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
+        self.0.resolve_storage_path(storage_path).await
+    }
+}
 
 /// Specifies which variant to use for evaluation.
 /// Either a variant name from the config, or a dynamic variant configuration.
@@ -29,8 +157,10 @@ pub enum EvaluationVariant {
 /// Parameters for running an evaluation using run_evaluation_core
 /// This struct encapsulates all the necessary components for evaluation execution
 pub struct EvaluationCoreArgs {
-    /// TensorZero client for making inference requests
-    pub tensorzero_client: Client,
+    /// Executor for making inference requests during evaluation.
+    /// Use `ClientInferenceExecutor` for CLI/external usage, or
+    /// `GatewayInferenceExecutor` when running inside the gateway.
+    pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
 
     /// ClickHouse client for database operations
     pub clickhouse_client: ClickHouseConnectionInfo,
@@ -78,4 +208,44 @@ pub struct EvaluationStreamResult {
     pub receiver: mpsc::Receiver<EvaluationUpdate>,
     pub run_info: RunInfo,
     pub evaluation_config: Arc<EvaluationConfig>,
+    /// The ClickHouse client used for this evaluation.
+    /// The caller may want to wait for the batch writer to finish.
+    pub clickhouse_client: ClickHouseConnectionInfo,
+}
+
+/// Parameters for running an evaluation using the app state directly.
+/// This is used by the gateway handler and embedded mode in durable-tools.
+pub struct RunEvaluationWithAppStateParams {
+    /// The evaluation configuration
+    pub evaluation_config: EvaluationConfig,
+
+    /// Function configuration for output schema validation
+    pub function_config: tensorzero_core::evaluations::EvaluationFunctionConfig,
+
+    /// Name of the evaluation (for tagging/logging purposes)
+    pub evaluation_name: String,
+
+    /// Name of the dataset to run on.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub dataset_name: Option<String>,
+
+    /// Specific datapoint IDs to evaluate.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub datapoint_ids: Option<Vec<Uuid>>,
+
+    /// Variant to use for evaluation.
+    pub variant: EvaluationVariant,
+
+    /// Number of concurrent requests to make.
+    pub concurrency: usize,
+
+    /// Cache configuration for inference requests
+    pub cache_mode: CacheEnabledMode,
+
+    /// Maximum number of datapoints to evaluate
+    pub max_datapoints: Option<u32>,
+
+    /// Precision targets for adaptive stopping.
+    /// Maps evaluator names to target confidence interval half-widths.
+    pub precision_targets: std::collections::HashMap<String, f32>,
 }

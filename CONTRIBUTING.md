@@ -200,7 +200,6 @@ To set it up, follow these steps from the `ui` directory:
 
    ```bash
    TENSORZERO_GATEWAY_URL="http://localhost:3000"
-   TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
 
    # Optional: add provider credentials for optimization workflows
    OPENAI_API_KEY="..."

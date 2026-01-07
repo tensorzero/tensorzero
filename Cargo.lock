@@ -1681,6 +1681,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2023,6 +2037,7 @@ name = "evaluations"
 version = "2025.12.6"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap",
  "durable",
  "futures",
@@ -2373,11 +2388,16 @@ dependencies = [
 name = "gateway"
 version = "2025.12.6"
 dependencies = [
+ "anyhow",
+ "async-stream",
+ "async-trait",
  "autopilot-worker",
  "axum",
  "brotli",
+ "chrono",
  "clap",
  "durable-tools",
+ "evaluations",
  "flate2",
  "futures",
  "http 1.4.0",
@@ -2386,6 +2406,7 @@ dependencies = [
  "reqwest",
  "reqwest-eventsource",
  "secrecy",
+ "serde",
  "serde_json",
  "sqlx",
  "tempfile",
@@ -2398,6 +2419,8 @@ dependencies = [
  "tokio-stream",
  "tower-http",
  "tracing",
+ "ts-rs",
+ "url",
  "uuid",
  "zstd",
 ]
@@ -2572,7 +2595,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68a7f542ee6b35af73b06abc0dad1c1bae89964e4e253bc4b587b91c9637867b"
 dependencies = [
  "cfg-if",
- "dashmap",
+ "dashmap 5.5.3",
  "futures",
  "futures-timer",
  "no-std-compat",
@@ -3143,10 +3166,10 @@ dependencies = [
 [[package]]
 name = "init-tracing-opentelemetry"
 version = "0.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "317b92661b729d90cce708de8a43cc7963fafe0710399f84299f9198a114fd4a"
+source = "git+https://github.com/Aaron1011/tracing-opentelemetry-instrumentation-sdk?rev=c240499e464c2c787dedda2b870ae50747a95e6f#c240499e464c2c787dedda2b870ae50747a95e6f"
 dependencies = [
  "opentelemetry",
+ "opentelemetry-aws",
  "opentelemetry_sdk",
  "thiserror 2.0.17",
  "tracing",
@@ -3961,9 +3984,9 @@ dependencies = [
 
 [[package]]
 name = "object_store"
-version = "0.12.4"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c1be0c6c22ec0817cdc77d3842f721a17fd30ab6965001415b5402a74e6b740"
+checksum = "d180d5469872facb82dec7e233ff850d615330ea3044a7813550b22ffa4f05ce"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -3983,7 +4006,7 @@ dependencies = [
  "rand 0.9.2",
  "reqwest",
  "ring",
- "rustls-pemfile",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -4035,6 +4058,16 @@ dependencies = [
  "pin-project-lite",
  "thiserror 2.0.17",
  "tracing",
+]
+
+[[package]]
+name = "opentelemetry-aws"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09fbe9af6b9403e7fe43c11cc341d320d7cf5e779c6708b41415228af1921045"
+dependencies = [
+ "opentelemetry",
+ "opentelemetry_sdk",
 ]
 
 [[package]]
@@ -6158,6 +6191,7 @@ dependencies = [
  "chrono",
  "clap",
  "clarabel",
+ "dashmap 6.1.0",
  "derive_builder 0.20.2",
  "durable",
  "enum-map",

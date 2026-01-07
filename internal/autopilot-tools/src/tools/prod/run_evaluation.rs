@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{
-    CacheEnabledMode, InnerToolError, RunEvaluationParams, RunEvaluationResponse, SimpleTool,
+    CacheEnabledMode, NonControlToolError, RunEvaluationParams, RunEvaluationResponse, SimpleTool,
     SimpleToolContext, ToolMetadata, ToolResult,
 };
 
@@ -127,7 +127,7 @@ impl ToolMetadata for RunEvaluationTool {
         });
 
         serde_json::from_value(schema).map_err(|e| {
-            InnerToolError::SchemaGeneration {
+            NonControlToolError::SchemaGeneration {
                 message: e.to_string(),
             }
             .into()

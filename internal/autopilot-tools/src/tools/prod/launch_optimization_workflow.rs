@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use durable_tools::{InnerToolError, TaskTool, ToolContext, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, TaskTool, ToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
 
@@ -143,7 +143,7 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
         });
 
         serde_json::from_value(schema).map_err(|e| {
-            InnerToolError::SchemaGeneration {
+            NonControlToolError::SchemaGeneration {
                 message: e.to_string(),
             }
             .into()

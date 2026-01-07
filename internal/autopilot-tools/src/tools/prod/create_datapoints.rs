@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use durable_tools::{InnerToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
@@ -59,11 +59,11 @@ impl ToolMetadata for CreateDatapointsTool {
                     "description": "The datapoints to create. Each can be Chat or Json type.",
                     "items": {
                         "type": "object",
-                        "description": "A datapoint. Use 'Chat' type with 'input' containing messages, or 'Json' type with 'input'/'output' as JSON objects.",
+                        "description": "A datapoint. Use 'chat' type with 'input' containing messages, or 'json' type with structured input/output.",
                         "properties": {
                             "type": {
                                 "type": "string",
-                                "enum": ["Chat", "Json"],
+                                "enum": ["chat", "json"],
                                 "description": "The datapoint type."
                             },
                             "function_name": {
@@ -75,7 +75,11 @@ impl ToolMetadata for CreateDatapointsTool {
                                 "description": "The input data. For Chat: {system?, messages}. For Json: any JSON object."
                             },
                             "output": {
-                                "description": "Expected output. For Chat: string or content blocks. For Json: any JSON."
+                                "description": "Expected output. For 'chat': array of content blocks like [{\"type\": \"text\", \"text\": \"...\"}]. For 'json': object with 'raw' field containing JSON string, e.g. {\"raw\": \"{\\\"key\\\": \\\"value\\\"}\"}"
+                            },
+                            "output_schema": {
+                                "type": "object",
+                                "description": "JSON Schema for validating the output. Only used for 'json' type datapoints."
                             },
                             "tags": {
                                 "type": "object",
@@ -91,7 +95,7 @@ impl ToolMetadata for CreateDatapointsTool {
         });
 
         serde_json::from_value(schema).map_err(|e| {
-            InnerToolError::SchemaGeneration {
+            NonControlToolError::SchemaGeneration {
                 message: e.to_string(),
             }
             .into()

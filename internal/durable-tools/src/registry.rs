@@ -9,7 +9,7 @@ use tensorzero::{FunctionTool, Tool};
 
 use crate::ToolResult;
 use crate::context::SimpleToolContext;
-use crate::error::{InnerToolError, ToolError};
+use crate::error::{NonControlToolError, ToolError};
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
 use crate::tool_metadata::ToolMetadata;
@@ -114,11 +114,11 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
 
     fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
         let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
-            .map_err(|e| InnerToolError::InvalidParams {
+            .map_err(|e| NonControlToolError::InvalidParams {
                 message: format!("llm_params: {e}"),
             })?;
         let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
-            InnerToolError::InvalidParams {
+            NonControlToolError::InvalidParams {
                 message: format!("side_info: {e}"),
             }
         })?;
@@ -150,11 +150,11 @@ impl<T: SimpleTool> ErasedTool for T {
 
     fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
         let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
-            .map_err(|e| InnerToolError::InvalidParams {
+            .map_err(|e| NonControlToolError::InvalidParams {
                 message: format!("llm_params: {e}"),
             })?;
         let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
-            InnerToolError::InvalidParams {
+            NonControlToolError::InvalidParams {
                 message: format!("side_info: {e}"),
             }
         })?;
@@ -210,11 +210,11 @@ impl ToolRegistry {
     ///
     /// # Errors
     ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
     pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
-            return Err(InnerToolError::DuplicateToolName {
+            return Err(NonControlToolError::DuplicateToolName {
                 name: name.into_owned(),
             }
             .into());
@@ -229,13 +229,13 @@ impl ToolRegistry {
     ///
     /// # Errors
     ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
     pub fn register_simple_tool<T: SimpleTool + Default>(
         &mut self,
     ) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
-            return Err(InnerToolError::DuplicateToolName {
+            return Err(NonControlToolError::DuplicateToolName {
                 name: name.into_owned(),
             }
             .into());
@@ -267,8 +267,8 @@ impl ToolRegistry {
 
     /// Validate parameters for a tool by name.
     ///
-    /// Returns `ToolError::ToolNotFound` if the tool doesn't exist.
-    /// Returns `ToolError::InvalidParams` if validation fails.
+    /// Returns `NonControlToolError::ToolNotFound` if the tool doesn't exist.
+    /// Returns `NonControlToolError::InvalidParams` if validation fails.
     pub fn validate_params(
         &self,
         tool_name: &str,
@@ -277,7 +277,7 @@ impl ToolRegistry {
     ) -> ToolResult<()> {
         let tool = self
             .get(tool_name)
-            .ok_or_else(|| InnerToolError::ToolNotFound {
+            .ok_or_else(|| NonControlToolError::ToolNotFound {
                 name: tool_name.to_string(),
             })?;
         tool.validate_params(llm_params, side_info)

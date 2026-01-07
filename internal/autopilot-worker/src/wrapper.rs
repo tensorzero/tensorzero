@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use autopilot_tools::AutopilotToolError;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, InnerToolError, SimpleTool, SimpleToolContext,
+    CreateEventGatewayRequest, EventPayload, NonControlToolError, SimpleTool, SimpleToolContext,
     TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
     ToolResult as DurableToolResult,
 };
@@ -334,9 +334,9 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
                 })
             })
         }
-        ToolError::Serializable(serializable_error) => {
+        ToolError::NonControl(non_control_error) => {
             let failure = ToolFailure::Tool {
-                error: serializable_error,
+                error: non_control_error,
             };
             serde_json::to_value(failure).unwrap_or_else(|e| {
                 serde_json::json!({
@@ -365,7 +365,7 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
 pub enum ToolFailure {
     Control { message: String },
     Serialization { message: String },
-    Tool { error: InnerToolError },
+    Tool { error: NonControlToolError },
     Database { message: String },
 }
 
