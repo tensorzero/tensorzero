@@ -1,10 +1,6 @@
 import { z } from "zod";
 
-import {
-  contentBlockChatOutputSchema,
-  jsonInferenceOutputSchema,
-  displayInputSchema,
-} from "./common";
+import type { EvaluationResultRow } from "~/types/tensorzero";
 
 export const EvaluationRunInfoSchema = z.object({
   evaluation_run_id: z.string(),
@@ -13,104 +9,6 @@ export const EvaluationRunInfoSchema = z.object({
 });
 
 export type EvaluationRunInfo = z.infer<typeof EvaluationRunInfoSchema>;
-
-export const EvaluationResultSchema = z.object({
-  datapoint_id: z.string().uuid(),
-  evaluation_run_id: z.string().uuid(),
-  input: z.string(),
-  generated_output: z.string(),
-  reference_output: z.string(),
-  dataset_name: z.string(),
-  metric_name: z.string(),
-  metric_value: z.string(),
-  is_human_feedback: z.boolean(),
-});
-
-export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
-
-export const EvaluationResultWithVariantSchema = EvaluationResultSchema.extend({
-  variant_name: z.string(),
-});
-
-export type EvaluationResultWithVariant = z.infer<
-  typeof EvaluationResultWithVariantSchema
->;
-
-export const JsonEvaluationResultSchema = z.object({
-  inference_id: z.string().uuid(),
-  episode_id: z.string().uuid(),
-  datapoint_id: z.string().uuid(),
-  evaluation_run_id: z.string().uuid(),
-  evaluator_inference_id: z.string().uuid().optional(),
-  input: displayInputSchema,
-  generated_output: jsonInferenceOutputSchema,
-  reference_output: jsonInferenceOutputSchema.nullish(),
-  dataset_name: z.string(),
-  metric_name: z.string().optional(),
-  metric_value: z.string().optional(),
-  feedback_id: z.string().uuid().optional(),
-  is_human_feedback: z.boolean(),
-  name: z.string().optional(),
-  staled_at: z.string().datetime().optional(),
-});
-
-export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
-
-export const ChatEvaluationResultSchema = z.object({
-  inference_id: z.string().uuid(),
-  episode_id: z.string().uuid(),
-  datapoint_id: z.string().uuid(),
-  evaluation_run_id: z.string().uuid(),
-  evaluator_inference_id: z.string().uuid().optional(),
-  input: displayInputSchema,
-  generated_output: z.array(contentBlockChatOutputSchema),
-  reference_output: z.array(contentBlockChatOutputSchema).nullish(),
-  dataset_name: z.string(),
-  metric_name: z.string().optional(),
-  metric_value: z.string().optional(),
-  feedback_id: z.string().uuid().optional(),
-  is_human_feedback: z.boolean(),
-  name: z.string().optional(),
-  staled_at: z.string().datetime().optional(),
-});
-
-export type ChatEvaluationResult = z.infer<typeof ChatEvaluationResultSchema>;
-
-export const ParsedEvaluationResultSchema = z.union([
-  JsonEvaluationResultSchema,
-  ChatEvaluationResultSchema,
-]);
-
-export type ParsedEvaluationResult = z.infer<
-  typeof ParsedEvaluationResultSchema
->;
-
-export const JsonEvaluationResultWithVariantSchema =
-  JsonEvaluationResultSchema.extend({
-    variant_name: z.string(),
-  });
-
-export type JsonEvaluationResultWithVariant = z.infer<
-  typeof JsonEvaluationResultWithVariantSchema
->;
-
-export const ChatEvaluationResultWithVariantSchema =
-  ChatEvaluationResultSchema.extend({
-    variant_name: z.string(),
-  });
-
-export type ChatEvaluationResultWithVariant = z.infer<
-  typeof ChatEvaluationResultWithVariantSchema
->;
-
-export const ParsedEvaluationResultWithVariantSchema = z.union([
-  JsonEvaluationResultWithVariantSchema,
-  ChatEvaluationResultWithVariantSchema,
-]);
-
-export type ParsedEvaluationResultWithVariant = z.infer<
-  typeof ParsedEvaluationResultWithVariantSchema
->;
 
 export const EvaluationStatisticsSchema = z.object({
   evaluation_run_id: z.string(),
@@ -157,19 +55,20 @@ export type ConsolidatedMetric = {
 
 // Define a type for consolidated evaluation results
 export type ConsolidatedEvaluationResult = Omit<
-  ParsedEvaluationResultWithVariant,
+  EvaluationResultRow,
   "metric_name" | "metric_value"
 > & {
   metrics: ConsolidatedMetric[];
 };
+
 /**
  * Consolidate evaluation results from the API.
  * Groups results by (datapoint_id, evaluation_run_id, variant_name) and collects metrics.
  * Input and output fields are already parsed by the backend.
  */
-export async function consolidateEvaluationResults(
-  evaluationResults: ParsedEvaluationResultWithVariant[],
-): Promise<ConsolidatedEvaluationResult[]> {
+export function consolidateEvaluationResults(
+  evaluationResults: EvaluationResultRow[],
+): ConsolidatedEvaluationResult[] {
   // Create a map to store results by datapoint_id and evaluation_run_id
   const resultMap = new Map<string, ConsolidatedEvaluationResult>();
 

@@ -11,7 +11,6 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
-import Input from "~/components/inference/Input";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 import {
@@ -22,6 +21,7 @@ import {
   useFetcher,
   type RouteHandle,
 } from "react-router";
+import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
@@ -29,7 +29,6 @@ import {
   getEvaluatorMetricName,
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
-import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { useConfig } from "~/context/config";
 import MetricValue from "~/components/metric/MetricValue";
 import { getMetricType } from "~/utils/config/evaluations";
@@ -53,7 +52,6 @@ import type {
   ContentBlockChatOutput,
 } from "~/types/tensorzero";
 
-type EvaluationOutput = JsonInferenceOutput | ContentBlockChatOutput[];
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
@@ -137,7 +135,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   const consolidatedEvaluationResults =
-    await consolidateEvaluationResults(evaluationResults);
+    consolidateEvaluationResults(evaluationResults);
   if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
     // Find which evaluation run IDs are missing from the results
     const foundEvaluationRunIds = new Set(
@@ -243,8 +241,7 @@ export default function EvaluationDatapointPage({
       ? [
           {
             id: "Reference",
-            output: consolidatedEvaluationResults[0]
-              .reference_output as EvaluationOutput,
+            output: consolidatedEvaluationResults[0].reference_output,
             metrics: [],
             variant_name: "Reference",
             inferenceId: null,
@@ -257,7 +254,7 @@ export default function EvaluationDatapointPage({
       inferenceId: result.inference_id,
       episodeId: result.episode_id,
       variant_name: result.variant_name,
-      output: result.generated_output as EvaluationOutput,
+      output: result.generated_output,
       metrics: result.metrics,
     })),
   ];
@@ -307,11 +304,7 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            {/* Cast StoredInput to ZodDisplayInput - they're structurally compatible for display */}
-            <Input
-              {...(consolidatedEvaluationResults[0]
-                .input as unknown as ZodDisplayInput)}
-            />
+            <InputElement input={consolidatedEvaluationResults[0].input} />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}
@@ -506,7 +499,7 @@ type OutputsSectionProps = {
   outputsToDisplay: Array<{
     id: string;
     variant_name: string;
-    output: EvaluationOutput;
+    output: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
     episodeId: string | null;

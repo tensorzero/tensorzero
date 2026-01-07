@@ -325,8 +325,8 @@ export default function DatasetRowTable({
         key={location.key}
         fallback={
           <PageButtons
-            onPreviousPage={() => { }}
-            onNextPage={() => { }}
+            onPreviousPage={() => {}}
+            onNextPage={() => {}}
             disablePrevious
             disableNext
           />

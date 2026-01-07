@@ -86,29 +86,7 @@ pub(crate) struct RawEvaluationResultRow {
     pub is_human_feedback: bool,
     pub variant_name: String,
     pub name: Option<String>,
-    /// staled_at as a string from ClickHouse, parsed to DateTime in conversion
     pub staled_at: Option<String>,
-}
-
-/// Parses an optional staled_at string from ClickHouse format to DateTime<Utc>.
-/// Returns None if the string is empty, null-like ("1970-01-01 00:00:00"), or fails to parse.
-fn parse_staled_at(staled_at: Option<String>) -> Option<DateTime<Utc>> {
-    staled_at.and_then(|s| {
-        // ClickHouse null DateTime64 may come back as "1970-01-01 00:00:00.000000" or empty
-        if s.is_empty() || s.starts_with("1970-01-01") {
-            return None;
-        }
-        // Try parsing as ISO 8601 format
-        DateTime::parse_from_rfc3339(&s)
-            .map(|dt| dt.with_timezone(&Utc))
-            .ok()
-            .or_else(|| {
-                // Try parsing as ClickHouse format "YYYY-MM-DD HH:MM:SS.ffffff"
-                chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f")
-                    .map(|naive| naive.and_utc())
-                    .ok()
-            })
-    })
 }
 
 /// Evaluation result for a chat function.
@@ -148,7 +126,7 @@ pub struct ChatEvaluationResultRow {
     pub name: Option<String>,
     /// When the datapoint was marked as stale (if ever)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub staled_at: Option<DateTime<Utc>>,
+    pub staled_at: Option<String>,
 }
 
 /// Evaluation result for a JSON function.
@@ -188,7 +166,7 @@ pub struct JsonEvaluationResultRow {
     pub name: Option<String>,
     /// When the datapoint was marked as stale (if ever)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub staled_at: Option<DateTime<Utc>>,
+    pub staled_at: Option<String>,
 }
 
 /// Evaluation result row that can represent either chat or JSON function output.
@@ -234,7 +212,7 @@ impl RawEvaluationResultRow {
             is_human_feedback: self.is_human_feedback,
             variant_name: self.variant_name,
             name: self.name,
-            staled_at: parse_staled_at(self.staled_at),
+            staled_at: self.staled_at,
         })
     }
 
@@ -271,7 +249,7 @@ impl RawEvaluationResultRow {
             is_human_feedback: self.is_human_feedback,
             variant_name: self.variant_name,
             name: self.name,
-            staled_at: parse_staled_at(self.staled_at),
+            staled_at: self.staled_at,
         })
     }
 }
