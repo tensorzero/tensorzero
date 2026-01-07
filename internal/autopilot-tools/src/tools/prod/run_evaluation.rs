@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{
-    CacheEnabledMode, RunEvaluationParams, RunEvaluationResponse, SimpleTool, SimpleToolContext,
-    ToolError, ToolMetadata, ToolResult,
+    CacheEnabledMode, NonControlToolError, RunEvaluationParams, RunEvaluationResponse, SimpleTool,
+    SimpleToolContext, ToolMetadata, ToolResult,
 };
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
@@ -124,7 +124,8 @@ impl ToolMetadata for RunEvaluationTool {
             "required": ["evaluation_name", "variant_name"]
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema)
+            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
     }
 }
 
@@ -150,6 +151,6 @@ impl SimpleTool for RunEvaluationTool {
         ctx.client()
             .run_evaluation(params)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| NonControlToolError::ExecutionFailed(e.into()).into())
     }
 }

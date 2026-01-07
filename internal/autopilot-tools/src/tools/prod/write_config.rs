@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -114,7 +114,8 @@ impl ToolMetadata for WriteConfigTool {
             "required": ["config"]
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema)
+            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
     }
 }
 
@@ -127,8 +128,10 @@ impl SimpleTool for WriteConfigTool {
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         let config: UninitializedConfig =
-            serde_json::from_value(llm_params.config).map_err(|e| ToolError::Validation {
-                message: format!("Invalid `config`: {e}"),
+            serde_json::from_value(llm_params.config).map_err(|e| {
+                NonControlToolError::Validation {
+                    message: format!("Invalid `config`: {e}"),
+                }
             })?;
 
         let request = WriteConfigRequest {
@@ -140,6 +143,6 @@ impl SimpleTool for WriteConfigTool {
         ctx.client()
             .write_config(request)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| NonControlToolError::ExecutionFailed(e.into()).into())
     }
 }

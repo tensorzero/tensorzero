@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, TaskTool, ToolContext, ToolMetadata, ToolResult};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -58,12 +58,13 @@ impl TaskTool for FlakyTool {
         if llm_params.fail_on_attempt > 0
             && llm_params.attempt_number % llm_params.fail_on_attempt == 0
         {
-            return Err(ToolError::Validation {
+            return Err(NonControlToolError::Validation {
                 message: format!(
                     "Deterministic failure on attempt {} (fail_on_attempt={})",
                     llm_params.attempt_number, llm_params.fail_on_attempt
                 ),
-            });
+            }
+            .into());
         }
 
         Ok(FlakyToolOutput {
