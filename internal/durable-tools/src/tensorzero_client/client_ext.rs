@@ -5,22 +5,19 @@
 //! mode switching.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use autopilot_client::AutopilotError;
 use evaluations::stats::EvaluationStats;
-use evaluations::types::{EvaluationCoreArgs, EvaluationVariant};
-use evaluations::{
-    ClientInferenceExecutor, EvaluationUpdate, OutputFormat, run_evaluation_core_streaming,
-};
+use evaluations::types::{EvaluationVariant, RunEvaluationWithAppStateParams};
+use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_with_app_state};
 use tensorzero::{
-    Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams, ClientMode,
-    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
-    DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetConfigResponse,
-    GetDatapointsResponse, GetInferencesResponse, InferenceOutput, InferenceResponse,
-    ListDatapointsRequest, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
-    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
+    Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
+    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -595,10 +592,19 @@ impl TensorZeroClient for Client {
         params: RunEvaluationParams,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError> {
         match self.mode() {
-            ClientMode::HTTPGateway(_) => Err(TensorZeroClientError::NotSupported(
-                "run_evaluation is only supported in embedded gateway mode".to_string(),
-            )),
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
+            ClientMode::HTTPGateway(_) => {
+                // HTTP mode is not supported because the /internal/evaluations/run endpoint
+                // requires resolved EvaluationConfig and EvaluationFunctionConfig, but
+                // get_config_snapshot only returns UninitializedConfig with paths to schemas
+                // rather than resolved schemas.
+                Err(TensorZeroClientError::NotSupported(
+                    "run_evaluation is only supported in embedded gateway mode".to_string(),
+                ))
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => {
                 let app_state = &gateway.handle.app_state;
 
                 // Look up the evaluation config
@@ -614,63 +620,44 @@ impl TensorZeroClient for Client {
                     })?
                     .clone();
 
-                // Build function configs table for the evaluation
-                let function_configs: HashMap<String, EvaluationFunctionConfig> = app_state
+                // Get the function config for this evaluation
+                let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
+                let function_config = app_state
                     .config
                     .functions
-                    .iter()
-                    .map(|(name, func)| {
-                        (name.clone(), EvaluationFunctionConfig::from(func.as_ref()))
-                    })
-                    .collect();
-                let function_configs = Arc::new(function_configs);
+                    .get(&inference_eval_config.function_name)
+                    .map(|func| EvaluationFunctionConfig::from(func.as_ref()))
+                    .ok_or_else(|| {
+                        TensorZeroClientError::Evaluation(format!(
+                            "Function '{}' not found in config",
+                            inference_eval_config.function_name
+                        ))
+                    })?;
 
-                // Build a Client from our existing components
-                let tensorzero_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
-                    config: app_state.config.clone(),
-                    clickhouse_connection_info: app_state.clickhouse_connection_info.clone(),
-                    postgres_connection_info: app_state.postgres_connection_info.clone(),
-                    http_client: app_state.http_client.clone(),
-                    timeout: *timeout,
-                })
-                .build()
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::Evaluation(format!("Failed to build client: {e}"))
-                })?;
-
-                let evaluation_run_id = Uuid::now_v7();
-
-                // Wrap the client in ClientInferenceExecutor for use with evaluations
-                let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
-
-                let core_args = EvaluationCoreArgs {
-                    inference_executor,
-                    clickhouse_client: app_state.clickhouse_connection_info.clone(),
-                    evaluation_config,
-                    function_configs,
+                // Build params for run_evaluation_with_app_state
+                let app_state_params = RunEvaluationWithAppStateParams {
+                    evaluation_config: (*evaluation_config).clone(),
+                    function_config,
+                    evaluation_name: params.evaluation_name,
                     dataset_name: params.dataset_name,
                     datapoint_ids: params.datapoint_ids,
                     variant: EvaluationVariant::Name(params.variant_name),
-                    evaluation_name: params.evaluation_name,
-                    evaluation_run_id,
-                    inference_cache: params.inference_cache,
                     concurrency: params.concurrency,
+                    cache_mode: params.inference_cache,
+                    max_datapoints: params.max_datapoints,
+                    precision_targets: params.precision_targets,
                 };
 
-                // Run the evaluation with optional adaptive stopping via precision_targets
-                let result = run_evaluation_core_streaming(
-                    core_args,
-                    params.max_datapoints,
-                    params.precision_targets,
-                )
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::Evaluation(format!("Evaluation failed: {e}"))
-                })?;
+                // Run the evaluation using app state directly
+                let result = run_evaluation_with_app_state(app_state.clone(), app_state_params)
+                    .await
+                    .map_err(|e| {
+                        TensorZeroClientError::Evaluation(format!("Evaluation failed: {e}"))
+                    })?;
 
                 let mut receiver = result.receiver;
                 let num_datapoints = result.run_info.num_datapoints;
+                let evaluation_run_id = result.run_info.evaluation_run_id;
 
                 // Collect evaluation results from the channel.
                 // We skip RunInfo since we already have that data from result.run_info.
