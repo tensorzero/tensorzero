@@ -152,7 +152,6 @@ export function NewDatapointForm() {
           <div className="space-y-2" data-testid="dataset-selector">
             <Label htmlFor="dataset">Dataset</Label>
             <DatasetCombobox
-              placeholder="Select dataset"
               selected={selectedDataset}
               onSelect={(dataset) => setSelectedDataset(dataset)}
               allowCreation

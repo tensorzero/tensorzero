@@ -23,7 +23,7 @@ test.describe("New Datapoint Page", () => {
     ).toBeVisible();
 
     // Select dataset (create new)
-    const datasetInput = page.getByPlaceholder("Select dataset");
+    const datasetInput = page.getByPlaceholder(/Create or find dataset/);
     await datasetInput.click();
     await datasetInput.fill(datasetName);
     await page.locator("[cmdk-item]").filter({ hasText: datasetName }).click();
@@ -138,7 +138,7 @@ test.describe("New Datapoint Page", () => {
     await page.waitForLoadState("networkidle");
 
     // Select dataset (create new)
-    const datasetInput = page.getByPlaceholder("Select dataset");
+    const datasetInput = page.getByPlaceholder(/Create or find dataset/);
     await datasetInput.click();
     await datasetInput.fill(datasetName);
     await page.locator("[cmdk-item]").filter({ hasText: datasetName }).click();
@@ -234,7 +234,7 @@ test.describe("New Datapoint Page", () => {
     await page.waitForLoadState("networkidle");
 
     // Select dataset first
-    const datasetInput = page.getByPlaceholder("Select dataset");
+    const datasetInput = page.getByPlaceholder(/Create or find dataset/);
     await datasetInput.click();
     await datasetInput.fill("test_switch");
     await page

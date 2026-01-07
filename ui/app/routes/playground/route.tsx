@@ -342,7 +342,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Dataset</Label>
         <DatasetCombobox
-          placeholder="Select dataset"
           functionName={functionName ?? undefined}
           disabled={!functionName}
           selected={datasetName}

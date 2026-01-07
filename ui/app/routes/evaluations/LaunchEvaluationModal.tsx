@@ -223,7 +223,6 @@ function EvaluationForm({
       />
 
       <DatasetCombobox
-        placeholder="Select dataset"
         functionName={function_name ?? undefined}
         selected={selectedDatasetName}
         onSelect={(name) => setSelectedDatasetName(name)}
