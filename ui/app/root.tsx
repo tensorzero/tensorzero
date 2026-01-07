@@ -18,8 +18,14 @@ import {
   getConfig,
   checkAutopilotAvailable,
 } from "./utils/config/index.server";
+import { AlertTriangle } from "lucide-react";
 import { AppSidebar } from "./components/layout/app.sidebar";
 import { ErrorContent, ErrorDialog } from "./components/ui/error";
+import {
+  ErrorContentCard,
+  ErrorContentHeader,
+  ErrorVariant,
+} from "./components/ui/error/ErrorContentPrimitives";
 import {
   BoundaryErrorType,
   isBoundaryErrorData,
@@ -225,16 +231,21 @@ function extractErrorMessage(error: unknown): string {
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const [open, setOpen] = React.useState(true);
 
-  // Client 404s (page not found in React Router) - show inline, not modal
+  // Client 404s (page not found in React Router) - show centered, not modal
   if (isRouteErrorResponse(error) && error.status === 404) {
     // Ensure this is actually a client 404, not a gateway route not found
     if (!isBoundaryErrorData(error.data)) {
       return (
-        <main className="bg-background flex min-h-screen flex-col items-center justify-center gap-4 p-8">
-          <h1 className="text-4xl font-bold">404</h1>
-          <p className="text-muted-foreground">
-            The requested page could not be found.
-          </p>
+        <main className="bg-background flex min-h-screen items-center justify-center p-8 pb-20">
+          <ErrorContentCard variant={ErrorVariant.Light}>
+            <ErrorContentHeader
+              icon={AlertTriangle}
+              title="Error 404"
+              description="The requested page could not be found."
+              showBorder={false}
+              variant={ErrorVariant.Light}
+            />
+          </ErrorContentCard>
         </main>
       );
     }
