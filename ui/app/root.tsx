@@ -19,13 +19,11 @@ import {
   checkAutopilotAvailable,
 } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
-import { GatewayAuthErrorContent } from "./components/ui/error/GatewayAuthErrorContent";
-import { GatewayUnavailableErrorContent } from "./components/ui/error/GatewayUnavailableErrorContent";
-import { RouteNotFoundErrorContent } from "./components/ui/error/RouteNotFoundErrorContent";
-import { ServerErrorContent } from "./components/ui/error/ServerErrorContent";
-import { ClickHouseErrorContent } from "./components/ui/error/ClickHouseErrorContent";
-import { ErrorBoundaryLayout } from "./components/ui/error/ErrorBoundaryLayout";
-import { ErrorDialog } from "./components/ui/error/ErrorDialog";
+import {
+  ErrorBoundaryLayout,
+  ErrorContent,
+  ErrorDialog,
+} from "./components/ui/error";
 import {
   BoundaryErrorType,
   isBoundaryErrorData,
@@ -201,35 +199,6 @@ function classifyError(error: unknown): {
     message = error.message;
   }
   return { type: BoundaryErrorType.ServerError, message };
-}
-
-function ErrorContent({
-  type,
-  message,
-  routeInfo,
-  status,
-}: {
-  type: BoundaryErrorType;
-  message?: string;
-  routeInfo?: string;
-  status?: number;
-}) {
-  switch (type) {
-    case BoundaryErrorType.GatewayUnavailable:
-      return <GatewayUnavailableErrorContent />;
-    case BoundaryErrorType.GatewayAuthFailed:
-      return <GatewayAuthErrorContent />;
-    case BoundaryErrorType.RouteNotFound:
-      return <RouteNotFoundErrorContent routeInfo={routeInfo} />;
-    case BoundaryErrorType.ClickHouseConnection:
-      return <ClickHouseErrorContent message={message} />;
-    case BoundaryErrorType.ServerError:
-      return <ServerErrorContent status={status} message={message} />;
-    default: {
-      const _exhaustiveCheck: never = type;
-      return <ServerErrorContent status={status} message={message} />;
-    }
-  }
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

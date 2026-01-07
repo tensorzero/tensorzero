@@ -1,21 +1,39 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { ErrorDialog } from "./ErrorDialog";
-import { GatewayUnavailableErrorContent } from "./GatewayUnavailableErrorContent";
-import { GatewayAuthErrorContent } from "./GatewayAuthErrorContent";
-import { RouteNotFoundErrorContent } from "./RouteNotFoundErrorContent";
-import { ServerErrorContent } from "./ServerErrorContent";
-import { ClickHouseErrorContent } from "./ClickHouseErrorContent";
+import { ErrorContent } from "./ErrorContent";
+import { BoundaryErrorType } from "~/utils/tensorzero/errors";
 
-function InteractiveWrapper({ children }: { children: React.ReactNode }) {
+function InteractiveWrapper({
+  type,
+  message,
+  routeInfo,
+  status,
+  stack,
+  label,
+}: {
+  type: BoundaryErrorType;
+  message?: string;
+  routeInfo?: string;
+  status?: number;
+  stack?: string;
+  label?: string;
+}) {
   const [open, setOpen] = useState(true);
   return (
     <ErrorDialog
       open={open}
       onDismiss={() => setOpen(false)}
       onReopen={() => setOpen(true)}
+      label={label}
     >
-      {children}
+      <ErrorContent
+        type={type}
+        message={message}
+        routeInfo={routeInfo}
+        status={status}
+        stack={stack}
+      />
     </ErrorDialog>
   );
 }
@@ -45,67 +63,74 @@ type Story = StoryObj<typeof meta>;
 
 export const GatewayUnavailable: Story = {
   args: {
-    children: <GatewayUnavailableErrorContent />,
+    type: BoundaryErrorType.GatewayUnavailable,
+    label: "Connection Error",
   },
 };
 
 export const AuthenticationFailed: Story = {
   args: {
-    children: <GatewayAuthErrorContent />,
+    type: BoundaryErrorType.GatewayAuthFailed,
+    label: "Auth Error",
   },
 };
 
 export const RouteNotFound: Story = {
   args: {
-    children: <RouteNotFoundErrorContent routeInfo="GET /api/v1/unknown" />,
+    type: BoundaryErrorType.RouteNotFound,
+    routeInfo: "GET /api/v1/unknown",
+    label: "Route Error",
   },
 };
 
 export const RouteNotFoundWithoutInfo: Story = {
   args: {
-    children: <RouteNotFoundErrorContent />,
+    type: BoundaryErrorType.RouteNotFound,
+    label: "Route Error",
   },
 };
 
 export const ServerError: Story = {
   args: {
-    children: (
-      <ServerErrorContent status={500} message="Internal server error" />
-    ),
+    type: BoundaryErrorType.ServerError,
+    status: 500,
+    message: "Internal server error",
+    label: "Server Error",
   },
 };
 
 export const ServerErrorWithStack: Story = {
   args: {
-    children: (
-      <ServerErrorContent
-        status={500}
-        message="Internal server error"
-        stack={`Error: Internal server error
+    type: BoundaryErrorType.ServerError,
+    status: 500,
+    message: "Internal server error",
+    stack: `Error: Internal server error
     at loader (/app/routes/observability/inferences/route.tsx:42:11)
     at callRouteLoader (node_modules/react-router/dist/development/chunk.js:1234:22)
-    at async Promise.all (index 0)`}
-      />
-    ),
+    at async Promise.all (index 0)`,
+    label: "Server Error",
   },
 };
 
 export const ServerErrorWithoutStatus: Story = {
   args: {
-    children: <ServerErrorContent message="Something unexpected happened" />,
+    type: BoundaryErrorType.ServerError,
+    message: "Something unexpected happened",
+    label: "Server Error",
   },
 };
 
 export const ClickHouseError: Story = {
   args: {
-    children: (
-      <ClickHouseErrorContent message="Connection refused to ClickHouse at localhost:8123" />
-    ),
+    type: BoundaryErrorType.ClickHouseConnection,
+    message: "Connection refused to ClickHouse at localhost:8123",
+    label: "Database Error",
   },
 };
 
 export const ClickHouseErrorDefault: Story = {
   args: {
-    children: <ClickHouseErrorContent />,
+    type: BoundaryErrorType.ClickHouseConnection,
+    label: "Database Error",
   },
 };
