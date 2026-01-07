@@ -88,6 +88,36 @@ impl Usage {
             _ => None,
         };
     }
+
+    /// Update self to contain the maximum of each field.
+    /// Used for accumulating cumulative usage values from streaming chunks.
+    /// `None` values are ignored (don't overwrite existing `Some` values).
+    /// Warns if a `Some` value decreases (unexpected for cumulative values).
+    pub fn max_strict(&mut self, other: &Usage) {
+        self.input_tokens = match (self.input_tokens, other.input_tokens) {
+            (Some(a), Some(b)) => {
+                if b < a {
+                    tracing::warn!("Usage `input_tokens` decreased from {a} to {b} - using max");
+                }
+                Some(a.max(b))
+            }
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        };
+
+        self.output_tokens = match (self.output_tokens, other.output_tokens) {
+            (Some(a), Some(b)) => {
+                if b < a {
+                    tracing::warn!("Usage `output_tokens` decreased from {a} to {b} - using max");
+                }
+                Some(a.max(b))
+            }
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        };
+    }
 }
 
 #[cfg(test)]
@@ -224,5 +254,120 @@ mod tests {
         let json = serde_json::to_value(&entry).unwrap();
         // data field should be present as null
         assert_eq!(json["data"], serde_json::Value::Null, "data should be null");
+    }
+
+    #[test]
+    fn test_usage_max_strict_both_some() {
+        let mut usage = Usage {
+            input_tokens: Some(5),
+            output_tokens: Some(10),
+        };
+        usage.max_strict(&Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(15),
+        });
+        assert_eq!(
+            usage.input_tokens,
+            Some(10),
+            "should take max of input_tokens"
+        );
+        assert_eq!(
+            usage.output_tokens,
+            Some(15),
+            "should take max of output_tokens"
+        );
+    }
+
+    #[test]
+    fn test_usage_max_strict_none_does_not_overwrite_some() {
+        let mut usage = Usage {
+            input_tokens: Some(5),
+            output_tokens: Some(10),
+        };
+        usage.max_strict(&Usage {
+            input_tokens: None,
+            output_tokens: Some(15),
+        });
+        assert_eq!(
+            usage.input_tokens,
+            Some(5),
+            "None should not overwrite existing Some"
+        );
+        assert_eq!(
+            usage.output_tokens,
+            Some(15),
+            "should take max of output_tokens"
+        );
+    }
+
+    #[test]
+    fn test_usage_max_strict_some_overwrites_none() {
+        let mut usage = Usage {
+            input_tokens: None,
+            output_tokens: None,
+        };
+        usage.max_strict(&Usage {
+            input_tokens: Some(5),
+            output_tokens: None,
+        });
+        assert_eq!(usage.input_tokens, Some(5), "Some should overwrite None");
+        assert_eq!(usage.output_tokens, None, "None + None = None");
+    }
+
+    #[test]
+    fn test_usage_max_strict_cumulative_scenario() {
+        // Simulates cumulative usage from streaming chunks
+        let mut usage = Usage::default(); // {None, None}
+
+        // First chunk: {input: 5, output: 10}
+        usage.max_strict(&Usage {
+            input_tokens: Some(5),
+            output_tokens: Some(10),
+        });
+        assert_eq!(usage.input_tokens, Some(5));
+        assert_eq!(usage.output_tokens, Some(10));
+
+        // Second chunk: {input: None, output: 15} (provider didn't repeat input)
+        usage.max_strict(&Usage {
+            input_tokens: None,
+            output_tokens: Some(15),
+        });
+        assert_eq!(
+            usage.input_tokens,
+            Some(5),
+            "input should remain 5 since None doesn't overwrite"
+        );
+        assert_eq!(
+            usage.output_tokens,
+            Some(15),
+            "output should update to cumulative 15"
+        );
+
+        // Third chunk: {input: 5, output: 20}
+        usage.max_strict(&Usage {
+            input_tokens: Some(5),
+            output_tokens: Some(20),
+        });
+        assert_eq!(usage.input_tokens, Some(5));
+        assert_eq!(usage.output_tokens, Some(20));
+    }
+
+    #[test]
+    fn test_usage_max_strict_decreasing_value_uses_max() {
+        // Even if a value decreases (unexpected), we should use max
+        let mut usage = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(20),
+        };
+        usage.max_strict(&Usage {
+            input_tokens: Some(5), // Decreased - unusual but should keep max
+            output_tokens: Some(25),
+        });
+        assert_eq!(
+            usage.input_tokens,
+            Some(10),
+            "should keep max even when other is lower"
+        );
+        assert_eq!(usage.output_tokens, Some(25));
     }
 }

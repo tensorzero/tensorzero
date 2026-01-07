@@ -874,11 +874,47 @@ fn create_stream(
 ) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
+
+        // ============================================================================
+        // Usage Tracking for Streaming Inferences
+        // ============================================================================
+        //
+        // There are two sources of usage data:
+        //
+        // 1. `extra_usage`: Usage from previous model inference results in complex variants
+        //    (e.g., candidate inferences in mixture_of_n, best_of_n_sampling).
+        //    These are SUMMED using `sum_iter_strict` because they represent distinct
+        //    model calls whose usage should be added together.
+        //
+        // 2. `streamed_usage`: Usage accumulated from chunks in the current stream.
+        //    Uses MAX (`max_strict`) because providers send CUMULATIVE values in streaming
+        //    chunks (e.g., chunk 1: output=10, chunk 2: output=15 means 15 total, not 25).
+        //
+        // None vs Zero semantics:
+        // - `None` means "provider didn't report this value" - we don't know it
+        // - `Some(0)` means "provider reported zero tokens"
+        //
+        // For `sum_iter_strict`: None contaminates (if any component is None, total is None)
+        // For `max_strict`: None is ignored (Some(5) + None = Some(5)) because a missing
+        //   field in a later chunk doesn't mean the value became unknown.
+        //
+        // Usage is stripped from intermediate chunks and emitted only at stream exhaustion
+        // in a final empty chunk. This ensures clients see usage exactly once.
+        // ============================================================================
+
+        // Usage from previous model inference results (e.g., candidates in mixture_of_n)
+        // We SUM these because they represent distinct model calls.
         let mut extra_usage = Some(Usage::sum_iter_strict(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached)));
-        // If `extra_usage` is zero, we don't want to potentially add the extra chunk below. It is handled already in `prepare_response_chunk`.
+        // If `extra_usage` is exactly zero, set to None to avoid emitting an empty usage chunk
+        // when there's nothing to report. Note: Some(0) is different from None semantically,
+        // but for emission purposes, zero usage doesn't need to be reported.
         if extra_usage == Some(Usage { input_tokens: Some(0), output_tokens: Some(0) }) {
             extra_usage = None;
         }
+
+        // Accumulate usage from streamed chunks using MAX (providers send cumulative values).
+        // This is used for client emission. Initialized to None so first chunk values are taken.
+        let mut streamed_usage: Option<Usage> = None;
 
         // Build raw_usage entries from previous model inferences if requested.
         // Returns Some(entries) if requested (even if empty), None if not requested.
@@ -901,17 +937,45 @@ fn create_stream(
             }
             match chunk {
                 Ok(chunk) => {
+                    // Accumulate usage for client emission using max (cumulative values)
+                    if let Some(chunk_usage) = chunk.usage() {
+                        if streamed_usage.is_none() {
+                            streamed_usage = Some(Usage::default());
+                        }
+                        if let Some(ref mut u) = streamed_usage {
+                            u.max_strict(chunk_usage);
+                        }
+                    }
+
+                    // Buffer the original chunk (with usage intact) for database writes.
+                    // collect_chunks will use max_strict to compute correct cumulative usage.
                     buffer.push(chunk.clone());
-                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk, &mut extra_usage, &mut extra_raw_usage) {
-                        yield Ok(chunk);
+
+                    // For client emission: strip usage from chunk - we emit it only at stream end
+                    let mut chunk_for_client = chunk;
+                    chunk_for_client.set_usage(None);
+                    // Pass None for extra_usage since we handle all usage at stream end
+                    if let Some(response_chunk) = prepare_response_chunk(&metadata, chunk_for_client, &mut None, &mut extra_raw_usage) {
+                        yield Ok(response_chunk);
                     }
                 }
                 Err(e) => yield Err(e),
             }
         }
-        // We didn't find an existing chunk to add 'extra_usage' (either because the underlying
-        // stream had no usage information, or because we returned zero usage due to caching)
-        if let Some(extra_usage) = extra_usage {
+
+        // After stream exhaustion: combine extra_usage + streamed_usage for client
+        let final_usage = match (extra_usage, streamed_usage) {
+            (Some(mut extra), Some(streamed)) => {
+                // Sum is correct here - these are from different sources (previous inferences + current)
+                extra.sum_strict(&streamed);
+                Some(extra)
+            }
+            (Some(u), None) | (None, Some(u)) => Some(u),
+            (None, None) => None,
+        };
+
+        // Emit final usage chunk to client (but NOT to buffer - buffer is for DB only)
+        if let Some(final_usage) = final_usage {
             let usage_chunk = match &*function {
                 FunctionConfig::Chat(_model_provider) => {
                     InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -920,7 +984,7 @@ fn create_stream(
                         finish_reason: None,
                         latency: Duration::from_millis(0),
                         raw_response: String::new(),
-                        usage: Some(extra_usage),
+                        usage: Some(final_usage),
                         raw_usage: None,
                     })
                 }
@@ -928,7 +992,7 @@ fn create_stream(
                     InferenceResultChunk::Json(JsonInferenceResultChunk {
                         thought: None,
                         created: 0,
-                        usage: Some(extra_usage),
+                        usage: Some(final_usage),
                         raw_usage: None,
                         latency: Duration::from_millis(0),
                         raw: None,
@@ -937,7 +1001,9 @@ fn create_stream(
                     })
                 }
             };
-            buffer.push(usage_chunk.clone());
+            // NOTE: Do NOT add usage_chunk to buffer! The buffer is for database writes,
+            // which should only contain the current model inference's usage (streamed_usage),
+            // not the aggregated usage across all model inferences (extra_usage + streamed_usage).
             if let Some(chunk) = prepare_response_chunk(&metadata, usage_chunk, &mut None, &mut extra_raw_usage) {
                 yield Ok(chunk);
             }

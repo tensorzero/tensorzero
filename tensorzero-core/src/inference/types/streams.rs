@@ -129,6 +129,13 @@ impl InferenceResultChunk {
         }
     }
 
+    pub fn set_usage(&mut self, usage: Option<Usage>) {
+        match self {
+            InferenceResultChunk::Chat(chunk) => chunk.usage = usage,
+            InferenceResultChunk::Json(chunk) => chunk.usage = usage,
+        }
+    }
+
     pub fn raw_usage(&self) -> Option<&Vec<RawUsageEntry>> {
         match self {
             InferenceResultChunk::Chat(chunk) => chunk.raw_usage.as_ref(),
@@ -287,7 +294,22 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
             .collect::<Vec<&str>>()
             .join("\n")
     });
-    // `usage` is `None` until we receive a chunk with usage information
+    // Usage accumulation from streaming chunks.
+    // We use `max_strict` because providers send CUMULATIVE values in streaming chunks
+    // (e.g., chunk 1: output=10, chunk 2: output=15 means 15 total, not 25).
+    //
+    // None vs Zero semantics:
+    // - `None` means "provider didn't report this value" - we don't know it
+    // - `Some(0)` means "provider reported zero tokens"
+    //
+    // `max_strict` ignores None (Some(5) + None = Some(5)) because a missing field
+    // in a later chunk doesn't mean the value became unknown - it just means the
+    // provider didn't repeat it in that chunk.
+    //
+    // We initialize to `None` (via Usage::default()) rather than `Usage::zero()` so that
+    // the first chunk's values are taken directly. If we started with Some(0), then
+    // max(Some(0), None) = Some(0) which would incorrectly report 0 for a field that
+    // was never reported.
     let mut usage: Option<Usage> = None;
     // Collect raw_usage entries from chunks (relay or provider streaming)
     let mut raw_usage_entries: Option<Vec<RawUsageEntry>> = None;
@@ -320,14 +342,14 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
 
     for chunk in value {
         if let Some(chunk_usage) = chunk.usage() {
-            // `usage` will be `None` if this is the first chunk with usage information....
+            // `usage` will be `None` if this is the first chunk with usage information.
+            // Initialize to default (None, None) so the first chunk's values are taken directly.
+            // We use `max_strict` because providers send cumulative values in streaming chunks.
             if usage.is_none() {
-                // ... so initialize it to zero ...
-                usage = Some(Usage::zero());
+                usage = Some(Usage::default());
             }
-            // ...and then add the chunk usage to it (handling `None` fields)
             if let Some(ref mut u) = usage {
-                u.sum_strict(chunk_usage);
+                u.max_strict(chunk_usage);
             }
         }
         // Accumulate raw_usage entries from relay or synthesized streams
@@ -960,7 +982,9 @@ mod tests {
             model_provider_name
         );
         assert_eq!(model_inference_result.raw_request, raw_request);
-        // Test Case 3: a JSON string that passes validation and also include usage in each chunk
+        // Test Case 3: a JSON string that passes validation with cumulative usage in each chunk
+        // Providers send cumulative values, so later chunks have >= values than earlier chunks.
+        // We use max_strict to handle this, taking the max of each field.
         let inference_id = Uuid::now_v7();
         let output_schema = serde_json::json!({
             "type": "object",
@@ -981,13 +1005,14 @@ mod tests {
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
         }));
+        // Cumulative usage: chunk 2 values should be >= chunk 1 values
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
         };
         let usage2 = Usage {
-            input_tokens: Some(5),
-            output_tokens: Some(10),
+            input_tokens: Some(10),  // Same as chunk 1 (cumulative)
+            output_tokens: Some(15), // Increased from 5 to 15 (cumulative)
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1035,12 +1060,14 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
+        // With cumulative semantics, we take the max of each field
         assert_eq!(
             response.usage_considering_cached(),
             Usage {
-                input_tokens: Some(15),
+                input_tokens: Some(10),
                 output_tokens: Some(15),
-            }
+            },
+            "Usage should be max of cumulative values from each chunk"
         );
         match response {
             InferenceResult::Json(json_result) => {
@@ -1062,6 +1089,17 @@ mod tests {
                     model_provider_name
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
+                // Verify the DB-bound usage (model_inference_result.usage) is correct.
+                // This is the value that gets written to the database for this model inference.
+                // With cumulative semantics, it should be the max of each field.
+                assert_eq!(
+                    model_inference_result.usage,
+                    Usage {
+                        input_tokens: Some(10),
+                        output_tokens: Some(15),
+                    },
+                    "Model inference usage (DB-bound) should be max of cumulative values"
+                );
             }
             InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
@@ -1255,7 +1293,7 @@ mod tests {
             InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         }
 
-        // Test Case 6: a JSON function with implicit tool call config
+        // Test Case 6: a JSON function with implicit tool call config and cumulative usage
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
         let output_schema = serde_json::json!({
@@ -1277,13 +1315,14 @@ mod tests {
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
         }));
+        // Cumulative usage: chunk 2 values should be >= chunk 1 values
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
         };
         let usage2 = Usage {
-            input_tokens: Some(5),
-            output_tokens: Some(10),
+            input_tokens: Some(10),  // Same (cumulative)
+            output_tokens: Some(15), // Increased (cumulative)
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1331,12 +1370,14 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
+        // With cumulative semantics, we take the max of each field
         assert_eq!(
             response.usage_considering_cached(),
             Usage {
-                input_tokens: Some(15),
+                input_tokens: Some(10),
                 output_tokens: Some(15),
-            }
+            },
+            "Usage should be max of cumulative values from each chunk"
         );
         match response {
             InferenceResult::Json(json_result) => {
@@ -1358,10 +1399,19 @@ mod tests {
                     model_provider_name
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
+                // Verify the DB-bound usage is correct with cumulative semantics
+                assert_eq!(
+                    model_inference_result.usage,
+                    Usage {
+                        input_tokens: Some(10),
+                        output_tokens: Some(15),
+                    },
+                    "Model inference usage (DB-bound) should be max of cumulative values"
+                );
             }
             InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
-        // Test Case 7: a JSON string with a dynamic schema that passes validation and also include usage in each chunk
+        // Test Case 7: a JSON string with a dynamic schema that passes validation with cumulative usage
         let inference_id = Uuid::now_v7();
         let static_output_schema = serde_json::json!({
             "type": "object",
@@ -1381,13 +1431,14 @@ mod tests {
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
         }));
+        // Cumulative usage: chunk 2 values should be >= chunk 1 values
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
         };
         let usage2 = Usage {
-            input_tokens: Some(5),
-            output_tokens: Some(10),
+            input_tokens: Some(10),  // Same (cumulative)
+            output_tokens: Some(15), // Increased (cumulative)
         };
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
             "type": "object",
@@ -1444,12 +1495,14 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
+        // With cumulative semantics, we take the max of each field
         assert_eq!(
             response.usage_considering_cached(),
             Usage {
-                input_tokens: Some(15),
+                input_tokens: Some(10),
                 output_tokens: Some(15),
-            }
+            },
+            "Usage should be max of cumulative values from each chunk"
         );
         match response {
             InferenceResult::Json(json_result) => {
@@ -1474,6 +1527,15 @@ mod tests {
                     model_provider_name
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
+                // Verify the DB-bound usage is correct with cumulative semantics
+                assert_eq!(
+                    model_inference_result.usage,
+                    Usage {
+                        input_tokens: Some(10),
+                        output_tokens: Some(15),
+                    },
+                    "Model inference usage (DB-bound) should be max of cumulative values"
+                );
             }
             InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
