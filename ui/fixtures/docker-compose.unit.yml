@@ -109,7 +109,6 @@ services:
         NODE_VERSION: ${NODE_VERSION:-22}
         PNPM_VERSION: ${PNPM_VERSION:-9}
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
