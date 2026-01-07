@@ -1,7 +1,7 @@
 # cargo-deny
 
 [sources]
-allow-git = ["https://github.com/hyperium/mime", "https://github.com/tensorzero/durable"]
+allow-git = ["https://github.com/hyperium/mime", "https://github.com/tensorzero/durable", "https://github.com/Aaron1011/tracing-opentelemetry-instrumentation-sdk"]
 unknown-git = "deny"
 
 [bans]

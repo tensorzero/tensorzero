@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ToolContext;
 use crate::context::SimpleToolContext;
-use crate::error::{ToolError, ToolResult};
+use crate::error::{NonControlToolError, ToolError, ToolResult};
 use crate::executor::ToolExecutorBuilder;
 use crate::registry::{ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 use crate::simple_tool::SimpleTool;
@@ -331,15 +331,13 @@ mod registry_tests {
 
     #[test]
     fn register_task_tool_errors_on_duplicate() {
-        use crate::error::ToolError;
-
         let mut registry = ToolRegistry::new();
         registry.register_task_tool::<EchoTaskTool>().unwrap();
 
         // Second registration should fail
         let result = registry.register_task_tool::<EchoTaskTool>();
         match result {
-            Err(ToolError::DuplicateToolName(name)) => {
+            Err(ToolError::NonControl(NonControlToolError::DuplicateToolName(name))) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -351,15 +349,13 @@ mod registry_tests {
 
     #[test]
     fn register_simple_tool_errors_on_duplicate() {
-        use crate::error::ToolError;
-
         let mut registry = ToolRegistry::new();
         registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         // Second registration should fail
         let result = registry.register_simple_tool::<EchoSimpleTool>();
         match result {
-            Err(ToolError::DuplicateToolName(name)) => {
+            Err(ToolError::NonControl(NonControlToolError::DuplicateToolName(name))) => {
                 assert_eq!(name, "echo_simple");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -371,7 +367,6 @@ mod registry_tests {
 
     #[test]
     fn register_tools_with_same_name_errors() {
-        use crate::error::ToolError;
         use std::borrow::Cow;
 
         // Create a SimpleTool with the same name as EchoTaskTool
@@ -412,7 +407,7 @@ mod registry_tests {
         // Registering a SimpleTool with the same name should fail
         let result = registry.register_simple_tool::<ConflictingSimpleTool>();
         match result {
-            Err(ToolError::DuplicateToolName(name)) => {
+            Err(ToolError::NonControl(NonControlToolError::DuplicateToolName(name))) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -545,10 +540,10 @@ mod error_tests {
         let tool_err: ToolError = task_err.into();
 
         match tool_err {
-            ToolError::ExecutionFailed(e) => {
+            ToolError::NonControl(NonControlToolError::ExecutionFailed(e)) => {
                 assert_eq!(e.to_string(), "test error");
             }
-            _ => panic!("Expected ExecutionFailed"),
+            _ => panic!("Expected NonControl(ExecutionFailed)"),
         }
     }
 
@@ -576,7 +571,8 @@ mod error_tests {
 
     #[test]
     fn task_error_from_tool_error_execution_failed() {
-        let tool_err = ToolError::ExecutionFailed(anyhow::anyhow!("test error"));
+        let tool_err: ToolError =
+            NonControlToolError::ExecutionFailed(anyhow::anyhow!("test error")).into();
         let task_err: TaskError = tool_err.into();
 
         match task_err {
@@ -600,7 +596,8 @@ mod error_tests {
 
     #[test]
     fn task_error_from_tool_error_tool_not_found() {
-        let tool_err = ToolError::ToolNotFound("missing_tool".to_string());
+        let tool_err: ToolError =
+            NonControlToolError::ToolNotFound("missing_tool".to_string()).into();
         let task_err: TaskError = tool_err.into();
 
         match task_err {
@@ -613,7 +610,8 @@ mod error_tests {
 
     #[test]
     fn task_error_from_tool_error_invalid_params() {
-        let tool_err = ToolError::InvalidParams("bad params".to_string());
+        let tool_err: ToolError =
+            NonControlToolError::InvalidParams("bad params".to_string()).into();
         let task_err: TaskError = tool_err.into();
 
         match task_err {
@@ -627,7 +625,7 @@ mod error_tests {
     #[test]
     fn task_error_from_tool_error_serialization() {
         let json_err = serde_json::from_str::<String>("not valid json").unwrap_err();
-        let tool_err = ToolError::Serialization(json_err);
+        let tool_err: ToolError = NonControlToolError::Serialization(json_err).into();
         let task_err: TaskError = tool_err.into();
 
         match task_err {

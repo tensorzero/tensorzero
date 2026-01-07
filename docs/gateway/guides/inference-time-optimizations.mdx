@@ -86,56 +86,10 @@ This example showcases how best-of-N sampling can significantly enhance an LLM's
 
 ![Inference-Time Optimization: Dynamic In-Context Learning](./inference-time-optimizations-dynamic-in-context-learning.png)
 
-Dynamic In-Context Learning (DICL) is an inference-time optimization strategy that enhances LLM performance by incorporating relevant historical examples into the prompt.
-This technique leverages a database of past interactions to select and include contextually similar examples in the current prompt, allowing the model to adapt to specific tasks or domains without requiring fine-tuning.
-By dynamically augmenting the input with relevant historical data, DICL enables the LLM to make more informed and accurate responses, effectively learning from past experiences in real-time.
+Dynamic In-Context Learning (DICL) is an inference-time optimization that improves LLM performance by incorporating relevant historical examples into your prompt.
+Instead of incorporating static examples manually in your prompts, DICL selects the most relevant examples at inference time.
 
-Here's how it works:
-
-0. Before inference: Curate reference examples, embed them, and store in the database
-1. Embed the current input using an embedding model and retrieve similar high-quality examples from a database of past interactions
-2. Incorporate these examples into the prompt to provide additional context
-3. Generate a response using the enhanced prompt
-
-To use DICL in TensorZero, you need to configure a variant with the `experimental_dynamic_in_context_learning` type.
-Here's a simple example configuration:
-
-```toml title="tensorzero.toml"
-[functions.draft_email.variants.dicl]
-type = "experimental_dynamic_in_context_learning"
-model = "gpt-4o-mini"
-embedding_model = "text-embedding-3-small"
-system_instructions = "functions/draft_email/dicl/system.txt"
-k = 5
-max_distance = 0.5  # Optional: filter examples by cosine distance
-
-[embedding_models.text-embedding-3-small]
-routing = ["openai"]
-
-[embedding_models.text-embedding-3-small.providers.openai]
-type = "openai"
-model_name = "text-embedding-3-small"
-```
-
-In this configuration:
-
-- We define a `dicl` variant that uses the `experimental_dynamic_in_context_learning` type.
-- The `embedding_model` field specifies the model used to embed inputs for similarity search.
-  We also need to define this model in the `embedding_models` section.
-- The `k` parameter determines the number of similar examples to retrieve and incorporate into the prompt.
-- The optional `max_distance` parameter filters examples based on their cosine distance from the input, ensuring only highly relevant examples are included.
-
-To use Dynamic In-Context Learning (DICL), you also need to add relevant examples to the `DynamicInContextLearningExample` table in your ClickHouse database.
-These examples will be used by the DICL variant to enhance the context of your prompts at inference time.
-
-The process of adding these examples to the database is crucial for DICL to function properly.
-We provide a sample recipe that simplifies this process: [Dynamic In-Context Learning with OpenAI](https://github.com/tensorzero/tensorzero/tree/main/recipes/dicl).
-
-This recipe supports selecting examples based on boolean metrics, float metrics, and demonstrations.
-It helps you populate the `DynamicInContextLearningExample` table with high-quality, relevant examples from your historical data.
-
-For more information on the `DynamicInContextLearningExample` table and its role in the TensorZero data model, see [Data Model](/gateway/data-model/).
-For a comprehensive list of configuration options for the `experimental_dynamic_in_context_learning` variant type, see [Configuration Reference](/gateway/configuration-reference/#type-experimental_dynamic_in_context_learning).
+See the [Dynamic In-Context Learning (DICL) Guide](/optimization/dynamic-in-context-learning-dicl) to learn more.
 
 <Tip>
 

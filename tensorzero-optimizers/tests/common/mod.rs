@@ -83,7 +83,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
             config_file: Some(config_path.clone()),
             clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-            postgres_url: None,
+            postgres_config: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
