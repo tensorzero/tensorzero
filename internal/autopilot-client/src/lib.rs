@@ -49,11 +49,11 @@ pub use client::{
 };
 pub use error::AutopilotError;
 pub use types::{
-    AutopilotSideInfo, AutopilotToolCall, AutopilotToolResult, Base64File, CreateEventRequest,
-    CreateEventResponse, ErrorDetail, ErrorResponse, Event, EventPayload, File, InputMessage,
-    InputMessageContent, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    AutopilotSideInfo, AutopilotStatus, AutopilotToolCall, AutopilotToolResult, Base64File,
+    CreateEventRequest, CreateEventResponse, ErrorDetail, ErrorResponse, Event, EventPayload, File,
+    InputMessage, InputMessageContent, ListEventsParams, ListEventsResponse, ListSessionsParams,
     ListSessionsResponse, ObjectStoragePointer, OptimizationWorkflowSideInfo, RawText, Role,
-    Session, StatusUpdate, StreamEventsParams, Template, Text, Thought, ToolCallAuthorization,
-    ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper, ToolOutcome, Unknown,
-    UrlFile,
+    Session, StatusUpdate, StreamEventsParams, StreamUpdate, Template, Text, Thought,
+    ToolCallAuthorization, ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper,
+    ToolOutcome, Unknown, UrlFile,
 };

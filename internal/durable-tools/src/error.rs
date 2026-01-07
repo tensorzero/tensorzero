@@ -1,9 +1,9 @@
 use durable::{ControlFlow, DurableError, TaskError};
 use thiserror::Error;
 
-/// Error type for tool execution.
+/// Non-control errors that can be caught and handled.
 #[derive(Debug, Error)]
-pub enum ToolError {
+pub enum NonControlToolError {
     /// Tool was not found in the registry.
     #[error("Tool not found: {0}")]
     ToolNotFound(String),
@@ -18,7 +18,7 @@ pub enum ToolError {
 
     /// Tool execution failed with an error.
     #[error("Execution failed: {0}")]
-    ExecutionFailed(#[from] anyhow::Error),
+    ExecutionFailed(anyhow::Error),
 
     /// Schema generation failed.
     #[error("Schema generation failed: {0}")]
@@ -26,15 +26,11 @@ pub enum ToolError {
 
     /// JSON serialization/deserialization error.
     #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
+    Serialization(serde_json::Error),
 
     /// Database operation failed.
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
-
-    /// Durable control flow signal (suspend, cancelled).
-    #[error("Control flow: {0:?}")]
-    Control(ControlFlow),
+    Database(sqlx::Error),
 
     /// Operation timed out.
     #[error("Timed out waiting for '{step_name}'")]
@@ -51,30 +47,108 @@ pub enum ToolError {
     },
 }
 
+impl From<anyhow::Error> for NonControlToolError {
+    fn from(err: anyhow::Error) -> Self {
+        NonControlToolError::ExecutionFailed(err)
+    }
+}
+
+impl From<serde_json::Error> for NonControlToolError {
+    fn from(err: serde_json::Error) -> Self {
+        NonControlToolError::Serialization(err)
+    }
+}
+
+impl From<sqlx::Error> for NonControlToolError {
+    fn from(err: sqlx::Error) -> Self {
+        NonControlToolError::Database(err)
+    }
+}
+
+/// Error type for tool execution, separating control signals from handleable errors.
+#[derive(Debug, Error)]
+pub enum ToolError {
+    /// Durable control flow signal (suspend, cancelled).
+    #[error("Control flow: {0:?}")]
+    Control(ControlFlow),
+
+    /// Non-control errors that can be caught and handled.
+    #[error(transparent)]
+    NonControl(#[from] NonControlToolError),
+}
+
+// Convenience From impls for ToolError that delegate through NonControlToolError
+impl From<serde_json::Error> for ToolError {
+    fn from(err: serde_json::Error) -> Self {
+        NonControlToolError::Serialization(err).into()
+    }
+}
+
+impl From<sqlx::Error> for ToolError {
+    fn from(err: sqlx::Error) -> Self {
+        NonControlToolError::Database(err).into()
+    }
+}
+
+impl From<anyhow::Error> for ToolError {
+    fn from(err: anyhow::Error) -> Self {
+        NonControlToolError::ExecutionFailed(err).into()
+    }
+}
+
 /// Result type alias for tool operations.
 pub type ToolResult<T> = Result<T, ToolError>;
+
+/// Extension trait for ergonomic control error propagation.
+pub trait ToolResultExt<T> {
+    /// Propagates control errors, returns inner result for non-control cases.
+    ///
+    /// # Usage
+    ///
+    /// ```ignore
+    /// let inner_result = some_tool_call().await.propagate_control()?;
+    /// match inner_result {
+    ///     Ok(value) => { /* use value */ },
+    ///     Err(non_control_err) => { /* handle error */ },
+    /// }
+    /// ```
+    fn propagate_control(self) -> Result<Result<T, NonControlToolError>, ToolError>;
+}
+
+impl<T> ToolResultExt<T> for ToolResult<T> {
+    fn propagate_control(self) -> Result<Result<T, NonControlToolError>, ToolError> {
+        match self {
+            Ok(v) => Ok(Ok(v)),
+            Err(ToolError::Control(cf)) => Err(ToolError::Control(cf)),
+            Err(ToolError::NonControl(e)) => Ok(Err(e)),
+        }
+    }
+}
 
 impl From<TaskError> for ToolError {
     fn from(err: TaskError) -> Self {
         match err {
             TaskError::Control(cf) => ToolError::Control(cf),
-            TaskError::Database(e) => ToolError::Database(e),
-            TaskError::Serialization(e) => ToolError::Serialization(e),
-            TaskError::Timeout { step_name } => ToolError::Timeout { step_name },
-            TaskError::Validation { message } => ToolError::Validation { message },
-            TaskError::TaskInternal(e) => ToolError::ExecutionFailed(e),
-            TaskError::ChildFailed { step_name, message } => ToolError::ExecutionFailed(
+            TaskError::Database(e) => NonControlToolError::Database(e).into(),
+            TaskError::Serialization(e) => NonControlToolError::Serialization(e).into(),
+            TaskError::Timeout { step_name } => NonControlToolError::Timeout { step_name }.into(),
+            TaskError::Validation { message } => NonControlToolError::Validation { message }.into(),
+            TaskError::TaskInternal(e) => NonControlToolError::ExecutionFailed(e).into(),
+            TaskError::ChildFailed { step_name, message } => NonControlToolError::ExecutionFailed(
                 anyhow::anyhow!("child task failed at '{step_name}': {message}"),
-            ),
+            )
+            .into(),
             TaskError::User {
                 message,
                 error_data,
-            } => {
-                ToolError::ExecutionFailed(anyhow::anyhow!("user error: {message} {error_data:?}"))
-            }
-            TaskError::ChildCancelled { step_name } => ToolError::ExecutionFailed(anyhow::anyhow!(
-                "child task was cancelled at '{step_name}'"
-            )),
+            } => NonControlToolError::ExecutionFailed(anyhow::anyhow!(
+                "user error: {message} {error_data:?}"
+            ))
+            .into(),
+            TaskError::ChildCancelled { step_name } => NonControlToolError::ExecutionFailed(
+                anyhow::anyhow!("child task was cancelled at '{step_name}'"),
+            )
+            .into(),
         }
     }
 }
@@ -83,15 +157,27 @@ impl From<ToolError> for TaskError {
     fn from(err: ToolError) -> Self {
         match err {
             ToolError::Control(cf) => TaskError::Control(cf),
-            ToolError::Database(e) => TaskError::Database(e),
-            ToolError::Serialization(e) => TaskError::Serialization(e),
-            ToolError::Timeout { step_name } => TaskError::Timeout { step_name },
-            ToolError::Validation { message } => TaskError::Validation { message },
-            ToolError::ToolNotFound(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
-            ToolError::DuplicateToolName(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
-            ToolError::InvalidParams(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
-            ToolError::ExecutionFailed(e) => TaskError::TaskInternal(e),
-            ToolError::SchemaGeneration(e) => TaskError::TaskInternal(e),
+            ToolError::NonControl(e) => e.into(),
+        }
+    }
+}
+
+impl From<NonControlToolError> for TaskError {
+    fn from(err: NonControlToolError) -> Self {
+        match err {
+            NonControlToolError::Database(e) => TaskError::Database(e),
+            NonControlToolError::Serialization(e) => TaskError::Serialization(e),
+            NonControlToolError::Timeout { step_name } => TaskError::Timeout { step_name },
+            NonControlToolError::Validation { message } => TaskError::Validation { message },
+            NonControlToolError::ToolNotFound(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
+            NonControlToolError::DuplicateToolName(msg) => {
+                TaskError::TaskInternal(anyhow::anyhow!(msg))
+            }
+            NonControlToolError::InvalidParams(msg) => {
+                TaskError::TaskInternal(anyhow::anyhow!(msg))
+            }
+            NonControlToolError::ExecutionFailed(e) => TaskError::TaskInternal(e),
+            NonControlToolError::SchemaGeneration(e) => TaskError::TaskInternal(e),
         }
     }
 }
@@ -99,24 +185,29 @@ impl From<ToolError> for TaskError {
 impl From<DurableError> for ToolError {
     fn from(err: DurableError) -> Self {
         match err {
-            DurableError::Database(e) => ToolError::Database(e),
-            DurableError::Serialization(e) => ToolError::Serialization(e),
-            DurableError::TaskNotRegistered { task_name } => ToolError::ToolNotFound(task_name),
-            DurableError::InvalidConfiguration { reason } => ToolError::Validation {
-                message: format!("Durable configuration invalid: {reason}"),
-            },
-            DurableError::TaskAlreadyRegistered { task_name } => {
-                ToolError::DuplicateToolName(task_name)
+            DurableError::Database(e) => NonControlToolError::Database(e).into(),
+            DurableError::Serialization(e) => NonControlToolError::Serialization(e).into(),
+            DurableError::TaskNotRegistered { task_name } => {
+                NonControlToolError::ToolNotFound(task_name).into()
             }
-            DurableError::ReservedHeaderPrefix { key } => ToolError::Validation {
+            DurableError::InvalidConfiguration { reason } => NonControlToolError::Validation {
+                message: format!("Durable configuration invalid: {reason}"),
+            }
+            .into(),
+            DurableError::TaskAlreadyRegistered { task_name } => {
+                NonControlToolError::DuplicateToolName(task_name).into()
+            }
+            DurableError::ReservedHeaderPrefix { key } => NonControlToolError::Validation {
                 message: format!(
                     "header key '{key}' uses reserved prefix 'durable::'. \
                      User headers cannot start with 'durable::'."
                 ),
-            },
-            DurableError::InvalidEventName { reason } => ToolError::Validation {
+            }
+            .into(),
+            DurableError::InvalidEventName { reason } => NonControlToolError::Validation {
                 message: format!("invalid event name: {reason}"),
-            },
+            }
+            .into(),
         }
     }
 }
