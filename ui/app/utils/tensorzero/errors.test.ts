@@ -75,9 +75,11 @@ describe("isClickHouseError", () => {
     expect(isClickHouseError(error)).toBe(true);
   });
 
-  it("should return true for error with clickhouse in message", () => {
+  it("should return false for error that merely mentions clickhouse in message", () => {
+    // Message-based matching is intentionally not supported - it's too broad
+    // and could match unrelated errors that just mention "ClickHouse"
     const error = new Error("Unable to connect to ClickHouse database");
-    expect(isClickHouseError(error)).toBe(true);
+    expect(isClickHouseError(error)).toBe(false);
   });
 
   it("should return false for unrelated errors", () => {

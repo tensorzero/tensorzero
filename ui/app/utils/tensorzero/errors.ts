@@ -143,8 +143,13 @@ export function isRouteNotFoundError(error: unknown): boolean {
 
 /**
  * Check if an error indicates a ClickHouse connection or query failure.
+ *
+ * Supports both:
+ * - Direct TensorZeroServerError.ClickHouse* instances (server-side)
+ * - Name pattern matching (for serialized errors where instanceof fails)
  */
 export function isClickHouseError(error: unknown): boolean {
+  // Direct instanceof checks for all ClickHouse error subclasses
   if (
     error instanceof TensorZeroServerError.ClickHouseConnection ||
     error instanceof TensorZeroServerError.ClickHouseQuery ||
@@ -154,24 +159,14 @@ export function isClickHouseError(error: unknown): boolean {
     return true;
   }
 
-  // Check serialized error name pattern
+  // Check serialized error name - all ClickHouse errors have names prefixed with "ClickHouse"
+  // This handles the serialization boundary where instanceof fails
   if (
     typeof error === "object" &&
     error !== null &&
     "name" in error &&
     typeof error.name === "string" &&
     error.name.startsWith("ClickHouse")
-  ) {
-    return true;
-  }
-
-  // Check message pattern for ClickHouse errors
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string" &&
-    error.message.toLowerCase().includes("clickhouse")
   ) {
     return true;
   }
