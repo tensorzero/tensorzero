@@ -24,7 +24,7 @@ interface DatasetSelectProps {
   selected: string | null;
   onSelect: (dataset: string, isNew: boolean) => void;
   functionName?: string;
-  placeholder?: string;
+  placeholder: string;
   allowCreation?: boolean;
   disabled?: boolean;
 }
@@ -40,14 +40,13 @@ export function DatasetSelect({
   const {
     isLoading,
     isError,
-    computedPlaceholder,
     searchPlaceholder,
     getPrefix,
     getSuffix,
     getSelectedDataset,
     filterItems,
     shouldShowCreateOption,
-  } = useDatasetOptions({ functionName, placeholder, allowCreation });
+  } = useDatasetOptions({ functionName, allowCreation });
 
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -98,7 +97,7 @@ export function DatasetSelect({
             <span className="flex flex-row items-center gap-2">
               <ButtonIcon as={Table} variant="tertiary" />
               <span className="text-fg-primary flex text-sm font-medium">
-                {computedPlaceholder}
+                {placeholder}
               </span>
             </span>
           )}

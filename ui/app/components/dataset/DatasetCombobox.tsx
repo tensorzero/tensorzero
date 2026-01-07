@@ -8,7 +8,6 @@ interface DatasetComboboxProps {
   selected: string | null;
   onSelect: (dataset: string, isNew: boolean) => void;
   functionName?: string;
-  placeholder?: string;
   allowCreation?: boolean;
   disabled?: boolean;
 }
@@ -17,7 +16,6 @@ export function DatasetCombobox({
   selected,
   onSelect,
   functionName,
-  placeholder,
   allowCreation = false,
   disabled = false,
 }: DatasetComboboxProps) {
@@ -28,7 +26,7 @@ export function DatasetCombobox({
     computedPlaceholder,
     getPrefix,
     getSuffix,
-  } = useDatasetOptions({ functionName, placeholder, allowCreation });
+  } = useDatasetOptions({ functionName, allowCreation });
 
   return (
     <Combobox
