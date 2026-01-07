@@ -106,13 +106,32 @@ These tests expect error responses which are NOT cached by provider-proxy:
 
 ---
 
+## Periodic Live Provider Tests with Slack Alerts
+
+**File: `.github/workflows/merge-queue.yml`**
+
+The merge queue workflow already includes a cron schedule that runs daily at midnight UTC. This scheduled run:
+- **Skips provider-proxy cache download** (lines 94-98, 186-189): Tests hit live providers directly
+- **Uploads fresh cache entries**: Successful runs update the provider-proxy cache for future merge queue runs
+
+Added Slack failure notification for scheduled runs in the `check-all-tests-passed` job:
+- Posts to channel `C09DM0RGDFG` (same channel as optimization test alerts)
+- Only triggers on failure for scheduled runs (not merge queue runs)
+- Links to the failed GitHub Actions run
+
+This means:
+- **Merge Queue**: Uses cached provider responses for deterministic CI
+- **Daily Cron (midnight UTC)**: Runs without cache, alerts Slack on failure
+
+---
+
 ## Future Work
 
 1. **Enable ReadOnly Mode for Merge Queue**: Set `PROVIDER_PROXY_CACHE_MODE=read-only` in merge queue CI to prevent cache misses from hitting live providers. Tests will fail if cache is missing (good - forces explicit cache regeneration).
 
 2. **Create Cache Regeneration Workflow**: Manual trigger to refresh provider-proxy cache by running all tests with live providers and uploading to R2.
 
-3. **Move Error Tests to Periodic**: Create a separate workflow for tests that expect error responses, running periodically with Slack alerts instead of blocking merge queue.
+3. **Skip Error Tests in Merge Queue**: Consider using a nextest filter to skip tests that expect error responses (`test_thinking_rejected_128k`, `test_bad_auth_extra_headers_with_provider_and_stream`) in merge queue runs, since these can never be cached and will always hit live providers.
 
 ---
 
@@ -125,3 +144,4 @@ These tests expect error responses which are NOT cached by provider-proxy:
 | Cache tests with random seeds | 6 | ✅ No changes (use dummy providers) |
 | Evaluation tests | 5 | ✅ No changes (use dummy providers) |
 | CI configuration | - | ✅ Added configurable cache mode |
+| Periodic live tests | - | ✅ Added Slack alerts for daily cron runs |
