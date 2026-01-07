@@ -314,7 +314,9 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
         ToolError::Control(cf) => {
             // Control flow errors should not be serialized - this is a bug if it happens
             let failure = ToolFailure::Control {
-                message: format!("Unexpected control flow signal: {cf:?}"),
+                message: format!(
+                    "Unexpected control flow signal: {cf:?}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
             };
             serde_json::to_value(failure).unwrap_or_else(|e| {
                 serde_json::json!({
