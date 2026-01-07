@@ -3,9 +3,7 @@
 //! This module provides an SSE endpoint for running evaluations and streaming results.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use async_trait::async_trait;
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -17,88 +15,14 @@ use uuid::Uuid;
 
 use evaluations::stats::{EvaluationError, EvaluationInfo, EvaluationUpdate};
 use evaluations::{
-    EvaluationCoreArgs, EvaluationVariant, EvaluationsInferenceExecutor,
-    run_evaluation_core_streaming,
+    EvaluationVariant, RunEvaluationWithAppStateParams, run_evaluation_with_app_state,
 };
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::client::{
-    ClientInferenceParams, FeedbackParams, FeedbackResponse, InferenceOutput,
-};
 use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
-use tensorzero_core::inference::types::storage::StoragePath;
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
-
-// =============================================================================
-// GatewayInferenceExecutor
-// =============================================================================
-
-/// Executor that calls gateway handlers directly without HTTP overhead.
-/// This is used when running evaluations from within the gateway.
-pub struct GatewayInferenceExecutor {
-    app_state: AppStateData,
-}
-
-impl GatewayInferenceExecutor {
-    pub fn new(app_state: AppStateData) -> Self {
-        Self { app_state }
-    }
-}
-
-#[async_trait]
-impl EvaluationsInferenceExecutor for GatewayInferenceExecutor {
-    async fn inference(
-        &self,
-        params: ClientInferenceParams,
-    ) -> Result<InferenceOutput, tensorzero_core::client::TensorZeroError> {
-        use tensorzero_core::client::TensorZeroError;
-        use tensorzero_core::endpoints::inference::Params as InferenceParams;
-
-        // Convert ClientInferenceParams to endpoint Params
-        let endpoint_params: InferenceParams = params
-            .try_into()
-            .map_err(|e: Error| TensorZeroError::Other { source: e.into() })?;
-
-        // Call the inference endpoint directly
-        let result = Box::pin(tensorzero_core::endpoints::inference::inference(
-            self.app_state.config.clone(),
-            &self.app_state.http_client,
-            self.app_state.clickhouse_connection_info.clone(),
-            self.app_state.postgres_connection_info.clone(),
-            self.app_state.deferred_tasks.clone(),
-            endpoint_params,
-            None, // No API key for internal calls
-        ))
-        .await
-        .map_err(|e| TensorZeroError::Other { source: e.into() })?;
-
-        Ok(result.output)
-    }
-
-    async fn feedback(
-        &self,
-        params: FeedbackParams,
-    ) -> Result<FeedbackResponse, tensorzero_core::client::TensorZeroError> {
-        use tensorzero_core::client::TensorZeroError;
-
-        // Call the feedback endpoint directly
-        tensorzero_core::endpoints::feedback::feedback(self.app_state.clone(), params, None)
-            .await
-            .map_err(|e| TensorZeroError::Other { source: e.into() })
-    }
-
-    async fn resolve_storage_path(&self, storage_path: StoragePath) -> Result<String, Error> {
-        // Use the object storage endpoint directly
-        let response = tensorzero_core::endpoints::object_storage::get_object(
-            self.app_state.config.object_store_info.as_ref(),
-            storage_path,
-        )
-        .await?;
-        Ok(response.data)
-    }
-}
 
 // =============================================================================
 // Request/Response Types
@@ -402,32 +326,6 @@ pub async fn run_evaluation_handler(
         }
     };
 
-    // Create a new ClickHouse client for the evaluation (with independent batch writer)
-    let clickhouse_client = app_state
-        .clickhouse_connection_info
-        .recreate()
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseConnection {
-                message: format!("Failed to create ClickHouse client for evaluation: {e}"),
-            })
-        })?;
-
-    // Create GatewayInferenceExecutor to call handlers directly without HTTP overhead
-    let inference_executor = Arc::new(GatewayInferenceExecutor::new(app_state.clone()));
-
-    // Extract function name from evaluation config
-    let EvaluationConfig::Inference(ref inference_eval_config) = request.evaluation_config;
-    let function_name = inference_eval_config.function_name.clone();
-
-    // Build function configs table
-    let mut function_configs = evaluations::EvaluationFunctionConfigTable::new();
-    function_configs.insert(function_name, request.function_config);
-    let function_configs = Arc::new(function_configs);
-
-    // Generate a new evaluation run ID
-    let evaluation_run_id = Uuid::now_v7();
-
     // Parse precision_targets
     let precision_targets: HashMap<String, f32> = request
         .precision_targets
@@ -445,32 +343,30 @@ pub async fn run_evaluation_handler(
     let dataset_name_for_event = request.dataset_name.clone();
     let evaluation_name_for_event = request.evaluation_name.clone();
 
-    // Build the core args
-    let core_args = EvaluationCoreArgs {
-        inference_executor,
-        clickhouse_client: clickhouse_client.clone(),
-        evaluation_config: Arc::new(request.evaluation_config),
-        function_configs,
+    // Build the params for run_evaluation_with_app_state
+    let params = RunEvaluationWithAppStateParams {
+        evaluation_config: request.evaluation_config,
+        function_config: request.function_config,
+        evaluation_name: request.evaluation_name,
         dataset_name: request.dataset_name,
         datapoint_ids: request.datapoint_ids,
         variant,
-        evaluation_name: request.evaluation_name,
-        evaluation_run_id,
-        inference_cache: cache_mode,
         concurrency,
+        cache_mode,
+        max_datapoints: request.max_datapoints,
+        precision_targets,
     };
 
-    // Start the evaluation
-    let result =
-        run_evaluation_core_streaming(core_args, request.max_datapoints, precision_targets)
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::EvaluationRun {
-                    message: format!("Failed to start evaluation run: {e}"),
-                })
-            })?;
+    // Run the evaluation
+    let result = run_evaluation_with_app_state(app_state, params)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::EvaluationRun {
+                message: format!("Failed to start evaluation run: {e}"),
+            })
+        })?;
 
-    let receiver = result.receiver;
+    let evaluation_run_id = result.run_info.evaluation_run_id;
     let num_datapoints = result.run_info.num_datapoints;
 
     // Create the SSE stream
@@ -480,8 +376,8 @@ pub async fn run_evaluation_handler(
         evaluation_name: evaluation_name_for_event,
         dataset_name: dataset_name_for_event,
         variant_name: variant_name_for_event,
-        receiver,
-        clickhouse_client,
+        receiver: result.receiver,
+        clickhouse_client: result.clickhouse_client,
     });
 
     Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))
