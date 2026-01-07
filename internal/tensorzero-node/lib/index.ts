@@ -1,11 +1,8 @@
 import { createRequire } from "module";
 import type {
-  ClientInferenceParams,
-  InferenceResponse,
   LaunchOptimizationWorkflowParams,
   OptimizationJobHandle,
   OptimizationJobInfo,
-  StaleDatasetResponse,
   KeyInfo,
 } from "./bindings";
 import type {
@@ -44,12 +41,6 @@ export class TensorZeroClient {
     return new TensorZeroClient(nativeClient);
   }
 
-  async inference(params: ClientInferenceParams): Promise<InferenceResponse> {
-    const paramsString = safeStringify(params);
-    const responseString = await this.nativeClient.inference(paramsString);
-    return JSON.parse(responseString) as InferenceResponse;
-  }
-
   async experimentalLaunchOptimizationWorkflow(
     params: LaunchOptimizationWorkflowParams,
   ): Promise<OptimizationJobHandle> {
@@ -68,20 +59,6 @@ export class TensorZeroClient {
     const statusString =
       await this.nativeClient.experimentalPollOptimization(jobHandleString);
     return JSON.parse(statusString) as OptimizationJobInfo;
-  }
-
-  async staleDataset(datasetName: string): Promise<StaleDatasetResponse> {
-    const staleDatasetString =
-      await this.nativeClient.staleDataset(datasetName);
-    return JSON.parse(staleDatasetString) as StaleDatasetResponse;
-  }
-
-  async getVariantSamplingProbabilities(
-    functionName: string,
-  ): Promise<Record<string, number>> {
-    const probabilitiesString =
-      await this.nativeClient.getVariantSamplingProbabilities(functionName);
-    return JSON.parse(probabilitiesString) as Record<string, number>;
   }
 }
 

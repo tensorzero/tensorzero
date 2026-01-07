@@ -134,6 +134,7 @@ schemars = { workspace = true, features = ["uuid1"] }
 opentelemetry-http = "0.31.0"
 # durable.workspace = true
 regex = { workspace = true }
+dashmap = "6.1.0"
 
 [dev-dependencies]
 tempfile = "3.21.0"

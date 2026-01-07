@@ -1680,6 +1680,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1826,7 +1840,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=ca986b6042829d924d413fc0f42d3bbd87b2df70#ca986b6042829d924d413fc0f42d3bbd87b2df70"
+source = "git+https://github.com/tensorzero/durable?rev=8ceb3c447ea8c77b7f6faef4e717602ad149a0f4#8ceb3c447ea8c77b7f6faef4e717602ad149a0f4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2580,7 +2594,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68a7f542ee6b35af73b06abc0dad1c1bae89964e4e253bc4b587b91c9637867b"
 dependencies = [
  "cfg-if",
- "dashmap",
+ "dashmap 5.5.3",
  "futures",
  "futures-timer",
  "no-std-compat",
@@ -6176,6 +6190,7 @@ dependencies = [
  "chrono",
  "clap",
  "clarabel",
+ "dashmap 6.1.0",
  "derive_builder 0.20.2",
  "durable",
  "enum-map",

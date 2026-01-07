@@ -138,6 +138,13 @@ impl From<TaskError> for ToolError {
                 anyhow::anyhow!("child task failed at '{step_name}': {message}"),
             )
             .into(),
+            TaskError::User {
+                message,
+                error_data,
+            } => NonControlToolError::ExecutionFailed(anyhow::anyhow!(
+                "user error: {message} {error_data:?}"
+            ))
+            .into(),
             TaskError::ChildCancelled { step_name } => NonControlToolError::ExecutionFailed(
                 anyhow::anyhow!("child task was cancelled at '{step_name}'"),
             )

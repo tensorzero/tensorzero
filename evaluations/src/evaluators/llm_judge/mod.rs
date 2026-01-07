@@ -7,6 +7,7 @@ use tensorzero_core::client::{
     ClientInferenceParams, DynamicToolParams, File, InferenceOutput, InferenceParams,
     InferenceResponse, Input, InputMessage, InputMessageContent, Role,
 };
+use tensorzero_core::db::evaluation_queries::EvaluationQueries;
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
     LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType, get_evaluator_metric_name,
@@ -19,7 +20,7 @@ use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::Clients;
-use crate::helpers::{check_inference_evaluation_human_feedback, get_cache_options};
+use crate::helpers::get_cache_options;
 
 #[derive(Debug)]
 pub struct LLMJudgeEvaluationResult {
@@ -69,13 +70,15 @@ pub async fn run_llm_judge_evaluator(
         inference_cache,
     } = params;
     debug!("Checking for existing human feedback");
-    if let Some(human_feedback) = check_inference_evaluation_human_feedback(
-        &clients.clickhouse_client,
-        &get_evaluator_metric_name(evaluation_name, evaluator_name),
-        datapoint.id(),
-        inference_response,
-    )
-    .await?
+    let serialized_output = inference_response.get_serialized_output()?;
+    if let Some(human_feedback) = clients
+        .clickhouse_client
+        .get_inference_evaluation_human_feedback(
+            &get_evaluator_metric_name(evaluation_name, evaluator_name),
+            &datapoint.id(),
+            &serialized_output,
+        )
+        .await?
     {
         info!("Found existing human feedback, using that instead of LLM judge");
         return Ok(Some(LLMJudgeEvaluationResult {
