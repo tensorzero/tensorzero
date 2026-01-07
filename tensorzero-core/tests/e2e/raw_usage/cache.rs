@@ -124,11 +124,11 @@ async fn test_raw_usage_cache_behavior_non_streaming() {
     // Use a fixed input for deterministic provider-proxy caching.
     // Gateway cache (ClickHouse) is fresh each CI run, so first request will be a cache miss.
     // See: https://github.com/tensorzero/tensorzero/issues/5380
-    let unique_input = "What is 2+2? Cache test: test_raw_usage_cache_behavior_non_streaming_v1";
+    let input = "raw_usage_non_streaming: What is 2+2?";
 
     // First request: should be a cache miss, raw_usage should have entries
     let first_raw_usage =
-        make_request_and_get_raw_usage("weather_helper", "openai", unique_input, false).await;
+        make_request_and_get_raw_usage("weather_helper", "openai", input, false).await;
 
     assert!(
         !first_raw_usage.is_empty(),
@@ -142,7 +142,7 @@ async fn test_raw_usage_cache_behavior_non_streaming() {
     // Second request with same input: should be a cache hit
     // Cache hits should be EXCLUDED from raw_usage, but field should still be present as empty array
     let second_raw_usage =
-        make_request_and_get_raw_usage("weather_helper", "openai", unique_input, false).await;
+        make_request_and_get_raw_usage("weather_helper", "openai", input, false).await;
 
     assert!(
         second_raw_usage.is_empty(),
@@ -155,13 +155,12 @@ async fn test_raw_usage_cache_behavior_streaming() {
     // Use a fixed input for deterministic provider-proxy caching.
     // Gateway cache (ClickHouse) is fresh each CI run, so first request will be a cache miss.
     // See: https://github.com/tensorzero/tensorzero/issues/5380
-    let unique_input =
-        "What is 3+3? Cache streaming test: test_raw_usage_cache_behavior_streaming_v1";
+    let input = "raw_usage_streaming: What is 3+3?";
 
     // First request: should be a cache miss
     // raw_usage should be present (even if potentially empty for simple streaming variants)
     let first_raw_usage =
-        make_request_and_get_raw_usage("weather_helper", "openai", unique_input, true).await;
+        make_request_and_get_raw_usage("weather_helper", "openai", input, true).await;
 
     // Note: For streaming, raw_usage includes the current streaming inference's usage
     // when it completes. So we should have at least one entry.
@@ -177,7 +176,7 @@ async fn test_raw_usage_cache_behavior_streaming() {
     // Second request: should be a cache hit
     // raw_usage should still be present but empty (field present as [])
     let second_raw_usage =
-        make_request_and_get_raw_usage("weather_helper", "openai", unique_input, true).await;
+        make_request_and_get_raw_usage("weather_helper", "openai", input, true).await;
 
     assert!(
         second_raw_usage.is_empty(),
@@ -189,7 +188,7 @@ async fn test_raw_usage_cache_behavior_streaming() {
 async fn test_raw_usage_cache_disabled() {
     // Use a fixed input for deterministic provider-proxy caching.
     // See: https://github.com/tensorzero/tensorzero/issues/5380
-    let unique_input = "What is 4+4? Cache disabled test: test_raw_usage_cache_disabled_v1";
+    let input = "raw_usage_cache_disabled: What is 4+4?";
 
     let episode_id = Uuid::now_v7();
 
@@ -203,7 +202,7 @@ async fn test_raw_usage_cache_disabled() {
             "messages": [
                 {
                     "role": "user",
-                    "content": unique_input
+                    "content": input
                 }
             ]
         },
@@ -244,8 +243,7 @@ async fn test_raw_usage_cache_disabled() {
 async fn test_raw_usage_cache_disabled_streaming() {
     // Use a fixed input for deterministic provider-proxy caching.
     // See: https://github.com/tensorzero/tensorzero/issues/5380
-    let unique_input =
-        "What is 5+5? Cache disabled streaming test: test_raw_usage_cache_disabled_streaming_v1";
+    let input = "raw_usage_cache_disabled_streaming: What is 5+5?";
 
     let episode_id = Uuid::now_v7();
 
@@ -259,7 +257,7 @@ async fn test_raw_usage_cache_disabled_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": unique_input
+                    "content": input
                 }
             ]
         },
@@ -392,11 +390,10 @@ async fn test_raw_usage_cache_openai_compatible_non_streaming() {
     // Use a fixed input for deterministic provider-proxy caching.
     // Gateway cache (ClickHouse) is fresh each CI run, so first request will be a cache miss.
     // See: https://github.com/tensorzero/tensorzero/issues/5380
-    let unique_input =
-        "What is 5+5? OpenAI cache test: test_raw_usage_cache_openai_compatible_non_streaming_v1";
+    let input = "raw_usage_openai_non_streaming: What is 5+5?";
 
     // First request: should be a cache miss
-    let first_raw_usage = make_openai_request_and_get_raw_usage(unique_input, false).await;
+    let first_raw_usage = make_openai_request_and_get_raw_usage(input, false).await;
 
     assert!(
         !first_raw_usage.is_empty(),
@@ -409,7 +406,7 @@ async fn test_raw_usage_cache_openai_compatible_non_streaming() {
 
     // Second request: should be a cache hit
     // tensorzero_raw_usage should still be present but empty (field present as [])
-    let second_raw_usage = make_openai_request_and_get_raw_usage(unique_input, false).await;
+    let second_raw_usage = make_openai_request_and_get_raw_usage(input, false).await;
 
     assert!(
         second_raw_usage.is_empty(),
@@ -422,10 +419,10 @@ async fn test_raw_usage_cache_openai_compatible_streaming() {
     // Use a fixed input for deterministic provider-proxy caching.
     // Gateway cache (ClickHouse) is fresh each CI run, so first request will be a cache miss.
     // See: https://github.com/tensorzero/tensorzero/issues/5380
-    let unique_input = "What is 6+6? OpenAI streaming cache test: test_raw_usage_cache_openai_compatible_streaming_v1";
+    let input = "raw_usage_openai_streaming: What is 6+6?";
 
     // First request: should be a cache miss
-    let first_raw_usage = make_openai_request_and_get_raw_usage(unique_input, true).await;
+    let first_raw_usage = make_openai_request_and_get_raw_usage(input, true).await;
 
     assert!(
         !first_raw_usage.is_empty(),
@@ -438,7 +435,7 @@ async fn test_raw_usage_cache_openai_compatible_streaming() {
 
     // Second request: should be a cache hit
     // tensorzero_raw_usage should still be present but empty (field present as [])
-    let second_raw_usage = make_openai_request_and_get_raw_usage(unique_input, true).await;
+    let second_raw_usage = make_openai_request_and_get_raw_usage(input, true).await;
 
     assert!(
         second_raw_usage.is_empty(),
