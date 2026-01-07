@@ -3,16 +3,16 @@ import type { LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
-export const ErrorVariant = {
+export const ErrorStyle = {
   Light: "LIGHT",
   Dark: "DARK",
 } as const;
 
-export type ErrorVariant = (typeof ErrorVariant)[keyof typeof ErrorVariant];
+export type ErrorStyle = (typeof ErrorStyle)[keyof typeof ErrorStyle];
 
 interface ErrorContentCardProps {
   children: React.ReactNode;
-  variant?: ErrorVariant;
+  variant?: ErrorStyle;
   className?: string;
 }
 
@@ -23,14 +23,14 @@ interface ErrorContentCardProps {
  */
 export function ErrorContentCard({
   children,
-  variant = ErrorVariant.Dark,
+  variant = ErrorStyle.Light,
   className,
 }: ErrorContentCardProps) {
   return (
     <Card
       className={cn(
         "max-w-lg shadow-none",
-        variant === ErrorVariant.Dark
+        variant === ErrorStyle.Dark
           ? "border-neutral-800 bg-neutral-950"
           : "bg-card border",
         className,
@@ -46,24 +46,21 @@ interface ErrorContentHeaderProps {
   title: string;
   description: string;
   showBorder?: boolean;
-  variant?: ErrorVariant;
+  variant?: ErrorStyle;
 }
 
-/**
- * Header with icon, title, and description.
- */
 export function ErrorContentHeader({
   icon: Icon,
   title,
   description,
   showBorder = true,
-  variant = ErrorVariant.Dark,
+  variant = ErrorStyle.Light,
 }: ErrorContentHeaderProps) {
   return (
     <CardHeader
       className={cn(
         showBorder &&
-          (variant === ErrorVariant.Dark
+          (variant === ErrorStyle.Dark
             ? "border-b border-neutral-900"
             : "border-b"),
       )}
@@ -72,14 +69,14 @@ export function ErrorContentHeader({
         <Icon
           className={cn(
             "h-6 w-6 shrink-0",
-            variant === ErrorVariant.Dark ? "text-red-400" : "text-red-500",
+            variant === ErrorStyle.Dark ? "text-red-400" : "text-red-500",
           )}
         />
         <div className="min-w-0 flex-1">
           <CardTitle
             className={cn(
               "font-medium",
-              variant === ErrorVariant.Dark
+              variant === ErrorStyle.Dark
                 ? "text-neutral-100"
                 : "text-foreground",
             )}
@@ -89,7 +86,7 @@ export function ErrorContentHeader({
           <p
             className={cn(
               "mt-1.5 text-sm",
-              variant === ErrorVariant.Dark
+              variant === ErrorStyle.Dark
                 ? "text-neutral-400"
                 : "text-muted-foreground",
             )}
@@ -103,35 +100,29 @@ export function ErrorContentHeader({
 }
 
 interface TroubleshootingSectionProps {
-  heading?: string;
   children: React.ReactNode;
-  variant?: ErrorVariant;
+  variant?: ErrorStyle;
 }
 
-/**
- * Numbered list of troubleshooting steps.
- */
+// Children are auto-numbered as an ordered list (1, 2, 3...)
 export function TroubleshootingSection({
-  heading = "What to check:",
   children,
-  variant = ErrorVariant.Dark,
+  variant = ErrorStyle.Light,
 }: TroubleshootingSectionProps) {
   return (
     <CardContent className="h-40 p-6">
       <h4
         className={cn(
           "mb-3 text-sm font-medium",
-          variant === ErrorVariant.Dark
-            ? "text-neutral-100"
-            : "text-foreground",
+          variant === ErrorStyle.Dark ? "text-neutral-100" : "text-foreground",
         )}
       >
-        {heading}
+        What to check:
       </h4>
       <ol
         className={cn(
           "space-y-2 text-sm",
-          variant === ErrorVariant.Dark
+          variant === ErrorStyle.Dark
             ? "text-neutral-400"
             : "text-muted-foreground",
         )}
@@ -141,7 +132,7 @@ export function TroubleshootingSection({
             <span
               className={cn(
                 "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs",
-                variant === ErrorVariant.Dark
+                variant === ErrorStyle.Dark
                   ? "bg-neutral-800 text-neutral-300"
                   : "bg-muted text-muted-foreground",
               )}
@@ -158,7 +149,7 @@ export function TroubleshootingSection({
 
 interface ErrorInlineCodeProps {
   children: React.ReactNode;
-  variant?: ErrorVariant;
+  variant?: ErrorStyle;
 }
 
 /**
@@ -166,13 +157,13 @@ interface ErrorInlineCodeProps {
  */
 export function ErrorInlineCode({
   children,
-  variant = ErrorVariant.Dark,
+  variant = ErrorStyle.Dark,
 }: ErrorInlineCodeProps) {
   return (
     <code
       className={cn(
         "rounded px-1 py-0.5 font-mono text-xs",
-        variant === ErrorVariant.Dark ? "bg-neutral-800" : "bg-muted",
+        variant === ErrorStyle.Dark ? "bg-neutral-800" : "bg-muted",
       )}
     >
       {children}
@@ -182,7 +173,7 @@ export function ErrorInlineCode({
 
 interface StackTraceContentProps {
   stack: string;
-  variant?: ErrorVariant;
+  variant?: ErrorStyle;
 }
 
 /**
@@ -190,14 +181,14 @@ interface StackTraceContentProps {
  */
 export function StackTraceContent({
   stack,
-  variant = ErrorVariant.Dark,
+  variant = ErrorStyle.Dark,
 }: StackTraceContentProps) {
   return (
     <CardContent className="flex h-40 flex-col p-6">
       <pre
         className={cn(
           "min-h-0 flex-1 overflow-auto rounded p-3 font-mono text-xs",
-          variant === ErrorVariant.Dark
+          variant === ErrorStyle.Dark
             ? "bg-neutral-900 text-neutral-400"
             : "bg-muted text-muted-foreground",
         )}
@@ -210,7 +201,7 @@ export function StackTraceContent({
 
 interface SimpleErrorContentProps {
   message: string;
-  variant?: ErrorVariant;
+  variant?: ErrorStyle;
 }
 
 /**
@@ -218,14 +209,14 @@ interface SimpleErrorContentProps {
  */
 export function SimpleErrorContent({
   message,
-  variant = ErrorVariant.Dark,
+  variant = ErrorStyle.Dark,
 }: SimpleErrorContentProps) {
   return (
     <CardContent>
       <p
         className={cn(
           "text-sm",
-          variant === ErrorVariant.Dark
+          variant === ErrorStyle.Dark
             ? "text-neutral-400"
             : "text-muted-foreground",
         )}

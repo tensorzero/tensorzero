@@ -13,6 +13,7 @@ import {
   ErrorContentCard,
   ErrorContentHeader,
   ErrorInlineCode,
+  ErrorStyle,
   StackTraceContent,
   TroubleshootingSection,
 } from "./ErrorContentPrimitives";
@@ -48,16 +49,20 @@ export function ErrorContent({ error }: ErrorContentProps) {
 
 function GatewayUnavailableContent() {
   return (
-    <ErrorContentCard>
+    <ErrorContentCard variant={ErrorStyle.Dark}>
       <ErrorContentHeader
         icon={Unplug}
         title="Gateway Unavailable"
         description="Unable to connect to the TensorZero Gateway."
+        variant={ErrorStyle.Dark}
       />
-      <TroubleshootingSection heading="Troubleshooting steps:">
+      <TroubleshootingSection variant={ErrorStyle.Dark}>
         <>Ensure the Gateway is running and accessible</>
         <>
-          Verify the <ErrorInlineCode>TENSORZERO_GATEWAY_URL</ErrorInlineCode>{" "}
+          Verify the{" "}
+          <ErrorInlineCode variant={ErrorStyle.Dark}>
+            TENSORZERO_GATEWAY_URL
+          </ErrorInlineCode>{" "}
           environment variable
         </>
         <>Check for network connectivity issues</>
@@ -68,16 +73,20 @@ function GatewayUnavailableContent() {
 
 function GatewayAuthContent() {
   return (
-    <ErrorContentCard>
+    <ErrorContentCard variant={ErrorStyle.Dark}>
       <ErrorContentHeader
         icon={KeyRound}
         title="Authentication Failed"
         description="Unable to authenticate with the TensorZero Gateway."
+        variant={ErrorStyle.Dark}
       />
-      <TroubleshootingSection>
+      <TroubleshootingSection variant={ErrorStyle.Dark}>
         <>
-          Verify <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode> is set
-          correctly
+          Verify{" "}
+          <ErrorInlineCode variant={ErrorStyle.Dark}>
+            TENSORZERO_API_KEY
+          </ErrorInlineCode>{" "}
+          is set correctly
         </>
         <>Ensure the API key has not expired or been revoked</>
         <>Check Gateway logs for authentication details</>
@@ -88,13 +97,14 @@ function GatewayAuthContent() {
 
 function RouteNotFoundContent({ routeInfo }: { routeInfo: string }) {
   return (
-    <ErrorContentCard>
+    <ErrorContentCard variant={ErrorStyle.Dark}>
       <ErrorContentHeader
         icon={Server}
         title="API Route Not Found"
         description={`The Gateway returned 404 for: ${routeInfo}`}
+        variant={ErrorStyle.Dark}
       />
-      <TroubleshootingSection>
+      <TroubleshootingSection variant={ErrorStyle.Dark}>
         <>Ensure the UI and Gateway versions are compatible</>
         <>Try refreshing the page or restarting the Gateway</>
         <>Check Gateway logs for more details</>
@@ -105,16 +115,20 @@ function RouteNotFoundContent({ routeInfo }: { routeInfo: string }) {
 
 function ClickHouseContent({ message }: { message?: string }) {
   return (
-    <ErrorContentCard>
+    <ErrorContentCard variant={ErrorStyle.Dark}>
       <ErrorContentHeader
         icon={Database}
         title="ClickHouse Connection Error"
         description={message || "Unable to connect to the ClickHouse database."}
+        variant={ErrorStyle.Dark}
       />
-      <TroubleshootingSection>
+      <TroubleshootingSection variant={ErrorStyle.Dark}>
         <>Verify ClickHouse is running and accessible</>
         <>
-          Check the <ErrorInlineCode>CLICKHOUSE_URL</ErrorInlineCode>{" "}
+          Check the{" "}
+          <ErrorInlineCode variant={ErrorStyle.Dark}>
+            CLICKHOUSE_URL
+          </ErrorInlineCode>{" "}
           environment variable
         </>
         <>Review Gateway logs for connection details</>
@@ -133,14 +147,15 @@ function ServerErrorContent({
   stack?: string;
 }) {
   return (
-    <ErrorContentCard>
+    <ErrorContentCard variant={ErrorStyle.Dark}>
       <ErrorContentHeader
         icon={AlertTriangle}
         title={status ? `Error ${status}` : "Something Went Wrong"}
         description={message || "An unexpected error occurred."}
         showBorder={Boolean(stack)}
+        variant={ErrorStyle.Dark}
       />
-      {stack && <StackTraceContent stack={stack} />}
+      {stack && <StackTraceContent stack={stack} variant={ErrorStyle.Dark} />}
     </ErrorContentCard>
   );
 }
