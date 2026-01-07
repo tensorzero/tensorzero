@@ -29,8 +29,8 @@ CREATE TABLE chat_inference (
     tags JSONB NOT NULL DEFAULT '{}',
     extra_body JSONB,
     ttft_ms INTEGER,
-    dynamic_tools TEXT[] DEFAULT '{}',
-    dynamic_provider_tools TEXT[] DEFAULT '{}',
+    dynamic_tools JSONB NOT NULL DEFAULT '[]',
+    dynamic_provider_tools JSONB NOT NULL DEFAULT '[]',
     allowed_tools TEXT,
     tool_choice TEXT,
     parallel_tool_calls BOOLEAN,
@@ -42,6 +42,38 @@ CREATE INDEX idx_chat_inference_function_variant ON chat_inference(function_name
 CREATE INDEX idx_chat_inference_episode ON chat_inference(episode_id);
 CREATE INDEX idx_chat_inference_timestamp ON chat_inference(timestamp DESC);
 CREATE INDEX idx_chat_inference_tags ON chat_inference USING GIN(tags);
+
+-- Compound index for list queries with ordering (most common query pattern)
+-- Used by: inference_queries.rs:225 (i.function_name = {function_name_param_placeholder})
+--          inference_queries.rs:754 (same pattern for datapoints)
+--          query_builder/mod.rs:2801 (ORDER BY i.timestamp DESC NULLS LAST, toUInt128(i.id) DESC)
+--          inference_count.rs:40,71 (WHERE function_name = {function_name:String})
+CREATE INDEX idx_chat_inference_function_ts_id
+    ON chat_inference(function_name, timestamp DESC, id DESC);
+
+-- Episode queries with ordering
+-- Used by: inference_queries.rs:248 (i.episode_id = {episode_id_param_placeholder})
+--          inference_queries.rs:337 (episode_id = {episode_id:UUID})
+--          test_helpers.rs:227 (SELECT * FROM ChatInference WHERE episode_id = ...)
+CREATE INDEX idx_chat_inference_episode_ts
+    ON chat_inference(episode_id, timestamp DESC);
+
+-- Variant statistics optimization
+-- Used by: inference_count.rs:71-73 (WHERE function_name = ... GROUP BY variant_name)
+--          inference_count.rs:193-194 (GROUP BY variant_name with max(timestamp))
+--          feedback.rs:695 (GROUP BY variant_name for metrics)
+CREATE INDEX idx_chat_inference_function_variant_ts
+    ON chat_inference(function_name, variant_name, timestamp DESC);
+
+-- Text search on JSONB input/output
+-- Used by: inference_queries.rs:275 (countSubstringsCaseInsensitiveUTF8(i.input, ...) + ...)
+--          inference_queries.rs:864-867 (input_term_frequency, output_term_frequency)
+--          dataset_queries.rs:283-284 (countSubstringsCaseInsensitiveUTF8 on input/output)
+-- Note: GIN indices enable JSONB containment (@>) queries; full-text search may need pg_trgm
+CREATE INDEX idx_chat_inference_input_gin
+    ON chat_inference USING GIN(input jsonb_path_ops);
+CREATE INDEX idx_chat_inference_output_gin
+    ON chat_inference USING GIN(output jsonb_path_ops);
 
 -- =============================================================================
 -- JSON INFERENCE TABLE
@@ -70,6 +102,28 @@ CREATE INDEX idx_json_inference_function_variant ON json_inference(function_name
 CREATE INDEX idx_json_inference_episode ON json_inference(episode_id);
 CREATE INDEX idx_json_inference_timestamp ON json_inference(timestamp DESC);
 CREATE INDEX idx_json_inference_tags ON json_inference USING GIN(tags);
+
+-- Compound index for list queries with ordering
+-- Same query patterns as chat_inference (inference_queries.rs generates UNION ALL)
+CREATE INDEX idx_json_inference_function_ts_id
+    ON json_inference(function_name, timestamp DESC, id DESC);
+
+-- Episode queries with ordering
+-- Same query patterns as chat_inference
+CREATE INDEX idx_json_inference_episode_ts
+    ON json_inference(episode_id, timestamp DESC);
+
+-- Variant statistics optimization
+-- Same query patterns as chat_inference
+CREATE INDEX idx_json_inference_function_variant_ts
+    ON json_inference(function_name, variant_name, timestamp DESC);
+
+-- Text search on JSONB input/output
+-- Same query patterns as chat_inference
+CREATE INDEX idx_json_inference_input_gin
+    ON json_inference USING GIN(input jsonb_path_ops);
+CREATE INDEX idx_json_inference_output_gin
+    ON json_inference USING GIN(output jsonb_path_ops);
 
 -- =============================================================================
 -- MODEL INFERENCE TABLE
