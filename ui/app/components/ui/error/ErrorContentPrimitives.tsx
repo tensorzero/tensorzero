@@ -1,3 +1,4 @@
+import * as React from "react";
 import type { LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 
@@ -53,27 +54,17 @@ export function TroubleshootingSection({
   return (
     <CardContent className="h-40 p-6">
       <h4 className="mb-3 text-sm font-medium text-neutral-100">{heading}</h4>
-      <ul className="space-y-2 text-sm text-neutral-400">{children}</ul>
+      <ol className="space-y-2 text-sm text-neutral-400">
+        {React.Children.map(children, (child, index) => (
+          <li key={index} className="flex items-start gap-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs text-neutral-300">
+              {index + 1}
+            </span>
+            <span>{child}</span>
+          </li>
+        ))}
+      </ol>
     </CardContent>
-  );
-}
-
-interface TroubleshootingItemProps {
-  number: number;
-  children: React.ReactNode;
-}
-
-export function TroubleshootingItem({
-  number,
-  children,
-}: TroubleshootingItemProps) {
-  return (
-    <li className="flex items-start gap-2">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs text-neutral-300">
-        {number}
-      </span>
-      {typeof children === "string" ? children : <span>{children}</span>}
-    </li>
   );
 }
 

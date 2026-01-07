@@ -14,7 +14,6 @@ import {
   ErrorContentHeader,
   InlineCode,
   StackTraceContent,
-  TroubleshootingItem,
   TroubleshootingSection,
 } from "./ErrorContentPrimitives";
 
@@ -56,16 +55,12 @@ function GatewayUnavailableContent() {
         description="Unable to connect to the TensorZero Gateway."
       />
       <TroubleshootingSection heading="Troubleshooting steps:">
-        <TroubleshootingItem number={1}>
-          Ensure the Gateway is running and accessible
-        </TroubleshootingItem>
-        <TroubleshootingItem number={2}>
+        <>Ensure the Gateway is running and accessible</>
+        <>
           Verify the <InlineCode>TENSORZERO_GATEWAY_URL</InlineCode> environment
           variable
-        </TroubleshootingItem>
-        <TroubleshootingItem number={3}>
-          Check for network connectivity issues
-        </TroubleshootingItem>
+        </>
+        <>Check for network connectivity issues</>
       </TroubleshootingSection>
     </ErrorContentCard>
   );
@@ -80,15 +75,11 @@ function GatewayAuthContent() {
         description="Unable to authenticate with the TensorZero Gateway."
       />
       <TroubleshootingSection>
-        <TroubleshootingItem number={1}>
+        <>
           Verify <InlineCode>TENSORZERO_API_KEY</InlineCode> is set correctly
-        </TroubleshootingItem>
-        <TroubleshootingItem number={2}>
-          Ensure the API key has not expired or been revoked
-        </TroubleshootingItem>
-        <TroubleshootingItem number={3}>
-          Check Gateway logs for authentication details
-        </TroubleshootingItem>
+        </>
+        <>Ensure the API key has not expired or been revoked</>
+        <>Check Gateway logs for authentication details</>
       </TroubleshootingSection>
     </ErrorContentCard>
   );
@@ -107,15 +98,9 @@ function RouteNotFoundContent({ routeInfo }: { routeInfo?: string }) {
         }
       />
       <TroubleshootingSection>
-        <TroubleshootingItem number={1}>
-          Ensure the UI and Gateway versions are compatible
-        </TroubleshootingItem>
-        <TroubleshootingItem number={2}>
-          Try refreshing the page or restarting the Gateway
-        </TroubleshootingItem>
-        <TroubleshootingItem number={3}>
-          Check Gateway logs for more details
-        </TroubleshootingItem>
+        <>Ensure the UI and Gateway versions are compatible</>
+        <>Try refreshing the page or restarting the Gateway</>
+        <>Check Gateway logs for more details</>
       </TroubleshootingSection>
     </ErrorContentCard>
   );
@@ -130,15 +115,11 @@ function ClickHouseContent({ message }: { message?: string }) {
         description={message || "Unable to connect to the ClickHouse database."}
       />
       <TroubleshootingSection>
-        <TroubleshootingItem number={1}>
-          Verify ClickHouse is running and accessible
-        </TroubleshootingItem>
-        <TroubleshootingItem number={2}>
+        <>Verify ClickHouse is running and accessible</>
+        <>
           Check the <InlineCode>CLICKHOUSE_URL</InlineCode> environment variable
-        </TroubleshootingItem>
-        <TroubleshootingItem number={3}>
-          Review Gateway logs for connection details
-        </TroubleshootingItem>
+        </>
+        <>Review Gateway logs for connection details</>
       </TroubleshootingSection>
     </ErrorContentCard>
   );
