@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use super::ClickHouseConnectionInfo;
+use super::escape_string_for_clickhouse_literal;
 use super::select_queries::{parse_count, parse_json_rows};
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::db::evaluation_queries::EvaluationResultRow;
@@ -13,6 +14,7 @@ use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::db::evaluation_queries::EvaluationStatisticsRow;
+use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
 use crate::statistics_util::{wald_confint, wilson_confint};
@@ -100,13 +102,13 @@ fn get_evaluation_result_datapoint_id_subquery(
     let query = format!(
         "all_inference_ids AS (
             SELECT DISTINCT inference_id
-            FROM TagInference FINAL WHERE key = 'tensorzero::evaluation_run_id'
+            FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
             AND function_name = {{function_name:String}}
             AND value IN ({{evaluation_run_ids:Array(String)}})
         ),
         all_datapoint_ids AS (
             SELECT DISTINCT value as datapoint_id
-            FROM TagInference FINAL
+            FROM TagInference
             WHERE key = 'tensorzero::datapoint_id'
             AND function_name = {{function_name:String}}
             AND inference_id IN (SELECT inference_id FROM all_inference_ids)
@@ -153,7 +155,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     any(function_name) AS inference_function_name,
                     any(variant_name) AS variant_name,
                     max(toUInt128(inference_id)) AS max_inference_id
-                FROM TagInference FINAL
+                FROM TagInference
                 WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
                 GROUP BY inference_id
             )
@@ -223,7 +225,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     AND value = {evaluation_name:String}
                 )
             SELECT DISTINCT value as evaluation_run_id, variant_name
-            FROM TagInference FINAL
+            FROM TagInference
             WHERE key = 'tensorzero::evaluation_run_id'
                 AND function_name = {function_name:String}
                 AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
@@ -273,7 +275,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     '%Y-%m-%dT%H:%i:%SZ'
                 ) as most_recent_inference_date
             FROM
-                TagInference AS run_tag FINAL
+                TagInference AS run_tag
             WHERE
                 run_tag.key = 'tensorzero::evaluation_run_id'
                 AND run_tag.value IN ({evaluation_run_ids:Array(String)})
@@ -308,7 +310,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             r"
             WITH datapoint_inference_ids AS (
                 SELECT inference_id
-                FROM TagInference FINAL
+                FROM TagInference
                 WHERE key = 'tensorzero::datapoint_id'
                 AND value = {{datapoint_id:String}}
             )
@@ -486,7 +488,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             r"
             WITH {datapoint_id_subquery},
             filtered_dp AS (
-                SELECT * FROM {datapoint_table_name} FINAL
+                SELECT * FROM {datapoint_table_name}
                 WHERE function_name = {{function_name:String}}
                 AND id IN (SELECT datapoint_id FROM all_datapoint_ids)
             ),
@@ -555,6 +557,38 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous(sql_query, &params).await?;
         parse_json_rows(response.response.as_str())
     }
+
+    async fn get_inference_evaluation_human_feedback(
+        &self,
+        metric_name: &str,
+        datapoint_id: &uuid::Uuid,
+        output: &str,
+    ) -> Result<Option<InferenceEvaluationHumanFeedbackRow>, Error> {
+        let sql_query = r"
+            SELECT value, evaluator_inference_id
+            FROM StaticEvaluationHumanFeedback
+            WHERE metric_name = {metric_name:String}
+            AND datapoint_id = {datapoint_id:UUID}
+            AND output = {output:String}
+            LIMIT 1
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let metric_name_str = metric_name.to_string();
+        let datapoint_id_str = datapoint_id.to_string();
+        let escaped_output = escape_string_for_clickhouse_literal(output);
+
+        let mut params = HashMap::new();
+        params.insert("metric_name", metric_name_str.as_str());
+        params.insert("datapoint_id", datapoint_id_str.as_str());
+        params.insert("output", escaped_output.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        let rows: Vec<InferenceEvaluationHumanFeedbackRow> =
+            parse_json_rows(response.response.as_str())?;
+        Ok(rows.into_iter().next())
+    }
 }
 
 #[cfg(test)]
@@ -617,7 +651,7 @@ mod tests {
                 // Verify the query contains the expected structure
                 assert_query_contains(query, "SELECT");
                 assert_query_contains(query, "evaluation_run_id");
-                assert_query_contains(query, "FROM TagInference FINAL");
+                assert_query_contains(query, "FROM TagInference");
                 assert_query_contains(query, "LIMIT {limit:UInt32}");
                 assert_query_contains(query, "OFFSET {offset:UInt32}");
 
@@ -745,13 +779,13 @@ mod tests {
                     "
                 WITH all_inference_ids AS (
                     SELECT DISTINCT inference_id
-                    FROM TagInference FINAL WHERE key = 'tensorzero::evaluation_run_id'
+                    FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
                     AND function_name = {function_name:String}
                     AND value IN ({evaluation_run_ids:Array(String)})
                 ),
                 all_datapoint_ids AS (
                     SELECT DISTINCT value as datapoint_id
-                    FROM TagInference FINAL
+                    FROM TagInference
                     WHERE key = 'tensorzero::datapoint_id'
                     AND function_name = {function_name:String}
                     AND inference_id IN (SELECT inference_id FROM all_inference_ids)
@@ -871,7 +905,7 @@ mod tests {
                         AND value = {evaluation_name:String}
                     )
                 SELECT DISTINCT value as evaluation_run_id, variant_name
-                FROM TagInference FINAL
+                FROM TagInference
                 WHERE key = 'tensorzero::evaluation_run_id'
                     AND function_name = {function_name:String}
                     AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
@@ -949,7 +983,7 @@ mod tests {
                         '%Y-%m-%dT%H:%i:%SZ'
                     ) as most_recent_inference_date
                 FROM
-                    TagInference AS run_tag FINAL
+                    TagInference AS run_tag
                 WHERE
                     run_tag.key = 'tensorzero::evaluation_run_id'
                     AND run_tag.value IN ({evaluation_run_ids:Array(String)})
@@ -1073,7 +1107,7 @@ mod tests {
                     query,
                     "WITH datapoint_inference_ids AS (
                         SELECT inference_id
-                        FROM TagInference FINAL
+                        FROM TagInference
                         WHERE key = 'tensorzero::datapoint_id'
                         AND value = {datapoint_id:String}
                     )
@@ -1137,7 +1171,7 @@ mod tests {
                     query,
                     "WITH datapoint_inference_ids AS (
                         SELECT inference_id
-                        FROM TagInference FINAL
+                        FROM TagInference
                         WHERE key = 'tensorzero::datapoint_id'
                         AND value = {datapoint_id:String}
                     )
@@ -1953,5 +1987,153 @@ mod tests {
         assert_eq!(result[0].metric_value, Some("true".to_string()));
         assert_eq!(result[1].metric_name, Some("metric2".to_string()));
         assert_eq!(result[1].metric_value, Some("0.95".to_string()));
+    }
+
+    // ============================================================================
+    // get_inference_evaluation_human_feedback tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_found() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(
+                    query,
+                    "SELECT value, evaluator_inference_id
+                    FROM StaticEvaluationHumanFeedback
+                    WHERE metric_name = {metric_name:String}
+                    AND datapoint_id = {datapoint_id:UUID}
+                    AND output = {output:String}
+                    LIMIT 1
+                    FORMAT JSONEachRow",
+                );
+                assert_eq!(params.get("metric_name"), Some(&"test_metric"));
+                assert_eq!(
+                    params.get("datapoint_id"),
+                    Some(&"0196ee9c-d808-74f3-8000-02ec7409b95d")
+                );
+                assert_eq!(params.get("output"), Some(&r#"{"raw":"test output"}"#));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"value":"0.95","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95e"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback(
+                "test_metric",
+                &datapoint_id,
+                r#"{"raw":"test output"}"#,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let feedback = result.unwrap();
+        assert_eq!(feedback.value, serde_json::json!(0.95));
+        assert_eq!(
+            feedback.evaluator_inference_id,
+            Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_not_found() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback(
+                "nonexistent_metric",
+                &datapoint_id,
+                r#"{"raw":"test output"}"#,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_boolean_value() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"value":"true","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95e"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback("test_metric", &datapoint_id, "test output")
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let feedback = result.unwrap();
+        assert_eq!(feedback.value, serde_json::json!(true));
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_object_value() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"value":"{\"score\":0.8,\"reason\":\"good\"}","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95e"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback("test_metric", &datapoint_id, "test output")
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let feedback = result.unwrap();
+        assert_eq!(
+            feedback.value,
+            serde_json::json!({"score": 0.8, "reason": "good"})
+        );
     }
 }

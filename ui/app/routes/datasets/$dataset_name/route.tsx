@@ -10,7 +10,6 @@ import {
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { logger } from "~/utils/logger";
-import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { useFetcher } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
@@ -92,8 +91,8 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (!dataset_name) {
       throw data("Dataset name is required", { status: 400 });
     }
-    const client = await getNativeTensorZeroClient();
-    await client.staleDataset(dataset_name);
+    const client = getTensorZeroClient();
+    await client.deleteDataset(dataset_name);
     // Redirect to datasets list after successful deletion
     return redirect("/datasets");
   }

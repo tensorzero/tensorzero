@@ -115,6 +115,7 @@ from .tensorzero import (
 )
 from .types import (
     AndFilter,  # pyright: ignore[reportDeprecated]
+    ApiType,
     BaseTensorZeroError,
     BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
     ChatDatapointInsert,
@@ -140,6 +141,7 @@ from .types import (
     OrderBy,
     OrFilter,  # pyright: ignore[reportDeprecated]
     RawText,
+    RawUsageEntry,
     System,
     TagFilter,  # pyright: ignore[reportDeprecated]
     Template,
@@ -203,6 +205,7 @@ __all__ = [
     "AlwaysExtraHeader",
     "AlwaysExtraHeaderDelete",
     "AndFilter",
+    "ApiType",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
@@ -298,6 +301,7 @@ __all__ = [
     "ProviderExtraHeader",  # DEPRECATED
     "ProviderExtraHeaderDelete",  # DEPRECATED
     "RawText",
+    "RawUsageEntry",
     "RenderedSample",
     "RenderedStoredInference",  # DEPRECATED
     "ResolvedInput",

@@ -18,8 +18,8 @@ pub use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
     GetConfigResponse, GetDatapointsResponse, InferenceResponse, ListDatapointsRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
-    WriteConfigResponse,
+    PostgresConfig, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::cache::CacheEnabledMode;
@@ -384,12 +384,12 @@ pub fn http_gateway_client(url: Url) -> Result<Arc<dyn TensorZeroClient>, Client
 pub async fn embedded_gateway_client(
     config_file: Option<PathBuf>,
     clickhouse_url: Option<String>,
-    postgres_url: Option<String>,
+    postgres_config: Option<String>,
 ) -> Result<Arc<dyn TensorZeroClient>, ClientBuilderError> {
     let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file,
         clickhouse_url,
-        postgres_url,
+        postgres_config: postgres_config.map(PostgresConfig::Url),
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: false,

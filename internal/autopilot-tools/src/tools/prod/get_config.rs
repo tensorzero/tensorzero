@@ -12,7 +12,7 @@ use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_config tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct GetConfigToolParams;
+pub struct GetConfigToolParams {}
 
 /// Tool for retrieving config snapshots.
 #[derive(Default)]

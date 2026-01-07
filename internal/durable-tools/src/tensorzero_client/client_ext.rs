@@ -11,7 +11,9 @@ use async_trait::async_trait;
 use autopilot_client::AutopilotError;
 use evaluations::stats::EvaluationStats;
 use evaluations::types::{EvaluationCoreArgs, EvaluationVariant};
-use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_core_streaming};
+use evaluations::{
+    ClientInferenceExecutor, EvaluationUpdate, OutputFormat, run_evaluation_core_streaming,
+};
 use tensorzero::{
     Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams, ClientMode,
     CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
@@ -639,8 +641,11 @@ impl TensorZeroClient for Client {
 
                 let evaluation_run_id = Uuid::now_v7();
 
+                // Wrap the client in ClientInferenceExecutor for use with evaluations
+                let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
                 let core_args = EvaluationCoreArgs {
-                    tensorzero_client,
+                    inference_executor,
                     clickhouse_client: app_state.clickhouse_connection_info.clone(),
                     evaluation_config,
                     function_configs,
