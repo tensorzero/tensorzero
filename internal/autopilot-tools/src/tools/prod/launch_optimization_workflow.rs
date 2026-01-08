@@ -103,8 +103,9 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                 },
                 "output_source": {
                     "type": "string",
-                    "enum": ["inference_output", "demonstration"],
-                    "description": "Source of output data: 'inference_output' (model outputs) or 'demonstration' (human demonstrations)."
+                    "enum": ["none", "inference", "demonstration"],
+                    "default": "inference",
+                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available, 'none' returns no output."
                 },
                 "limit": {
                     "type": "integer",
@@ -124,8 +125,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                     "properties": {
                         "type": {
                             "type": "string",
-                            "enum": ["sft", "dpo", "mipro_v2"],
-                            "description": "Optimizer type: 'sft' (supervised fine-tuning), 'dpo' (direct preference optimization), 'mipro_v2' (prompt optimization)."
+                            "enum": ["dicl", "openai_sft", "fireworks_sft", "gcp_vertex_gemini_sft", "gepa", "together_sft"],
+                            "description": "Optimizer type: 'dicl' (dynamic in-context learning), 'openai_sft'/'fireworks_sft'/'gcp_vertex_gemini_sft'/'together_sft' (supervised fine-tuning on various providers), 'gepa' (genetic prompt algorithm)."
                         },
                         "model_name": {
                             "type": "string",
