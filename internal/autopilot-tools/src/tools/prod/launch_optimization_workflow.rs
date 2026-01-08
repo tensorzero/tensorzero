@@ -101,8 +101,9 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                 },
                 "output_source": {
                     "type": "string",
-                    "enum": ["inference_output", "demonstration"],
-                    "description": "Source of output data: 'inference_output' (model outputs) or 'demonstration' (human demonstrations)."
+                    "enum": ["none", "inference", "demonstration"],
+                    "default": "inference",
+                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available, 'none' returns no output."
                 },
                 "limit": {
                     "type": "integer",
