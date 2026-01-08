@@ -2643,7 +2643,7 @@ def test_sync_err_in_stream(sync_client: TensorZeroGateway):
         next(result)
     assert "Dummy error in stream" in str(exc_info.value)
     remaining_chunks = list(result)
-    assert len(remaining_chunks) == 12
+    assert len(remaining_chunks) == 13
 
 
 @pytest.mark.asyncio
@@ -2670,7 +2670,7 @@ async def test_async_err_in_stream(async_client: AsyncTensorZeroGateway):
     remaining_chunks: t.List[InferenceChunk] = []
     async for chunk in result:
         remaining_chunks.append(chunk)
-    assert len(remaining_chunks) == 12
+    assert len(remaining_chunks) == 13
 
 
 @pytest.mark.asyncio
