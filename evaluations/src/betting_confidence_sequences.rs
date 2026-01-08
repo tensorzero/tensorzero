@@ -902,6 +902,48 @@ mod tests {
         );
     }
 
+    // Tests for interval nesting behavior
+
+    #[test]
+    fn test_intervals_are_nested_over_updates() {
+        // Verify that confidence intervals are nested: each update produces
+        // an interval contained within (or equal to) the previous interval.
+        //
+        // Without intersection, raw bounds would be:
+        //   Batch 1: [0.13, 1.00]
+        //   Batch 2: [0.18, 0.87]
+        //   Batch 3: [0.25, 0.80]
+        //   Batch 4: [0.34, 0.81] <- upper bound expands from 0.80 to 0.81
+        let initial = create_initial_cs(101, 0.05);
+
+        let obs_batches = vec![
+            vec![0.8, 0.7, 0.9],
+            vec![0.3, 0.4, 0.2],
+            vec![0.5, 0.6, 0.55],
+            vec![0.9, 0.85, 0.8],
+        ];
+
+        let mut prev = initial;
+        for (i, obs) in obs_batches.into_iter().enumerate() {
+            let updated = update_betting_cs(prev.clone(), obs, None).unwrap();
+
+            assert!(
+                updated.cs_lower >= prev.cs_lower,
+                "Batch {i}: lower bound should not decrease: prev={}, new={}",
+                prev.cs_lower,
+                updated.cs_lower
+            );
+            assert!(
+                updated.cs_upper <= prev.cs_upper,
+                "Batch {i}: upper bound should not increase: prev={}, new={}",
+                prev.cs_upper,
+                updated.cs_upper
+            );
+
+            prev = updated;
+        }
+    }
+
     // Tests for interval tightening behavior
 
     #[test]
