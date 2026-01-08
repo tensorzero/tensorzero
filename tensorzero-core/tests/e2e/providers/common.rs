@@ -3721,16 +3721,14 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     }
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
-    // Generate random u32
-    let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false, false,
+        &provider, episode_id, &tag_value, false, false,
     )
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true, false,
+        &provider, episode_id, &tag_value, true, false,
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -3744,17 +3742,15 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
-    // Generate random u32
-    let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false, true,
+        &provider, episode_id, &tag_value, false, true,
     )
     .await;
 
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true, true,
+        &provider, episode_id, &tag_value, true, true,
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -3763,7 +3759,6 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
 pub async fn test_simple_streaming_inference_request_with_provider_cache(
     provider: &E2ETestProvider,
     episode_id: Uuid,
-    seed: u32,
     tag_value: &str,
     check_cache: bool,
     include_original_response: bool,
@@ -3779,7 +3774,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
+               "system": {"assistant_name": "Dr. Mehta"},
                "messages": [
                 {
                     "role": "user",
@@ -3929,7 +3924,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
+        "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
             {
                 "role": "user",
@@ -4032,7 +4027,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        format!("You are a helpful and friendly assistant named Dr. Mehta #{seed}")
+        format!("You are a helpful and friendly assistant named Dr. Mehta")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
