@@ -35,7 +35,7 @@ export function ErrorContentCard({
       className={cn(
         "max-w-lg shadow-none",
         scope === ErrorScope.App
-          ? "border-neutral-800 bg-neutral-950"
+          ? "rounded-none border-none bg-transparent"
           : "bg-card border",
         className,
       )}
