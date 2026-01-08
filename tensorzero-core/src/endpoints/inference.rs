@@ -49,7 +49,7 @@ use crate::inference::types::{
     ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, ResolvedInput, TextChunk,
     Usage, collect_chunks,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::observability::request_logging::HttpMetricData;
@@ -152,7 +152,7 @@ struct InferenceMetadata {
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
-    pub dynamic_output_schema: Option<DynamicJSONSchema>,
+    pub dynamic_output_schema: Option<JSONSchema>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub json_mode: Option<JsonMode>,
@@ -350,7 +350,7 @@ pub async fn inference(
     }
 
     // Validate the input
-    function.validate_inference_params(&params)?;
+    function.validate_inference_params(&params).await?;
 
     // Validate extra_body and extra_headers filters
     validate_inference_filters(
@@ -407,7 +407,7 @@ pub async fn inference(
     let mut variant_errors: IndexMap<String, Error> = IndexMap::new();
 
     // Set up inference config
-    let output_schema = params.output_schema.map(DynamicJSONSchema::new);
+    let output_schema = params.output_schema.map(JSONSchema::new);
 
     let tags = Arc::new(params.tags.clone());
 
@@ -579,7 +579,7 @@ struct InferVariantArgs<'a> {
     inference_params: InferenceParams,
     templates: &'a Arc<TemplateConfig<'static>>,
     tool_config: &'a Option<ToolCallConfig>,
-    output_schema: &'a Option<DynamicJSONSchema>,
+    output_schema: &'a Option<JSONSchema>,
     config: &'a Arc<Config>,
     clickhouse_connection_info: &'a ClickHouseConnectionInfo,
     tags: &'a HashMap<String, String>,

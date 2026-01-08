@@ -39,7 +39,7 @@ use crate::inference::types::{
     Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, current_timestamp,
 };
 use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::model::ModelTable;
 use crate::rate_limiting::ScopeInfo;
 use crate::relay::TensorzeroRelay;
@@ -148,7 +148,7 @@ pub async fn start_batch_inference(
     // Collect the tool params and output schemas into vectors of the same length as the batch
     let batch_dynamic_tool_params: Vec<DynamicToolParams> =
         BatchDynamicToolParamsWithSize(params.dynamic_tool_params, num_inferences).try_into()?;
-    let batch_dynamic_output_schemas: Vec<Option<DynamicJSONSchema>> =
+    let batch_dynamic_output_schemas: Vec<Option<JSONSchema>> =
         BatchOutputSchemasWithSize(params.output_schemas, num_inferences).try_into()?;
 
     let tool_configs = batch_dynamic_tool_params
@@ -171,18 +171,14 @@ pub async fn start_batch_inference(
     }
 
     // Validate the input
-    params
-        .inputs
-        .iter()
-        .enumerate()
-        .try_for_each(|(i, input)| {
-            function.validate_input(input).map_err(|e| {
-                Error::new(ErrorDetails::BatchInputValidation {
-                    index: i,
-                    message: e.to_string(),
-                })
+    for (i, input) in params.inputs.iter().enumerate() {
+        function.validate_input(input).await.map_err(|e| {
+            Error::new(ErrorDetails::BatchInputValidation {
+                index: i,
+                message: e.to_string(),
             })
         })?;
+    }
 
     // If a variant is pinned, only that variant should be attempted
     if let Some(ref variant_name) = params.variant_name {
@@ -384,7 +380,7 @@ struct StartVariantBatchInferenceArgs<'a> {
     inference_clients: InferenceClients,
     inference_params: Vec<InferenceParams>,
     tool_configs: &'a Vec<Option<ToolCallConfig>>,
-    batch_dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
+    batch_dynamic_output_schemas: &'a Vec<Option<JSONSchema>>,
     config: &'a Arc<Config>,
     clickhouse_connection_info: &'a ClickHouseConnectionInfo,
     tags: Option<BatchTags>,
@@ -415,7 +411,7 @@ async fn start_variant_batch_inference(
         .iter()
         .map(|opt| opt.as_ref().map(|tc| Arc::new(tc.clone())))
         .collect();
-    let schemas_arc: Vec<Option<Arc<DynamicJSONSchema>>> = batch_dynamic_output_schemas
+    let schemas_arc: Vec<Option<Arc<JSONSchema>>> = batch_dynamic_output_schemas
         .iter()
         .map(|opt| opt.as_ref().map(|s| Arc::new(s.clone())))
         .collect();
@@ -1043,7 +1039,7 @@ pub async fn write_completed_batch_inference<'a>(
             None => None,
         };
         let output_schema = match output_schema
-            .map(|s| DynamicJSONSchema::parse_from_str(&s))
+            .map(|s| JSONSchema::parse_from_str(&s))
             .transpose()
         {
             Ok(s) => s,

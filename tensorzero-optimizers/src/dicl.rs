@@ -633,7 +633,7 @@ mod tests {
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
             StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
-        jsonschema_util::StaticJSONSchema,
+        jsonschema_util::JSONSchema,
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
@@ -1075,7 +1075,7 @@ mod tests {
     }
 
     fn create_test_json_function_config() -> FunctionConfig {
-        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let output_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}
@@ -1098,7 +1098,7 @@ mod tests {
     }
 
     fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
-        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let output_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}

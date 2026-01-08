@@ -9,7 +9,7 @@ use crate::endpoints::datasets::v1::types::{
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{FetchContext, InputExt, JsonInferenceOutput};
-use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
+use crate::jsonschema_util::JSONSchema;
 use crate::tool::ToolCallConfigDatabaseInsert;
 
 impl CreateChatDatapointRequest {
@@ -32,7 +32,7 @@ impl CreateChatDatapointRequest {
         };
 
         // Validate and convert input
-        function_config.validate_input(&self.input)?;
+        function_config.validate_input(&self.input).await?;
         let stored_input = self
             .input
             .into_lazy_resolved_input(fetch_context)?
@@ -96,7 +96,7 @@ impl CreateJsonDatapointRequest {
         };
 
         // Validate and convert input
-        function_config.validate_input(&self.input)?;
+        function_config.validate_input(&self.input).await?;
         let stored_input = self
             .input
             .into_lazy_resolved_input(fetch_context)?
@@ -105,7 +105,7 @@ impl CreateJsonDatapointRequest {
 
         // Determine the output schema (use provided or default to function's schema)
         // parsed_schema is declared here to make it live long enough until the end of the function.
-        let parsed_schema: DynamicJSONSchema;
+        let parsed_schema: JSONSchema;
         let (output_schema, schema_ref) = if let Some(user_schema) = self.output_schema {
             // Validate the user-provided output_schema
             let schema_str = serde_json::to_string(&user_schema).map_err(|e| {
@@ -113,18 +113,18 @@ impl CreateJsonDatapointRequest {
                     message: format!("Failed to serialize output_schema: {e}"),
                 })
             })?;
-            parsed_schema = DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
+            parsed_schema = JSONSchema::parse_from_str(&schema_str).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Invalid output_schema: {e}"),
                 })
             })?;
             // Ensure the schema is valid by forcing compilation
             parsed_schema.ensure_valid().await?;
-            (user_schema, JsonSchemaRef::Dynamic(&parsed_schema))
+            (user_schema, &parsed_schema)
         } else {
             (
                 json_function_config.output_schema.value.clone(),
-                JsonSchemaRef::Static(&json_function_config.output_schema),
+                &json_function_config.output_schema,
             )
         };
 
@@ -166,7 +166,7 @@ impl JsonDatapointOutputUpdate {
     /// populates the `parsed` field if the output is valid.
     pub async fn into_json_inference_output(
         self,
-        output_schema: JsonSchemaRef<'_>,
+        output_schema: &JSONSchema,
     ) -> JsonInferenceOutput {
         let mut output = JsonInferenceOutput {
             raw: self.raw,
@@ -202,7 +202,7 @@ mod tests {
         JsonInferenceOutput, System, Template, Text,
     };
     use crate::inference::types::{Role, StoredInputMessage, StoredInputMessageContent};
-    use crate::jsonschema_util::DynamicJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::tool::{DynamicToolParams, InferenceResponseToolCall};
     use serde_json::json;
     use std::collections::HashMap;
@@ -629,9 +629,8 @@ mod tests {
             raw: Some(r#"{"key": "value"}"#.to_string()),
         };
         let schema_value = json!({"type": "object", "properties": {"key": {"type": "string"}}, });
-        let schema = DynamicJSONSchema::new(schema_value);
-        let schema_ref = JsonSchemaRef::Dynamic(&schema);
-        let output = update.into_json_inference_output(schema_ref).await;
+        let schema = JSONSchema::new(schema_value);
+        let output = update.into_json_inference_output(&schema).await;
 
         assert_eq!(
             output.raw,
@@ -651,9 +650,8 @@ mod tests {
             raw: Some(r#"{"key": "nonconformant value"}"#.to_string()),
         };
         let schema_value = json!({"type": "object", "properties": {"key": {"type": "number"}}, });
-        let schema = DynamicJSONSchema::new(schema_value);
-        let schema_ref = JsonSchemaRef::Dynamic(&schema);
-        let output = update.into_json_inference_output(schema_ref).await;
+        let schema = JSONSchema::new(schema_value);
+        let output = update.into_json_inference_output(&schema).await;
         assert_eq!(output.parsed, None);
 
         assert_eq!(
@@ -674,9 +672,8 @@ mod tests {
         };
 
         let schema_value = json!({"type": "object", "properties": {"value": {"type": "string"}}, });
-        let schema = DynamicJSONSchema::new(schema_value);
-        let schema_ref = JsonSchemaRef::Dynamic(&schema);
-        let output = update.into_json_inference_output(schema_ref).await;
+        let schema = JSONSchema::new(schema_value);
+        let output = update.into_json_inference_output(&schema).await;
         assert_eq!(output.parsed, None);
 
         assert_eq!(

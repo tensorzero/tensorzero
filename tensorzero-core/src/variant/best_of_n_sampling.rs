@@ -23,7 +23,7 @@ use crate::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceResponseWithMetadata, RequestMessage, Role,
     System, batch::StartBatchModelInferenceWithMetadata,
 };
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::model::ModelTable;
 use crate::tool::create_json_mode_tool_call_config_with_allowed_tools;
 use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
@@ -142,9 +142,9 @@ impl UninitializedBestOfNSamplingConfig {
 const IMPLICIT_TOOL_NAME: &str = "respond";
 
 lazy_static! {
-    static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
+    static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchema = {
         #[expect(clippy::expect_used)]
-        StaticJSONSchema::from_value(json!({
+        JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "thinking": { "type": "string" },
@@ -858,14 +858,14 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_static_schema() {
+    #[tokio::test]
+    async fn test_static_schema() {
         // Also covers the fact that the lazy schema works
         let instance = json!({
             "thinking": "I am thinking",
             "answer_choice": 0
         });
-        let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance);
+        let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance).await;
         assert!(result.is_ok());
     }
 
@@ -873,7 +873,7 @@ mod tests {
     async fn test_prepare_system_message() {
         let templates = get_test_template_config().await;
 
-        let system_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let system_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "assistant_name": {

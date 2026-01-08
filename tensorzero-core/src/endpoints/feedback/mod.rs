@@ -22,7 +22,7 @@ use crate::function::FunctionConfig;
 use crate::inference::types::{
     ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text, parse_chat_output,
 };
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::tool::{
     StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
     deserialize_optional_tool_info,
@@ -714,8 +714,9 @@ pub async fn validate_parse_demonstration(
         }
         (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
-            StaticJSONSchema::from_value(output_schema)?
+            JSONSchema::from_value(output_schema)?
                 .validate(value)
+                .await
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
@@ -939,7 +940,7 @@ mod tests {
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
     use crate::tool::{
         FunctionToolConfig, InferenceResponseToolCall, StaticToolConfig, ToolChoice,
@@ -1336,7 +1337,7 @@ mod tests {
             name: "get_temperature".to_string(),
             key: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
-            parameters: StaticJSONSchema::from_value(json!({
+            parameters: JSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "location": {"type": "string"},
@@ -1501,7 +1502,7 @@ mod tests {
         let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
+            output_schema: JSONSchema::from_value(output_schema.clone()).unwrap(),
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),

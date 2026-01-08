@@ -242,7 +242,7 @@ mod tests {
 
     // Helper to create a test tool config
     fn create_static_tool_config() -> FunctionToolConfig {
-        use crate::jsonschema_util::StaticJSONSchema;
+        use crate::jsonschema_util::JSONSchema;
         use crate::tool::StaticToolConfig;
         use std::sync::Arc;
 
@@ -250,7 +250,7 @@ mod tests {
             name: "test_tool".to_string(),
             key: "test_tool".to_string(),
             description: "A test tool".to_string(),
-            parameters: StaticJSONSchema::from_value(json!({
+            parameters: JSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "param1": {"type": "string"}
@@ -262,13 +262,13 @@ mod tests {
     }
 
     fn create_dynamic_tool_config() -> FunctionToolConfig {
-        use crate::jsonschema_util::DynamicJSONSchema;
+        use crate::jsonschema_util::JSONSchema;
         use crate::tool::DynamicToolConfig;
 
         FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "dynamic_tool".to_string(),
             description: "A dynamic tool".to_string(),
-            parameters: DynamicJSONSchema::new(json!({
+            parameters: JSONSchema::new(json!({
                 "type": "object",
                 "properties": {
                     "param1": {"type": "string"}
@@ -784,7 +784,7 @@ mod tests {
 
     #[test]
     fn test_prepare_tools_multiple_tools() {
-        use crate::jsonschema_util::StaticJSONSchema;
+        use crate::jsonschema_util::JSONSchema;
         use crate::tool::StaticToolConfig;
         use std::sync::Arc;
 
@@ -792,7 +792,7 @@ mod tests {
             name: "tool1".to_string(),
             key: "tool1".to_string(),
             description: "First tool".to_string(),
-            parameters: StaticJSONSchema::from_value(json!({"type": "object"})).unwrap(),
+            parameters: JSONSchema::from_value(json!({"type": "object"})).unwrap(),
             strict: true,
         }));
 
@@ -800,7 +800,7 @@ mod tests {
             name: "tool2".to_string(),
             key: "tool2".to_string(),
             description: "Second tool".to_string(),
-            parameters: StaticJSONSchema::from_value(json!({"type": "object"})).unwrap(),
+            parameters: JSONSchema::from_value(json!({"type": "object"})).unwrap(),
             strict: false,
         }));
 

@@ -3134,7 +3134,7 @@ fn handle_gcp_vertex_gemini_error(
 mod tests {
     use super::*;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{StaticToolConfig, ToolCallConfig, ToolResult};
     use serde_json::json;
@@ -4463,7 +4463,7 @@ mod tests {
             "additionalProperties": false
         });
 
-        let tool_schema = StaticJSONSchema::from_value(tool_schema_value).unwrap();
+        let tool_schema = JSONSchema::from_value(tool_schema_value).unwrap();
 
         let static_tool = StaticToolConfig {
             name: "test_tool".to_string(),

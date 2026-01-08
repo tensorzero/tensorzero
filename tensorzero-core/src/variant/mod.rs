@@ -36,7 +36,7 @@ use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
@@ -132,7 +132,7 @@ pub enum JsonMode {
 pub struct InferenceConfig {
     pub tool_config: Option<Arc<ToolCallConfig>>,
     pub templates: Arc<TemplateConfig<'static>>,
-    pub dynamic_output_schema: Option<Arc<DynamicJSONSchema>>,
+    pub dynamic_output_schema: Option<Arc<JSONSchema>>,
     pub function_name: Arc<str>,
     pub variant_name: Arc<str>,
     pub ids: InferenceIds,
@@ -151,7 +151,7 @@ pub struct InferenceConfig {
 pub struct BatchInferenceConfig {
     pub tool_configs: Vec<Option<Arc<ToolCallConfig>>>,
     pub templates: Arc<TemplateConfig<'static>>,
-    pub dynamic_output_schemas: Vec<Option<Arc<DynamicJSONSchema>>>,
+    pub dynamic_output_schemas: Vec<Option<Arc<JSONSchema>>>,
     pub function_name: Arc<str>,
     pub variant_name: Arc<str>,
     pub fetch_and_encode_input_files_before_inference: bool,
@@ -845,7 +845,7 @@ impl BatchInferenceConfig {
     pub fn new(
         templates: Arc<TemplateConfig<'static>>,
         tool_configs: Vec<Option<Arc<ToolCallConfig>>>,
-        dynamic_output_schemas: Vec<Option<Arc<DynamicJSONSchema>>>,
+        dynamic_output_schemas: Vec<Option<Arc<JSONSchema>>>,
         function_name: Arc<str>,
         variant_name: Arc<str>,
         fetch_and_encode_input_files_before_inference: bool,
@@ -929,7 +929,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
     };
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::providers::dummy::{
@@ -1044,7 +1044,7 @@ mod tests {
             },
             "required": ["answer"],
         });
-        let output_schema = StaticJSONSchema::from_value(output_schema_value.clone()).unwrap();
+        let output_schema = JSONSchema::from_value(output_schema_value.clone()).unwrap();
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
 
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
@@ -1091,7 +1091,7 @@ mod tests {
             },
             "required": ["result"],
         });
-        let dynamic_output_schema = DynamicJSONSchema::new(dynamic_output_schema_value.clone());
+        let dynamic_output_schema = JSONSchema::new(dynamic_output_schema_value.clone());
         let inference_config_dynamic = InferenceConfig {
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1327,7 +1327,7 @@ mod tests {
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(json!({
+            output_schema: JSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "answer": { "type": "string" }

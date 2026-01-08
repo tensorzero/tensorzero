@@ -16,7 +16,7 @@ use crate::{
         inference::{ChatCompletionInferenceParams, InferenceParams},
     },
     error::{Error, ErrorDetails},
-    jsonschema_util::DynamicJSONSchema,
+    jsonschema_util::JSONSchema,
     tool::{ToolCallConfig, ToolCallConfigDatabaseInsert, deserialize_optional_tool_info},
     utils::uuid::validate_tensorzero_uuid,
 };
@@ -550,7 +550,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
 
 pub struct BatchOutputSchemasWithSize(pub Option<BatchOutputSchemas>, pub usize);
 
-impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<DynamicJSONSchema>> {
+impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<JSONSchema>> {
     type Error = Error;
 
     fn try_from(
@@ -560,7 +560,7 @@ impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<DynamicJSONSchema>> {
             if schemas.len() == num_inferences {
                 Ok(schemas
                     .into_iter()
-                    .map(|schema| schema.map(DynamicJSONSchema::new))
+                    .map(|schema| schema.map(JSONSchema::new))
                     .collect())
             } else {
                 Err(ErrorDetails::InvalidRequest {
@@ -794,13 +794,13 @@ mod tests {
     fn test_batch_output_schemas_with_size() {
         let batch_output_schemas_with_size = BatchOutputSchemasWithSize(None, 3);
         let batch_output_schemas =
-            Vec::<Option<DynamicJSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
+            Vec::<Option<JSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
         assert_eq!(batch_output_schemas.len(), 3);
 
         let batch_output_schemas_with_size =
             BatchOutputSchemasWithSize(Some(vec![None, None, None]), 3);
         let batch_output_schemas =
-            Vec::<Option<DynamicJSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
+            Vec::<Option<JSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
         assert_eq!(batch_output_schemas.len(), 3);
     }
 }

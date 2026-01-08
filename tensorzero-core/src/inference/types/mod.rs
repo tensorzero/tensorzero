@@ -2145,7 +2145,7 @@ pub(super) fn schema_for_delete_field(_gen: &mut schemars::SchemaGenerator) -> s
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jsonschema_util::DynamicJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolChoice};
     use serde_json::json;
@@ -2542,7 +2542,7 @@ mod tests {
                 vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "custom_tool".to_string(),
                     description: "A custom tool".to_string(),
-                    parameters: DynamicJSONSchema::new(
+                    parameters: JSONSchema::new(
                         serde_json::from_str(
                             r#"{
                         "type": "object",
@@ -2669,7 +2669,7 @@ mod tests {
                 vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "weather_tool".to_string(),
                     description: "Get weather information".to_string(),
-                    parameters: DynamicJSONSchema::new(
+                    parameters: JSONSchema::new(
                         serde_json::from_str(
                             r#"{
                         "type": "object",
