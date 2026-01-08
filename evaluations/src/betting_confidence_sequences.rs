@@ -377,7 +377,7 @@ pub fn update_betting_cs(
     let left_outside = wealth_hedged[0] >= threshold;
     let right_outside = wealth_hedged[n_grid - 1] >= threshold;
 
-    let (cs_lower, _idx_lower) = if left_outside {
+    let (cs_lower_new, _idx_lower) = if left_outside {
         // Binary search in [0, min_idx] to find lower bound
         find_cs_lower(&wealth_hedged, &m_values, threshold, min_idx)
     } else {
@@ -385,13 +385,17 @@ pub fn update_betting_cs(
         (m_values[0], 0)
     };
 
-    let (cs_upper, _idx_upper) = if right_outside {
+    let (cs_upper_new, _idx_upper) = if right_outside {
         // Binary search in [min_idx, n-1] to find upper bound
         find_cs_upper(&wealth_hedged, &m_values, threshold, min_idx)
     } else {
         // Right endpoint is inside confidence set
         (m_values[n_grid - 1], n_grid - 1)
     };
+
+    // Intersect with previous bounds to ensure nested confidence sequences
+    let cs_lower = cs_lower_new.max(prev_results.cs_lower);
+    let cs_upper = cs_upper_new.min(prev_results.cs_upper);
 
     let variance_reg_final = *variances_reg
         .last()
