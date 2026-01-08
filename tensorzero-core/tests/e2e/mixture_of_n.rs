@@ -203,24 +203,13 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
 
     // Each model stream response uses 2 output tokens
     // We have 3 candidates and 1 fuser, so 4*2=8 output tokens
-    if stream {
-        assert_eq!(
-            usage_sum,
-            Usage {
-                input_tokens: Some(40),
-                output_tokens: Some(8),
-            }
-        );
-    } else {
-        // Each model uses 1 token
-        assert_eq!(
-            usage_sum,
-            Usage {
-                input_tokens: Some(40),
-                output_tokens: Some(4),
-            }
-        );
-    }
+    assert_eq!(
+        usage_sum,
+        Usage {
+            input_tokens: Some(40),
+            output_tokens: Some(8),
+        }
+    );
 
     // When all of the candidates are cached, the reported HTTP usage should be 0 (since no tokens were billed),
     // even though we'll store the original cached usage in the database.
@@ -962,7 +951,7 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
         chunk_data.push(chunk_json);
     }
     assert_eq!(chunk_data.len(), 2);
-    // Content and initial usage data are in the same chunk in the fake stream
+    // First chunk contains content only (usage/finish_reason are in the final chunk)
     assert_eq!(
         chunk_data[0],
         serde_json::json!({
@@ -970,14 +959,9 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
             "episode_id": episode_id.to_string(),
             "variant_name":"mixture_of_n_variant_bad_fuser",
             "content":[{"type": "text", "id": "0", "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."}],
-            // Usage data only includes information from the chosen candidate
-            // The remaining usage information is added in the second chunk
-            "usage":{"input_tokens":10,"output_tokens":1},
-            "finish_reason": "stop"
         })
     );
-    // We create a new chunk with 'extra_usage' information, since we didn't have any chunks
-    // with both usage information and empty content.
+    // Final chunk contains usage (accumulated from all candidates) and finish_reason
     assert_eq!(
         chunk_data[1],
         serde_json::json!({
@@ -985,7 +969,9 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
             "episode_id": episode_id.to_string(),
             "variant_name":"mixture_of_n_variant_bad_fuser",
             "content":[],
-            "usage":{"input_tokens":10,"output_tokens":1},
+            // Usage is accumulated from all 2 candidates (10+10 input tokens, 1+1 output tokens)
+            "usage":{"input_tokens":20,"output_tokens":2},
+            "finish_reason": "stop"
         }),
     );
 
@@ -1049,8 +1035,8 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "model_provider_name": "good",
           "input_tokens": 20,
           "output_tokens": 2,
-          "response_time_ms": 0,
-          "ttft_ms": 0,
+          "response_time_ms": 100,
+          "ttft_ms": 100,
           "system": "You are a helpful and friendly assistant named AskJeeves",
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
@@ -1141,8 +1127,8 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
             }
             chunk_data.push(chunk_json);
         }
-        assert_eq!(chunk_data.len(), 1);
-        // Content and usage data are in the same chunk in the fake stream
+        assert_eq!(chunk_data.len(), 2);
+        // First chunk contains content only
         assert_eq!(
             chunk_data[0],
             serde_json::json!({
@@ -1150,6 +1136,16 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
                 "episode_id": episode_id.to_string(),
                 "variant_name":"mixture_of_n_variant",
                 "content":[{"type": "text", "id": "0", "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."}],
+            })
+        );
+        // Final chunk contains usage and finish_reason
+        assert_eq!(
+            chunk_data[1],
+            serde_json::json!({
+                "inference_id": first_inference_id.unwrap().to_string(),
+                "episode_id": episode_id.to_string(),
+                "variant_name":"mixture_of_n_variant",
+                "content":[],
                 "usage":{"input_tokens":10,"output_tokens":1},
                 "finish_reason": "stop"
             })
@@ -1226,8 +1222,8 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
           "model_provider_name": "good",
           "input_tokens": 10,
           "output_tokens": 1,
-          "response_time_ms": 0,
-          "ttft_ms": 0,
+          "response_time_ms": 100,
+          "ttft_ms": 100,
           "system": "You are a helpful and friendly assistant named AskJeeves",
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",

@@ -255,8 +255,8 @@ pub struct CollectChunksArgs {
     pub fetch_and_encode_input_files_before_inference: bool,
     /// Pre-generated model inference ID for streaming (to match raw_usage entries)
     pub model_inference_id: Uuid,
-    /// The final (aggregated) `Usage` we streamed to the client
-    pub usage: Usage,
+    /// The `Usage` for the final streamed inference
+    pub model_inference_usage: Usage,
     /// The final `FinishReason` we streamed to the client
     pub finish_reason: Option<FinishReason>,
 }
@@ -284,7 +284,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         extra_body,
         extra_headers,
         model_inference_id,
-        usage,
+        model_inference_usage,
         finish_reason,
     } = args;
 
@@ -601,7 +601,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         input_messages,
         raw_request,
         raw_response,
-        usage,
+        usage: model_inference_usage,
         raw_usage,
         provider_latency,
         finish_reason,
@@ -870,7 +870,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage::default(),
+            model_inference_usage: Usage::default(),
             finish_reason: None,
         };
         let result = collect_chunks(collect_chunks_args).await;
@@ -937,7 +937,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage {
+            model_inference_usage: Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
             },
@@ -1041,7 +1041,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage {
+            model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
             },
@@ -1082,7 +1082,7 @@ mod tests {
         // Test Case 4: a JSON string that fails validation and usage only in last chunk
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
-        let usage = Usage {
+        let model_inference_usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
         };
@@ -1090,7 +1090,7 @@ mod tests {
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
-                usage: Some(usage),
+                usage: Some(model_inference_usage),
                 raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(100)),
@@ -1128,11 +1128,11 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage,
+            model_inference_usage,
             finish_reason: Some(FinishReason::ToolCall),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
-        assert_eq!(result.usage_considering_cached(), usage);
+        assert_eq!(result.usage_considering_cached(), model_inference_usage);
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -1165,7 +1165,7 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let episode_id = Uuid::now_v7();
         let created = current_timestamp();
-        let usage = Usage {
+        let model_inference_usage = Usage {
             input_tokens: Some(15),
             output_tokens: Some(10),
         };
@@ -1173,7 +1173,7 @@ mod tests {
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":\"John\",".to_string()),
                 thought: None,
-                usage: Some(usage),
+                usage: Some(model_inference_usage),
                 raw_usage: None,
                 raw_response: "{\"name\":\"John\",".to_string(),
                 provider_latency: Some(Duration::from_millis(100)),
@@ -1220,11 +1220,11 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage,
+            model_inference_usage,
             finish_reason: Some(FinishReason::Stop),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
-        assert_eq!(result.usage_considering_cached(), usage);
+        assert_eq!(result.usage_considering_cached(), model_inference_usage);
         match result {
             InferenceResult::Chat(chat_response) => {
                 assert_eq!(chat_response.inference_id, inference_id);
@@ -1339,7 +1339,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage {
+            model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
             },
@@ -1455,7 +1455,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage {
+            model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
             },
@@ -1636,7 +1636,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage {
+            model_inference_usage: Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
             },
@@ -1774,7 +1774,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage::default(),
+            model_inference_usage: Usage::default(),
             finish_reason: None,
         };
 
@@ -1864,7 +1864,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage::default(),
+            model_inference_usage: Usage::default(),
             finish_reason: None,
         };
 
@@ -1945,7 +1945,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage::default(),
+            model_inference_usage: Usage::default(),
             finish_reason: None,
         };
 
@@ -2030,7 +2030,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage::default(),
+            model_inference_usage: Usage::default(),
             finish_reason: None,
         };
 
@@ -2099,7 +2099,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage::default(),
+            model_inference_usage: Usage::default(),
             finish_reason: None,
         };
 
@@ -2220,7 +2220,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             model_inference_id: Uuid::now_v7(),
-            usage: Usage::default(),
+            model_inference_usage: Usage::default(),
             finish_reason: None,
         };
 

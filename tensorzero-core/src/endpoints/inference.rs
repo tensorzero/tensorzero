@@ -953,21 +953,23 @@ fn create_stream(
         let finish_reason = finish_reasons.pop();
 
         // If we saw multiple chunks with `usage`, compute the field-wise max and warn if they are non-cumulative
-        let usage = aggregate_usage_from_single_streaming_model_inference(usages);
+        // This is the current model's usage (used for database storage)
+        let model_inference_usage = aggregate_usage_from_single_streaming_model_inference(usages);
         // Then add the usage from previous inferences (e.g. best-of-N candidates)
-        let usage = aggregate_usage_across_model_inferences(
-            metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).chain(std::iter::once(usage))
+        // This is the total usage for the TensorZero inference
+        let inference_usage = aggregate_usage_across_model_inferences(
+            metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).chain(std::iter::once(model_inference_usage))
         );
 
         let chunk = match *function {
             FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 finish_reason,
-                usage: Some(usage),
+                usage: Some(inference_usage),
                 ..Default::default()
             }),
             FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
                 finish_reason,
-                usage: Some(usage),
+                usage: Some(inference_usage),
                 ..Default::default()
             }),
         };
@@ -1039,7 +1041,9 @@ fn create_stream(
                     extra_headers: extra_headers.clone(),
                     fetch_and_encode_input_files_before_inference,
                     model_inference_id,
-                    usage,
+                    // Use only the current model's usage, not the aggregated total
+                    // (previous model inferences are added separately below)
+                    model_inference_usage,
                     finish_reason,
                 };
                 let inference_response: Result<InferenceResult, Error> =
