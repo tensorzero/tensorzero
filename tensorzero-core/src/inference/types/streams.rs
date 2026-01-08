@@ -331,7 +331,11 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     let mut thought_summaries: IndexMap<String, IndexSet<String>> = IndexMap::new();
 
     for chunk in value {
-        if let Some(chunk_raw_usage) = chunk.raw_usage() {
+        // Only collect raw_usage from real provider chunks (not artificial chunks).
+        // Artificial chunks have provider_latency: None.
+        if chunk.provider_latency().is_some()
+            && let Some(chunk_raw_usage) = chunk.raw_usage()
+        {
             raw_usage
                 .get_or_insert_with(Vec::new)
                 .extend(chunk_raw_usage.iter().cloned());
