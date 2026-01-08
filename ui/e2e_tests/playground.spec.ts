@@ -12,8 +12,8 @@ test("playground should work for a chat function that sets 2 variants", async ({
   await page.getByRole("option", { name: "write_haiku" }).click();
 
   // Select dataset 'foo'
-  await page.getByText("Select a dataset").click();
-  await page.getByPlaceholder(/dataset/i).fill("foo");
+  await page.getByPlaceholder("Select dataset").click();
+  await page.getByPlaceholder("Select dataset").fill("foo");
   await page.locator('[data-dataset-name="foo"]').click();
 
   // Select variant 'initial_prompt_gpt4o_mini'
@@ -27,9 +27,7 @@ test("playground should work for a chat function that sets 2 variants", async ({
   await expect(page.getByPlaceholder("Select function")).toHaveValue(
     "write_haiku",
   );
-  await expect(
-    page.getByRole("combobox").filter({ hasText: "foo" }),
-  ).toBeVisible();
+  await expect(page.getByPlaceholder("Select dataset")).toHaveValue("foo");
   await expect(
     page.getByRole("link", { name: "initial_prompt_gpt4o_mini" }),
   ).toBeVisible();
@@ -66,8 +64,8 @@ test("playground should work for extract_entities JSON function with 2 variants"
   await page.getByRole("option", { name: "extract_entities" }).click();
 
   // Select dataset 'foo'
-  await page.getByText("Select a dataset").click();
-  await page.getByPlaceholder(/dataset/i).fill("foo");
+  await page.getByPlaceholder("Select dataset").click();
+  await page.getByPlaceholder("Select dataset").fill("foo");
   await page.locator('[data-dataset-name="foo"]').click();
 
   // Select variants 'baseline' and 'gpt4o_mini_initial_prompt'
@@ -83,9 +81,7 @@ test("playground should work for extract_entities JSON function with 2 variants"
   await expect(page.getByPlaceholder("Select function")).toHaveValue(
     "extract_entities",
   );
-  await expect(
-    page.getByRole("combobox").filter({ hasText: "foo" }),
-  ).toBeVisible();
+  await expect(page.getByPlaceholder("Select dataset")).toHaveValue("foo");
   await expect(page.getByRole("link", { name: "baseline" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "gpt4o_mini_initial_prompt" }),
@@ -126,8 +122,8 @@ test("playground should work for image_judger function with images in input", as
   await page.getByRole("option", { name: "image_judger" }).click();
 
   // Select dataset 'baz'
-  await page.getByText("Select a dataset").click();
-  await page.getByPlaceholder(/dataset/i).fill("baz");
+  await page.getByPlaceholder("Select dataset").click();
+  await page.getByPlaceholder("Select dataset").fill("baz");
   await page.locator('[data-dataset-name="baz"]').click();
 
   // Select variant 'honest_answer'
@@ -138,9 +134,7 @@ test("playground should work for image_judger function with images in input", as
   await expect(page.getByPlaceholder("Select function")).toHaveValue(
     "image_judger",
   );
-  await expect(
-    page.getByRole("combobox").filter({ hasText: "baz" }),
-  ).toBeVisible();
+  await expect(page.getByPlaceholder("Select dataset")).toHaveValue("baz");
   await expect(page.getByRole("link", { name: "honest_answer" })).toBeVisible();
 
   // Verify that there is 1 input and 1 reference output
@@ -172,9 +166,9 @@ test("playground should work for data with tools", async ({ page }) => {
   await expect(page.getByPlaceholder("Select function")).toHaveValue(
     "multi_hop_rag_agent",
   );
-  await expect(
-    page.getByRole("combobox").filter({ hasText: "tool_call_examples" }),
-  ).toBeVisible();
+  await expect(page.getByPlaceholder("Select dataset")).toHaveValue(
+    "tool_call_examples",
+  );
   await expect(page.getByRole("link", { name: "baseline" })).toBeVisible();
 
   // Verify that there is 1 input and 1 reference output
@@ -262,9 +256,7 @@ test("editing variants works @credentials", async ({ page }) => {
   await expect(page.getByPlaceholder("Select function")).toHaveValue(
     "write_haiku",
   );
-  await expect(
-    page.getByRole("combobox").filter({ hasText: "foo" }),
-  ).toBeVisible();
+  await expect(page.getByPlaceholder("Select dataset")).toHaveValue("foo");
   await expect(
     page.getByRole("link", { name: "initial_prompt_gpt4o_mini" }),
   ).toBeVisible();
@@ -326,8 +318,8 @@ test("playground should work with tool config ID different from display name @cr
   await page.getByRole("option", { name: "multi_hop_rag_agent" }).click();
 
   // Select dataset 'tool_call_examples'
-  await page.getByText("Select a dataset").click();
-  await page.getByPlaceholder(/dataset/i).fill("tool_call_examples");
+  await page.getByPlaceholder("Select dataset").click();
+  await page.getByPlaceholder("Select dataset").fill("tool_call_examples");
   await page.getByRole("option", { name: "tool_call_examples" }).click();
 
   // Select variant 'baseline'
@@ -338,9 +330,9 @@ test("playground should work with tool config ID different from display name @cr
   await expect(page.getByPlaceholder("Select function")).toHaveValue(
     "multi_hop_rag_agent",
   );
-  await expect(
-    page.getByRole("combobox").filter({ hasText: "tool_call_examples" }),
-  ).toBeVisible();
+  await expect(page.getByPlaceholder("Select dataset")).toHaveValue(
+    "tool_call_examples",
+  );
   await expect(page.getByRole("link", { name: "baseline" })).toBeVisible();
 
   // Verify that there is at least 1 input
