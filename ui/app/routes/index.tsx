@@ -1,4 +1,6 @@
 import { Link, type RouteHandle, Await, useAsyncError } from "react-router";
+import { RouteErrorContent } from "~/components/ui/error";
+import { logger } from "~/utils/logger";
 import * as React from "react";
 import { Card } from "~/components/ui/card";
 import { PageLayout } from "~/components/layout/PageLayout";
@@ -363,4 +365,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </div>
     </PageLayout>
   );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  logger.error(error);
+  return <RouteErrorContent error={error} />;
 }

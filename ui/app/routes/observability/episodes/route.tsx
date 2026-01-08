@@ -1,6 +1,6 @@
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import { data, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import EpisodeSearchBar from "./EpisodeSearchBar";
 import {
@@ -8,7 +8,6 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { EpisodeByIdRow, TableBoundsWithCount } from "~/types/tensorzero";
 import { Suspense, use } from "react";
@@ -120,32 +119,4 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
       </SectionLayout>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

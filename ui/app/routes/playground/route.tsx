@@ -4,9 +4,10 @@ import {
   Link,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
-  isRouteErrorResponse,
   useNavigation,
 } from "react-router";
+import { RouteErrorContent } from "~/components/ui/error";
+import { logger } from "~/utils/logger";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
@@ -577,70 +578,8 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  if (isRouteErrorResponse(error)) {
-    return (
-      <PageLayout>
-        <div className="flex min-h-[50vh] flex-col items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900">
-              {error.status} {error.statusText}
-            </h1>
-            <p className="mt-4 text-lg text-gray-600">{error.data}</p>
-            <Link
-              to="/playground"
-              className="mt-6 inline-block rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-            >
-              Go to Playground
-            </Link>
-          </div>
-        </div>
-      </PageLayout>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <PageLayout>
-        <div className="flex min-h-[50vh] flex-col items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900">Error</h1>
-            <p className="mt-4 text-lg text-gray-600">{error.message}</p>
-            <details className="mt-4 max-w-2xl text-left">
-              <summary className="cursor-pointer text-sm text-gray-500">
-                Stack trace
-              </summary>
-              <pre className="mt-2 overflow-auto rounded bg-gray-100 p-4 text-xs">
-                {error.stack}
-              </pre>
-            </details>
-            <Link
-              to="/playground"
-              className="mt-6 inline-block rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-            >
-              Go to Playground
-            </Link>
-          </div>
-        </div>
-      </PageLayout>
-    );
-  } else {
-    return (
-      <PageLayout>
-        <div className="flex min-h-[50vh] flex-col items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900">Unknown Error</h1>
-            <p className="mt-4 text-lg text-gray-600">
-              An unexpected error occurred. Please try again.
-            </p>
-            <Link
-              to="/playground"
-              className="mt-6 inline-block rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-            >
-              Go to Playground
-            </Link>
-          </div>
-        </div>
-      </PageLayout>
-    );
-  }
+  logger.error(error);
+  return <RouteErrorContent error={error} />;
 }
 
 function GridRow({

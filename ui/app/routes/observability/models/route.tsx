@@ -1,6 +1,7 @@
-import { data } from "react-router";
+import { data, type RouteHandle } from "react-router";
 import type { Route } from "./+types/route";
-import type { RouteHandle } from "react-router";
+import { RouteErrorContent } from "~/components/ui/error";
+import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
   crumb: () => ["Models"],
@@ -92,4 +93,9 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
       </SectionsGroup>
     </PageLayout>
   );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  logger.error(error);
+  return <RouteErrorContent error={error} />;
 }
