@@ -3723,12 +3723,22 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let tag_value = Uuid::now_v7().to_string();
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, &tag_value, false, false,
+        &provider,
+        episode_id,
+        &tag_value,
+        false,
+        false,
+        /*test_id=*/ "streaming_inference_request_with_provider",
     )
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, &tag_value, true, false,
+        &provider,
+        episode_id,
+        &tag_value,
+        true,
+        false,
+        /*test_id=*/ "streaming_inference_request_with_provider",
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -3744,13 +3754,23 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
     let tag_value = Uuid::now_v7().to_string();
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, &tag_value, false, true,
+        &provider,
+        episode_id,
+        &tag_value,
+        false,
+        true,
+        /*test_id=*/ "streaming_include_original_response_with_provider",
     )
     .await;
 
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, &tag_value, true, true,
+        &provider,
+        episode_id,
+        &tag_value,
+        true,
+        true,
+        /*test_id=*/ "streaming_include_original_response_with_provider",
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -3762,6 +3782,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     tag_value: &str,
     assert_response_is_cached: bool,
     include_original_response: bool,
+    // test_id is included to make sure requests are distinct across different tests, but cached within the test.
+    test_id: &str,
 ) -> String {
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -3774,7 +3796,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": "Dr. Mehta"},
+               "system": {"assistant_name": format!("Dr. Mehta {test_id}")},
                "messages": [
                 {
                     "role": "user",
@@ -4023,7 +4045,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        format!("You are a helpful and friendly assistant named Dr. Mehta")
+        format!("You are a helpful and friendly assistant named Dr. Mehta {test_id}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
