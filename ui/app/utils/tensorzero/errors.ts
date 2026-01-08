@@ -1,4 +1,5 @@
 import { StatusCodes as HttpStatusCode } from "http-status-codes";
+import { isRouteErrorResponse } from "react-router";
 import { isErrorLike } from "~/utils/common";
 
 /**
@@ -114,14 +115,14 @@ export function isAuthenticationError(error: unknown): boolean {
 }
 
 /**
- * Check if an error indicates a route not found from the gateway.
+ * Check if an error indicates a gateway API route not found.
  * This typically happens when the UI version doesn't match the gateway version.
  *
  * Supports both:
  * - Direct TensorZeroServerError.RouteNotFound instances (server-side)
  * - Message pattern matching (for serialized errors)
  */
-export function isRouteNotFoundError(error: unknown): boolean {
+export function isGatewayRouteNotFoundError(error: unknown): boolean {
   if (error instanceof TensorZeroServerError.RouteNotFound) {
     return true;
   }
@@ -172,6 +173,19 @@ export function isClickHouseError(error: unknown): boolean {
   }
 
   return false;
+}
+
+/**
+ * Check if an error is an infrastructure error that should trigger graceful degradation.
+ * Includes: gateway unreachable, auth failed, route not found (version mismatch), ClickHouse unavailable.
+ */
+export function isInfraError(error: unknown): boolean {
+  return (
+    isGatewayConnectionError(error) ||
+    isAuthenticationError(error) ||
+    isGatewayRouteNotFoundError(error) ||
+    isClickHouseError(error)
+  );
 }
 
 /**
@@ -678,6 +692,29 @@ export function isTensorZeroServerError(
 }
 
 /**
+ * Returns a user-friendly label for a BoundaryErrorType.
+ * Used in error dialogs and UI components.
+ */
+export function getErrorLabel(type: BoundaryErrorType): string {
+  switch (type) {
+    case BoundaryErrorType.GatewayUnavailable:
+      return "Gateway Connection Error";
+    case BoundaryErrorType.GatewayAuthFailed:
+      return "Auth Error";
+    case BoundaryErrorType.RouteNotFound:
+      return "Route Error";
+    case BoundaryErrorType.ClickHouseConnection:
+      return "Database Error";
+    case BoundaryErrorType.ServerError:
+      return "Server Error";
+    default: {
+      const _exhaustiveCheck: never = type;
+      return "Server Error";
+    }
+  }
+}
+
+/**
  * Extracts error details from an unknown error in a type-safe way.
  * Useful for displaying error information in UI components.
  */
@@ -695,4 +732,83 @@ export function getErrorDetails(error: unknown): {
     return { message: error.message };
   }
   return { message: String(error) };
+}
+
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+  return "";
+}
+
+/**
+ * Classifies an error into a ClassifiedError discriminated union.
+ * Handles both direct Error instances and serialized error data from React Router boundaries.
+ */
+export function classifyError(error: unknown): ClassifiedError {
+  if (isRouteErrorResponse(error) && isBoundaryErrorData(error.data)) {
+    const { errorType } = error.data;
+    switch (errorType) {
+      case BoundaryErrorType.GatewayUnavailable:
+        return { type: BoundaryErrorType.GatewayUnavailable };
+      case BoundaryErrorType.GatewayAuthFailed:
+        return { type: BoundaryErrorType.GatewayAuthFailed };
+      case BoundaryErrorType.RouteNotFound:
+        return {
+          type: BoundaryErrorType.RouteNotFound,
+          routeInfo: error.data.routeInfo,
+        };
+      case BoundaryErrorType.ClickHouseConnection:
+        return {
+          type: BoundaryErrorType.ClickHouseConnection,
+          message: "message" in error.data ? error.data.message : undefined,
+        };
+      case BoundaryErrorType.ServerError:
+        return {
+          type: BoundaryErrorType.ServerError,
+          message: "message" in error.data ? error.data.message : undefined,
+          status: error.status,
+        };
+      default: {
+        const _exhaustiveCheck: never = errorType;
+        return { type: BoundaryErrorType.ServerError, status: error.status };
+      }
+    }
+  }
+
+  if (isGatewayConnectionError(error)) {
+    return { type: BoundaryErrorType.GatewayUnavailable };
+  }
+
+  if (isAuthenticationError(error)) {
+    return { type: BoundaryErrorType.GatewayAuthFailed };
+  }
+
+  if (isGatewayRouteNotFoundError(error)) {
+    const errorMessage = extractErrorMessage(error);
+    const routeMatch = errorMessage.match(/Route not found: (\w+) (.+)/);
+    const routeInfo = routeMatch
+      ? `${routeMatch[1]} ${routeMatch[2]}`
+      : errorMessage;
+    return { type: BoundaryErrorType.RouteNotFound, routeInfo };
+  }
+
+  if (isClickHouseError(error)) {
+    const message = error instanceof Error ? error.message : undefined;
+    return { type: BoundaryErrorType.ClickHouseConnection, message };
+  }
+
+  const message = isRouteErrorResponse(error)
+    ? error.statusText || undefined
+    : error instanceof Error
+      ? error.message
+      : undefined;
+  const status = isRouteErrorResponse(error) ? error.status : undefined;
+  return { type: BoundaryErrorType.ServerError, message, status };
 }

@@ -6,7 +6,7 @@ import {
   isAuthenticationError,
   isClickHouseError,
   isGatewayConnectionError,
-  isRouteNotFoundError,
+  isGatewayRouteNotFoundError,
   TensorZeroServerError,
 } from "./errors";
 
@@ -113,53 +113,57 @@ describe("isClickHouseError", () => {
   });
 });
 
-describe("isRouteNotFoundError", () => {
+describe("isGatewayRouteNotFoundError", () => {
   it("should return true for TensorZeroServerError.RouteNotFound instance", () => {
     const error = new TensorZeroServerError.RouteNotFound(
       "Route not found: GET /api/unknown",
     );
-    expect(isRouteNotFoundError(error)).toBe(true);
+    expect(isGatewayRouteNotFoundError(error)).toBe(true);
   });
 
   it("should return true for error with matching message pattern", () => {
     // Errors get serialized across React Router boundary, losing instanceof
     const error = new Error("Route not found: GET /api/unknown");
-    expect(isRouteNotFoundError(error)).toBe(true);
+    expect(isGatewayRouteNotFoundError(error)).toBe(true);
   });
 
   it("should return true for plain object with matching message", () => {
     const serializedError = { message: "Route not found: POST /api/test" };
-    expect(isRouteNotFoundError(serializedError)).toBe(true);
+    expect(isGatewayRouteNotFoundError(serializedError)).toBe(true);
   });
 
   it("should return false for error with non-matching message", () => {
     const error = new Error("Something went wrong");
-    expect(isRouteNotFoundError(error)).toBe(false);
+    expect(isGatewayRouteNotFoundError(error)).toBe(false);
   });
 
   it("should return false for error with partial message match", () => {
     const error = new Error("Cannot route not found");
-    expect(isRouteNotFoundError(error)).toBe(false);
+    expect(isGatewayRouteNotFoundError(error)).toBe(false);
   });
 
   it("should return false for null", () => {
-    expect(isRouteNotFoundError(null)).toBe(false);
+    expect(isGatewayRouteNotFoundError(null)).toBe(false);
   });
 
   it("should return false for undefined", () => {
-    expect(isRouteNotFoundError(undefined)).toBe(false);
+    expect(isGatewayRouteNotFoundError(undefined)).toBe(false);
   });
 
   it("should return false for string", () => {
-    expect(isRouteNotFoundError("Route not found: GET /api")).toBe(false);
+    expect(isGatewayRouteNotFoundError("Route not found: GET /api")).toBe(
+      false,
+    );
   });
 
   it("should return false for object without message property", () => {
-    expect(isRouteNotFoundError({ error: "Route not found" })).toBe(false);
+    expect(isGatewayRouteNotFoundError({ error: "Route not found" })).toBe(
+      false,
+    );
   });
 
   it("should return false for object with non-string message", () => {
-    expect(isRouteNotFoundError({ message: 404 })).toBe(false);
+    expect(isGatewayRouteNotFoundError({ message: 404 })).toBe(false);
   });
 });
 

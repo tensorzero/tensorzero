@@ -17,6 +17,7 @@ import {
 import { logger } from "~/utils/logger";
 import { toEvaluationUrl } from "~/utils/urls";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { isInfraError } from "~/utils/tensorzero/errors";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -24,18 +25,32 @@ export async function loader({ request }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const limit = parseInt(searchParams.get("limit") || "15");
 
-  const [totalEvaluationRuns, evaluationRunsResponse] = await Promise.all([
-    getTensorZeroClient().countEvaluationRuns(),
-    getTensorZeroClient().listEvaluationRuns(limit, offset),
-  ]);
-  const evaluationRuns = evaluationRunsResponse.runs;
+  try {
+    const [totalEvaluationRuns, evaluationRunsResponse] = await Promise.all([
+      getTensorZeroClient().countEvaluationRuns(),
+      getTensorZeroClient().listEvaluationRuns(limit, offset),
+    ]);
+    const evaluationRuns = evaluationRunsResponse.runs;
 
-  return {
-    totalEvaluationRuns,
-    evaluationRuns,
-    offset,
-    limit,
-  };
+    return {
+      totalEvaluationRuns,
+      evaluationRuns,
+      offset,
+      limit,
+    };
+  } catch (error) {
+    // Graceful degradation: return empty data on infra errors
+    if (isInfraError(error)) {
+      logger.warn("Infrastructure unavailable, showing degraded evaluations");
+      return {
+        totalEvaluationRuns: 0,
+        evaluationRuns: [],
+        offset,
+        limit,
+      };
+    }
+    throw error;
+  }
 }
 
 export async function action({ request }: Route.ActionArgs) {

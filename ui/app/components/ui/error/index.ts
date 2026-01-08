@@ -2,25 +2,25 @@
  * ERROR BOUNDARY ARCHITECTURE
  * ===========================
  *
- * This codebase uses a two-tier error boundary strategy:
+ * Errors are classified into two categories:
  *
- * 1. ROOT ErrorBoundary (root.tsx):
- *    - Catches startup failures (gateway down, auth failed, ClickHouse unavailable)
- *    - Shows dark modal overlay via ErrorDialog + ErrorContent
- *    - RootErrorBoundaryLayout renders the app shell (sidebar) behind the overlay
- *      so the app feels "present but blocked" rather than completely broken
+ * 1. INFRA ERRORS (gateway down, auth failed, ClickHouse unavailable):
+ *    - Shown as dismissible dark modal overlay via ErrorDialog
+ *    - Sidebar remains visible behind overlay
+ *    - User can dismiss to browse (with degraded functionality)
  *
- * 2. ROUTE ErrorBoundaries (e.g., datasets/layout.tsx):
- *    - Catches errors after app has loaded (API failures, validation, render errors)
- *    - Shows light card within content area - sidebar stays visible
- *    - Uses RouteErrorContent for consistent styling
+ * 2. PAGE ERRORS (404s, API failures, validation errors):
+ *    - Shown inline within content area via PageErrorStack
+ *    - Sidebar stays fully functional
  *
- * ErrorScope (App/Page) determines theming:
- *    - App: Dark overlay for app-level errors (used by ErrorContent)
- *    - Page: Light card for page-level errors (used by RouteErrorContent)
+ * Components:
+ *    - LayoutErrorBoundary: Handles both infra (dialog) and page (inline) errors
+ *    - RouteErrorContent: Page errors only (for routes without layout boundaries)
+ *    - RootErrorBoundaryLayout: Shell with sidebar for root-level errors
  */
 
 export { RootErrorBoundaryLayout } from "./RootErrorBoundaryLayout";
 export { ErrorDialog } from "./ErrorDialog";
 export { ErrorContent } from "./ErrorContent";
 export { RouteErrorContent } from "./RouteErrorContent";
+export { LayoutErrorBoundary } from "./LayoutErrorBoundary";

@@ -1,6 +1,6 @@
 import type { Route } from "./+types/route";
 import FunctionsTable from "./FunctionsTable";
-import { useConfig } from "~/context/config";
+import { useAllFunctionConfigs } from "~/context/config";
 import {
   PageHeader,
   PageLayout,
@@ -8,16 +8,25 @@ import {
 } from "~/components/layout/PageLayout";
 import { useMemo, useState } from "react";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { logger } from "~/utils/logger";
 
 export async function loader() {
-  const httpClient = getTensorZeroClient();
-  const countsInfo = await httpClient.listFunctionsWithInferenceCount();
-  return { countsInfo };
+  try {
+    const httpClient = getTensorZeroClient();
+    const countsInfo = await httpClient.listFunctionsWithInferenceCount();
+    return { countsInfo };
+  } catch (error) {
+    logger.error("Failed to load functions", error);
+    return { countsInfo: [] };
+  }
 }
+
+const EMPTY_FUNCTIONS = {};
 
 export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
   const { countsInfo } = loaderData;
-  const functions = useConfig().functions;
+  const functionsConfig = useAllFunctionConfigs();
+  const functions = functionsConfig ?? EMPTY_FUNCTIONS;
 
   const [showInternalFunctions, setShowInternalFunctions] = useState(false);
 

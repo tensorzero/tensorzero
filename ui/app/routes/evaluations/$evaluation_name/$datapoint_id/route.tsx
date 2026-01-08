@@ -227,8 +227,8 @@ export default function EvaluationDatapointPage({
   } = loaderData;
   const fetcher = useFetcher();
   const config = useConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
+  const evaluation_config = config?.evaluations[evaluation_name];
+  if (!config || !evaluation_config) {
     throw data(
       `Evaluation config not found for evaluation ${evaluation_name}`,
       { status: 404 },
@@ -389,8 +389,8 @@ const MetricRow = ({
 }) => {
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
-  const metricProperties = config.metrics[metric_name];
-  if (!metricProperties) {
+  const metricProperties = config?.metrics[metric_name];
+  if (!config || !metricProperties) {
     return null;
   }
   if (inferenceId === null) {

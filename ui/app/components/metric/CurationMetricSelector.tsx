@@ -41,7 +41,7 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
   functionFieldName: Path<T>;
-  config: UiConfig;
+  config: UiConfig | undefined;
   addDemonstrations: boolean;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
@@ -78,11 +78,13 @@ export default function CurationMetricSelector<
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const metrics = Object.fromEntries(
-    Object.entries(config.metrics).filter(([, v]) => v !== undefined),
-  ) as Record<string, FeedbackConfig>;
+  const metrics = config
+    ? (Object.fromEntries(
+        Object.entries(config.metrics).filter(([, v]) => v !== undefined),
+      ) as Record<string, FeedbackConfig>)
+    : ({} as Record<string, FeedbackConfig>);
 
-  if (addDemonstrations) {
+  if (addDemonstrations && config) {
     metrics["demonstration"] = {
       type: "demonstration",
       level: "inference",
@@ -166,7 +168,7 @@ export default function CurationMetricSelector<
                     aria-labelledby={`${metricLabelId}-label`}
                     id={metricComboboxId}
                     className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
-                    disabled={!functionValue || metricsLoading}
+                    disabled={!config || !functionValue || metricsLoading}
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       {metricsLoading && (
@@ -373,34 +375,32 @@ export default function CurationMetricSelector<
 
             <div className="text-muted-foreground space-y-1 text-sm">
               <div>
-                Feedbacks: {/* If data is loading, show skeleton */}
-                {isLoading ? (
+                Feedbacks:{" "}
+                {!config ? (
+                  <span className="text-muted-foreground/25">—</span>
+                ) : isLoading ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is empty string (unselected), show loading skeleton */
-                field.value === "" ? (
+                ) : field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is null (selected "None"), show N/A */
-                field.value === null ? (
+                ) : field.value === null ? (
                   <span className="font-medium">N/A</span>
                 ) : (
-                  /* Otherwise show the actual feedback count */
                   <span className="font-medium">
                     {feedbackCount?.toLocaleString() ?? "0"}
                   </span>
                 )}
               </div>
               <div>
-                Curated Inferences: {/* If data is loading, show skeleton */}
-                {isLoading ? (
+                Curated Inferences:{" "}
+                {!config ? (
+                  <span className="text-muted-foreground/25">—</span>
+                ) : isLoading ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is empty string (unselected), show loading skeleton */
-                field.value === "" ? (
+                ) : field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is null (selected "None"), show N/A */
-                field.value === null ? (
+                ) : field.value === null ? (
                   <span className="font-medium">N/A</span>
                 ) : (
-                  /* Otherwise show the actual curated inference count */
                   <span className="font-medium">
                     {curatedInferenceCount?.toLocaleString() ?? "0"}
                   </span>

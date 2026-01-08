@@ -140,7 +140,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   try {
     config = await getConfig();
   } catch {
-    throw data("Failed to load configuration", { status: 500 });
+    // Config unavailable (gateway down) - return empty data
+    // Components will handle null config gracefully
+    return {
+      functionName: null,
+      datasetName: null,
+      datapoints: [],
+      inputs: [],
+      totalDatapoints: 0,
+      offset,
+      limit,
+      dehydratedState: null,
+    };
   }
 
   const functionConfig = functionName
@@ -251,6 +262,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [currentSearchParams, setSearchParams] = useSearchParams();
   const [editingVariant, setEditingVariant] =
     useState<PlaygroundVariantInfo | null>(null);
+
   const { variants, searchParams } = useMemo(() => {
     if (navigation.state !== "loading") {
       return {
@@ -323,7 +335,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader name="Playground" />
+      <PageHeader heading="Playground" />
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Function</Label>
         <FunctionSelector
@@ -496,7 +508,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                   input={inputs[index]}
                                   functionName={functionName}
                                   functionConfig={functionConfig}
-                                  toolsConfig={config.tools}
+                                  toolsConfig={config?.tools ?? {}}
                                 />
                               </div>
                             );

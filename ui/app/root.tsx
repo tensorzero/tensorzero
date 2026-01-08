@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -18,25 +17,21 @@ import {
   getConfig,
   checkAutopilotAvailable,
 } from "./utils/config/index.server";
-import { AlertTriangle } from "lucide-react";
 import { AppSidebar } from "./components/layout/app.sidebar";
 import {
   RootErrorBoundaryLayout,
   ErrorContent,
   ErrorDialog,
 } from "./components/ui/error";
-import {
-  ErrorContentCard,
-  ErrorContentHeader,
-  ErrorScope,
-} from "./components/ui/error/ErrorContentPrimitives";
+import { NotFoundDisplay } from "./components/ui/error/ErrorContentPrimitives";
 import {
   BoundaryErrorType,
   isBoundaryErrorData,
   isAuthenticationError,
   isGatewayConnectionError,
-  isRouteNotFoundError,
+  classifyError,
   isClickHouseError,
+  getErrorLabel,
   type ClassifiedError,
 } from "./utils/tensorzero/errors";
 import { ContentLayout } from "./components/layout/ContentLayout";
@@ -74,26 +69,47 @@ export async function loader() {
       getConfig(),
       checkAutopilotAvailable(),
     ]);
-    return { config, isReadOnly, autopilotAvailable };
+    return {
+      config,
+      isReadOnly,
+      autopilotAvailable,
+      infraError: null as ClassifiedError | null,
+    };
   } catch (e) {
+    // Graceful degradation for infrastructure errors:
+    // Return fallback state so UI renders with dismissible error dialog.
+    // Child routes will handle their own errors via their error boundaries.
     if (isGatewayConnectionError(e)) {
-      throw data(
-        { errorType: BoundaryErrorType.GatewayUnavailable },
-        { status: 503 },
-      );
+      return {
+        config: undefined,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: BoundaryErrorType.GatewayUnavailable,
+        } as ClassifiedError,
+      };
     }
     if (isAuthenticationError(e)) {
-      throw data(
-        { errorType: BoundaryErrorType.GatewayAuthFailed },
-        { status: 401 },
-      );
+      return {
+        config: undefined,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: BoundaryErrorType.GatewayAuthFailed,
+        } as ClassifiedError,
+      };
     }
     if (isClickHouseError(e)) {
       const message = e instanceof Error ? e.message : undefined;
-      throw data(
-        { errorType: BoundaryErrorType.ClickHouseConnection, message },
-        { status: 503 },
-      );
+      return {
+        config: undefined,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: BoundaryErrorType.ClickHouseConnection,
+          message,
+        } as ClassifiedError,
+      };
     }
     throw e;
   }
@@ -119,7 +135,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
-  const { config, isReadOnly, autopilotAvailable } = loaderData;
+  const { config, isReadOnly, autopilotAvailable, infraError } = loaderData;
+  const [dialogOpen, setDialogOpen] = React.useState(true);
 
   return (
     <AppProviders>
@@ -132,87 +149,21 @@ export default function App({ loaderData }: Route.ComponentProps) {
                 <Outlet />
               </ContentLayout>
             </div>
+            {infraError && (
+              <ErrorDialog
+                open={dialogOpen}
+                onDismiss={() => setDialogOpen(false)}
+                onReopen={() => setDialogOpen(true)}
+                label={getErrorLabel(infraError.type)}
+              >
+                <ErrorContent error={infraError} />
+              </ErrorDialog>
+            )}
           </ConfigProvider>
         </AutopilotAvailableProvider>
       </ReadOnlyProvider>
     </AppProviders>
   );
-}
-
-function classifyError(error: unknown): ClassifiedError {
-  // Check for serialized BoundaryErrorData (from data() throws)
-  if (isRouteErrorResponse(error) && isBoundaryErrorData(error.data)) {
-    const { errorType } = error.data;
-    switch (errorType) {
-      case BoundaryErrorType.GatewayUnavailable:
-        return { type: BoundaryErrorType.GatewayUnavailable };
-      case BoundaryErrorType.GatewayAuthFailed:
-        return { type: BoundaryErrorType.GatewayAuthFailed };
-      case BoundaryErrorType.RouteNotFound:
-        return {
-          type: BoundaryErrorType.RouteNotFound,
-          routeInfo: error.data.routeInfo,
-        };
-      case BoundaryErrorType.ClickHouseConnection:
-        return {
-          type: BoundaryErrorType.ClickHouseConnection,
-          message: "message" in error.data ? error.data.message : undefined,
-        };
-      case BoundaryErrorType.ServerError:
-        return {
-          type: BoundaryErrorType.ServerError,
-          message: "message" in error.data ? error.data.message : undefined,
-          status: error.status,
-        };
-      default: {
-        const _exhaustiveCheck: never = errorType;
-        return { type: BoundaryErrorType.ServerError, status: error.status };
-      }
-    }
-  }
-
-  if (isGatewayConnectionError(error)) {
-    return { type: BoundaryErrorType.GatewayUnavailable };
-  }
-
-  if (isAuthenticationError(error)) {
-    return { type: BoundaryErrorType.GatewayAuthFailed };
-  }
-
-  if (isRouteNotFoundError(error)) {
-    const errorMessage = extractErrorMessage(error);
-    const routeMatch = errorMessage.match(/Route not found: (\w+) (.+)/);
-    const routeInfo = routeMatch
-      ? `${routeMatch[1]} ${routeMatch[2]}`
-      : errorMessage;
-    return { type: BoundaryErrorType.RouteNotFound, routeInfo };
-  }
-
-  if (isClickHouseError(error)) {
-    const message = error instanceof Error ? error.message : undefined;
-    return { type: BoundaryErrorType.ClickHouseConnection, message };
-  }
-
-  const message = isRouteErrorResponse(error)
-    ? error.statusText || undefined
-    : error instanceof Error
-      ? error.message
-      : undefined;
-  const status = isRouteErrorResponse(error) ? error.status : undefined;
-  return { type: BoundaryErrorType.ServerError, message, status };
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-  return "";
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -224,15 +175,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     if (!isBoundaryErrorData(error.data)) {
       return (
         <RootErrorBoundaryLayout>
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-8 pb-20">
-            <ErrorContentCard scope={ErrorScope.Page}>
-              <ErrorContentHeader
-                icon={AlertTriangle}
-                title="Error 404"
-                description="The requested page could not be found."
-                scope={ErrorScope.Page}
-              />
-            </ErrorContentCard>
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <NotFoundDisplay />
           </div>
         </RootErrorBoundaryLayout>
       );
@@ -255,23 +199,4 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </ErrorDialog>
     </RootErrorBoundaryLayout>
   );
-}
-
-function getErrorLabel(type: BoundaryErrorType): string {
-  switch (type) {
-    case BoundaryErrorType.GatewayUnavailable:
-      return "Connection Error";
-    case BoundaryErrorType.GatewayAuthFailed:
-      return "Auth Error";
-    case BoundaryErrorType.RouteNotFound:
-      return "Route Error";
-    case BoundaryErrorType.ClickHouseConnection:
-      return "Database Error";
-    case BoundaryErrorType.ServerError:
-      return "Server Error";
-    default: {
-      const _exhaustiveCheck: never = type;
-      return "Server Error";
-    }
-  }
 }

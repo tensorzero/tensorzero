@@ -53,7 +53,7 @@ type Story = StoryObj<typeof meta>;
 export const GatewayUnavailable: Story = {
   args: {
     error: { type: BoundaryErrorType.GatewayUnavailable },
-    label: "Connection Error",
+    label: "Gateway Connection Error",
   },
 };
 

@@ -2,6 +2,7 @@ import { data, type RouteHandle } from "react-router";
 import type { Route } from "./+types/route";
 import { RouteErrorContent } from "~/components/ui/error";
 import { logger } from "~/utils/logger";
+import { isInfraError } from "~/utils/tensorzero/errors";
 
 export const handle: RouteHandle = {
   crumb: () => ["Models"],
@@ -51,12 +52,29 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const numPeriods = parseInt(url.searchParams.get("usageNumPeriods") || "10");
   const client = getTensorZeroClient();
+  // Graceful degradation: return empty data on infra errors
   const modelUsageTimeseriesPromise = client
     .getModelUsageTimeseries(usageTimeGranularity, numPeriods)
-    .then((response) => response.data);
+    .then((response) => response.data)
+    .catch((error) => {
+      if (isInfraError(error)) {
+        logger.warn("Infrastructure unavailable, showing degraded model usage");
+        return [];
+      }
+      throw error;
+    });
   const modelLatencyQuantilesPromise = client
     .getModelLatencyQuantiles(latencyTimeGranularity)
-    .then((response) => response.data);
+    .then((response) => response.data)
+    .catch((error) => {
+      if (isInfraError(error)) {
+        logger.warn(
+          "Infrastructure unavailable, showing degraded model latency",
+        );
+        return [];
+      }
+      throw error;
+    });
   const quantiles = getQuantiles();
   return {
     modelUsageTimeseriesPromise,
@@ -76,7 +94,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader name="Models" />
+      <PageHeader heading="Models" />
 
       <SectionsGroup>
         <SectionLayout>

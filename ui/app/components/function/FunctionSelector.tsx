@@ -8,7 +8,7 @@ import { Combobox } from "~/components/ui/combobox";
 interface FunctionSelectorProps {
   selected: string | null;
   onSelect?: (functionName: string) => void;
-  functions: { [x: string]: FunctionConfig | undefined };
+  functions: { [x: string]: FunctionConfig | undefined } | null;
   hideDefaultFunction?: boolean;
   ariaLabel?: string;
 }
@@ -31,16 +31,18 @@ export function FunctionSelector({
 }: FunctionSelectorProps) {
   const functionNames = useMemo(
     () =>
-      Object.keys(functions).filter(
-        (name) => !(hideDefaultFunction && name === DEFAULT_FUNCTION),
-      ),
+      functions
+        ? Object.keys(functions).filter(
+            (name) => !(hideDefaultFunction && name === DEFAULT_FUNCTION),
+          )
+        : [],
     [functions, hideDefaultFunction],
   );
 
   const getItemIcon = useCallback(
     (name: string | null) => {
       if (!name) return <Functions className="h-4 w-4 shrink-0" />;
-      const fn = functions[name];
+      const fn = functions?.[name];
       return fn ? <FunctionTypeIcon type={fn.type} /> : null;
     },
     [functions],
@@ -52,9 +54,12 @@ export function FunctionSelector({
       onSelect={(value) => onSelect?.(value)}
       items={functionNames}
       getItemIcon={getItemIcon}
-      placeholder="Select function"
-      emptyMessage="No functions found"
+      placeholder={functions ? "Select function" : "—"}
+      emptyMessage={
+        functions ? "No functions found" : "Configuration unavailable"
+      }
       ariaLabel={ariaLabel}
+      disabled={!functions}
     />
   );
 }

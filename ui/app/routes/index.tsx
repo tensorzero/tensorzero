@@ -1,5 +1,5 @@
 import { Link, type RouteHandle, Await, useAsyncError } from "react-router";
-import { RouteErrorContent } from "~/components/ui/error";
+import { LayoutErrorBoundary } from "~/components/ui/error";
 import { logger } from "~/utils/logger";
 import * as React from "react";
 import { Card } from "~/components/ui/card";
@@ -29,7 +29,7 @@ import {
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
 import type { Route } from "./+types/index";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { getErrorDetails } from "~/utils/tensorzero/errors";
+import { getErrorDetails, isInfraError } from "~/utils/tensorzero/errors";
 
 export const handle: RouteHandle = {
   hideBreadcrumbs: true,
@@ -127,90 +127,111 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 }
 
 export async function loader() {
-  const httpClient = getTensorZeroClient();
+  try {
+    const httpClient = getTensorZeroClient();
 
-  // Create the promises
-  const countsInfoPromise = httpClient.listFunctionsWithInferenceCount();
-  const episodesPromise = httpClient.queryEpisodeTableBounds();
-  const datasetMetadataPromise = httpClient.listDatasets({});
-  const numEvaluationRunsPromise = httpClient.countEvaluationRuns();
-  const numWorkflowEvaluationRunsPromise =
-    httpClient.countWorkflowEvaluationRuns();
-  const numWorkflowEvaluationRunProjectsPromise =
-    httpClient.countWorkflowEvaluationProjects();
-  const configPromise = getConfig();
-  const functionConfigsPromise = getAllFunctionConfigs();
-  const numModelsUsedPromise = httpClient
-    .countDistinctModelsUsed()
-    .then((response) => response.model_count);
+    // Create the promises
+    const countsInfoPromise = httpClient.listFunctionsWithInferenceCount();
+    const episodesPromise = httpClient.queryEpisodeTableBounds();
+    const datasetMetadataPromise = httpClient.listDatasets({});
+    const numEvaluationRunsPromise = httpClient.countEvaluationRuns();
+    const numWorkflowEvaluationRunsPromise =
+      httpClient.countWorkflowEvaluationRuns();
+    const numWorkflowEvaluationRunProjectsPromise =
+      httpClient.countWorkflowEvaluationProjects();
+    const configPromise = getConfig();
+    const functionConfigsPromise = getAllFunctionConfigs();
+    const numModelsUsedPromise = httpClient
+      .countDistinctModelsUsed()
+      .then((response) => response.model_count);
 
-  // Create derived promises - these will be stable references
-  const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
-    const total = countsInfo.reduce(
-      (acc, curr) => acc + curr.inference_count,
-      0,
+    // Create derived promises - these will be stable references
+    const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
+      const total = countsInfo.reduce(
+        (acc, curr) => acc + curr.inference_count,
+        0,
+      );
+      return `${total.toLocaleString()} inferences`;
+    });
+
+    const numFunctionsDesc = functionConfigsPromise.then((functionConfigs) => {
+      const numFunctions = Object.keys(functionConfigs).length;
+      return `${numFunctions} functions`;
+    });
+
+    const numVariantsDesc = functionConfigsPromise.then((functionConfigs) => {
+      const numVariants = Object.values(functionConfigs).reduce(
+        (acc, funcConfig) => {
+          return (
+            acc +
+            (funcConfig ? Object.keys(funcConfig.variants || {}).length : 0)
+          );
+        },
+        0,
+      );
+      return `${numVariants} variants`;
+    });
+
+    const numEpisodesDesc = episodesPromise.then(
+      (result) => `${result.count.toLocaleString()} episodes`,
     );
-    return `${total.toLocaleString()} inferences`;
-  });
 
-  const numFunctionsDesc = functionConfigsPromise.then((functionConfigs) => {
-    const numFunctions = Object.keys(functionConfigs).length;
-    return `${numFunctions} functions`;
-  });
-
-  const numVariantsDesc = functionConfigsPromise.then((functionConfigs) => {
-    const numVariants = Object.values(functionConfigs).reduce(
-      (acc, funcConfig) => {
-        return (
-          acc + (funcConfig ? Object.keys(funcConfig.variants || {}).length : 0)
-        );
-      },
-      0,
+    const numDatasetsDesc = datasetMetadataPromise.then(
+      (datasets) => `${datasets.datasets.length} datasets`,
     );
-    return `${numVariants} variants`;
-  });
 
-  const numEpisodesDesc = episodesPromise.then(
-    (result) => `${result.count.toLocaleString()} episodes`,
-  );
+    const numEvaluationRunsDesc = numEvaluationRunsPromise.then(
+      (runs) => `evaluations, ${runs} runs`,
+    );
 
-  const numDatasetsDesc = datasetMetadataPromise.then(
-    (datasets) => `${datasets.datasets.length} datasets`,
-  );
+    // We need to create a special promise for the inference evaluations that includes the config count
+    const inferenceEvaluationsDesc = Promise.all([
+      configPromise,
+      numEvaluationRunsPromise,
+    ]).then(([config, runs]) => {
+      const numEvaluations = Object.keys(config.evaluations || {}).length;
+      return `${numEvaluations} evaluations, ${runs} runs`;
+    });
 
-  const numEvaluationRunsDesc = numEvaluationRunsPromise.then(
-    (runs) => `evaluations, ${runs} runs`,
-  );
+    const dynamicEvaluationsDesc = Promise.all([
+      numWorkflowEvaluationRunProjectsPromise,
+      numWorkflowEvaluationRunsPromise,
+    ]).then(([projects, runs]) => `${projects} projects, ${runs} runs`);
 
-  // We need to create a special promise for the inference evaluations that includes the config count
-  const inferenceEvaluationsDesc = Promise.all([
-    configPromise,
-    numEvaluationRunsPromise,
-  ]).then(([config, runs]) => {
-    const numEvaluations = Object.keys(config.evaluations || {}).length;
-    return `${numEvaluations} evaluations, ${runs} runs`;
-  });
+    const numModelsUsedDesc = numModelsUsedPromise.then(
+      (numModelsUsed) => `${numModelsUsed} models used`,
+    );
 
-  const dynamicEvaluationsDesc = Promise.all([
-    numWorkflowEvaluationRunProjectsPromise,
-    numWorkflowEvaluationRunsPromise,
-  ]).then(([projects, runs]) => `${projects} projects, ${runs} runs`);
-
-  const numModelsUsedDesc = numModelsUsedPromise.then(
-    (numModelsUsed) => `${numModelsUsed} models used`,
-  );
-
-  return {
-    totalInferencesDesc,
-    numFunctionsDesc,
-    numVariantsDesc,
-    numEpisodesDesc,
-    numDatasetsDesc,
-    numEvaluationRunsDesc,
-    inferenceEvaluationsDesc,
-    dynamicEvaluationsDesc,
-    numModelsUsedDesc,
-  };
+    return {
+      totalInferencesDesc,
+      numFunctionsDesc,
+      numVariantsDesc,
+      numEpisodesDesc,
+      numDatasetsDesc,
+      numEvaluationRunsDesc,
+      inferenceEvaluationsDesc,
+      dynamicEvaluationsDesc,
+      numModelsUsedDesc,
+    };
+  } catch (error) {
+    // Graceful degradation: if infra is down, return fallback state
+    // Root shows dismissible dialog, we show "—" on cards
+    if (isInfraError(error)) {
+      logger.warn("Infrastructure unavailable, showing degraded home page");
+      return {
+        totalInferencesDesc: Promise.resolve("—"),
+        numFunctionsDesc: Promise.resolve("—"),
+        numVariantsDesc: Promise.resolve("—"),
+        numEpisodesDesc: Promise.resolve("—"),
+        numDatasetsDesc: Promise.resolve("—"),
+        numEvaluationRunsDesc: Promise.resolve("—"),
+        inferenceEvaluationsDesc: Promise.resolve("—"),
+        dynamicEvaluationsDesc: Promise.resolve("—"),
+        numModelsUsedDesc: Promise.resolve("—"),
+      };
+    }
+    throw error;
+  }
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
@@ -369,5 +390,5 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   logger.error(error);
-  return <RouteErrorContent error={error} />;
+  return <LayoutErrorBoundary error={error} />;
 }

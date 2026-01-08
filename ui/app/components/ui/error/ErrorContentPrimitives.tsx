@@ -1,5 +1,6 @@
 import * as React from "react";
-import type { LucideIcon } from "lucide-react";
+import { FileQuestion, type LucideIcon } from "lucide-react";
+import { isRouteErrorResponse } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
@@ -109,7 +110,7 @@ export function TroubleshootingSection({
   return (
     <CardContent
       className={cn(
-        "h-40 p-6",
+        "p-6",
         scope === ErrorScope.App ? "border-t border-neutral-900" : "border-t",
       )}
     >
@@ -200,7 +201,7 @@ export function StackTraceContent({
   );
 }
 
-interface SimpleErrorDisplayProps {
+interface PageErrorStackProps {
   icon: LucideIcon;
   title: string;
   description: string;
@@ -210,17 +211,51 @@ interface SimpleErrorDisplayProps {
 }
 
 /**
+ * Centered container for page-level error displays.
+ * Used by error boundaries to center content in the available space.
+ */
+export function PageErrorContainer({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-full items-center justify-center p-8 pb-20">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Standard 404 "Page Not Found" display.
+ * Reusable across root, layout, and route error boundaries.
+ */
+export function NotFoundDisplay() {
+  return (
+    <PageErrorContainer>
+      <PageErrorStack
+        icon={FileQuestion}
+        title="Page Not Found"
+        description="The page you're looking for doesn't exist."
+        scope={ErrorScope.Page}
+        muted
+      />
+    </PageErrorContainer>
+  );
+}
+
+/**
  * Standalone error display for simple errors without troubleshooting steps.
  * Vertical layout: large icon above, centered text below.
  * No card border for cleaner appearance.
  */
-export function SimpleErrorDisplay({
+export function PageErrorStack({
   icon: Icon,
   title,
   description,
   scope = ErrorScope.Page,
   muted = false,
-}: SimpleErrorDisplayProps) {
+}: PageErrorStackProps) {
   const iconColor = muted
     ? "text-neutral-300"
     : scope === ErrorScope.App
@@ -255,4 +290,39 @@ export function SimpleErrorDisplay({
       </p>
     </div>
   );
+}
+
+export interface PageErrorInfo {
+  title: string;
+  message: string;
+  status?: number;
+}
+
+/**
+ * Extracts display-friendly error info from an unknown error.
+ * Handles RouteErrorResponse, Error instances, and unknown values.
+ */
+export function extractPageErrorInfo(error: unknown): PageErrorInfo {
+  if (isRouteErrorResponse(error)) {
+    return {
+      title: error.statusText || "Error",
+      message:
+        typeof error.data === "string"
+          ? error.data
+          : "An unexpected error occurred.",
+      status: error.status,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      title: "Error",
+      message: error.message,
+    };
+  }
+
+  return {
+    title: "Error",
+    message: "An unexpected error occurred.",
+  };
 }
