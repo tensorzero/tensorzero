@@ -3,12 +3,18 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use durable_tools::{TensorZeroClient, ToolExecutor, Worker, WorkerOptions};
+use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
+use autopilot_tools::ToolVisitor;
+use durable_tools::{
+    SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
+};
+use serde::Serialize;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-#[cfg(feature = "e2e_tests")]
+use crate::wrapper::ClientSimpleToolWrapper;
 use crate::wrapper::ClientTaskToolWrapper;
 
 /// Configuration for the autopilot worker.
@@ -19,6 +25,8 @@ pub struct AutopilotWorkerConfig {
     pub queue_name: String,
     /// TensorZero client for calling inference and autopilot operations.
     pub t0_client: Arc<dyn TensorZeroClient>,
+    /// Default max attempts for a task in the worker
+    pub default_max_attempts: u32,
 }
 
 impl AutopilotWorkerConfig {
@@ -31,7 +39,11 @@ impl AutopilotWorkerConfig {
     ///
     /// Environment variables:
     /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Queue name (default: "autopilot")
-    pub fn new(pool: PgPool, t0_client: Arc<dyn TensorZeroClient>) -> Self {
+    pub fn new(
+        pool: PgPool,
+        t0_client: Arc<dyn TensorZeroClient>,
+        default_max_attempts: u32,
+    ) -> Self {
         let mut queue_name = autopilot_client::DEFAULT_SPAWN_QUEUE_NAME.to_string();
         if cfg!(feature = "e2e_tests")
             && let Some(name) = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME").ok()
@@ -43,6 +55,7 @@ impl AutopilotWorkerConfig {
             pool,
             queue_name,
             t0_client,
+            default_max_attempts,
         }
     }
 }
@@ -63,6 +76,7 @@ impl AutopilotWorker {
             .pool(config.pool)
             .queue_name(&config.queue_name)
             .t0_client(config.t0_client)
+            .default_max_attempts(config.default_max_attempts)
             .build()
             .await?;
 
@@ -72,19 +86,12 @@ impl AutopilotWorker {
     }
 
     /// Register all autopilot tools with the executor.
+    #[allow(clippy::unused_async, clippy::allow_attributes)]
     pub async fn register_tools(&self) -> Result<()> {
-        #[cfg(feature = "e2e_tests")]
-        {
-            // Register test tools
-
-            use autopilot_tools::tools::EchoTool;
-            self.executor
-                .register_task_tool::<ClientTaskToolWrapper<EchoTool>>()
-                .await?;
-            // Additional test tools can be registered here
-        }
-
-        // Production tools will be registered here when implemented
+        let visitor = LocalToolVisitor {
+            executor: &self.executor,
+        };
+        autopilot_tools::for_each_tool(&visitor).await?;
         Ok(())
     }
 
@@ -120,6 +127,48 @@ impl AutopilotWorker {
                 worker.shutdown().await;
             }
         }
+    }
+}
+
+/// Visitor that registers tools for local execution on the autopilot worker.
+///
+/// All tools are wrapped to:
+/// 1. Inject [`AutopilotSideInfo`] around the tool's native `SideInfo`
+/// 2. Publish results to the autopilot API after execution
+///
+/// - TaskTools are wrapped in [`ClientToolWrapper`]
+/// - SimpleTools are wrapped in [`ClientSimpleToolWrapper`] which promotes them to TaskTools
+struct LocalToolVisitor<'a> {
+    executor: &'a ToolExecutor,
+}
+
+#[async_trait]
+impl ToolVisitor for LocalToolVisitor<'_> {
+    type Error = ToolError;
+
+    async fn visit_task_tool<T>(&self) -> Result<(), ToolError>
+    where
+        T: TaskTool + Default,
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+    {
+        self.executor
+            .register_task_tool::<ClientTaskToolWrapper<T>>()
+            .await?;
+        Ok(())
+    }
+
+    async fn visit_simple_tool<T>(&self) -> Result<(), ToolError>
+    where
+        T: SimpleTool + Default,
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+    {
+        // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
+        self.executor
+            .register_task_tool::<ClientSimpleToolWrapper<T>>()
+            .await?;
+        Ok(())
     }
 }
 

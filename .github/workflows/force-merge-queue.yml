@@ -18,6 +18,7 @@ on:
   # even when the PR is from a fork.
   pull_request_target:
     types: [labeled, unlabeled]
+  workflow_call:
 
 jobs:
   attach-successful-status:

@@ -59,8 +59,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
-      AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
       AZURE_OPENAI_EASTUS2_API_KEY: ${AZURE_OPENAI_EASTUS2_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
       AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-}
@@ -146,7 +145,7 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
+    # Keep this running to make `check-docker-compose.sh` detect that all containers are healthy
     command:
       ["bash", "-c", "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests"]
     healthcheck:
@@ -179,8 +178,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
-      AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
       AZURE_OPENAI_EASTUS2_API_KEY: ${AZURE_OPENAI_EASTUS2_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
       AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-}

@@ -3,13 +3,15 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::GetDatapointsResponse;
 use uuid::Uuid;
 
-use crate::types::AutopilotToolSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_datapoints tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -28,7 +30,7 @@ pub struct GetDatapointsToolParams {
 pub struct GetDatapointsTool;
 
 impl ToolMetadata for GetDatapointsTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = GetDatapointsResponse;
     type LlmParams = GetDatapointsToolParams;
 
@@ -41,6 +43,32 @@ impl ToolMetadata for GetDatapointsTool {
             "Get specific datapoints by their IDs. \
              Optionally provide dataset_name for better query performance.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Get specific datapoints by their IDs.",
+            "properties": {
+                "dataset_name": {
+                    "type": "string",
+                    "description": "The name of the dataset (optional, but recommended for performance)."
+                },
+                "ids": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "uuid" },
+                    "description": "The IDs of the datapoints to retrieve."
+                }
+            },
+            "required": ["ids"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -55,6 +83,6 @@ impl SimpleTool for GetDatapointsTool {
         ctx.client()
             .get_datapoints(llm_params.dataset_name, llm_params.ids)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("get_datapoints", e).into())
     }
 }

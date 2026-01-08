@@ -1,4 +1,4 @@
-/// This file contains test cases that target the `azure` provider against Azure AI Foundry models instead of Azure OpenAI Service models.
+/// This file contains test cases that target the `azure` provider against Azure AI Foundry models instead of Azure models.
 use std::collections::HashMap;
 
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};

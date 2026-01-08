@@ -9,8 +9,6 @@
 //! - Multi-variant evaluation with per-variant stopping conditions
 //! - Batch processing for efficiency
 //! - Checkpointed execution for crash recovery
-//!
-//! NOTE: This module is work in progress.
 
 mod updates;
 pub use updates::*;
@@ -64,6 +62,90 @@ const DEFAULT_FAILURE_THRESHOLD: f64 = 0.05;
 
 fn default_failure_threshold() -> f64 {
     DEFAULT_FAILURE_THRESHOLD
+}
+
+/// Minimum samples before applying hedge weight rebalancing.
+///
+/// Before this threshold, rankings are too noisy to reliably guess which variants
+/// might be in the top-k vs. outside it. Using symmetric hedges (0.5) is safer
+/// until we have enough data.
+const MIN_SAMPLES_FOR_REBALANCING: u64 = 20;
+
+/// Choose hedge weight based on a variant's provisional rank.
+///
+/// Variants believed to be in the top set emphasize the lower tail so their lower
+/// confidence bound rises quickly (easier to certify inclusion). Variants believed
+/// to be outside the top set emphasize the upper tail to shrink their upper bounds
+/// (easier to certify exclusion). Middle variants keep a symmetric hedge.
+///
+/// # Arguments
+/// * `rank` - 0-indexed rank of the variant by sample mean (0 = best)
+/// * `k_min` - Minimum k for top-k identification
+/// * `k_max` - Maximum k for top-k identification
+///
+/// # Returns
+/// Hedge weight for the upper wealth process (in [0, 1]).
+fn get_rank_based_hedge_weight(rank: usize, k_min: u32, k_max: u32) -> f64 {
+    if rank < k_min as usize {
+        0.8 // Boost lower bounds to certify inclusion sooner
+    } else if rank >= k_max as usize {
+        0.2 // Shrink upper bounds to certify exclusion sooner
+    } else {
+        0.5 // Middle variants keep symmetric hedge
+    }
+}
+
+/// Compute per-variant hedge weights based on provisional ranking.
+///
+/// Ranks variants by their current sample mean (from confidence sequences),
+/// then assigns hedge weights using `get_rank_based_hedge_weight()`.
+///
+/// Only applies rebalancing if all variants have at least `MIN_SAMPLES_FOR_REBALANCING`
+/// observations. Otherwise returns `None` (use default symmetric hedge).
+///
+/// # Arguments
+/// * `variant_performance` - Current performance confidence sequences for each variant
+/// * `k_min` - Minimum k for top-k identification
+/// * `k_max` - Maximum k for top-k identification
+///
+/// # Returns
+/// `Some(HashMap)` with per-variant hedge weights if rebalancing applies, `None` otherwise.
+fn compute_hedge_weights(
+    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    k_min: u32,
+    k_max: u32,
+) -> Option<HashMap<String, f64>> {
+    // Check minimum sample requirement
+    let min_samples = variant_performance
+        .values()
+        .map(|cs| cs.count)
+        .min()
+        .unwrap_or(0);
+
+    if min_samples < MIN_SAMPLES_FOR_REBALANCING {
+        return None;
+    }
+
+    // Sort variants by sample mean (descending) to get ranks
+    let mut variants_by_mean: Vec<(&String, f64)> = variant_performance
+        .iter()
+        .map(|(name, cs)| (name, cs.mean_est))
+        .collect();
+    variants_by_mean.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Assign hedge weights based on rank
+    let hedge_weights: HashMap<String, f64> = variants_by_mean
+        .iter()
+        .enumerate()
+        .map(|(rank, (name, _))| {
+            (
+                (*name).clone(),
+                get_rank_based_hedge_weight(rank, k_min, k_max),
+            )
+        })
+        .collect();
+
+    Some(hedge_weights)
 }
 
 // ============================================================================
@@ -327,6 +409,9 @@ impl ScoringFunction for AverageEvaluatorScore {
 /// * `variant_performance` - Map to update with performance statistics
 /// * `variant_failures` - Map to update with variant failure rates
 /// * `evaluator_failures` - Map to update with evaluator failure rates
+/// * `hedge_weights` - Optional per-variant hedge weights for performance CS updates.
+///   If `Some`, applies rank-based rebalancing to accelerate top-k identification.
+///   Only applied to `variant_performance`, not to failure rate tracking.
 ///
 /// # Returns
 /// `Ok(())` on success, or an error if confidence sequence updates fail.
@@ -336,6 +421,7 @@ pub fn compute_updates(
     variant_performance: &mut HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
     evaluator_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
+    hedge_weights: Option<&HashMap<String, f64>>,
 ) -> Result<()> {
     // Collect observations per variant for performance scores
     let mut performance_observations: HashMap<String, Vec<f64>> = HashMap::new();
@@ -419,7 +505,8 @@ pub fn compute_updates(
             continue;
         }
         if let Some(cs) = variant_performance.remove(&variant_name) {
-            let updated = update_betting_cs(cs, observations, None)?;
+            let hedge_weight = hedge_weights.and_then(|hw| hw.get(&variant_name)).copied();
+            let updated = update_betting_cs(cs, observations, hedge_weight)?;
             variant_performance.insert(variant_name, updated);
         }
     }
@@ -1165,6 +1252,13 @@ async fn process_batch_step(
         }
     };
 
+    // Compute hedge weights for rank-based rebalancing (accelerates top-k identification)
+    let hedge_weights = compute_hedge_weights(
+        &current_state.variant_performance,
+        params.k_min,
+        params.k_max,
+    );
+
     // Update confidence sequences
     let scoring_fn = params.scoring_function.clone().into_scoring_fn();
     compute_updates(
@@ -1173,6 +1267,7 @@ async fn process_batch_step(
         &mut current_state.variant_performance,
         &mut current_state.variant_failures,
         &mut current_state.evaluator_failures,
+        hedge_weights.as_ref(),
     )?;
 
     // Update number of datapoints processed and batch index

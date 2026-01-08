@@ -21,7 +21,8 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
+use crate::inference::types::usage::raw_usage_entries_from_value;
+use crate::inference::types::{ApiType, ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::inference::types::{
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -33,6 +34,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::OpenAIMessagesConfig;
+use uuid::Uuid;
 
 use super::chat_completions::{
     ChatCompletionAllowedToolsChoice, ChatCompletionSpecificToolChoice, ChatCompletionTool,
@@ -206,6 +208,7 @@ impl InferenceProvider for AzureProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
@@ -270,6 +273,7 @@ impl InferenceProvider for AzureProvider {
                 raw_request,
                 generic_request: request,
                 raw_response,
+                model_inference_id,
             }
             .try_into()?)
         } else {
@@ -302,6 +306,7 @@ impl InferenceProvider for AzureProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -338,6 +343,7 @@ impl InferenceProvider for AzureProvider {
         .await?;
         let stream = stream_openai(
             PROVIDER_TYPE.to_string(),
+            model_inference_id,
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
             None,
@@ -544,14 +550,27 @@ fn into_embedding_provider_response(
         .into_iter()
         .map(|data| data.embedding)
         .collect();
-    Ok(EmbeddingProviderResponse::new(
+    let provider_usage = response.usage;
+    let usage = provider_usage.clone().into();
+    let raw_usage_value = azure_usage_from_raw_response(&raw_response);
+    let mut embedding_response = EmbeddingProviderResponse::new(
         embeddings,
         request_body.input.clone(),
         raw_request,
         raw_response,
-        response.usage.into(),
+        usage,
         latency,
-    ))
+        None,
+    );
+    embedding_response.raw_usage = raw_usage_value.map(|usage| {
+        raw_usage_entries_from_value(
+            embedding_response.id,
+            PROVIDER_TYPE,
+            ApiType::Embeddings,
+            usage,
+        )
+    });
+    Ok(embedding_response)
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -761,6 +780,7 @@ struct AzureResponseWithMetadata<'a> {
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -772,6 +792,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             raw_request,
             generic_request,
             raw_response,
+            model_inference_id,
         } = value;
 
         if response.choices.len() != 1 {
@@ -788,6 +809,14 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
+        let raw_usage = azure_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = response.usage.into();
         let OpenAIResponseChoice {
             message,
@@ -819,12 +848,20 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 input_messages,
                 raw_request,
                 raw_response,
+                raw_usage,
                 usage,
                 latency,
                 finish_reason: Some(finish_reason.into()),
+                id: model_inference_id,
             },
         ))
     }
+}
+
+fn azure_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 #[derive(Debug, Serialize)]
@@ -1096,6 +1133,7 @@ mod tests {
             raw_request: serde_json::to_string(&AzureRequest::new(&generic_request).await.unwrap())
                 .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response: ProviderInferenceResponse =
             azure_response_with_metadata.try_into().unwrap();

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ToolContext;
 use crate::context::SimpleToolContext;
-use crate::error::{ToolError, ToolResult};
+use crate::error::{NonControlToolError, ToolError, ToolResult};
 use crate::executor::ToolExecutorBuilder;
 use crate::registry::{ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 use crate::simple_tool::SimpleTool;
@@ -331,15 +331,13 @@ mod registry_tests {
 
     #[test]
     fn register_task_tool_errors_on_duplicate() {
-        use crate::error::ToolError;
-
         let mut registry = ToolRegistry::new();
         registry.register_task_tool::<EchoTaskTool>().unwrap();
 
         // Second registration should fail
         let result = registry.register_task_tool::<EchoTaskTool>();
         match result {
-            Err(ToolError::DuplicateToolName(name)) => {
+            Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -351,15 +349,13 @@ mod registry_tests {
 
     #[test]
     fn register_simple_tool_errors_on_duplicate() {
-        use crate::error::ToolError;
-
         let mut registry = ToolRegistry::new();
         registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         // Second registration should fail
         let result = registry.register_simple_tool::<EchoSimpleTool>();
         match result {
-            Err(ToolError::DuplicateToolName(name)) => {
+            Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_simple");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -371,7 +367,6 @@ mod registry_tests {
 
     #[test]
     fn register_tools_with_same_name_errors() {
-        use crate::error::ToolError;
         use std::borrow::Cow;
 
         // Create a SimpleTool with the same name as EchoTaskTool
@@ -412,7 +407,7 @@ mod registry_tests {
         // Registering a SimpleTool with the same name should fail
         let result = registry.register_simple_tool::<ConflictingSimpleTool>();
         match result {
-            Err(ToolError::DuplicateToolName(name)) => {
+            Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -486,7 +481,7 @@ mod erasure_tests {
     #[test]
     fn erased_task_tool_wrapper_parameters_schema_has_message_field() {
         let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
-        let schema = wrapper.parameters_schema();
+        let schema = wrapper.parameters_schema().unwrap();
 
         // The schema should be an object with a "message" property
         let schema_json = serde_json::to_value(&schema).unwrap();
@@ -545,10 +540,10 @@ mod error_tests {
         let tool_err: ToolError = task_err.into();
 
         match tool_err {
-            ToolError::ExecutionFailed(e) => {
-                assert_eq!(e.to_string(), "test error");
+            ToolError::NonControl(NonControlToolError::Internal { message }) => {
+                assert_eq!(message, "test error");
             }
-            _ => panic!("Expected ExecutionFailed"),
+            _ => panic!("Expected NonControl(Internal)"),
         }
     }
 
@@ -575,15 +570,18 @@ mod error_tests {
     }
 
     #[test]
-    fn task_error_from_tool_error_execution_failed() {
-        let tool_err = ToolError::ExecutionFailed(anyhow::anyhow!("test error"));
+    fn task_error_from_tool_error_user() {
+        let tool_err = ToolError::NonControl(NonControlToolError::User {
+            message: "test error".to_string(),
+            error_data: serde_json::json!({"kind": "TestError"}),
+        });
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::TaskInternal(e) => {
-                assert_eq!(e.to_string(), "test error");
+            TaskError::User { message, .. } => {
+                assert_eq!(message, "test error");
             }
-            _ => panic!("Expected TaskInternal"),
+            _ => panic!("Expected User"),
         }
     }
 
@@ -600,27 +598,31 @@ mod error_tests {
 
     #[test]
     fn task_error_from_tool_error_tool_not_found() {
-        let tool_err = ToolError::ToolNotFound("missing_tool".to_string());
+        let tool_err = ToolError::NonControl(NonControlToolError::ToolNotFound {
+            name: "missing_tool".to_string(),
+        });
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::TaskInternal(e) => {
-                assert!(e.to_string().contains("missing_tool"));
+            TaskError::User { message, .. } => {
+                assert!(message.contains("missing_tool"));
             }
-            _ => panic!("Expected TaskInternal"),
+            _ => panic!("Expected User"),
         }
     }
 
     #[test]
     fn task_error_from_tool_error_invalid_params() {
-        let tool_err = ToolError::InvalidParams("bad params".to_string());
+        let tool_err = ToolError::NonControl(NonControlToolError::InvalidParams {
+            message: "bad params".to_string(),
+        });
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::TaskInternal(e) => {
-                assert!(e.to_string().contains("bad params"));
+            TaskError::User { message, .. } => {
+                assert!(message.contains("bad params"));
             }
-            _ => panic!("Expected TaskInternal"),
+            _ => panic!("Expected User"),
         }
     }
 

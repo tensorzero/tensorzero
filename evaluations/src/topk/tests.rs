@@ -131,6 +131,7 @@ fn mock_success(
             input_tokens: Some(0),
             output_tokens: Some(0),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     });
@@ -193,6 +194,7 @@ fn test_compute_updates_empty_results() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -296,6 +298,7 @@ fn test_compute_updates_variant_failures() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -340,6 +343,7 @@ fn test_compute_updates_missing_variant_in_map() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -409,6 +413,7 @@ fn test_compute_updates_successful_evaluations() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -530,6 +535,7 @@ fn test_compute_updates_evaluator_failures() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -600,6 +606,7 @@ fn test_compute_updates_mixed_success_and_failure() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -2044,4 +2051,344 @@ fn test_check_global_stopping_too_many_variant_failures() {
         }
         other => panic!("expected TooManyVariantsFailed, got {other:?}"),
     }
+}
+
+// ============================================================================
+// Tests for hedge weight functions
+// ============================================================================
+
+/// Helper to create a confidence sequence with specified count and mean_est.
+fn mock_cs_with_count_and_mean(
+    name: &str,
+    count: u64,
+    mean_est: f64,
+) -> (String, MeanBettingConfidenceSequence) {
+    (
+        name.to_string(),
+        MeanBettingConfidenceSequence {
+            name: name.to_string(),
+            mean_regularized: mean_est,
+            variance_regularized: 0.1,
+            count,
+            mean_est,
+            cs_lower: mean_est - 0.1,
+            cs_upper: mean_est + 0.1,
+            alpha: 0.05,
+            wealth: WealthProcesses {
+                grid: WealthProcessGridPoints::Resolution(101),
+                wealth_upper: vec![1.0; 101],
+                wealth_lower: vec![1.0; 101],
+            },
+        },
+    )
+}
+
+/// Test get_rank_based_hedge_weight assigns correct weights based on rank relative to k_min/k_max.
+#[test]
+fn test_get_rank_based_hedge_weight() {
+    // k_min = 2, k_max = 4: rank < 2 gets 0.8, rank >= 4 gets 0.2, else 0.5
+    assert_eq!(get_rank_based_hedge_weight(0, 2, 4), 0.8);
+    assert_eq!(get_rank_based_hedge_weight(1, 2, 4), 0.8);
+    assert_eq!(get_rank_based_hedge_weight(2, 2, 4), 0.5);
+    assert_eq!(get_rank_based_hedge_weight(3, 2, 4), 0.5);
+    assert_eq!(get_rank_based_hedge_weight(4, 2, 4), 0.2);
+    assert_eq!(get_rank_based_hedge_weight(5, 2, 4), 0.2);
+    assert_eq!(get_rank_based_hedge_weight(10, 2, 4), 0.2);
+
+    // k_min = k_max = 2: rank < 2 gets 0.8, rank >= 2 gets 0.2, no middle
+    assert_eq!(get_rank_based_hedge_weight(1, 2, 2), 0.8);
+    assert_eq!(get_rank_based_hedge_weight(2, 2, 2), 0.2);
+}
+
+/// Test that compute_hedge_weights returns None when any variant is below MIN_SAMPLES_FOR_REBALANCING.
+#[test]
+fn test_compute_hedge_weights_threshold() {
+    // Below threshold: returns None
+    let below_threshold: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 19, 0.8),
+        mock_cs_with_count_and_mean("b", 19, 0.6),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(compute_hedge_weights(&below_threshold, 1, 2), None);
+
+    // At threshold: returns weights (k_min=1, k_max=2: rank < 1 gets 0.8, rank >= 2 gets 0.2)
+    let at_threshold: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 20, 0.8), // Rank 0 (< k_min)
+        mock_cs_with_count_and_mean("b", 20, 0.6), // Rank 1 (middle)
+    ]
+    .into_iter()
+    .collect();
+    let weights = compute_hedge_weights(&at_threshold, 1, 2).unwrap();
+    assert_eq!(weights["a"], 0.8);
+    assert_eq!(weights["b"], 0.5);
+
+    // Mixed counts with one below threshold: returns None
+    let mixed: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 100, 0.8),
+        mock_cs_with_count_and_mean("b", 19, 0.6), // Below threshold
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(compute_hedge_weights(&mixed, 1, 2), None);
+}
+
+/// Test that compute_hedge_weights ranks variants by mean and assigns correct weights.
+#[test]
+fn test_compute_hedge_weights_ranking_and_weights() {
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("v1", 30, 0.9), // Rank 0
+        mock_cs_with_count_and_mean("v2", 30, 0.8), // Rank 1
+        mock_cs_with_count_and_mean("v3", 30, 0.7), // Rank 2
+        mock_cs_with_count_and_mean("v4", 30, 0.6), // Rank 3
+        mock_cs_with_count_and_mean("v5", 30, 0.5), // Rank 4
+    ]
+    .into_iter()
+    .collect();
+
+    // k_min = 2, k_max = 3: rank < 2 gets 0.8, rank >= 3 gets 0.2, else 0.5
+    let weights = compute_hedge_weights(&variant_performance, 2, 3).unwrap();
+    assert_eq!(weights["v1"], 0.8); // rank 0
+    assert_eq!(weights["v2"], 0.8); // rank 1
+    assert_eq!(weights["v3"], 0.5); // rank 2
+    assert_eq!(weights["v4"], 0.2); // rank 3
+    assert_eq!(weights["v5"], 0.2); // rank 4
+
+    // Test tied means: tied variants get adjacent ranks
+    let tied: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 25, 0.7),
+        mock_cs_with_count_and_mean("b", 25, 0.7), // Tied with a
+        mock_cs_with_count_and_mean("c", 25, 0.5),
+    ]
+    .into_iter()
+    .collect();
+    // k_min=1, k_max=2: rank < 1 gets 0.8, rank >= 2 gets 0.2, else 0.5
+    let weights = compute_hedge_weights(&tied, 1, 2).unwrap();
+    assert_eq!(weights["c"], 0.2); // rank 2 (>= k_max)
+    // a and b are tied at ranks 0 and 1: rank 0 gets 0.8, rank 1 gets 0.5
+    let ab_weights: Vec<f64> = vec![weights["a"], weights["b"]];
+    assert!(ab_weights.contains(&0.8) && ab_weights.contains(&0.5));
+}
+
+// ----------------------------------------------------------------------------
+// compute_updates with hedge_weights tests
+// ----------------------------------------------------------------------------
+
+/// Test that passing hedge_weights to compute_updates affects the CS differently than None.
+#[test]
+fn test_compute_updates_with_hedge_weights_affects_cs() {
+    // Create identical fresh CSes (not mock ones with preset values)
+    let mut variant_performance_no_hedge: HashMap<String, MeanBettingConfidenceSequence> = [(
+        "variant".to_string(),
+        MeanBettingConfidenceSequence::new("variant".to_string(), 101, 0.05),
+    )]
+    .into_iter()
+    .collect();
+
+    let mut variant_performance_with_hedge: HashMap<String, MeanBettingConfidenceSequence> = [(
+        "variant".to_string(),
+        MeanBettingConfidenceSequence::new("variant".to_string(), 101, 0.05),
+    )]
+    .into_iter()
+    .collect();
+
+    let mut variant_failures_no_hedge: HashMap<String, MeanBettingConfidenceSequence> = [(
+        "variant".to_string(),
+        MeanBettingConfidenceSequence::new("variant".to_string(), 101, 0.05),
+    )]
+    .into_iter()
+    .collect();
+
+    let mut variant_failures_with_hedge: HashMap<String, MeanBettingConfidenceSequence> = [(
+        "variant".to_string(),
+        MeanBettingConfidenceSequence::new("variant".to_string(), 101, 0.05),
+    )]
+    .into_iter()
+    .collect();
+
+    let mut evaluator_failures_no_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        HashMap::new();
+    let mut evaluator_failures_with_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        HashMap::new();
+
+    let scoring_fn = AverageEvaluatorScore;
+
+    // Create multiple batches with consistent high scores (0.8)
+    // We need enough observations for the hedge weight to make a visible difference
+    for _ in 0..20 {
+        let datapoint_id = uuid::Uuid::now_v7();
+        let results_by_datapoint: BatchResultsByDatapoint = [(
+            datapoint_id,
+            [(
+                "variant".to_string(),
+                mock_success(
+                    datapoint_id,
+                    "variant",
+                    [("eval1".to_string(), Ok(Some(json!(0.8))))]
+                        .into_iter()
+                        .collect(),
+                ),
+            )]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
+        // Apply update without hedge weights
+        compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance_no_hedge,
+            &mut variant_failures_no_hedge,
+            &mut evaluator_failures_no_hedge,
+            None,
+        )
+        .unwrap();
+
+        // Apply update with hedge weight 0.8 (spend more inferential power on lower bound)
+        let hedge_weights: HashMap<String, f64> =
+            [("variant".to_string(), 0.8)].into_iter().collect();
+        compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance_with_hedge,
+            &mut variant_failures_with_hedge,
+            &mut evaluator_failures_with_hedge,
+            Some(&hedge_weights),
+        )
+        .unwrap();
+    }
+
+    // Both should have been updated with 20 observations
+    assert_eq!(variant_performance_no_hedge["variant"].count, 20);
+    assert_eq!(variant_performance_with_hedge["variant"].count, 20);
+
+    // The underlying wealth processes should be identical (hedge weight doesn't affect them)
+    let cs_no_hedge = &variant_performance_no_hedge["variant"];
+    let cs_with_hedge = &variant_performance_with_hedge["variant"];
+
+    assert_eq!(
+        cs_no_hedge.wealth.wealth_upper, cs_with_hedge.wealth.wealth_upper,
+        "wealth_upper should be identical regardless of hedge weight"
+    );
+    assert_eq!(
+        cs_no_hedge.wealth.wealth_lower, cs_with_hedge.wealth.wealth_lower,
+        "wealth_lower should be identical regardless of hedge weight"
+    );
+
+    // With weight 0.8 emphasizing the positive wealth process, lower bound should be
+    // higher (tighter), and upper bound should also be higher (looser)
+    assert!(
+        cs_with_hedge.cs_lower > cs_no_hedge.cs_lower,
+        "With hedge weight 0.8, lower bound ({}) should be > the lower bound with hedge weight 0.5 ({})",
+        cs_with_hedge.cs_lower,
+        cs_no_hedge.cs_lower
+    );
+    assert!(
+        cs_with_hedge.cs_upper > cs_no_hedge.cs_upper,
+        "With hedge weight 0.8, upper bound ({}) should be > the upper bound with hedge weight 0.5 ({})",
+        cs_with_hedge.cs_lower,
+        cs_no_hedge.cs_lower
+    );
+}
+
+/// Test that hedge_weights only affects variant_performance, not failures.
+#[test]
+fn test_compute_updates_hedge_weights_only_applied_to_performance() {
+    // Create initial states
+    let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("variant", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let mut variant_failures_with_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("variant", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let mut variant_failures_no_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("variant", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let mut evaluator_failures_with_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("eval1", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let mut evaluator_failures_no_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("eval1", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let scoring_fn = AverageEvaluatorScore;
+
+    // Create a batch with successful evaluation
+    let datapoint_id = uuid::Uuid::now_v7();
+    let results_by_datapoint: BatchResultsByDatapoint = [(
+        datapoint_id,
+        [(
+            "variant".to_string(),
+            mock_success(
+                datapoint_id,
+                "variant",
+                [("eval1".to_string(), Ok(Some(json!(0.8))))]
+                    .into_iter()
+                    .collect(),
+            ),
+        )]
+        .into_iter()
+        .collect(),
+    )]
+    .into_iter()
+    .collect();
+
+    // Apply with extreme hedge weight
+    let hedge_weights: HashMap<String, f64> = [("variant".to_string(), 0.2)].into_iter().collect();
+
+    compute_updates(
+        &results_by_datapoint,
+        &scoring_fn,
+        &mut variant_performance.clone(),
+        &mut variant_failures_with_hedge,
+        &mut evaluator_failures_with_hedge,
+        Some(&hedge_weights),
+    )
+    .unwrap();
+
+    compute_updates(
+        &results_by_datapoint,
+        &scoring_fn,
+        &mut variant_performance,
+        &mut variant_failures_no_hedge,
+        &mut evaluator_failures_no_hedge,
+        None,
+    )
+    .unwrap();
+
+    // variant_failures should be identical regardless of hedge_weights
+    // (hedge_weights is only applied to performance, not failures)
+    assert_eq!(
+        variant_failures_with_hedge["variant"].cs_lower,
+        variant_failures_no_hedge["variant"].cs_lower,
+        "variant_failures cs_lower should be the same regardless of hedge_weights"
+    );
+    assert_eq!(
+        variant_failures_with_hedge["variant"].cs_upper,
+        variant_failures_no_hedge["variant"].cs_upper,
+        "variant_failures cs_upper should be the same regardless of hedge_weights"
+    );
+
+    // evaluator_failures should be identical regardless of hedge_weights
+    assert_eq!(
+        evaluator_failures_with_hedge["eval1"].cs_lower,
+        evaluator_failures_no_hedge["eval1"].cs_lower,
+        "evaluator_failures cs_lower should be the same regardless of hedge_weights"
+    );
+    assert_eq!(
+        evaluator_failures_with_hedge["eval1"].cs_upper,
+        evaluator_failures_no_hedge["eval1"].cs_upper,
+        "evaluator_failures cs_upper should be the same regardless of hedge_weights"
+    );
 }

@@ -1,0 +1,30 @@
+[functions.write_haiku]
+type = "chat"
+user_schema = "../../../fixtures/config/functions/write_haiku/user_schema.json"
+
+[functions.write_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
+
+[functions.write_haiku.variants.aws_bedrock]
+weight = 0
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+user_template = "../../../fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
+
+
+[functions.write_haiku.variants.initial_prompt_gpt4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../../../ui/fixtures/config/functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "../../../../ui/fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+
+[functions.write_haiku.variants.better_prompt_gpt4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../../../ui/fixtures/config/functions/write_haiku/better_prompt/system_template.minijinja"
+user_template = "../../../../ui/fixtures/config/functions/write_haiku/better_prompt/user_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }

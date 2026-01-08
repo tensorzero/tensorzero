@@ -6,7 +6,7 @@ use std::{collections::HashMap, net::SocketAddr};
 use secrecy::SecretString;
 use tensorzero::ClientExt;
 
-use object_store::{ObjectStore, aws::AmazonS3Builder};
+use object_store::{ObjectStore, ObjectStoreExt, aws::AmazonS3Builder};
 use std::sync::Arc;
 use tensorzero_core::config::provider_types::{
     AnthropicDefaults, AzureDefaults, DeepSeekDefaults, FireworksDefaults, GCPDefaults,
@@ -1541,7 +1541,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     .await;
 }
 
-async fn create_s3_object_store(
+fn create_s3_object_store(
     bucket_name: Option<String>,
     region: Option<String>,
     endpoint: Option<String>,
@@ -1577,7 +1577,6 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
         None,
         None,
     )
-    .await
     .unwrap();
 
     use rand::distr::Alphanumeric;

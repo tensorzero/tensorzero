@@ -1,13 +1,13 @@
 import { BaseTensorZeroClient } from "./base-client";
 import type {
-  Event,
-  CreateEventRequest,
+  CreateEventGatewayRequest,
   CreateEventResponse,
   ListEventsParams,
   ListEventsResponse,
   ListSessionsParams,
   ListSessionsResponse,
   StreamEventsParams,
+  StreamUpdate,
 } from "~/types/tensorzero";
 
 /**
@@ -61,7 +61,7 @@ export class AutopilotClient extends BaseTensorZeroClient {
    */
   async createAutopilotEvent(
     sessionId: string,
-    request: CreateEventRequest,
+    request: CreateEventGatewayRequest,
   ): Promise<CreateEventResponse> {
     const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events`;
     const response = await this.fetch(endpoint, {
@@ -82,7 +82,7 @@ export class AutopilotClient extends BaseTensorZeroClient {
   async *streamAutopilotEvents(
     sessionId: string,
     params?: StreamEventsParams,
-  ): AsyncGenerator<Event, void, unknown> {
+  ): AsyncGenerator<StreamUpdate, void, unknown> {
     const searchParams = new URLSearchParams();
     if (params?.last_event_id)
       searchParams.set("last_event_id", params.last_event_id);
@@ -123,7 +123,7 @@ export class AutopilotClient extends BaseTensorZeroClient {
           if (line.startsWith("data: ")) {
             const data = line.slice(6);
             if (data) {
-              const event = JSON.parse(data) as Event;
+              const event = JSON.parse(data) as StreamUpdate;
               yield event;
             }
           }

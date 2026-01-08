@@ -8,14 +8,14 @@ type = "azure"
 deployment_id = "gpt-4o"
 
 # Option 1: Environment variable endpoint
-# endpoint = "env::AZURE_OPENAI_API_BASE"
+# endpoint = "env::AZURE_API_BASE"
 # Option 2: Dynamic endpoint - resolved at runtime from request credentials
-endpoint = "dynamic::AZURE_OPENAI_API_BASE"
+endpoint = "dynamic::azure_api_base"
 # Option 3: Static endpoint (current way)
 # endpoint = "https://your-endpoint.openai.azure.com"
 
 # Dynamic API key - will be resolved at runtime from credentials
-api_key_location = "dynamic::azure_openai_api_key"
+api_key_location = "dynamic::azure_api_key"
 
 [functions.my_function_name]
 type = "chat"
