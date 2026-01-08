@@ -3864,8 +3864,22 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         }
 
         if let Some(usage) = chunk_json.get("usage") {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
 
         if let Some(chunk_finish_reason) = chunk_json.get("finish_reason") {
@@ -4395,8 +4409,22 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         }
 
         if let Some(usage) = chunk_json.get("usage") {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
@@ -5076,8 +5104,22 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
@@ -5677,8 +5719,22 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
@@ -6319,8 +6375,22 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
@@ -6921,8 +6991,22 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
@@ -7623,8 +7707,22 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
@@ -8316,8 +8414,22 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
     assert!(tool_name.is_some());
@@ -8929,8 +9041,22 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         }
 
         if let Some(usage) = chunk_json.get("usage") {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
@@ -9726,8 +9852,22 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
@@ -10461,8 +10601,22 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
     assert!(get_temperature_tool_id.is_some());
@@ -11368,8 +11522,22 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         }
 
         if let Some(usage) = chunk_json.get("usage") {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
@@ -12416,8 +12584,22 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            // Azure OpenAI Service doesn't return usage in streaming, so tokens may be null
+            let is_azure_without_usage = provider.variant_name.contains("azure")
+                && !provider.variant_name.contains("azure-ai-foundry");
+            if is_azure_without_usage {
+                input_tokens += usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                output_tokens += usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            } else {
+                input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            }
         }
     }
 
