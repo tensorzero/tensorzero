@@ -178,6 +178,22 @@ pub enum EvaluationResultRow {
     Json(JsonEvaluationResultRow),
 }
 
+impl EvaluationResultRow {
+    pub fn datapoint_id(&self) -> Uuid {
+        match self {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        }
+    }
+
+    pub fn evaluation_run_id(&self) -> Uuid {
+        match self {
+            EvaluationResultRow::Chat(row) => row.evaluation_run_id,
+            EvaluationResultRow::Json(row) => row.evaluation_run_id,
+        }
+    }
+}
+
 impl RawEvaluationResultRow {
     /// Convert a raw result row to a typed Chat result row.
     pub fn into_chat(self) -> Result<ChatEvaluationResultRow, Error> {

@@ -1,7 +1,9 @@
 //! E2E tests for evaluation ClickHouse queries.
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::evaluation_queries::EvaluationQueries;
+use tensorzero_core::db::evaluation_queries::{
+    ChatEvaluationResultRow, EvaluationQueries, EvaluationResultRow, JsonEvaluationResultRow,
+};
 use tensorzero_core::function::FunctionConfigType;
 use uuid::Uuid;
 
@@ -457,8 +459,6 @@ async fn test_get_evaluation_statistics_chat_function() {
 /// Test that get_evaluation_results returns correct results for haiku evaluation.
 #[tokio::test]
 async fn test_get_evaluation_results_haiku() {
-    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
-
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id =
@@ -523,10 +523,7 @@ async fn test_get_evaluation_results_haiku() {
     // Verify datapoint count (should be 5 unique datapoints)
     let datapoint_ids: std::collections::HashSet<_> = results
         .iter()
-        .map(|r| match r {
-            EvaluationResultRow::Chat(row) => row.datapoint_id,
-            EvaluationResultRow::Json(row) => row.datapoint_id,
-        })
+        .map(EvaluationResultRow::datapoint_id)
         .collect();
     assert_eq!(datapoint_ids.len(), 5, "Expected 5 unique datapoints");
 }
@@ -534,8 +531,6 @@ async fn test_get_evaluation_results_haiku() {
 /// Test that get_evaluation_results handles entity_extraction (JSON function) correctly.
 #[tokio::test]
 async fn test_get_evaluation_results_entity_extraction() {
-    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
-
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id =
@@ -592,27 +587,21 @@ async fn test_get_evaluation_results_entity_extraction() {
     // Verify datapoint count
     let datapoint_ids: std::collections::HashSet<_> = results
         .iter()
-        .map(|r| match r {
-            EvaluationResultRow::Chat(row) => row.datapoint_id,
-            EvaluationResultRow::Json(row) => row.datapoint_id,
-        })
+        .map(EvaluationResultRow::datapoint_id)
         .collect();
     assert_eq!(datapoint_ids.len(), 2, "Expected 2 unique datapoints");
 
     // Verify results are Json type
     for result in &results {
-        match result {
-            EvaluationResultRow::Json(_) => {}
-            EvaluationResultRow::Chat(_) => panic!("Expected Json result"),
-        }
+        let EvaluationResultRow::Json(_) = result else {
+            panic!("Expected Json result, got {result:?}");
+        };
     }
 }
 
 /// Test that get_evaluation_results handles multiple evaluation runs (ragged case).
 #[tokio::test]
 async fn test_get_evaluation_results_multiple_runs() {
-    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
-
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id1 =
@@ -703,8 +692,6 @@ async fn test_get_evaluation_results_nonexistent_function() {
 /// Test that get_evaluation_results respects pagination offset.
 #[tokio::test]
 async fn test_get_evaluation_results_pagination() {
-    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
-
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id =
@@ -745,17 +732,11 @@ async fn test_get_evaluation_results_pagination() {
     // Verify no overlap between pages
     let first_datapoints: std::collections::HashSet<_> = first_page
         .iter()
-        .map(|r| match r {
-            EvaluationResultRow::Chat(row) => row.datapoint_id,
-            EvaluationResultRow::Json(row) => row.datapoint_id,
-        })
+        .map(EvaluationResultRow::datapoint_id)
         .collect();
     let second_datapoints: std::collections::HashSet<_> = second_page
         .iter()
-        .map(|r| match r {
-            EvaluationResultRow::Chat(row) => row.datapoint_id,
-            EvaluationResultRow::Json(row) => row.datapoint_id,
-        })
+        .map(EvaluationResultRow::datapoint_id)
         .collect();
 
     let overlap: Vec<_> = first_datapoints.intersection(&second_datapoints).collect();
@@ -768,8 +749,6 @@ async fn test_get_evaluation_results_pagination() {
 /// Test that get_evaluation_results with datapoint_id filter returns results for only that datapoint.
 #[tokio::test]
 async fn test_get_evaluation_results_with_datapoint_id_filter() {
-    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
-
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id =
@@ -790,10 +769,7 @@ async fn test_get_evaluation_results_with_datapoint_id_filter() {
         .unwrap();
 
     assert!(!all_results.is_empty(), "Need at least one result to test");
-    let target_datapoint_id = match &all_results[0] {
-        EvaluationResultRow::Chat(row) => row.datapoint_id,
-        EvaluationResultRow::Json(row) => row.datapoint_id,
-    };
+    let target_datapoint_id = all_results[0].datapoint_id();
 
     // Now filter by that specific datapoint_id
     let filtered_results = clickhouse
@@ -815,12 +791,9 @@ async fn test_get_evaluation_results_with_datapoint_id_filter() {
         "Should have results for the datapoint"
     );
     for result in &filtered_results {
-        let dp_id = match result {
-            EvaluationResultRow::Chat(row) => row.datapoint_id,
-            EvaluationResultRow::Json(row) => row.datapoint_id,
-        };
         assert_eq!(
-            dp_id, target_datapoint_id,
+            result.datapoint_id(),
+            target_datapoint_id,
             "All results should be for the filtered datapoint"
         );
     }
@@ -859,8 +832,6 @@ async fn test_get_evaluation_results_with_datapoint_id_filter_nonexistent() {
 /// This mirrors the TypeScript test "should return correct array for chat datapoint".
 #[tokio::test]
 async fn test_get_evaluation_results_chat_datapoint_details() {
-    use tensorzero_core::db::evaluation_queries::{ChatEvaluationResultRow, EvaluationResultRow};
-
     let clickhouse = get_clickhouse().await;
 
     let datapoint_id = Uuid::parse_str("0196374a-d03f-7420-9da5-1561cba71ddb").expect("Valid UUID");
@@ -973,8 +944,6 @@ async fn test_get_evaluation_results_chat_datapoint_details() {
 /// This mirrors the TypeScript test "should return correct array for json datapoint".
 #[tokio::test]
 async fn test_get_evaluation_results_json_datapoint_details() {
-    use tensorzero_core::db::evaluation_queries::{EvaluationResultRow, JsonEvaluationResultRow};
-
     let clickhouse = get_clickhouse().await;
 
     let datapoint_id = Uuid::parse_str("0193994e-5560-7610-a3a0-45fdd59338aa").expect("Valid UUID");
