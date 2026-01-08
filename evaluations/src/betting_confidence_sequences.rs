@@ -907,7 +907,8 @@ mod tests {
     #[test]
     fn test_intervals_are_nested_over_updates() {
         // Verify that confidence intervals are nested: each update produces
-        // an interval contained within (or equal to) the previous interval.
+        // an interval contained within (or equal to) the previous interval,
+        // as a result of using the running intersection of intervals.
         //
         // Without intersection, raw bounds would be:
         //   Batch 1: [0.13, 1.00]
