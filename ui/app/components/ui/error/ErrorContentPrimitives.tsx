@@ -4,37 +4,37 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
 /**
- * Error context based on the nature of the failure:
+ * Error scope based on the nature of the failure:
  * - App: App-level errors (gateway, auth, DB) - dark overlay in ErrorDialog
  * - Page: Page-level errors (404, API failures) - light card, inline or standalone
  */
-export const ErrorContext = {
+export const ErrorScope = {
   App: "APP",
   Page: "PAGE",
 } as const;
 
-export type ErrorContext = (typeof ErrorContext)[keyof typeof ErrorContext];
+export type ErrorScope = (typeof ErrorScope)[keyof typeof ErrorScope];
 
 interface ErrorContentCardProps {
   children: React.ReactNode;
-  context?: ErrorContext;
+  scope?: ErrorScope;
   className?: string;
 }
 
 /**
  * Container card for error content.
- * Card border is determined by context: App floats without border, Page has border.
+ * Card border is determined by scope: App floats without border, Page has border.
  */
 export function ErrorContentCard({
   children,
-  context = ErrorContext.Page,
+  scope = ErrorScope.Page,
   className,
 }: ErrorContentCardProps) {
   return (
     <Card
       className={cn(
         "max-w-lg shadow-none",
-        context === ErrorContext.App
+        scope === ErrorScope.App
           ? "border-neutral-800 bg-neutral-950"
           : "bg-card border",
         className,
@@ -49,18 +49,18 @@ interface ErrorContentHeaderProps {
   icon: LucideIcon;
   title: string;
   description: string;
-  context?: ErrorContext;
+  scope?: ErrorScope;
 }
 
 /**
- * Header for error content. Colors adapt to context.
+ * Header for error content. Colors adapt to scope.
  * Separator border (if needed) is handled by body components via border-t.
  */
 export function ErrorContentHeader({
   icon: Icon,
   title,
   description,
-  context = ErrorContext.Page,
+  scope = ErrorScope.Page,
 }: ErrorContentHeaderProps) {
   return (
     <CardHeader>
@@ -68,16 +68,14 @@ export function ErrorContentHeader({
         <Icon
           className={cn(
             "h-6 w-6 shrink-0",
-            context === ErrorContext.App ? "text-red-400" : "text-red-500",
+            scope === ErrorScope.App ? "text-red-400" : "text-red-500",
           )}
         />
         <div className="min-w-0 flex-1">
           <CardTitle
             className={cn(
               "font-medium",
-              context === ErrorContext.App
-                ? "text-neutral-100"
-                : "text-foreground",
+              scope === ErrorScope.App ? "text-neutral-100" : "text-foreground",
             )}
           >
             {title}
@@ -85,7 +83,7 @@ export function ErrorContentHeader({
           <p
             className={cn(
               "mt-1.5 text-sm",
-              context === ErrorContext.App
+              scope === ErrorScope.App
                 ? "text-neutral-400"
                 : "text-muted-foreground",
             )}
@@ -100,27 +98,25 @@ export function ErrorContentHeader({
 
 interface TroubleshootingSectionProps {
   children: React.ReactNode;
-  context?: ErrorContext;
+  scope?: ErrorScope;
 }
 
 // Children are auto-numbered as an ordered list (1, 2, 3...)
 export function TroubleshootingSection({
   children,
-  context = ErrorContext.Page,
+  scope = ErrorScope.Page,
 }: TroubleshootingSectionProps) {
   return (
     <CardContent
       className={cn(
         "h-40 p-6",
-        context === ErrorContext.App
-          ? "border-t border-neutral-900"
-          : "border-t",
+        scope === ErrorScope.App ? "border-t border-neutral-900" : "border-t",
       )}
     >
       <h4
         className={cn(
           "mb-3 text-sm font-medium",
-          context === ErrorContext.App ? "text-neutral-100" : "text-foreground",
+          scope === ErrorScope.App ? "text-neutral-100" : "text-foreground",
         )}
       >
         What to check:
@@ -128,7 +124,7 @@ export function TroubleshootingSection({
       <ol
         className={cn(
           "space-y-2 text-sm",
-          context === ErrorContext.App
+          scope === ErrorScope.App
             ? "text-neutral-400"
             : "text-muted-foreground",
         )}
@@ -138,7 +134,7 @@ export function TroubleshootingSection({
             <span
               className={cn(
                 "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs",
-                context === ErrorContext.App
+                scope === ErrorScope.App
                   ? "bg-neutral-800 text-neutral-300"
                   : "bg-muted text-muted-foreground",
               )}
@@ -155,18 +151,18 @@ export function TroubleshootingSection({
 
 interface ErrorInlineCodeProps {
   children: React.ReactNode;
-  context?: ErrorContext;
+  scope?: ErrorScope;
 }
 
 export function ErrorInlineCode({
   children,
-  context = ErrorContext.Page,
+  scope = ErrorScope.Page,
 }: ErrorInlineCodeProps) {
   return (
     <code
       className={cn(
         "rounded px-1 py-0.5 font-mono text-xs",
-        context === ErrorContext.App ? "bg-neutral-800" : "bg-muted",
+        scope === ErrorScope.App ? "bg-neutral-800" : "bg-muted",
       )}
     >
       {children}
@@ -176,26 +172,24 @@ export function ErrorInlineCode({
 
 interface StackTraceContentProps {
   stack: string;
-  context?: ErrorContext;
+  scope?: ErrorScope;
 }
 
 export function StackTraceContent({
   stack,
-  context = ErrorContext.Page,
+  scope = ErrorScope.Page,
 }: StackTraceContentProps) {
   return (
     <CardContent
       className={cn(
         "flex h-40 flex-col p-6",
-        context === ErrorContext.App
-          ? "border-t border-neutral-900"
-          : "border-t",
+        scope === ErrorScope.App ? "border-t border-neutral-900" : "border-t",
       )}
     >
       <pre
         className={cn(
           "min-h-0 flex-1 overflow-auto rounded p-3 font-mono text-xs",
-          context === ErrorContext.App
+          scope === ErrorScope.App
             ? "bg-neutral-900 text-neutral-400"
             : "bg-muted text-muted-foreground",
         )}
@@ -208,25 +202,23 @@ export function StackTraceContent({
 
 interface SimpleErrorContentProps {
   message: string;
-  context?: ErrorContext;
+  scope?: ErrorScope;
 }
 
 export function SimpleErrorContent({
   message,
-  context = ErrorContext.Page,
+  scope = ErrorScope.Page,
 }: SimpleErrorContentProps) {
   return (
     <CardContent
       className={cn(
-        context === ErrorContext.App
-          ? "border-t border-neutral-900"
-          : "border-t",
+        scope === ErrorScope.App ? "border-t border-neutral-900" : "border-t",
       )}
     >
       <p
         className={cn(
           "text-sm",
-          context === ErrorContext.App
+          scope === ErrorScope.App
             ? "text-neutral-400"
             : "text-muted-foreground",
         )}

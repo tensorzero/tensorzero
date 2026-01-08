@@ -28,7 +28,7 @@ import {
 import {
   ErrorContentCard,
   ErrorContentHeader,
-  ErrorContext,
+  ErrorScope,
 } from "./components/ui/error/ErrorContentPrimitives";
 import {
   BoundaryErrorType,
@@ -225,12 +225,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       return (
         <RootErrorBoundaryLayout>
           <div className="fixed inset-0 z-50 flex items-center justify-center p-8 pb-20">
-            <ErrorContentCard context={ErrorContext.Page}>
+            <ErrorContentCard scope={ErrorScope.Page}>
               <ErrorContentHeader
                 icon={AlertTriangle}
                 title="Error 404"
                 description="The requested page could not be found."
-                context={ErrorContext.Page}
+                scope={ErrorScope.Page}
               />
             </ErrorContentCard>
           </div>

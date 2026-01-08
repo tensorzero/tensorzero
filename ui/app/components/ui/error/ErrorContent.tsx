@@ -12,7 +12,7 @@ import {
 import {
   ErrorContentCard,
   ErrorContentHeader,
-  ErrorContext,
+  ErrorScope,
   ErrorInlineCode,
   StackTraceContent,
   TroubleshootingSection,
@@ -49,18 +49,18 @@ export function ErrorContent({ error }: ErrorContentProps) {
 
 function GatewayUnavailableContent() {
   return (
-    <ErrorContentCard context={ErrorContext.App}>
+    <ErrorContentCard scope={ErrorScope.App}>
       <ErrorContentHeader
         icon={Unplug}
         title="Gateway Unavailable"
         description="Unable to connect to the TensorZero Gateway."
-        context={ErrorContext.App}
+        scope={ErrorScope.App}
       />
-      <TroubleshootingSection context={ErrorContext.App}>
+      <TroubleshootingSection scope={ErrorScope.App}>
         <>Ensure the Gateway is running and accessible</>
         <>
           Verify the{" "}
-          <ErrorInlineCode context={ErrorContext.App}>
+          <ErrorInlineCode scope={ErrorScope.App}>
             TENSORZERO_GATEWAY_URL
           </ErrorInlineCode>{" "}
           environment variable
@@ -73,17 +73,17 @@ function GatewayUnavailableContent() {
 
 function GatewayAuthContent() {
   return (
-    <ErrorContentCard context={ErrorContext.App}>
+    <ErrorContentCard scope={ErrorScope.App}>
       <ErrorContentHeader
         icon={KeyRound}
         title="Authentication Failed"
         description="Unable to authenticate with the TensorZero Gateway."
-        context={ErrorContext.App}
+        scope={ErrorScope.App}
       />
-      <TroubleshootingSection context={ErrorContext.App}>
+      <TroubleshootingSection scope={ErrorScope.App}>
         <>
           Verify{" "}
-          <ErrorInlineCode context={ErrorContext.App}>
+          <ErrorInlineCode scope={ErrorScope.App}>
             TENSORZERO_API_KEY
           </ErrorInlineCode>{" "}
           is set correctly
@@ -97,14 +97,14 @@ function GatewayAuthContent() {
 
 function RouteNotFoundContent({ routeInfo }: { routeInfo: string }) {
   return (
-    <ErrorContentCard context={ErrorContext.App}>
+    <ErrorContentCard scope={ErrorScope.App}>
       <ErrorContentHeader
         icon={Server}
         title="API Route Not Found"
         description={`The Gateway returned 404 for: ${routeInfo}`}
-        context={ErrorContext.App}
+        scope={ErrorScope.App}
       />
-      <TroubleshootingSection context={ErrorContext.App}>
+      <TroubleshootingSection scope={ErrorScope.App}>
         <>Ensure the UI and Gateway versions are compatible</>
         <>Try refreshing the page or restarting the Gateway</>
         <>Check Gateway logs for more details</>
@@ -115,18 +115,18 @@ function RouteNotFoundContent({ routeInfo }: { routeInfo: string }) {
 
 function ClickHouseContent({ message }: { message?: string }) {
   return (
-    <ErrorContentCard context={ErrorContext.App}>
+    <ErrorContentCard scope={ErrorScope.App}>
       <ErrorContentHeader
         icon={Database}
         title="ClickHouse Connection Error"
         description={message || "Unable to connect to the ClickHouse database."}
-        context={ErrorContext.App}
+        scope={ErrorScope.App}
       />
-      <TroubleshootingSection context={ErrorContext.App}>
+      <TroubleshootingSection scope={ErrorScope.App}>
         <>Verify ClickHouse is running and accessible</>
         <>
           Check the{" "}
-          <ErrorInlineCode context={ErrorContext.App}>
+          <ErrorInlineCode scope={ErrorScope.App}>
             CLICKHOUSE_URL
           </ErrorInlineCode>{" "}
           environment variable
@@ -147,14 +147,14 @@ function ServerErrorContent({
   stack?: string;
 }) {
   return (
-    <ErrorContentCard context={ErrorContext.App}>
+    <ErrorContentCard scope={ErrorScope.App}>
       <ErrorContentHeader
         icon={AlertTriangle}
         title={status ? `Error ${status}` : "Something Went Wrong"}
         description={message || "An unexpected error occurred."}
-        context={ErrorContext.App}
+        scope={ErrorScope.App}
       />
-      {stack && <StackTraceContent stack={stack} context={ErrorContext.App} />}
+      {stack && <StackTraceContent stack={stack} scope={ErrorScope.App} />}
     </ErrorContentCard>
   );
 }
