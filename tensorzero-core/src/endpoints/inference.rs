@@ -924,11 +924,12 @@ fn create_stream(
         let mut usages: Vec<Usage> = vec![];
         let mut finish_reasons: Vec<FinishReason> = vec![];
         let mut inference_ttft = None;
+        let mut had_error = false;
         while let Some(chunk) = stream.next().await {
-            // If the first chunk is an error, emit it and try again
             let mut chunk = match chunk {
                 Ok(c) => c,
                 Err(e) => {
+                    had_error = true;
                     yield Err(e);
                     continue;
                 }
@@ -963,39 +964,42 @@ fn create_stream(
 
         // If we saw multiple chunks with `usage`, compute the field-wise max and warn if they are non-cumulative
         let usage = aggregate_usage_from_single_streaming_model_inference(usages);
+        // Then add the usage from previous inferences (e.g. best-of-N candidates)
         let usage = aggregate_usage_across_model_inferences(
             metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).chain(std::iter::once(usage))
         );
 
-        // Finally, emit a chunk with `usage` and `finish_reason`
-        #[expect(clippy::expect_used)]
-        let created = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .expect("Time went backwards");
+        // Only emit the final chunk with `usage` and `finish_reason` if there was no error
+        if !had_error {
+            #[expect(clippy::expect_used)]
+            let created = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .expect("Time went backwards");
 
-        let latency = metadata.start_time.elapsed();
+            let latency = metadata.start_time.elapsed();
 
-        let chunk = match *function {
-            FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
-                finish_reason,
-                usage: Some(usage),
-                created,
-                latency,
-                ..Default::default()
-            }),
-            FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
-                finish_reason,
-                usage: Some(usage),
-                created,
-                latency,
-                ..Default::default()
-            }),
-        };
+            let chunk = match *function {
+                FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                    finish_reason,
+                    usage: Some(usage),
+                    created,
+                    latency,
+                    ..Default::default()
+                }),
+                FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
+                    finish_reason,
+                    usage: Some(usage),
+                    created,
+                    latency,
+                    ..Default::default()
+                }),
+            };
 
-        buffer.push(chunk.clone());
+            buffer.push(chunk.clone());
 
-        yield Ok(prepare_response_chunk(&metadata, chunk));
+            yield Ok(prepare_response_chunk(&metadata, chunk));
+        }
 
         if !metadata.dryrun {
             // IMPORTANT: The following code will not be reached if the stream is interrupted.
@@ -1062,6 +1066,7 @@ fn create_stream(
                     model_inference_id,
                     usage,
                     finish_reason,
+                    ttft: inference_ttft,
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;

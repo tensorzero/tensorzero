@@ -254,6 +254,8 @@ pub struct CollectChunksArgs {
     pub usage: Usage,
     /// The final `FinishReason` we streamed to the client
     pub finish_reason: Option<FinishReason>,
+    /// The TTFT captured when the first real provider chunk arrived.
+    pub ttft: Option<Duration>,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -283,6 +285,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         model_inference_id,
         usage,
         finish_reason,
+        ttft,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -325,10 +328,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     // which is used to construct the final 'summary' field on Thought.
     let mut thought_summaries: IndexMap<String, IndexSet<String>> = IndexMap::new();
 
-    // Set our TTFT to the latency of the first chunk, regardless of whether the chunk actually had any content.
-    // Some models can produce entirely empty chunks - we treat this as the "first token" being the invisible
-    // end-of-response marker.
-    let ttft = value.first().map(|chunk| chunk.latency()).ok_or_else(|| {
+    // Use the passed-in TTFT (captured when the first real provider chunk arrived).
+    let ttft = ttft.ok_or_else(|| {
         Error::new(ErrorDetails::TypeConversion {
             message: "Never got TTFT because there were no chunks in the response".to_string(),
         })
@@ -863,14 +864,13 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
+            ttft: None,
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::TypeConversion {
-                message:
-                    "Attempted to create an InferenceResult from an empty response chunk vector"
-                        .to_string(),
+                message: "Never got TTFT because there were no chunks in the response".to_string(),
             }
             .into()
         );
@@ -937,6 +937,7 @@ mod tests {
                 output_tokens: Some(4),
             },
             finish_reason: Some(FinishReason::Stop),
+            ttft: Some(latency),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -1043,6 +1044,7 @@ mod tests {
                 output_tokens: Some(15),
             },
             finish_reason: Some(FinishReason::Stop),
+            ttft: Some(latency),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1129,6 +1131,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage,
             finish_reason: Some(FinishReason::ToolCall),
+            ttft: Some(latency),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1224,6 +1227,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage,
             finish_reason: Some(FinishReason::Stop),
+            ttft: Some(latency),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1348,6 +1352,7 @@ mod tests {
                 output_tokens: Some(15),
             },
             finish_reason: Some(FinishReason::Stop),
+            ttft: Some(latency),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1466,6 +1471,7 @@ mod tests {
                 output_tokens: Some(15),
             },
             finish_reason: Some(FinishReason::ToolCall),
+            ttft: Some(Duration::from_millis(150)),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1651,6 +1657,7 @@ mod tests {
                 output_tokens: Some(4),
             },
             finish_reason: Some(FinishReason::Stop),
+            ttft: Some(latency),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1789,6 +1796,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
+            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1881,6 +1889,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
+            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1964,6 +1973,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
+            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2051,6 +2061,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
+            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2121,6 +2132,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
+            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2245,6 +2257,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
+            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
