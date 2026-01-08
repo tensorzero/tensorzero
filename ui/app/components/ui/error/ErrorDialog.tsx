@@ -39,7 +39,7 @@ export function ErrorDialog({
             aria-describedby={undefined}
             onOpenAutoFocus={(e) => e.preventDefault()}
           >
-            <DialogContentBox className="dark max-h-[90vh] gap-0 overflow-hidden rounded-lg bg-neutral-950 p-0 text-neutral-100">
+            <DialogContentBox className="dark max-h-[90vh] w-fit gap-0 overflow-hidden rounded-lg bg-neutral-950 p-0 text-neutral-100">
               {children}
 
               <DialogPrimitive.Close

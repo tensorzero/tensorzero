@@ -33,7 +33,7 @@ export function ErrorContentCard({
   return (
     <Card
       className={cn(
-        "max-w-lg shadow-none",
+        "w-[26rem] max-w-full shadow-none",
         scope === ErrorScope.App
           ? "rounded-none border-none bg-transparent"
           : "bg-card border",
