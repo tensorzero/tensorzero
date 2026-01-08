@@ -114,9 +114,14 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
 
     fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
         let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
-            .map_err(|e| NonControlToolError::InvalidParams(format!("llm_params: {e}")))?;
-        let _: T::SideInfo = serde_json::from_value(side_info.clone())
-            .map_err(|e| NonControlToolError::InvalidParams(format!("side_info: {e}")))?;
+            .map_err(|e| NonControlToolError::InvalidParams {
+                message: format!("llm_params: {e}"),
+            })?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("side_info: {e}"),
+            }
+        })?;
         Ok(())
     }
 }
@@ -145,9 +150,14 @@ impl<T: SimpleTool> ErasedTool for T {
 
     fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
         let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
-            .map_err(|e| NonControlToolError::InvalidParams(format!("llm_params: {e}")))?;
-        let _: T::SideInfo = serde_json::from_value(side_info.clone())
-            .map_err(|e| NonControlToolError::InvalidParams(format!("side_info: {e}")))?;
+            .map_err(|e| NonControlToolError::InvalidParams {
+                message: format!("llm_params: {e}"),
+            })?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("side_info: {e}"),
+            }
+        })?;
         Ok(())
     }
 }
@@ -204,7 +214,10 @@ impl ToolRegistry {
     pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
-            return Err(NonControlToolError::DuplicateToolName(name.into_owned()).into());
+            return Err(NonControlToolError::DuplicateToolName {
+                name: name.into_owned(),
+            }
+            .into());
         }
 
         let wrapper = Arc::new(ErasedTaskToolWrapper::<T>::new());
@@ -222,7 +235,10 @@ impl ToolRegistry {
     ) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
-            return Err(NonControlToolError::DuplicateToolName(name.into_owned()).into());
+            return Err(NonControlToolError::DuplicateToolName {
+                name: name.into_owned(),
+            }
+            .into());
         }
 
         let tool = Arc::new(T::default());
@@ -261,7 +277,9 @@ impl ToolRegistry {
     ) -> ToolResult<()> {
         let tool = self
             .get(tool_name)
-            .ok_or_else(|| NonControlToolError::ToolNotFound(tool_name.to_string()))?;
+            .ok_or_else(|| NonControlToolError::ToolNotFound {
+                name: tool_name.to_string(),
+            })?;
         tool.validate_params(llm_params, side_info)
     }
 

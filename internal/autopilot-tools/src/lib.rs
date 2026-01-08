@@ -40,8 +40,11 @@
 //! - `ErrorSimpleTool` - Always returns an error
 //! - `SlowSimpleTool` - Sleeps for configurable duration
 
+pub mod error;
 pub mod tools;
 mod visitor;
+
+pub use error::{AutopilotToolError, AutopilotToolResult};
 
 pub use visitor::ToolVisitor;
 

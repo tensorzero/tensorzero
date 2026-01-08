@@ -673,7 +673,7 @@ impl ClientBuilder {
     }
 
     #[cfg(any(test, feature = "e2e_tests"))]
-    pub async fn build_from_state(handle: GatewayHandle) -> Result<Client, ClientBuilderError> {
+    pub fn build_from_state(handle: GatewayHandle) -> Result<Client, ClientBuilderError> {
         Ok(Client {
             mode: Arc::new(ClientMode::EmbeddedGateway {
                 gateway: EmbeddedGateway { handle },

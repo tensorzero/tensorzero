@@ -13,6 +13,7 @@ type ComboboxInputProps = {
   disabled?: boolean;
   open: boolean;
   prefix?: React.ReactNode;
+  suffix?: React.ReactNode;
   ariaLabel?: string;
 };
 
@@ -28,6 +29,7 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
       disabled = false,
       open,
       prefix,
+      suffix,
       ariaLabel,
     },
     ref,
@@ -51,11 +53,13 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
           aria-expanded={open}
           aria-label={ariaLabel}
           className={clsx(
-            "cursor-text pr-8 font-mono",
+            "cursor-text font-mono",
             prefix ? "pl-9" : "pl-3",
+            suffix ? "pr-16" : "pr-8",
           )}
         />
-        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-2">
+          {suffix}
           <ChevronDown
             className={clsx("text-fg-tertiary h-4 w-4", open && "-rotate-180")}
           />

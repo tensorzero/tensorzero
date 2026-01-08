@@ -9,6 +9,8 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -75,8 +77,12 @@ impl ToolMetadata for GetFeedbackByVariantTool {
             "required": ["metric_name", "function_name"]
         });
 
-        serde_json::from_value(schema)
-            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -95,6 +101,6 @@ impl SimpleTool for GetFeedbackByVariantTool {
                 llm_params.variant_names,
             )
             .await
-            .map_err(|e| NonControlToolError::ExecutionFailed(e.into()).into())
+            .map_err(|e| AutopilotToolError::client_error("get_feedback_by_variant", e).into())
     }
 }

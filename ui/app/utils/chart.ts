@@ -42,6 +42,47 @@ export function formatDetailedNumber(value: number): string {
 }
 
 /**
+ * Format numbers with 3 significant digits and compact notation
+ * Examples: 0.12, 1.23, 12.3, 123, 1.23k, 12.3k, 123k, 1.23M
+ */
+export function formatCompactNumber(value: number): string {
+  if (value === 0) return "0";
+
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+
+  if (abs >= 1_000_000_000_000) {
+    const n = abs / 1_000_000_000_000;
+    return `${sign}${n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2)}T`;
+  }
+  if (abs >= 1_000_000_000) {
+    const n = abs / 1_000_000_000;
+    return `${sign}${n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2)}B`;
+  }
+  if (abs >= 1_000_000) {
+    const n = abs / 1_000_000;
+    return `${sign}${n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2)}M`;
+  }
+  if (abs >= 1_000) {
+    const n = abs / 1_000;
+    return `${sign}${n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2)}k`;
+  }
+
+  // For numbers < 1000, use 3 significant digits
+  if (abs >= 100) {
+    return `${sign}${Math.round(abs)}`;
+  }
+  if (abs >= 10) {
+    return `${sign}${abs.toFixed(1).replace(/\.0$/, "")}`;
+  }
+  if (abs >= 1) {
+    return `${sign}${abs.toFixed(2).replace(/\.?0+$/, "")}`;
+  }
+  // For decimals < 1, show up to 2 decimal places
+  return `${sign}${abs.toFixed(2).replace(/\.?0+$/, "")}`;
+}
+
+/**
  * Helper to pad numbers with leading zeros
  */
 function pad(num: number, size: number = 2): string {

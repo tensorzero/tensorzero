@@ -4,6 +4,8 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -133,8 +135,12 @@ impl ToolMetadata for InferenceTool {
             "required": ["input"]
         });
 
-        serde_json::from_value(schema)
-            .map_err(|e| NonControlToolError::SchemaGeneration(e.into()).into())
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -165,9 +171,7 @@ impl SimpleTool for InferenceTool {
         let response = if let Some(hash) = side_info.config_snapshot_hash {
             let snapshot_hash: SnapshotHash =
                 hash.parse().map_err(|_: std::convert::Infallible| {
-                    NonControlToolError::Validation {
-                        message: "Invalid snapshot hash".to_string(),
-                    }
+                    AutopilotToolError::validation("Invalid snapshot hash")
                 })?;
             ctx.client()
                 .action(
@@ -175,12 +179,12 @@ impl SimpleTool for InferenceTool {
                     ActionInput::Inference(Box::new(client_params)),
                 )
                 .await
-                .map_err(|e| NonControlToolError::ExecutionFailed(e.into()))?
+                .map_err(|e| AutopilotToolError::client_error("inference", e))?
         } else {
             ctx.client()
                 .inference(client_params)
                 .await
-                .map_err(|e| NonControlToolError::ExecutionFailed(e.into()))?
+                .map_err(|e| AutopilotToolError::client_error("inference", e))?
         };
 
         Ok(response)

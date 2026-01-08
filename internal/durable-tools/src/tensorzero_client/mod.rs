@@ -73,9 +73,12 @@ pub enum TensorZeroClientError {
     Evaluation(String),
 }
 
-// TODO: These evaluation types are defined here temporarily because there is no HTTP
-// endpoint for evaluations yet. Once an HTTP endpoint is added, these should be replaced
-// with the wire types from tensorzero-core (re-exported through the SDK).
+// Note: These evaluation types are specific to durable-tools and cannot be replaced with
+// the HTTP wire types from gateway/src/routes/evaluations.rs. The HTTP endpoint uses SSE
+// streaming with per-datapoint events, while these types provide an aggregated response
+// suitable for tool use cases. Additionally, RunEvaluationParams takes only evaluation_name
+// (looking up config internally), while the HTTP endpoint requires the caller to pass in
+// the resolved evaluation_config and function_config.
 
 /// Parameters for running an evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]

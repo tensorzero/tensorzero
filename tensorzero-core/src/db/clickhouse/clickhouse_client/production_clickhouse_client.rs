@@ -11,7 +11,6 @@ use std::time::Duration;
 use url::Url;
 
 use crate::config::BatchWritesConfig;
-use crate::db::clickhouse::BatchWriterHandle;
 use crate::db::clickhouse::ClickHouseClient;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::ClickHouseResponse;
@@ -22,6 +21,7 @@ use crate::db::clickhouse::HealthCheckable;
 use crate::db::clickhouse::Rows;
 use crate::db::clickhouse::TableName;
 use crate::db::clickhouse::batching::BatchSender;
+use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::migrations::check_table_exists;
 use crate::error::DelayedError;
@@ -625,9 +625,7 @@ async fn write_production<T: Serialize + Send + Sync>(
     let rows_json = rows.as_json();
 
     if let Some(batch_sender) = batch {
-        batch_sender
-            .add_to_batch(table, rows_json?.into_owned())
-            .await?;
+        batch_sender.add_to_batch(table, rows_json?.into_owned())?;
         return Ok(());
     }
 

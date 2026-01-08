@@ -27,13 +27,13 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     });
     await expect(evaluationOption).toBeVisible();
     await evaluationOption.click();
-    await expect(page.getByText("Select a dataset")).toBeVisible();
+    await expect(page.getByPlaceholder("Select dataset")).toBeVisible();
 
     // Select the dataset we created
-    await page.getByText("Select a dataset").click();
+    await page.getByPlaceholder("Select dataset").click();
 
     // Type to filter/search for our dataset
-    const datasetInput = page.getByPlaceholder("Select a dataset");
+    const datasetInput = page.getByPlaceholder("Select dataset");
     await datasetInput.fill(datasetName);
     const datasetOption = page.locator(`[data-dataset-name="${datasetName}"]`);
     await expect(datasetOption).toBeVisible();
@@ -108,11 +108,9 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     await expect(variantInput).toHaveValue("gpt4o_mini_initial_prompt");
 
     // Verify the dataset field is cleared (not showing the deleted dataset)
-    // The dataset selector should show placeholder text
-    const datasetTrigger = dialog
-      .locator('button[role="combobox"]')
-      .filter({ hasText: "Select a dataset" });
-    await expect(datasetTrigger).toBeVisible();
+    // The dataset selector should show empty value (placeholder visible)
+    const datasetSelector = dialog.getByPlaceholder("Select dataset");
+    await expect(datasetSelector).toHaveValue("");
 
     // Verify our deleted dataset name is NOT visible in the modal
     await expect(dialog.getByText(datasetName)).not.toBeVisible();

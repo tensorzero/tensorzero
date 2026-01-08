@@ -58,7 +58,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     )
     .await
     .unwrap();
-    ClientBuilder::build_from_state(handle).await.unwrap()
+    ClientBuilder::build_from_state(handle).unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread")]

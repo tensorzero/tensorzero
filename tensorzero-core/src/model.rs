@@ -422,8 +422,7 @@ impl ModelConfig {
             clients,
             stream,
             write_to_cache,
-        )
-        .await?
+        )?
         .instrument(span);
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
@@ -715,7 +714,7 @@ impl ModelConfig {
 /// us to wrap the underlying stream.
 ///
 /// Note - this function is *not* called in relay mode
-async fn wrap_provider_stream(
+fn wrap_provider_stream(
     raw_request: String,
     model_request: ModelProviderRequest<'_>,
     ticket_borrow: TicketBorrows,
