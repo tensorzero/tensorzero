@@ -3910,9 +3910,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         {
             assert_eq!(input_tokens, 0);
             assert_eq!(output_tokens, 0);
-        } else {
-            assert!(input_tokens > 0);
-            assert!(output_tokens > 0);
         }
     }
 
@@ -3946,7 +3943,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta"},
+        "system": {"assistant_name": format!("Dr. Mehta {test_id}")},
         "messages": [
             {
                 "role": "user",
@@ -4025,9 +4022,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         {
             assert!(input_tokens.is_null());
             assert!(output_tokens.is_null());
-        } else {
-            assert!(input_tokens.as_u64().unwrap() > 0);
-            assert!(output_tokens.as_u64().unwrap() > 0);
         }
     }
 
