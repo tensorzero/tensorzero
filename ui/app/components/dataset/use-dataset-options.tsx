@@ -49,17 +49,17 @@ export function useDatasetOptions({
     if (placeholder) return placeholder;
     if (allowCreation) {
       return sortedDatasetNames.length > 0
-        ? "Create or find a dataset"
-        : "Create a dataset";
+        ? "Create or find dataset"
+        : "Create dataset";
     }
-    return "Select a dataset";
+    return "Select dataset";
   }, [placeholder, allowCreation, sortedDatasetNames.length]);
 
   const searchPlaceholder = useMemo(() => {
     if (allowCreation) {
       return sortedDatasetNames.length > 0
-        ? "Create or find a dataset"
-        : "Create a dataset";
+        ? "Create or find dataset"
+        : "Create dataset";
     }
     return "Search datasets";
   }, [allowCreation, sortedDatasetNames.length]);
