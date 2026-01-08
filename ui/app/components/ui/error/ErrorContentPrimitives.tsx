@@ -228,3 +228,60 @@ export function SimpleErrorContent({
     </CardContent>
   );
 }
+
+interface SimpleErrorDisplayProps {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  scope?: ErrorScope;
+  /** Use muted gray styling instead of red (e.g., for 404s) */
+  muted?: boolean;
+}
+
+/**
+ * Standalone error display for simple errors without troubleshooting steps.
+ * Vertical layout: large icon above, centered text below.
+ * No card border for cleaner appearance.
+ */
+export function SimpleErrorDisplay({
+  icon: Icon,
+  title,
+  description,
+  scope = ErrorScope.Page,
+  muted = false,
+}: SimpleErrorDisplayProps) {
+  const iconColor = muted
+    ? "text-neutral-300"
+    : scope === ErrorScope.App
+      ? "text-red-400"
+      : "text-red-500";
+
+  return (
+    <div
+      className={cn(
+        "flex w-[26rem] max-w-full flex-col items-center px-8 py-10 text-center",
+        scope === ErrorScope.App && "bg-transparent",
+      )}
+    >
+      <Icon className={cn("mb-4 h-10 w-10", iconColor)} />
+      <h2
+        className={cn(
+          "text-xl font-medium",
+          scope === ErrorScope.App ? "text-neutral-100" : "text-foreground",
+        )}
+      >
+        {title}
+      </h2>
+      <p
+        className={cn(
+          "mt-2 max-w-xs text-sm break-words",
+          scope === ErrorScope.App
+            ? "text-neutral-400"
+            : "text-muted-foreground",
+        )}
+      >
+        {description}
+      </p>
+    </div>
+  );
+}
