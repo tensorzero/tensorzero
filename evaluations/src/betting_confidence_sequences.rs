@@ -393,9 +393,10 @@ pub fn update_betting_cs(
         (m_values[n_grid - 1], n_grid - 1)
     };
 
-    // Intersect with previous bounds to ensure nested confidence sequences
-    let cs_lower = cs_lower_new.max(prev_results.cs_lower);
-    let cs_upper = cs_upper_new.min(prev_results.cs_upper);
+    // Intersect with previous bounds to ensure nested confidence sequences.
+    // If the intersection would be empty, ensure the interval still contains mean_est.
+    let cs_lower = cs_lower_new.max(prev_results.cs_lower).min(mean_est);
+    let cs_upper = cs_upper_new.min(prev_results.cs_upper).max(mean_est);
 
     let variance_reg_final = *variances_reg
         .last()
