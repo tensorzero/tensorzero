@@ -72,10 +72,14 @@ export function Combobox({
 
   const shouldVirtualize = filteredItems.length >= virtualizeThreshold;
 
-  // Reset highlighted index when filtered items change
+  // Reset highlighted index when filtered items change, clamping to valid range
   useEffect(() => {
-    setHighlightedIndex(0);
-  }, [filteredItems.length, searchValue]);
+    setHighlightedIndex((prev) => {
+      if (filteredItems.length === 0) return 0;
+      // Clamp to valid range if items were filtered
+      return Math.min(prev, filteredItems.length - 1);
+    });
+  }, [filteredItems.length]);
 
   const handleSelect = useCallback(
     (item: string) => {
@@ -114,6 +118,33 @@ export function Combobox({
         return;
       }
 
+      if (e.key === "Home") {
+        e.preventDefault();
+        setHighlightedIndex(0);
+        return;
+      }
+
+      if (e.key === "End") {
+        e.preventDefault();
+        setHighlightedIndex(Math.max(0, filteredItems.length - 1));
+        return;
+      }
+
+      if (e.key === "PageDown") {
+        e.preventDefault();
+        // Jump ~8 items (one viewport)
+        setHighlightedIndex((prev) =>
+          Math.min(prev + 8, filteredItems.length - 1),
+        );
+        return;
+      }
+
+      if (e.key === "PageUp") {
+        e.preventDefault();
+        setHighlightedIndex((prev) => Math.max(prev - 8, 0));
+        return;
+      }
+
       if (e.key === "Enter") {
         e.preventDefault();
         const item = filteredItems[highlightedIndex];
@@ -144,6 +175,7 @@ export function Combobox({
   const renderItem = useCallback(
     (item: string, index: number) => {
       const isHighlighted = shouldVirtualize && index === highlightedIndex;
+      const isSelected = item === selected;
       return (
         <CommandItem
           key={item}
@@ -153,13 +185,15 @@ export function Combobox({
             "flex items-center gap-2",
             isHighlighted && "bg-accent text-accent-foreground",
           )}
+          aria-selected={isHighlighted || isSelected}
+          data-highlighted={isHighlighted}
         >
           {getItemIcon?.(item)}
           <span className="truncate font-mono">{item}</span>
         </CommandItem>
       );
     },
-    [getItemIcon, handleSelect, shouldVirtualize, highlightedIndex],
+    [getItemIcon, handleSelect, shouldVirtualize, highlightedIndex, selected],
   );
 
   return (

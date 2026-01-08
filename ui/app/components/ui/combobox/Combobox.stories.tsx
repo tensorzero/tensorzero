@@ -181,3 +181,115 @@ export const StressTest: Story = {
     );
   },
 };
+
+/**
+ * Demo keyboard navigation in virtualized mode.
+ * - Arrow Up/Down: Move highlight
+ * - Home/End: Jump to first/last
+ * - PageUp/PageDown: Jump ~8 items
+ * - Enter: Select highlighted item
+ * - Escape: Close dropdown
+ */
+export const KeyboardNavigation: Story = {
+  args: {
+    items: generateItems(500),
+    virtualizeThreshold: 100,
+    placeholder: "Click then use arrow keys...",
+  },
+  render: function Render(args) {
+    const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+
+    return (
+      <div className="w-80">
+        <p className="text-fg-muted mb-4 text-sm">
+          <strong>Keyboard shortcuts:</strong>
+          <br />
+          ↑↓ Move highlight
+          <br />
+          Home/End Jump to start/end
+          <br />
+          PageUp/PageDown Jump 8 items
+          <br />
+          Enter Select
+          <br />
+          Escape Close
+        </p>
+        <Combobox
+          {...args}
+          selected={selected ?? null}
+          onSelect={(item) => updateArgs({ selected: item })}
+        />
+        {selected && (
+          <p className="text-fg-secondary mt-4 text-sm">
+            Selected: <strong>{selected}</strong>
+          </p>
+        )}
+      </div>
+    );
+  },
+};
+
+/**
+ * Demo filtering behavior with virtualization.
+ * Type to filter, selection persists through filter changes.
+ */
+export const FilteringDemo: Story = {
+  args: {
+    items: [
+      ...generateItems(100),
+      "apple",
+      "banana",
+      "cherry",
+      "date",
+      "elderberry",
+    ],
+    virtualizeThreshold: 50,
+    placeholder: "Try typing 'item' or 'apple'...",
+  },
+  render: function Render(args) {
+    const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+
+    return (
+      <div className="w-80">
+        <p className="text-fg-muted mb-4 text-sm">
+          Type to filter. Try &quot;item_5&quot; or &quot;apple&quot;. Highlight
+          resets to first match when filtering.
+        </p>
+        <Combobox
+          {...args}
+          selected={selected ?? null}
+          onSelect={(item) => updateArgs({ selected: item })}
+        />
+      </div>
+    );
+  },
+};
+
+/**
+ * Edge case: transition between virtualized and non-virtualized
+ * as user filters items below/above threshold.
+ */
+export const ThresholdTransition: Story = {
+  args: {
+    items: generateItems(150),
+    virtualizeThreshold: 100,
+    placeholder: "Type to filter below 100...",
+  },
+  render: function Render(args) {
+    const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+
+    return (
+      <div className="w-80">
+        <p className="text-fg-muted mb-4 text-sm">
+          150 items with threshold=100. Type to filter below 100 items and
+          observe transition from virtualized to non-virtualized rendering.
+        </p>
+        <Combobox
+          {...args}
+          selected={selected ?? null}
+          onSelect={(item) => updateArgs({ selected: item })}
+        />
+      </div>
+    );
+  },
+};
