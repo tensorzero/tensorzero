@@ -218,21 +218,23 @@ function extractErrorMessage(error: unknown): string {
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const [open, setOpen] = React.useState(true);
 
-  // Client 404s (page not found in React Router) - show centered, not modal
+  // Client 404s (page not found in React Router) - show in content area with sidebar
   if (isRouteErrorResponse(error) && error.status === 404) {
     // Ensure this is actually a client 404, not a gateway route not found
     if (!isBoundaryErrorData(error.data)) {
       return (
-        <main className="bg-background flex min-h-screen items-center justify-center p-8 pb-20">
-          <ErrorContentCard context={ErrorContext.Page}>
-            <ErrorContentHeader
-              icon={AlertTriangle}
-              title="Error 404"
-              description="The requested page could not be found."
-              context={ErrorContext.Page}
-            />
-          </ErrorContentCard>
-        </main>
+        <RootErrorBoundaryLayout>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-8 pb-20">
+            <ErrorContentCard context={ErrorContext.Page}>
+              <ErrorContentHeader
+                icon={AlertTriangle}
+                title="Error 404"
+                description="The requested page could not be found."
+                context={ErrorContext.Page}
+              />
+            </ErrorContentCard>
+          </div>
+        </RootErrorBoundaryLayout>
       );
     }
   }
