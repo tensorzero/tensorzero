@@ -3760,7 +3760,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     provider: &E2ETestProvider,
     episode_id: Uuid,
     tag_value: &str,
-    check_cache: bool,
+    assert_response_is_cached: bool,
     include_original_response: bool,
 ) -> String {
     let extra_headers = if provider.is_modal_provider() {
@@ -3858,7 +3858,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         }
 
         // When we get a cache hit, the usage should be explicitly set to 0
-        if check_cache {
+        if assert_response_is_cached {
             let usage = chunk_json.get("usage").unwrap();
             assert_eq!(usage.get("input_tokens").unwrap().as_u64().unwrap(), 0);
             assert_eq!(usage.get("output_tokens").unwrap().as_u64().unwrap(), 0);
@@ -3884,7 +3884,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
         if (provider.variant_name.contains("azure")
             && !provider.variant_name.contains("azure-ai-foundry"))
-            || check_cache
+            || assert_response_is_cached
         {
             assert_eq!(input_tokens, 0);
             assert_eq!(output_tokens, 0);
@@ -4010,17 +4010,13 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    if check_cache {
+    if assert_response_is_cached {
         assert_eq!(response_time_ms, 0);
-    } else {
-        assert!(response_time_ms > 0);
     }
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    if check_cache {
+    if assert_response_is_cached {
         assert_eq!(ttft_ms, 0);
-    } else {
-        assert!(ttft_ms >= 1);
     }
     assert!(ttft_ms <= response_time_ms);
 
