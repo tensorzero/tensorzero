@@ -1300,8 +1300,9 @@ async fn test_topk_emit_event_streaming() {
         "empty2".to_string(),
     ];
 
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
     });
 
