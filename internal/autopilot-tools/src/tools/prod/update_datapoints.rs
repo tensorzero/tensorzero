@@ -59,7 +59,13 @@ impl ToolMetadata for UpdateDatapointsTool {
                     "description": "The datapoints to update.",
                     "items": {
                         "type": "object",
+                        "description": "A datapoint update. Use 'chat' type for chat datapoints, or 'json' type for JSON datapoints.",
                         "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": ["chat", "json"],
+                                "description": "The datapoint type. Must match the type of the existing datapoint."
+                            },
                             "id": {
                                 "type": "string",
                                 "format": "uuid",
@@ -70,7 +76,11 @@ impl ToolMetadata for UpdateDatapointsTool {
                                 "description": "New input data (optional)."
                             },
                             "output": {
-                                "description": "New output data (optional)."
+                                "description": "New output data (optional). For chat: array of content blocks. For json: object with 'raw' string field."
+                            },
+                            "output_schema": {
+                                "type": "object",
+                                "description": "Output schema for validation (optional, only for 'json' type datapoints)."
                             },
                             "tags": {
                                 "type": "object",
@@ -78,7 +88,7 @@ impl ToolMetadata for UpdateDatapointsTool {
                                 "description": "New tags (optional)."
                             }
                         },
-                        "required": ["id"]
+                        "required": ["type", "id"]
                     }
                 }
             },
