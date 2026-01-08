@@ -1298,7 +1298,7 @@ async fn e2e_test_variant_failover() {
                     "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "template", "name": "user", "arguments": {"type": "tacos", "quantity": 13}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"type": "tacos", "quantity": 794827}}],
                     }
                 ]},
             "stream": false,
@@ -1357,7 +1357,7 @@ async fn e2e_test_variant_failover() {
             "messages": [
             {
                 "role": "user",
-                "content": [{"type": "template", "name": "user", "arguments": {"type": "tacos", "quantity": 13}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"type": "tacos", "quantity": 794827}}]
             }
         ]}
     );
@@ -1434,7 +1434,7 @@ async fn e2e_test_variant_failover() {
         StoredRequestMessage {
             role: Role::User,
             content: vec![StoredContentBlock::Text(Text {
-                text: "I want 13 of tacos, please.".to_string(),
+                text: "I want 794827 of tacos, please.".to_string(),
             })],
         }
     );
@@ -1462,7 +1462,7 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
                         name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
-                            ("quantity".to_string(), 13.into()),
+                            ("quantity".to_string(), 794827.into()),
                         ])),
                     })],
                 }],
@@ -1509,7 +1509,7 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
                         name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
-                            ("quantity".to_string(), 13.into()),
+                            ("quantity".to_string(), 794827.into()),
                         ])),
                     })],
                 }],
