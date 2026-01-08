@@ -258,8 +258,6 @@ pub struct CollectChunksArgs {
     pub ttft: Option<Duration>,
 }
 
-// Modify the collect_chunks function to accept CollectChunksArgs
-// 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
 pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, Error> {
     let CollectChunksArgs {
         value,
@@ -307,6 +305,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         value
             .iter()
             .map(InferenceResultChunk::raw_response)
+            .filter(|s| !s.is_empty()) // remove artificial chunks (e.g. our final chunk with usage and finish reason)
             .collect::<Vec<&str>>()
             .join("\n")
     });

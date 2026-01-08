@@ -924,12 +924,10 @@ fn create_stream(
         let mut usages: Vec<Usage> = vec![];
         let mut finish_reasons: Vec<FinishReason> = vec![];
         let mut inference_ttft = None;
-        let mut had_error = false;
         while let Some(chunk) = stream.next().await {
             let mut chunk = match chunk {
                 Ok(c) => c,
                 Err(e) => {
-                    had_error = true;
                     yield Err(e);
                     continue;
                 }
@@ -973,37 +971,35 @@ fn create_stream(
             metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).chain(std::iter::once(usage))
         );
 
-        // Only emit the final chunk with `usage` and `finish_reason` if there was no error
-        if !had_error {
-            #[expect(clippy::expect_used)]
-            let created = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .expect("Time went backwards");
+        // Emit the final chunk with usage + finish reason
+        #[expect(clippy::expect_used)]
+        let created = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .expect("Time went backwards");
 
-            let latency = metadata.start_time.elapsed();
+        let latency = metadata.start_time.elapsed();
 
-            let chunk = match *function {
-                FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
-                    finish_reason,
-                    usage: Some(usage),
-                    created,
-                    latency,
-                    ..Default::default()
-                }),
-                FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
-                    finish_reason,
-                    usage: Some(usage),
-                    created,
-                    latency,
-                    ..Default::default()
-                }),
-            };
+        let chunk = match *function {
+            FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                finish_reason,
+                usage: Some(usage),
+                created,
+                latency,
+                ..Default::default()
+            }),
+            FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
+                finish_reason,
+                usage: Some(usage),
+                created,
+                latency,
+                ..Default::default()
+            }),
+        };
 
-            buffer.push(chunk.clone());
+        buffer.push(chunk.clone());
 
-            yield Ok(prepare_response_chunk(&metadata, chunk));
-        }
+        yield Ok(prepare_response_chunk(&metadata, chunk));
 
         if !metadata.dryrun {
             // IMPORTANT: The following code will not be reached if the stream is interrupted.
