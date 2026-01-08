@@ -200,35 +200,6 @@ export function StackTraceContent({
   );
 }
 
-interface SimpleErrorContentProps {
-  message: string;
-  scope?: ErrorScope;
-}
-
-export function SimpleErrorContent({
-  message,
-  scope = ErrorScope.Page,
-}: SimpleErrorContentProps) {
-  return (
-    <CardContent
-      className={cn(
-        scope === ErrorScope.App ? "border-t border-neutral-900" : "border-t",
-      )}
-    >
-      <p
-        className={cn(
-          "text-sm",
-          scope === ErrorScope.App
-            ? "text-neutral-400"
-            : "text-muted-foreground",
-        )}
-      >
-        {message}
-      </p>
-    </CardContent>
-  );
-}
-
 interface SimpleErrorDisplayProps {
   icon: LucideIcon;
   title: string;
