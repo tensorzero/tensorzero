@@ -953,7 +953,11 @@ fn create_stream(
             }
 
             buffer.push(chunk.clone());
-            yield Ok(prepare_response_chunk(&metadata, chunk));
+
+            // Stream chunk, unless we've stripped all useful information
+            if should_stream_chunk_in_create_stream(&chunk, metadata.include_original_response, metadata.include_raw_usage) {
+                yield Ok(prepare_response_chunk(&metadata, chunk));
+            }
         }
 
         // If we saw multiple chunks with `finish_reason`, warn (unexpected behavior)
@@ -1115,6 +1119,72 @@ fn create_stream(
             } else {
                 write_future.await;
             }
+        }
+    }
+}
+
+/// Decide whether we should stream an intermediate chunk in `create_stream`.
+///
+/// We want to stream chunks that have useful information (e.g. content, usage).
+///
+/// We always want to stream a chunk if `include_original_response` is enabled.
+fn should_stream_chunk_in_create_stream(
+    chunk: &InferenceResultChunk,
+    include_original_response: bool,
+    include_raw_usage: bool,
+) -> bool {
+    if include_original_response {
+        return true;
+    }
+
+    match chunk {
+        InferenceResultChunk::Chat(c) => {
+            let ChatInferenceResultChunk {
+                // Always stream these fields
+                content,
+                // These fields should've been cleared for intermediate chunks in `create_stream`; if they're here, stream
+                usage,
+                finish_reason,
+                // Only stream if `include_raw_usage` is enabled
+                raw_usage,
+
+                // We already handled `include_original_response` above
+                raw_response: _,
+                // We don't care about streaming the following fields in isolation
+                created: _,
+                latency: _,
+            } = c;
+
+            // We want to stream the chunk if `raw_usage` is relevant
+            if include_raw_usage && raw_usage.as_ref().is_some_and(|x| !x.is_empty()) {
+                return true;
+            }
+
+            !content.is_empty() || usage.is_some() || finish_reason.is_some()
+        }
+        InferenceResultChunk::Json(c) => {
+            let JsonInferenceResultChunk {
+                // Always stream these fields
+                raw,
+                thought,
+                // These fields should've been cleared for intermediate chunks in `create_stream`; if they're here, stream
+                usage,
+                finish_reason,
+                // Only stream if `include_raw_usage` is enabled
+                raw_usage,
+                // We already handled `include_original_response` above
+                raw_response: _,
+                // We don't care about streaming the following fields in isolation
+                created: _,
+                latency: _,
+            } = c;
+
+            // We want to stream the chunk if `raw_usage` is relevant
+            if include_raw_usage && raw_usage.as_ref().is_some_and(|x| !x.is_empty()) {
+                return true;
+            }
+
+            raw.is_some() || thought.is_some() || usage.is_some() || finish_reason.is_some()
         }
     }
 }
