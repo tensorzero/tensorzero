@@ -377,7 +377,7 @@ pub fn update_betting_cs(
     let left_outside = wealth_hedged[0] >= threshold;
     let right_outside = wealth_hedged[n_grid - 1] >= threshold;
 
-    let (cs_lower, _idx_lower) = if left_outside {
+    let (cs_lower_new, _idx_lower) = if left_outside {
         // Binary search in [0, min_idx] to find lower bound
         find_cs_lower(&wealth_hedged, &m_values, threshold, min_idx)
     } else {
@@ -385,13 +385,19 @@ pub fn update_betting_cs(
         (m_values[0], 0)
     };
 
-    let (cs_upper, _idx_upper) = if right_outside {
+    let (cs_upper_new, _idx_upper) = if right_outside {
         // Binary search in [min_idx, n-1] to find upper bound
         find_cs_upper(&wealth_hedged, &m_values, threshold, min_idx)
     } else {
         // Right endpoint is inside confidence set
         (m_values[n_grid - 1], n_grid - 1)
     };
+
+    // Intersect with previous bounds to ensure nested confidence sequences,
+    // unless that would result in an empty set, in which case just return
+    // [mean_est, mean_est].
+    let cs_lower = cs_lower_new.max(prev_results.cs_lower).min(mean_est);
+    let cs_upper = cs_upper_new.min(prev_results.cs_upper).max(mean_est);
 
     let variance_reg_final = *variances_reg
         .last()
@@ -896,6 +902,49 @@ mod tests {
                 || !approx_eq(updated_low.mean_est, updated_high.mean_est),
             "Different hedge weights should affect confidence interval or mean estimate"
         );
+    }
+
+    // Tests for interval nesting behavior
+
+    #[test]
+    fn test_intervals_are_nested_over_updates() {
+        // Verify that confidence intervals are nested: each update produces
+        // an interval contained within (or equal to) the previous interval,
+        // as a result of using the running intersection of intervals.
+        //
+        // Without intersection, raw bounds would be:
+        //   Batch 1: [0.13, 1.00]
+        //   Batch 2: [0.18, 0.87]
+        //   Batch 3: [0.25, 0.80]
+        //   Batch 4: [0.34, 0.81] <- upper bound expands from 0.80 to 0.81
+        let initial = create_initial_cs(101, 0.05);
+
+        let obs_batches = vec![
+            vec![0.8, 0.7, 0.9],
+            vec![0.3, 0.4, 0.2],
+            vec![0.5, 0.6, 0.55],
+            vec![0.9, 0.85, 0.8],
+        ];
+
+        let mut prev = initial;
+        for (i, obs) in obs_batches.into_iter().enumerate() {
+            let updated = update_betting_cs(prev.clone(), obs, None).unwrap();
+
+            assert!(
+                updated.cs_lower >= prev.cs_lower,
+                "Batch {i}: lower bound should not decrease: prev={}, new={}",
+                prev.cs_lower,
+                updated.cs_lower
+            );
+            assert!(
+                updated.cs_upper <= prev.cs_upper,
+                "Batch {i}: upper bound should not increase: prev={}, new={}",
+                prev.cs_upper,
+                updated.cs_upper
+            );
+
+            prev = updated;
+        }
     }
 
     // Tests for interval tightening behavior
