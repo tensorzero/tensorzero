@@ -2314,7 +2314,13 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     provider: &E2ETestProvider,
     stream: bool,
 ) {
-    // Inject randomness to prevent this from being cached, since provider-proxy will ignore the (invalid) auth header
+    // NOTE: This test expects error responses (auth failures), which provider-proxy
+    // does not cache. Therefore, this test will always hit live providers.
+    // Consider moving to periodic live tests if this causes merge queue instability.
+    // See: https://github.com/tensorzero/tensorzero/issues/5380
+    //
+    // We inject randomness since provider-proxy sanitizes auth headers for cache key computation,
+    // so without randomness we'd potentially get a cached success response from another test.
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -3714,16 +3720,24 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     }
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
-    // Generate random u32
-    let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false, false,
+        &provider,
+        episode_id,
+        &tag_value,
+        false,
+        false,
+        /*test_id=*/ "streaming_inference_request_with_provider",
     )
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true, false,
+        &provider,
+        episode_id,
+        &tag_value,
+        true,
+        false,
+        /*test_id=*/ "streaming_inference_request_with_provider",
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -3737,17 +3751,25 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
-    // Generate random u32
-    let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false, true,
+        &provider,
+        episode_id,
+        &tag_value,
+        false,
+        true,
+        /*test_id=*/ "streaming_include_original_response_with_provider",
     )
     .await;
 
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true, true,
+        &provider,
+        episode_id,
+        &tag_value,
+        true,
+        true,
+        /*test_id=*/ "streaming_include_original_response_with_provider",
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -3756,10 +3778,11 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
 pub async fn test_simple_streaming_inference_request_with_provider_cache(
     provider: &E2ETestProvider,
     episode_id: Uuid,
-    seed: u32,
     tag_value: &str,
-    check_cache: bool,
+    assert_response_is_cached: bool,
     include_original_response: bool,
+    // test_id is included to make sure requests are distinct across different tests, but cached within the test.
+    test_id: &str,
 ) -> String {
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -3772,7 +3795,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
+               "system": {"assistant_name": format!("Dr. Mehta {test_id}")},
                "messages": [
                 {
                     "role": "user",
@@ -3856,7 +3879,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         }
 
         // When we get a cache hit, the usage should be explicitly set to 0
-        if check_cache {
+        if assert_response_is_cached {
             let usage = chunk_json.get("usage").unwrap();
             assert_eq!(usage.get("input_tokens").unwrap().as_u64().unwrap(), 0);
             assert_eq!(usage.get("output_tokens").unwrap().as_u64().unwrap(), 0);
@@ -3882,13 +3905,10 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
         if (provider.variant_name.contains("azure")
             && !provider.variant_name.contains("azure-ai-foundry"))
-            || check_cache
+            || assert_response_is_cached
         {
             assert_eq!(input_tokens, 0);
             assert_eq!(output_tokens, 0);
-        } else {
-            assert!(input_tokens > 0);
-            assert!(output_tokens > 0);
         }
     }
 
@@ -3922,7 +3942,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
+        "system": {"assistant_name": format!("Dr. Mehta {test_id}")},
         "messages": [
             {
                 "role": "user",
@@ -4001,31 +4021,24 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         {
             assert!(input_tokens.is_null());
             assert!(output_tokens.is_null());
-        } else {
-            assert!(input_tokens.as_u64().unwrap() > 0);
-            assert!(output_tokens.as_u64().unwrap() > 0);
         }
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    if check_cache {
+    if assert_response_is_cached {
         assert_eq!(response_time_ms, 0);
-    } else {
-        assert!(response_time_ms > 0);
     }
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    if check_cache {
+    if assert_response_is_cached {
         assert_eq!(ttft_ms, 0);
-    } else {
-        assert!(ttft_ms >= 1);
     }
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        format!("You are a helpful and friendly assistant named Dr. Mehta #{seed}")
+        format!("You are a helpful and friendly assistant named Dr. Mehta {test_id}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();

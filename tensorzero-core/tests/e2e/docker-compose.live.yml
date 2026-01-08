@@ -19,12 +19,15 @@ services:
     volumes:
       # Mount cache directory for downloading cache files separately
       - ../../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache
+    # Cache mode can be overridden via PROVIDER_PROXY_CACHE_MODE environment variable.
+    # Options: read-old-write-new (default), read-only, read-write
+    # See: https://github.com/tensorzero/tensorzero/issues/5380
     command:
       [
         "--cache-path",
         "/app/ci/provider-proxy-cache",
         "--mode",
-        "read-old-write-new",
+        "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
       ]
     healthcheck:
       test:
