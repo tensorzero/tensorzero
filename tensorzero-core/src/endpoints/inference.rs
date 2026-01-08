@@ -891,25 +891,13 @@ fn create_stream(
             if !entries.is_empty() {
                 let raw_usage = Some(entries);
 
-                #[expect(clippy::expect_used)]
-                let created = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .expect("Time went backwards");
-
-                let latency = metadata.start_time.elapsed();
-
                 let chunk = match *function {
                     FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
-                        created,
                         raw_usage,
-                        latency,
                         ..Default::default()
                     }),
                     FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
-                        created,
                         raw_usage,
-                        latency,
                         ..Default::default()
                     }),
                 };
@@ -971,28 +959,15 @@ fn create_stream(
             metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).chain(std::iter::once(usage))
         );
 
-        // Emit the final chunk with usage + finish reason
-        #[expect(clippy::expect_used)]
-        let created = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .expect("Time went backwards");
-
-        let latency = metadata.start_time.elapsed();
-
         let chunk = match *function {
             FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 finish_reason,
                 usage: Some(usage),
-                created,
-                latency,
                 ..Default::default()
             }),
             FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
                 finish_reason,
                 usage: Some(usage),
-                created,
-                latency,
                 ..Default::default()
             }),
         };
@@ -1066,7 +1041,6 @@ fn create_stream(
                     model_inference_id,
                     usage,
                     finish_reason,
-                    ttft: inference_ttft,
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -1146,8 +1120,7 @@ fn should_stream_chunk_in_create_stream(
                 // We already handled `include_original_response` above
                 raw_response: _,
                 // We don't care about streaming the following fields in isolation
-                created: _,
-                latency: _,
+                provider_latency: _,
             } = c;
 
             // We want to stream the chunk if `raw_usage` is relevant
@@ -1171,8 +1144,7 @@ fn should_stream_chunk_in_create_stream(
                 // We never actually stream this field, so we don't need it
                 thought: _,
                 // We don't care about streaming the following fields in isolation
-                created: _,
-                latency: _,
+                provider_latency: _,
             } = c;
 
             // We want to stream the chunk if `raw_usage` is relevant
@@ -1828,12 +1800,11 @@ mod tests {
         })];
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content: content.clone(),
-            created: 0,
             usage: None,
             raw_usage: None,
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
-            latency: Duration::from_millis(100),
+            provider_latency: Some(Duration::from_millis(100)),
         });
         let raw_request = "raw request".to_string();
         let inference_metadata = InferenceMetadata {
@@ -1887,11 +1858,10 @@ mod tests {
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: Some("Test content".to_string()),
             thought: Some("Thought 1".to_string()),
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(100),
+            provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
         });
         let inference_metadata = InferenceMetadata {
@@ -2338,7 +2308,6 @@ mod tests {
                 text: "Test content".to_string(),
                 id: "0".to_string(),
             })],
-            created: 0,
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
@@ -2346,7 +2315,7 @@ mod tests {
             raw_usage: Some(raw_usage_entries.clone()),
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
-            latency: Duration::from_millis(100),
+            provider_latency: Some(Duration::from_millis(100)),
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2389,7 +2358,6 @@ mod tests {
         // Create a chunk WITH raw_usage set
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content: vec![],
-            created: 0,
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
@@ -2397,7 +2365,7 @@ mod tests {
             raw_usage: Some(raw_usage_entries),
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
-            latency: Duration::from_millis(100),
+            provider_latency: Some(Duration::from_millis(100)),
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2424,7 +2392,6 @@ mod tests {
                 text: "Content".to_string(),
                 id: "0".to_string(),
             })],
-            created: 0,
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
@@ -2432,7 +2399,7 @@ mod tests {
             raw_usage: None,
             finish_reason: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(50),
+            provider_latency: Some(Duration::from_millis(50)),
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2456,7 +2423,6 @@ mod tests {
 
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content: vec![],
-            created: 0,
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
@@ -2464,7 +2430,7 @@ mod tests {
             raw_usage: None,
             finish_reason: Some(FinishReason::Stop),
             raw_response: String::new(),
-            latency: Duration::from_millis(100),
+            provider_latency: Some(Duration::from_millis(100)),
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2502,14 +2468,13 @@ mod tests {
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: Some(r#"{"key": "value"}"#.to_string()),
             thought: None,
-            created: 0,
             usage: Some(Usage {
                 input_tokens: Some(30),
                 output_tokens: Some(20),
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: String::new(),
-            latency: Duration::from_millis(100),
+            provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
         });
 
@@ -2540,12 +2505,11 @@ mod tests {
                 text: "Test".to_string(),
                 id: "0".to_string(),
             })],
-            created: 0,
             usage: None,
             raw_usage: None,
             finish_reason: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(50),
+            provider_latency: Some(Duration::from_millis(50)),
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2582,7 +2546,6 @@ mod tests {
 
         let previous_inference = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 0,
             output: vec![ContentBlockOutput::Text(Text {
                 text: "previous output".to_string(),
             })],
@@ -2679,7 +2642,6 @@ mod tests {
 
         let cached_inference = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 0,
             output: vec![ContentBlockOutput::Text(Text {
                 text: "cached output".to_string(),
             })],
@@ -2758,7 +2720,6 @@ mod tests {
 
         let previous_inference = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 0,
             output: vec![ContentBlockOutput::Text(Text {
                 text: "output".to_string(),
             })],

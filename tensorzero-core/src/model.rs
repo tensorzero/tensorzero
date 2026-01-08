@@ -45,7 +45,6 @@ use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
-    current_timestamp,
 };
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
@@ -185,15 +184,13 @@ impl StreamResponse {
                         raw_response: c.raw_response,
                         // We intentionally don't cache and re-use these values from the original
                         // request:
-                        // The new result was 'created' now
-                        created: current_timestamp(),
                         // Use the real usage (so that the `ModelInference` row we write is accurate)
                         // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
                         usage: c.usage,
                         // raw_usage is not cached
                         raw_usage: None,
                         // We didn't make any network calls to the model provider, so the latency is 0
-                        latency: Duration::from_secs(0),
+                        provider_latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {

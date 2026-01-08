@@ -1200,7 +1200,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_response,
                 raw_usage,
                 usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
                 id: model_inference_id,
             },
@@ -2416,7 +2416,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
-        assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.provider_latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.input_messages, input_messages);
 
@@ -2478,7 +2478,7 @@ mod tests {
         assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(50));
-        assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.provider_latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(
             inference_response.finish_reason,
@@ -2554,7 +2554,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, None);
-        assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.provider_latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.input_messages, input_messages);
     }
@@ -2595,7 +2595,7 @@ mod tests {
             }
             _ => panic!("Expected a text content block"),
         }
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
 
         // Test ContentBlockDelta with InputJsonDelta but no previous tool info
         let mut current_tool_id = None;
@@ -2663,7 +2663,7 @@ mod tests {
             }
             _ => panic!("Expected a tool call content block"),
         }
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
 
         // Test ContentBlockStart with ToolUse
         let mut current_tool_id = None;
@@ -2700,7 +2700,7 @@ mod tests {
             }
             _ => panic!("Expected a tool call content block"),
         }
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
         assert_eq!(current_tool_id, Some("tool1".to_string()));
         assert_eq!(current_tool_name, Some("calculator".to_string()));
 
@@ -2735,7 +2735,7 @@ mod tests {
             }
             _ => panic!("Expected a text content block"),
         }
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
 
         // Test ContentBlockStop
         let content_block_stop = AnthropicStreamMessage::ContentBlockStop { index: 2 };
@@ -2812,7 +2812,7 @@ mod tests {
         let usage = chunk.usage.unwrap();
         assert_eq!(usage.input_tokens, Some(10));
         assert_eq!(usage.output_tokens, Some(20));
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
         // Test MessageStart with usage
@@ -2839,7 +2839,7 @@ mod tests {
         let usage = chunk.usage.unwrap();
         assert_eq!(usage.input_tokens, Some(5));
         assert_eq!(usage.output_tokens, Some(15));
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
 
         // Test MessageStop
         let message_stop = AnthropicStreamMessage::MessageStop;
@@ -3031,11 +3031,10 @@ mod tests {
         // Test case 1: Empty content
         let chunk = ProviderInferenceResponseChunk {
             content: vec![],
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(0),
+            provider_latency: Duration::from_millis(0),
             finish_reason: None,
         };
         let mut result = chunk.clone();
@@ -3049,11 +3048,10 @@ mod tests {
         );
         // Test case 2: Single text block
         let chunk = ProviderInferenceResponseChunk {
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(0),
+            provider_latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::Text(TextChunk {
                 text: "\"key\": \"value ".to_string(),
@@ -3072,11 +3070,10 @@ mod tests {
 
         // Test case 3: Multiple blocks (should remain unchanged)
         let chunk = ProviderInferenceResponseChunk {
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(0),
+            provider_latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![
                 ContentBlockChunk::Text(TextChunk {
@@ -3095,11 +3092,10 @@ mod tests {
 
         // Test case 4: Non-text block (should remain unchanged)
         let chunk = ProviderInferenceResponseChunk {
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(0),
+            provider_latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "1".to_string(),

@@ -29,12 +29,13 @@ use super::InferenceResult;
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ProviderInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
-    pub created: u64,
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub raw_response: String,
-    pub latency: Duration,
+    /// Time elapsed between making the request to the model provider and receiving this chunk.
+    /// Important: this is NOT latency from the start of the TensorZero request.
+    pub provider_latency: Duration,
     pub finish_reason: Option<FinishReason>,
 }
 
@@ -83,12 +84,15 @@ pub struct UnknownChunk {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ChatInferenceResultChunk {
     pub content: Vec<ContentBlockChunk>,
-    pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
-    pub latency: Duration,
+    /// Time elapsed between making the request to the model provider and receiving this chunk.
+    /// Important: this is NOT latency from the start of the TensorZero request.
+    /// None for artificial chunks created by TensorZero (e.g., usage/finish_reason chunks).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_latency: Option<Duration>,
     pub raw_response: String,
     pub finish_reason: Option<FinishReason>,
 }
@@ -97,12 +101,15 @@ pub struct ChatInferenceResultChunk {
 pub struct JsonInferenceResultChunk {
     pub raw: Option<String>,
     pub thought: Option<String>,
-    pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
-    pub latency: Duration,
+    /// Time elapsed between making the request to the model provider and receiving this chunk.
+    /// Important: this is NOT latency from the start of the TensorZero request.
+    /// None for artificial chunks created by TensorZero (e.g., usage/finish_reason chunks).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_latency: Option<Duration>,
     pub raw_response: String,
     pub finish_reason: Option<FinishReason>,
 }
@@ -115,10 +122,10 @@ pub enum InferenceResultChunk {
 }
 
 impl InferenceResultChunk {
-    pub fn latency(&self) -> Duration {
+    pub fn provider_latency(&self) -> Option<Duration> {
         match self {
-            InferenceResultChunk::Chat(chunk) => chunk.latency,
-            InferenceResultChunk::Json(chunk) => chunk.latency,
+            InferenceResultChunk::Chat(chunk) => chunk.provider_latency,
+            InferenceResultChunk::Json(chunk) => chunk.provider_latency,
         }
     }
 
@@ -176,10 +183,9 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
     fn from(chunk: ProviderInferenceResponseChunk) -> Self {
         Self {
             content: chunk.content,
-            created: chunk.created,
             usage: chunk.usage,
             raw_usage: chunk.raw_usage,
-            latency: chunk.latency,
+            provider_latency: Some(chunk.provider_latency),
             finish_reason: chunk.finish_reason,
             raw_response: chunk.raw_response,
         }
@@ -212,10 +218,9 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
         Self {
             raw,
             thought,
-            created: chunk.created,
             usage: chunk.usage,
             raw_usage: chunk.raw_usage,
-            latency: chunk.latency,
+            provider_latency: Some(chunk.provider_latency),
             raw_response: chunk.raw_response,
             finish_reason: chunk.finish_reason,
         }
@@ -254,8 +259,6 @@ pub struct CollectChunksArgs {
     pub usage: Usage,
     /// The final `FinishReason` we streamed to the client
     pub finish_reason: Option<FinishReason>,
-    /// The TTFT captured when the first real provider chunk arrived.
-    pub ttft: Option<Duration>,
 }
 
 pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, Error> {
@@ -283,7 +286,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         model_inference_id,
         usage,
         finish_reason,
-        ttft,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -311,28 +313,22 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     });
     // Collect raw_usage entries from chunks (relay or provider streaming)
     let mut raw_usage: Option<Vec<RawUsageEntry>> = None;
-    let response_time = value
-        .last()
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::TypeConversion {
-                message:
-                    "Attempted to create an InferenceResult from an empty response chunk vector"
-                        .to_string(),
-            })
-        })?
-        .latency();
+
+    // Extract provider-level TTFT from the first real chunk (with provider_latency set).
+    // This is used for ModelInference timing.
+    let provider_ttft = value.iter().find_map(|chunk| chunk.provider_latency());
+
+    // Extract provider-level response_time from the last real chunk (with provider_latency set).
+    // This is used for ModelInference timing.
+    let provider_response_time = value
+        .iter()
+        .rev()
+        .find_map(|chunk| chunk.provider_latency());
 
     // Maps a chunk id to a map of summary ids to summary texts
     // This is used to build up a thought summary list for each thought,
     // which is used to construct the final 'summary' field on Thought.
     let mut thought_summaries: IndexMap<String, IndexSet<String>> = IndexMap::new();
-
-    // Use the passed-in TTFT (captured when the first real provider chunk arrived).
-    let ttft = ttft.ok_or_else(|| {
-        Error::new(ErrorDetails::TypeConversion {
-            message: "Never got TTFT because there were no chunks in the response".to_string(),
-        })
-    })?;
 
     for chunk in value {
         if let Some(chunk_raw_usage) = chunk.raw_usage() {
@@ -581,9 +577,22 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
             }
         }
     }
-    let latency = Latency::Streaming {
-        ttft,
-        response_time,
+    // For ModelInference, use provider-level timing (excludes TensorZero overhead).
+    // We should always have at least one real provider chunk with provider_latency set.
+    let provider_ttft = provider_ttft.ok_or_else(|| {
+        Error::new(ErrorDetails::TypeConversion {
+            message: "No provider-level TTFT found - all chunks were artificial".to_string(),
+        })
+    })?;
+    let provider_response_time = provider_response_time.ok_or_else(|| {
+        Error::new(ErrorDetails::TypeConversion {
+            message: "No provider-level response time found - all chunks were artificial"
+                .to_string(),
+        })
+    })?;
+    let provider_latency = Latency::Streaming {
+        ttft: provider_ttft,
+        response_time: provider_response_time,
     };
     let content_blocks: Vec<_> = blocks.into_values().collect();
     let model_response = ProviderInferenceResponse::new(ProviderInferenceResponseArgs {
@@ -594,7 +603,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         raw_response,
         usage,
         raw_usage,
-        latency: latency.clone(),
+        provider_latency,
         finish_reason,
         id: model_inference_id,
     });
@@ -863,15 +872,12 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
-            ttft: None,
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::TypeConversion {
-                message:
-                    "Attempted to create an InferenceResult from an empty response chunk vector"
-                        .to_string(),
+                message: "No provider-level TTFT found - all chunks were artificial".to_string(),
             }
             .into()
         );
@@ -884,15 +890,14 @@ mod tests {
             text: "Hello,".to_string(),
             id: "0".to_string(),
         })];
-        let latency = Duration::from_millis(150);
+        let provider_latency = Some(Duration::from_millis(150));
         let chunks = vec![
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content,
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "{\"message\": \"Hello}".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -900,14 +905,13 @@ mod tests {
                     text: " world!".to_string(),
                     id: "0".to_string(),
                 })],
-                created,
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
                 }),
                 raw_usage: None,
                 raw_response: ", world!\"}".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
         ];
@@ -938,7 +942,6 @@ mod tests {
                 output_tokens: Some(4),
             },
             finish_reason: Some(FinishReason::Stop),
-            ttft: Some(latency),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -1000,21 +1003,19 @@ mod tests {
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
-                created,
                 usage: Some(usage1),
                 raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
-                latency: Duration::from_millis(150),
+                provider_latency: Some(Duration::from_millis(150)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
-                created,
                 usage: Some(usage2),
                 raw_usage: None,
                 raw_response: "\"John\",\"age\":30}".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
         ];
@@ -1045,7 +1046,6 @@ mod tests {
                 output_tokens: Some(15),
             },
             finish_reason: Some(FinishReason::Stop),
-            ttft: Some(latency),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1090,21 +1090,19 @@ mod tests {
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
-                created,
                 usage: Some(usage),
                 raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
-                latency: Duration::from_millis(100),
+                provider_latency: Some(Duration::from_millis(100)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\"}".to_string()),
                 thought: None,
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "\"John\"}".to_string(),
-                latency: Duration::from_millis(200),
+                provider_latency: Some(Duration::from_millis(200)),
                 finish_reason: None,
             }),
         ];
@@ -1132,7 +1130,6 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage,
             finish_reason: Some(FinishReason::ToolCall),
-            ttft: Some(latency),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1176,31 +1173,28 @@ mod tests {
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":\"John\",".to_string()),
                 thought: None,
-                created,
                 usage: Some(usage),
                 raw_usage: None,
                 raw_response: "{\"name\":\"John\",".to_string(),
-                latency: Duration::from_millis(100),
+                provider_latency: Some(Duration::from_millis(100)),
                 finish_reason: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some(String::new()),
                 thought: Some("Thought 2".to_string()),
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: String::new(),
-                latency: Duration::from_millis(200),
+                provider_latency: Some(Duration::from_millis(200)),
                 finish_reason: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"age\":30}".to_string()),
                 thought: None,
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "\"age\":30}".to_string(),
-                latency: Duration::from_millis(300),
+                provider_latency: Some(Duration::from_millis(300)),
                 finish_reason: Some(FinishReason::Stop),
             }),
         ];
@@ -1228,7 +1222,6 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage,
             finish_reason: Some(FinishReason::Stop),
-            ttft: Some(latency),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1276,7 +1269,7 @@ mod tests {
 
         // Test Case 6: a JSON function with implicit tool call config
         let inference_id = Uuid::now_v7();
-        let created = current_timestamp();
+
         let output_schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -1308,21 +1301,19 @@ mod tests {
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
-                created,
                 usage: Some(usage1),
                 raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
-                latency: Duration::from_millis(150),
+                provider_latency: Some(Duration::from_millis(150)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
-                created,
                 usage: Some(usage2),
                 raw_usage: None,
                 raw_response: "\"John\",\"age\":30}".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
         ];
@@ -1353,7 +1344,6 @@ mod tests {
                 output_tokens: Some(15),
             },
             finish_reason: Some(FinishReason::Stop),
-            ttft: Some(latency),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1427,22 +1417,20 @@ mod tests {
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
                 thought: Some("Thought 1".to_string()),
-                created,
                 usage: Some(usage1),
                 raw_usage: None,
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: "{\"name\":".to_string(),
-                latency: Duration::from_millis(150),
+                provider_latency: Some(Duration::from_millis(150)),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
                 thought: Some("Thought 2".to_string()),
-                created,
                 usage: Some(usage2),
                 raw_usage: None,
                 finish_reason: Some(FinishReason::ToolCall),
                 raw_response: "\"John\",\"age\":30}".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1472,7 +1460,6 @@ mod tests {
                 output_tokens: Some(15),
             },
             finish_reason: Some(FinishReason::ToolCall),
-            ttft: Some(Duration::from_millis(150)),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1520,7 +1507,7 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let episode_id = Uuid::now_v7();
         let created = current_timestamp();
-        let latency = Duration::from_millis(150);
+        let provider_latency = Some(Duration::from_millis(150));
         let chunks = vec![
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -1534,11 +1521,10 @@ mod tests {
                         raw_arguments: "true".to_string(),
                     }),
                 ],
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "{\"message\": \"Hello}".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -1592,11 +1578,10 @@ mod tests {
                         provider_type: None,
                     }),
                 ],
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "my raw thought".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -1604,14 +1589,13 @@ mod tests {
                     text: "world!".to_string(),
                     id: "0".to_string(),
                 })],
-                created,
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
                 }),
                 raw_usage: None,
                 raw_response: ", world!\"}".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -1623,11 +1607,10 @@ mod tests {
                     signature: None,
                     provider_type: None,
                 })],
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "my other raw thought".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
         ];
@@ -1658,7 +1641,6 @@ mod tests {
                 output_tokens: Some(4),
             },
             finish_reason: Some(FinishReason::Stop),
-            ttft: Some(latency),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1737,8 +1719,7 @@ mod tests {
         let raw_request = "raw request".to_string();
         let inference_id = Uuid::now_v7();
         let episode_id = Uuid::now_v7();
-        let created = current_timestamp();
-        let latency = Duration::from_millis(150);
+        let provider_latency = Some(Duration::from_millis(150));
 
         // Test case 1: Tool name sent in first chunk, then arguments accumulated
         let chunks_case1 = vec![
@@ -1748,11 +1729,10 @@ mod tests {
                     raw_name: Some("get_weather".to_string()),
                     raw_arguments: "{\"loca".to_string(),
                 })],
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "chunk1".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -1761,14 +1741,13 @@ mod tests {
                     raw_name: None, // No name in subsequent chunks
                     raw_arguments: "tion\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
                 })],
-                created,
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
                 }),
                 raw_usage: None,
                 raw_response: "chunk2".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
         ];
@@ -1797,7 +1776,6 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
-            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1834,11 +1812,10 @@ mod tests {
                         raw_arguments: "{\"expr".to_string(),
                     }),
                 ],
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "chunk1".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -1854,14 +1831,13 @@ mod tests {
                         raw_arguments: "ession\": \"2+2\"}".to_string(),
                     }),
                 ],
-                created,
                 usage: Some(Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
                 }),
                 raw_usage: None,
                 raw_response: "chunk2".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
         ];
@@ -1890,7 +1866,6 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
-            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1925,11 +1900,10 @@ mod tests {
                     raw_name: None, // No name in first chunk
                     raw_arguments: "{\"key\":".to_string(),
                 })],
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "chunk1".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -1938,14 +1912,13 @@ mod tests {
                     raw_name: Some("my_function".to_string()), // Name comes later
                     raw_arguments: " \"value\"}".to_string(),
                 })],
-                created,
                 usage: Some(Usage {
                     input_tokens: Some(5),
                     output_tokens: Some(10),
                 }),
                 raw_usage: None,
                 raw_response: "chunk2".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
         ];
@@ -1974,7 +1947,6 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
-            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2007,11 +1979,10 @@ mod tests {
                         raw_arguments: "{\"query\"".to_string(),
                     }),
                 ],
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "chunk1".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -2026,14 +1997,13 @@ mod tests {
                         raw_arguments: ": \"weather today\"}".to_string(),
                     }),
                 ],
-                created,
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(15),
                 }),
                 raw_usage: None,
                 raw_response: "chunk2".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
         ];
@@ -2062,7 +2032,6 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
-            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2098,14 +2067,13 @@ mod tests {
                 raw_name: None,
                 raw_arguments: "{\"test\": true}".to_string(),
             })],
-            created,
             usage: Some(Usage {
                 input_tokens: Some(5),
                 output_tokens: Some(5),
             }),
             raw_usage: None,
             raw_response: "chunk1".to_string(),
-            latency,
+            provider_latency,
             finish_reason: Some(FinishReason::ToolCall),
         })];
 
@@ -2133,7 +2101,6 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
-            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2172,11 +2139,10 @@ mod tests {
                         raw_arguments: "{\"me".to_string(),
                     }),
                 ],
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "chunk1".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -2197,11 +2163,10 @@ mod tests {
                         raw_arguments: "ssage\": ".to_string(),
                     }),
                 ],
-                created,
                 usage: None,
                 raw_usage: None,
                 raw_response: "chunk2".to_string(),
-                latency,
+                provider_latency,
                 finish_reason: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -2222,14 +2187,13 @@ mod tests {
                         raw_arguments: "\"Hello world\"}".to_string(),
                     }),
                 ],
-                created,
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(30),
                 }),
                 raw_usage: None,
                 raw_response: "chunk3".to_string(),
-                latency: Duration::from_millis(250),
+                provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
         ];
@@ -2258,7 +2222,6 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             usage: Usage::default(),
             finish_reason: None,
-            ttft: Some(latency),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2305,23 +2268,21 @@ mod tests {
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
                 raw_name: Some("test_tool".to_string()),
             })],
-            created: 1234567890,
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
             }),
             raw_usage: None,
             raw_response: "raw response".to_string(),
-            latency: Duration::from_secs(1),
+            provider_latency: Duration::from_secs(1),
             finish_reason: Some(FinishReason::ToolCall),
         };
 
         let result = JsonInferenceResultChunk::from(tool_chunk);
         assert_eq!(result.raw, Some("{\"key\": \"value\"}".to_string()));
         assert_eq!(result.thought, None);
-        assert_eq!(result.created, 1234567890);
         assert_eq!(result.raw_response, "raw response");
-        assert_eq!(result.latency, Duration::from_secs(1));
+        assert_eq!(result.provider_latency, Some(Duration::from_secs(1)));
         assert_eq!(
             result.usage,
             Some(Usage {
@@ -2336,11 +2297,10 @@ mod tests {
                 id: "123".to_string(),
                 text: "some text".to_string(),
             })],
-            created: 1234567890,
             usage: None,
             raw_usage: None,
             raw_response: "raw response".to_string(),
-            latency: Duration::from_secs(1),
+            provider_latency: Duration::from_secs(1),
             finish_reason: None,
         };
 
@@ -2358,11 +2318,10 @@ mod tests {
                 signature: None,
                 provider_type: None,
             })],
-            created: 1234567890,
             usage: None,
             raw_usage: None,
             raw_response: "raw response".to_string(),
-            latency: Duration::from_secs(1),
+            provider_latency: Duration::from_secs(1),
             finish_reason: None,
         };
 
@@ -2391,11 +2350,10 @@ mod tests {
                     provider_type: None,
                 }),
             ],
-            created: 1234567890,
             usage: None,
             raw_usage: None,
             raw_response: "raw response".to_string(),
-            latency: Duration::from_secs(1),
+            provider_latency: Duration::from_secs(1),
             finish_reason: None,
         };
 
@@ -2406,11 +2364,10 @@ mod tests {
         // Test case for empty content
         let empty_chunk = ProviderInferenceResponseChunk {
             content: vec![],
-            created: 1234567890,
             usage: None,
             raw_usage: None,
             raw_response: "raw response".to_string(),
-            latency: Duration::from_secs(1),
+            provider_latency: Duration::from_secs(1),
             finish_reason: None,
         };
 

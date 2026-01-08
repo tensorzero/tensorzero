@@ -2741,7 +2741,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 raw_usage,
                 usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,
             },
@@ -3682,7 +3682,7 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_millis(100)
             }
@@ -3781,7 +3781,7 @@ mod tests {
             Some(FinishReason::ToolCall)
         );
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_millis(110)
             }

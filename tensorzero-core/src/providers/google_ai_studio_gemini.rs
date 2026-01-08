@@ -1355,7 +1355,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: first_candidate.finish_reason.map(Into::into),
                 id: model_inference_id,
             },
@@ -2111,7 +2111,7 @@ mod tests {
                 output_tokens: Some(10),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(
@@ -2225,7 +2225,7 @@ mod tests {
                 output_tokens: Some(20),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(
             model_inference_response.finish_reason,
             Some(FinishReason::Stop)
@@ -2352,7 +2352,7 @@ mod tests {
                 output_tokens: Some(40),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(
             model_inference_response.system,
             Some("test_system".to_string())

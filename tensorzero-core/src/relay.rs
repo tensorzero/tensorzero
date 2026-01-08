@@ -339,7 +339,7 @@ impl TensorzeroRelay {
                 raw_response: http_data.raw_response.unwrap_or_default(),
                 usage,
                 raw_usage: raw_usage_entries,
-                latency,
+                provider_latency: latency,
                 finish_reason,
                 id: Uuid::now_v7(),
             },
