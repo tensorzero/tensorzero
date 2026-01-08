@@ -870,7 +870,9 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::TypeConversion {
-                message: "Never got TTFT because there were no chunks in the response".to_string(),
+                message:
+                    "Attempted to create an InferenceResult from an empty response chunk vector"
+                        .to_string(),
             }
             .into()
         );

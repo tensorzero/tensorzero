@@ -1147,7 +1147,6 @@ fn should_stream_chunk_in_create_stream(
                 finish_reason,
                 // Only stream if `include_raw_usage` is enabled
                 raw_usage,
-
                 // We already handled `include_original_response` above
                 raw_response: _,
                 // We don't care about streaming the following fields in isolation
@@ -1166,7 +1165,6 @@ fn should_stream_chunk_in_create_stream(
             let JsonInferenceResultChunk {
                 // Always stream these fields
                 raw,
-                thought,
                 // These fields should've been cleared for intermediate chunks in `create_stream`; if they're here, stream
                 usage,
                 finish_reason,
@@ -1174,6 +1172,8 @@ fn should_stream_chunk_in_create_stream(
                 raw_usage,
                 // We already handled `include_original_response` above
                 raw_response: _,
+                // We never actually stream this field, so we don't need it
+                thought: _,
                 // We don't care about streaming the following fields in isolation
                 created: _,
                 latency: _,
@@ -1184,7 +1184,9 @@ fn should_stream_chunk_in_create_stream(
                 return true;
             }
 
-            raw.is_some() || thought.is_some() || usage.is_some() || finish_reason.is_some()
+            raw.as_ref().is_some_and(|x| !x.is_empty())
+                || usage.is_some()
+                || finish_reason.is_some()
         }
     }
 }

@@ -392,6 +392,7 @@ class ChatChunk:
     usage: Optional[Usage] = None
     raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
+    original_chunk: Optional[str] = None
 
 
 @dataclass
@@ -403,6 +404,7 @@ class JsonChunk:
     usage: Optional[Usage] = None
     raw_usage: Optional[List[RawUsageEntry]] = None
     finish_reason: Optional[FinishReason] = None
+    original_chunk: Optional[str] = None
 
 
 InferenceChunk = Union[ChatChunk, JsonChunk]
@@ -421,6 +423,7 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
             raw_usage=parse_raw_usage(chunk.get("raw_usage")),
             finish_reason=finish_reason_enum,
+            original_chunk=chunk.get("original_chunk"),
         )
     elif "raw" in chunk:
         return JsonChunk(
@@ -431,6 +434,7 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
             raw_usage=parse_raw_usage(chunk.get("raw_usage")),
             finish_reason=finish_reason_enum,
+            original_chunk=chunk.get("original_chunk"),
         )
     else:
         raise ValueError(f"Unable to determine response type: {chunk}")
