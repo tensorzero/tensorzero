@@ -13,6 +13,10 @@ import {
 import { useCallback, useMemo } from "react";
 import { ComboboxInput } from "./ComboboxInput";
 import { useCombobox } from "./use-combobox";
+import { VirtualizedCommandItems } from "~/components/ui/virtualized-command-list";
+
+/** Default threshold for enabling virtualization */
+const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
 
 type ComboboxProps = {
   selected: string | null;
@@ -24,6 +28,12 @@ type ComboboxProps = {
   disabled?: boolean;
   name?: string;
   ariaLabel?: string;
+  /**
+   * Number of items at which virtualization is enabled.
+   * Set to 0 to always virtualize, or Infinity to never virtualize.
+   * Default: 100
+   */
+  virtualizeThreshold?: number;
 };
 
 export function Combobox({
@@ -36,6 +46,7 @@ export function Combobox({
   disabled = false,
   name,
   ariaLabel,
+  virtualizeThreshold = DEFAULT_VIRTUALIZE_THRESHOLD,
 }: ComboboxProps) {
   const {
     open,
@@ -68,6 +79,23 @@ export function Combobox({
     return getItemIcon?.(item);
   }, [selected, searchValue, getItemIcon]);
 
+  const shouldVirtualize = filteredItems.length >= virtualizeThreshold;
+
+  const renderItem = useCallback(
+    (item: string) => (
+      <CommandItem
+        key={item}
+        value={item}
+        onSelect={() => handleSelect(item)}
+        className="flex items-center gap-2"
+      >
+        {getItemIcon?.(item)}
+        <span className="truncate font-mono">{item}</span>
+      </CommandItem>
+    ),
+    [getItemIcon, handleSelect],
+  );
+
   return (
     <div className="w-full">
       {name && <input type="hidden" name={name} value={selected ?? ""} />}
@@ -98,21 +126,19 @@ export function Combobox({
               <CommandEmpty className="text-fg-tertiary flex items-center justify-center py-6 text-sm">
                 {emptyMessage}
               </CommandEmpty>
-              {filteredItems.length > 0 && (
-                <CommandGroup>
-                  {filteredItems.map((item) => (
-                    <CommandItem
-                      key={item}
-                      value={item}
-                      onSelect={() => handleSelect(item)}
-                      className="flex items-center gap-2"
-                    >
-                      {getItemIcon?.(item)}
-                      <span className="truncate font-mono">{item}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              )}
+              {filteredItems.length > 0 &&
+                (shouldVirtualize ? (
+                  <CommandGroup>
+                    <VirtualizedCommandItems
+                      items={filteredItems}
+                      renderItem={renderItem}
+                    />
+                  </CommandGroup>
+                ) : (
+                  <CommandGroup>
+                    {filteredItems.map((item) => renderItem(item))}
+                  </CommandGroup>
+                ))}
             </CommandList>
           </Command>
         </PopoverContent>
