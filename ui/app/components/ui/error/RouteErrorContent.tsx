@@ -3,7 +3,7 @@ import { isRouteErrorResponse } from "react-router";
 import {
   ErrorContentCard,
   ErrorContentHeader,
-  ErrorContext,
+  ErrorScope,
 } from "./ErrorContentPrimitives";
 
 interface RouteErrorContentProps {
@@ -15,12 +15,12 @@ export function RouteErrorContent({ error }: RouteErrorContentProps) {
 
   return (
     <div className="flex min-h-full items-center justify-center p-8 pb-20">
-      <ErrorContentCard context={ErrorContext.Page}>
+      <ErrorContentCard scope={ErrorScope.Page}>
         <ErrorContentHeader
           icon={AlertTriangle}
           title={status ? `Error ${status}` : title}
           description={message}
-          context={ErrorContext.Page}
+          scope={ErrorScope.Page}
         />
       </ErrorContentCard>
     </div>

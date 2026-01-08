@@ -15,7 +15,7 @@
  *    - Shows light card within content area - sidebar stays visible
  *    - Uses RouteErrorContent for consistent styling
  *
- * ErrorContext (App/Page) determines theming:
+ * ErrorScope (App/Page) determines theming:
  *    - App: Dark overlay for app-level errors (used by ErrorContent)
  *    - Page: Light card for page-level errors (used by RouteErrorContent)
  */
