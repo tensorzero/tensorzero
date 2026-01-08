@@ -39,14 +39,10 @@ import {
   isClickHouseError,
   type ClassifiedError,
 } from "./utils/tensorzero/errors";
-import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
-import { ReactQueryProvider } from "./providers/react-query";
+import { AppProviders } from "./providers/app-providers";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
-import { TooltipProvider } from "~/components/ui/tooltip";
-import { GlobalToastProvider } from "~/providers/global-toast-provider";
-import { Toaster } from "~/components/ui/toaster";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -126,27 +122,20 @@ export default function App({ loaderData }: Route.ComponentProps) {
   const { config, isReadOnly, autopilotAvailable } = loaderData;
 
   return (
-    <ReactQueryProvider>
-      <GlobalToastProvider>
-        <ReadOnlyProvider value={isReadOnly}>
-          <AutopilotAvailableProvider value={autopilotAvailable}>
-            <ConfigProvider value={config}>
-              <SidebarProvider>
-                <TooltipProvider>
-                  <div className="fixed inset-0 flex">
-                    <AppSidebar />
-                    <ContentLayout>
-                      <Outlet />
-                    </ContentLayout>
-                  </div>
-                </TooltipProvider>
-              </SidebarProvider>
-            </ConfigProvider>
-          </AutopilotAvailableProvider>
-        </ReadOnlyProvider>
-        <Toaster />
-      </GlobalToastProvider>
-    </ReactQueryProvider>
+    <AppProviders>
+      <ReadOnlyProvider value={isReadOnly}>
+        <AutopilotAvailableProvider value={autopilotAvailable}>
+          <ConfigProvider value={config}>
+            <div className="fixed inset-0 flex">
+              <AppSidebar />
+              <ContentLayout>
+                <Outlet />
+              </ContentLayout>
+            </div>
+          </ConfigProvider>
+        </AutopilotAvailableProvider>
+      </ReadOnlyProvider>
+    </AppProviders>
   );
 }
 

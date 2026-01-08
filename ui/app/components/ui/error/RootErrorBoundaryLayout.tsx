@@ -1,33 +1,26 @@
 import { AppSidebar } from "~/components/layout/app.sidebar";
 import { ContentLayout } from "~/components/layout/ContentLayout";
-import { SidebarProvider } from "~/components/ui/sidebar";
-import { TooltipProvider } from "~/components/ui/tooltip";
-import { ReactQueryProvider } from "~/providers/react-query";
-import { GlobalToastProvider } from "~/providers/global-toast-provider";
-import { Toaster } from "~/components/ui/toaster";
+import { AppProviders } from "~/providers/app-providers";
 
 interface RootErrorBoundaryLayoutProps {
   children?: React.ReactNode;
 }
 
-// Provides necessary context providers without requiring config
+/**
+ * Renders the app shell even when the root loader fails.
+ * Shows sidebar + layout so the app feels present but blocked by the error,
+ * rather than completely broken. Children render as an overlay on top.
+ */
 export function RootErrorBoundaryLayout({
   children,
 }: RootErrorBoundaryLayoutProps) {
   return (
-    <ReactQueryProvider>
-      <GlobalToastProvider>
-        <SidebarProvider>
-          <TooltipProvider>
-            <div className="fixed inset-0 flex">
-              <AppSidebar />
-              <ContentLayout />
-            </div>
-            {children}
-          </TooltipProvider>
-        </SidebarProvider>
-        <Toaster />
-      </GlobalToastProvider>
-    </ReactQueryProvider>
+    <AppProviders>
+      <div className="fixed inset-0 flex">
+        <AppSidebar />
+        <ContentLayout />
+      </div>
+      {children}
+    </AppProviders>
   );
 }
