@@ -203,13 +203,24 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
 
     // Each model stream response uses 2 output tokens
     // We have 3 candidates and 1 fuser, so 4*2=8 output tokens
-    assert_eq!(
-        usage_sum,
-        Usage {
-            input_tokens: Some(40),
-            output_tokens: Some(8),
-        }
-    );
+    if stream {
+        assert_eq!(
+            usage_sum,
+            Usage {
+                input_tokens: Some(40),
+                output_tokens: Some(8),
+            }
+        );
+    } else {
+        // Non-streaming: dummy provider returns 1 output token per model (content.len() = 1 Vec element)
+        assert_eq!(
+            usage_sum,
+            Usage {
+                input_tokens: Some(40),
+                output_tokens: Some(4),
+            }
+        );
+    }
 
     // When all of the candidates are cached, the reported HTTP usage should be 0 (since no tokens were billed),
     // even though we'll store the original cached usage in the database.
@@ -1023,6 +1034,7 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
         .unwrap();
     assert!(snapshot_hash.is_string());
 
+    // Each model inference should have its INDIVIDUAL usage, not aggregated
     assert_eq!(
         first_result,
         serde_json::json!({
@@ -1033,8 +1045,8 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}",
           "model_name": "test",
           "model_provider_name": "good",
-          "input_tokens": 20,
-          "output_tokens": 2,
+          "input_tokens": 10,
+          "output_tokens": 1,
           "response_time_ms": 100,
           "ttft_ms": 100,
           "system": "You are a helpful and friendly assistant named AskJeeves",
