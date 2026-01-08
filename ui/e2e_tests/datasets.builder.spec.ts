@@ -37,7 +37,7 @@ test.describe("Dataset Builder", () => {
 
     // Select new dataset name
     await page.getByRole("combobox", { name: "Dataset" }).click();
-    await page.getByPlaceholder(/Create or find a dataset/).fill(datasetName);
+    await page.getByPlaceholder(/Create or find dataset/).fill(datasetName);
     await page.getByRole("option", { name: datasetName }).click();
 
     // Select function
@@ -63,7 +63,7 @@ test.describe("Dataset Builder", () => {
 
     // Select new dataset name
     await page.getByRole("combobox", { name: "Dataset" }).click();
-    await page.getByPlaceholder(/Create or find a dataset/).fill(datasetName);
+    await page.getByPlaceholder(/Create or find dataset/).fill(datasetName);
     await page.getByRole("option", { name: datasetName }).click();
 
     // Select function
@@ -114,7 +114,7 @@ test.describe("Dataset Builder", () => {
 
     // Select new dataset name
     await page.getByRole("combobox", { name: "Dataset" }).click();
-    await page.getByPlaceholder(/Create or find a dataset/).fill(datasetName);
+    await page.getByPlaceholder(/Create or find dataset/).fill(datasetName);
     await page.getByRole("option", { name: datasetName }).click();
 
     // Select function (answer_question has tags foo=bar)
@@ -145,7 +145,7 @@ test.describe("Dataset Builder", () => {
 
     // Select new dataset name
     await page.getByRole("combobox", { name: "Dataset" }).click();
-    await page.getByPlaceholder(/Create or find a dataset/).fill(datasetName);
+    await page.getByPlaceholder(/Create or find dataset/).fill(datasetName);
     await page.getByRole("option", { name: datasetName }).click();
 
     // Select function
@@ -182,7 +182,7 @@ test.describe("Dataset Builder", () => {
 
     // Select new dataset name
     await page.getByRole("combobox", { name: "Dataset" }).click();
-    await page.getByPlaceholder(/Create or find a dataset/).fill(datasetName);
+    await page.getByPlaceholder(/Create or find dataset/).fill(datasetName);
     await page.getByRole("option", { name: datasetName }).click();
 
     // Select function
@@ -214,7 +214,7 @@ test.describe("Dataset Builder", () => {
 
     // Select new dataset name
     await page.getByRole("combobox", { name: "Dataset" }).click();
-    await page.getByPlaceholder(/Create or find a dataset/).fill(datasetName);
+    await page.getByPlaceholder(/Create or find dataset/).fill(datasetName);
     await page.getByRole("option", { name: datasetName }).click();
 
     // Select function
