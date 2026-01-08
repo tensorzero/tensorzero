@@ -33,9 +33,8 @@ pub use get_latest_feedback_by_metric::{
 };
 pub use inference::{InferenceTool, InferenceToolParams};
 pub use launch_optimization_workflow::{
-    LaunchOptimizationWorkflowLlmParams, LaunchOptimizationWorkflowTool,
-    LaunchOptimizationWorkflowToolOutput, LaunchOptimizationWorkflowToolParams, LlmOptimizerConfig,
-    LlmOptimizerType, LlmOutputSource,
+    LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolOutput,
+    LaunchOptimizationWorkflowToolParams,
 };
 pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
 pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};
