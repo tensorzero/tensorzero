@@ -1,6 +1,6 @@
 import type { Route } from "./+types/route";
 import DatasetRowTable, { type DatasetRowsData } from "./DatasetRowTable";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import { data, redirect } from "react-router";
 import DatasetRowSearchBar from "./DatasetRowSearchBar";
 import {
   PageHeader,
@@ -9,7 +9,6 @@ import {
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
-import { logger } from "~/utils/logger";
 import { useFetcher } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
@@ -40,18 +39,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
+  // Check if dataset exists first (throws 404 if not found)
+  const datasetsResponse = await getTensorZeroClient().listDatasets({});
+  const datasetInfo = datasetsResponse.datasets.find(
+    (d) => d.dataset_name === dataset_name,
+  );
+  if (!datasetInfo) {
+    throw data(`Dataset "${dataset_name}" not found`, { status: 404 });
+  }
+
   // Promise for count (streams to PageHeader)
-  const countPromise = getTensorZeroClient()
-    .listDatasets({})
-    .then((response) => {
-      const info = response.datasets.find(
-        (d) => d.dataset_name === dataset_name,
-      );
-      if (!info) {
-        throw Error("Dataset not found");
-      }
-      return info.datapoint_count;
-    });
+  const countPromise = Promise.resolve(datasetInfo.datapoint_count);
 
   // Promise for table data (streams to DatasetRowTable)
   const dataPromise: Promise<DatasetRowsData> = (async () => {
@@ -199,32 +197,4 @@ export default function DatasetDetailPage({
       </SectionLayout>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }
