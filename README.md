@@ -45,7 +45,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 >
 > ### **Coming Soon: TensorZero Autopilot**
 >
-> TensorZero Autopilot is an **automated AI engineer** powered by the TensorZero that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests.
+> TensorZero Autopilot is an **automated AI engineer** (powered by the TensorZero Stack) that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests.
 > **[Learn more](https://www.tensorzero.com/)** **[Join the waitlist](https://tensorzerodotcom.notion.site/2d87520bbad380c9ad0dd19566b3bc91)**
 
 ## Features
