@@ -19,6 +19,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// Helper to create mock RouteErrorResponse objects that pass isRouteErrorResponse()
+function createMockRouteErrorResponse(
+  status: number,
+  data: unknown,
+  statusText = "",
+) {
+  return { status, statusText, data, internal: true };
+}
+
 export const GenericError: Story = {
   args: {
     error: new Error("Failed to load data from the server"),
@@ -27,31 +36,31 @@ export const GenericError: Story = {
 
 export const NotFound: Story = {
   args: {
-    error: {
-      status: 404,
-      statusText: "Not Found",
-      data: "The requested resource could not be found.",
-    },
+    error: createMockRouteErrorResponse(
+      404,
+      "The requested resource could not be found.",
+      "Not Found",
+    ),
   },
 };
 
 export const ServerError: Story = {
   args: {
-    error: {
-      status: 500,
-      statusText: "Internal Server Error",
-      data: "An unexpected error occurred while processing your request.",
-    },
+    error: createMockRouteErrorResponse(
+      500,
+      "An unexpected error occurred while processing your request.",
+      "Internal Server Error",
+    ),
   },
 };
 
 export const BadRequest: Story = {
   args: {
-    error: {
-      status: 400,
-      statusText: "Bad Request",
-      data: "The request was malformed or contained invalid parameters.",
-    },
+    error: createMockRouteErrorResponse(
+      400,
+      "The request was malformed or contained invalid parameters.",
+      "Bad Request",
+    ),
   },
 };
 
