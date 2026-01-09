@@ -54,7 +54,7 @@ export function FeedbackMeansTimeseries({
   chartConfig: Record<string, { label: string; color: string }>;
 }) {
   const config = useConfig();
-  const metric = metricName ? config.metrics[metricName] : undefined;
+  const metric = metricName ? config?.metrics[metricName] : undefined;
   // Add numeric timestamps for x-axis (Recharts requires numbers for linear scale)
   const meanDataWithTimestamps: Array<
     FeedbackMeansTimeseriesData & { timestamp: number }
