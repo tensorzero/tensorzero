@@ -25,8 +25,8 @@ import {
 } from "./components/ui/error";
 import { NotFoundDisplay } from "./components/ui/error/ErrorContentPrimitives";
 import {
-  BoundaryErrorType,
-  isBoundaryErrorData,
+  InfraErrorType,
+  isInfraErrorData,
   isAuthenticationError,
   isGatewayConnectionError,
   classifyError,
@@ -85,7 +85,7 @@ export async function loader() {
         isReadOnly,
         autopilotAvailable: false,
         infraError: {
-          type: BoundaryErrorType.GatewayUnavailable,
+          type: InfraErrorType.GatewayUnavailable,
         } as ClassifiedError,
       };
     }
@@ -95,7 +95,7 @@ export async function loader() {
         isReadOnly,
         autopilotAvailable: false,
         infraError: {
-          type: BoundaryErrorType.GatewayAuthFailed,
+          type: InfraErrorType.GatewayAuthFailed,
         } as ClassifiedError,
       };
     }
@@ -106,7 +106,7 @@ export async function loader() {
         isReadOnly,
         autopilotAvailable: false,
         infraError: {
-          type: BoundaryErrorType.ClickHouseConnection,
+          type: InfraErrorType.ClickHouseUnavailable,
           message,
         } as ClassifiedError,
       };
@@ -172,7 +172,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   // Client 404s (page not found in React Router) - show in content area with sidebar
   if (isRouteErrorResponse(error) && error.status === 404) {
     // Ensure this is actually a client 404, not a gateway route not found
-    if (!isBoundaryErrorData(error.data)) {
+    if (!isInfraErrorData(error.data)) {
       return (
         <RootErrorBoundaryLayout>
           <div className="fixed inset-0 z-50 flex items-center justify-center">

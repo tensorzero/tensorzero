@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
-  BoundaryErrorType,
+  InfraErrorType,
   GatewayConnectionError,
-  isBoundaryErrorData,
+  isInfraErrorData,
   isAuthenticationError,
   isClickHouseError,
   isGatewayConnectionError,
@@ -10,53 +10,51 @@ import {
   TensorZeroServerError,
 } from "./errors";
 
-describe("BoundaryErrorType", () => {
+describe("InfraErrorType", () => {
   it("should have expected error type values", () => {
-    expect(BoundaryErrorType.GatewayUnavailable).toBe("GATEWAY_UNAVAILABLE");
-    expect(BoundaryErrorType.GatewayAuthFailed).toBe("GATEWAY_AUTH_FAILED");
-    expect(BoundaryErrorType.RouteNotFound).toBe("ROUTE_NOT_FOUND");
-    expect(BoundaryErrorType.ClickHouseConnection).toBe(
-      "CLICKHOUSE_CONNECTION",
-    );
-    expect(BoundaryErrorType.ServerError).toBe("SERVER_ERROR");
+    expect(InfraErrorType.GatewayUnavailable).toBe("GATEWAY_UNAVAILABLE");
+    expect(InfraErrorType.GatewayAuthFailed).toBe("GATEWAY_AUTH_FAILED");
+    expect(InfraErrorType.GatewayRouteNotFound).toBe("GATEWAY_ROUTE_NOT_FOUND");
+    expect(InfraErrorType.ClickHouseUnavailable).toBe("CLICKHOUSE_UNAVAILABLE");
+    expect(InfraErrorType.ServerError).toBe("SERVER_ERROR");
   });
 });
 
-describe("isBoundaryErrorData", () => {
-  it("should return true for valid BoundaryErrorData", () => {
-    const data = { errorType: BoundaryErrorType.GatewayUnavailable };
-    expect(isBoundaryErrorData(data)).toBe(true);
+describe("isInfraErrorData", () => {
+  it("should return true for valid InfraErrorData", () => {
+    const data = { errorType: InfraErrorType.GatewayUnavailable };
+    expect(isInfraErrorData(data)).toBe(true);
   });
 
-  it("should return true for BoundaryErrorData with optional fields", () => {
+  it("should return true for InfraErrorData with optional fields", () => {
     const data = {
-      errorType: BoundaryErrorType.RouteNotFound,
+      errorType: InfraErrorType.GatewayRouteNotFound,
       message: "Some message",
       routeInfo: "GET /api/test",
     };
-    expect(isBoundaryErrorData(data)).toBe(true);
+    expect(isInfraErrorData(data)).toBe(true);
   });
 
   it("should return false for null", () => {
-    expect(isBoundaryErrorData(null)).toBe(false);
+    expect(isInfraErrorData(null)).toBe(false);
   });
 
   it("should return false for undefined", () => {
-    expect(isBoundaryErrorData(undefined)).toBe(false);
+    expect(isInfraErrorData(undefined)).toBe(false);
   });
 
   it("should return false for object without errorType", () => {
-    expect(isBoundaryErrorData({ message: "error" })).toBe(false);
+    expect(isInfraErrorData({ message: "error" })).toBe(false);
   });
 
   it("should return false for object with invalid errorType", () => {
-    expect(isBoundaryErrorData({ errorType: "INVALID_TYPE" })).toBe(false);
+    expect(isInfraErrorData({ errorType: "INVALID_TYPE" })).toBe(false);
   });
 
   it("should return false for non-object values", () => {
-    expect(isBoundaryErrorData("string")).toBe(false);
-    expect(isBoundaryErrorData(123)).toBe(false);
-    expect(isBoundaryErrorData(true)).toBe(false);
+    expect(isInfraErrorData("string")).toBe(false);
+    expect(isInfraErrorData(123)).toBe(false);
+    expect(isInfraErrorData(true)).toBe(false);
   });
 });
 

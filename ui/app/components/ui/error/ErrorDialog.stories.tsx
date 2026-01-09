@@ -3,7 +3,7 @@ import { useState } from "react";
 import { ErrorDialog } from "./ErrorDialog";
 import { ErrorContent } from "./ErrorContent";
 import {
-  BoundaryErrorType,
+  InfraErrorType,
   type ClassifiedError,
 } from "~/utils/tensorzero/errors";
 
@@ -52,22 +52,22 @@ type Story = StoryObj<typeof meta>;
 
 export const GatewayUnavailable: Story = {
   args: {
-    error: { type: BoundaryErrorType.GatewayUnavailable },
+    error: { type: InfraErrorType.GatewayUnavailable },
     label: "Gateway Connection Error",
   },
 };
 
 export const AuthenticationFailed: Story = {
   args: {
-    error: { type: BoundaryErrorType.GatewayAuthFailed },
+    error: { type: InfraErrorType.GatewayAuthFailed },
     label: "Auth Error",
   },
 };
 
-export const RouteNotFound: Story = {
+export const GatewayRouteNotFound: Story = {
   args: {
     error: {
-      type: BoundaryErrorType.RouteNotFound,
+      type: InfraErrorType.GatewayRouteNotFound,
       routeInfo: "GET /api/v1/unknown",
     },
     label: "Route Error",
@@ -77,7 +77,7 @@ export const RouteNotFound: Story = {
 export const ServerError: Story = {
   args: {
     error: {
-      type: BoundaryErrorType.ServerError,
+      type: InfraErrorType.ServerError,
       status: 500,
       message: "Internal server error",
     },
@@ -88,7 +88,7 @@ export const ServerError: Story = {
 export const ServerErrorWithStack: Story = {
   args: {
     error: {
-      type: BoundaryErrorType.ServerError,
+      type: InfraErrorType.ServerError,
       status: 500,
       message: "Internal server error",
       stack: `Error: Internal server error
@@ -103,26 +103,26 @@ export const ServerErrorWithStack: Story = {
 export const ServerErrorWithoutStatus: Story = {
   args: {
     error: {
-      type: BoundaryErrorType.ServerError,
+      type: InfraErrorType.ServerError,
       message: "Something unexpected happened",
     },
     label: "Server Error",
   },
 };
 
-export const ClickHouseError: Story = {
+export const ClickHouseUnavailable: Story = {
   args: {
     error: {
-      type: BoundaryErrorType.ClickHouseConnection,
+      type: InfraErrorType.ClickHouseUnavailable,
       message: "Connection refused to ClickHouse at localhost:8123",
     },
     label: "Database Error",
   },
 };
 
-export const ClickHouseErrorDefault: Story = {
+export const ClickHouseUnavailableDefault: Story = {
   args: {
-    error: { type: BoundaryErrorType.ClickHouseConnection },
+    error: { type: InfraErrorType.ClickHouseUnavailable },
     label: "Database Error",
   },
 };

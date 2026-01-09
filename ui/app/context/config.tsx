@@ -15,7 +15,7 @@ const ConfigContext = createContext<UiConfig | undefined>(undefined);
 
 /**
  * Hook to get the TensorZero configuration.
- * Returns undefined when config is unavailable (e.g., gateway down).
+ * Returns undefined when config is unavailable due to infra errors.
  * Components should handle undefined gracefully by showing empty/disabled states.
  */
 export function useConfig(): UiConfig | undefined {

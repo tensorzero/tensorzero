@@ -140,8 +140,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   try {
     config = await getConfig();
   } catch {
-    // Config unavailable (gateway down) - return empty data
-    // Components will handle null config gracefully
+    // Config unavailable (infra error) - return empty data
     return {
       functionName: null,
       datasetName: null,

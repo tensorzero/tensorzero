@@ -6,7 +6,7 @@ import {
   Unplug,
 } from "lucide-react";
 import {
-  BoundaryErrorType,
+  InfraErrorType,
   type ClassifiedError,
 } from "~/utils/tensorzero/errors";
 import {
@@ -24,15 +24,15 @@ interface ErrorContentProps {
 
 export function ErrorContent({ error }: ErrorContentProps) {
   switch (error.type) {
-    case BoundaryErrorType.GatewayUnavailable:
+    case InfraErrorType.GatewayUnavailable:
       return <GatewayUnavailableContent />;
-    case BoundaryErrorType.GatewayAuthFailed:
+    case InfraErrorType.GatewayAuthFailed:
       return <GatewayAuthContent />;
-    case BoundaryErrorType.RouteNotFound:
-      return <RouteNotFoundContent routeInfo={error.routeInfo} />;
-    case BoundaryErrorType.ClickHouseConnection:
+    case InfraErrorType.GatewayRouteNotFound:
+      return <GatewayRouteNotFoundContent routeInfo={error.routeInfo} />;
+    case InfraErrorType.ClickHouseUnavailable:
       return <ClickHouseContent message={error.message} />;
-    case BoundaryErrorType.ServerError:
+    case InfraErrorType.ServerError:
       return (
         <ServerErrorContent
           status={error.status}
@@ -95,12 +95,12 @@ function GatewayAuthContent() {
   );
 }
 
-function RouteNotFoundContent({ routeInfo }: { routeInfo: string }) {
+function GatewayRouteNotFoundContent({ routeInfo }: { routeInfo: string }) {
   return (
     <ErrorContentCard scope={ErrorScope.App}>
       <ErrorContentHeader
         icon={Server}
-        title="API Route Not Found"
+        title="Gateway Route Not Found"
         description={`The Gateway returned 404 for: ${routeInfo}`}
         scope={ErrorScope.App}
       />

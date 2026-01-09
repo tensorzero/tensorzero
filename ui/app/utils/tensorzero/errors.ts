@@ -3,71 +3,67 @@ import { isRouteErrorResponse } from "react-router";
 import { isErrorLike } from "~/utils/common";
 
 /**
- * Enum-like constants for categorizing errors that survive serialization
- * across the React Router server/client boundary.
+ * Enum-like constants for categorizing infrastructure errors that survive
+ * serialization across the React Router server/client boundary.
  *
  * Use with React Router's `data()` helper:
  * ```ts
- * throw data({ errorType: BoundaryErrorType.GatewayUnavailable }, { status: 503 });
+ * throw data({ errorType: InfraErrorType.GatewayUnavailable }, { status: 503 });
  * ```
  */
-export const BoundaryErrorType = {
+export const InfraErrorType = {
   GatewayUnavailable: "GATEWAY_UNAVAILABLE",
   GatewayAuthFailed: "GATEWAY_AUTH_FAILED",
-  RouteNotFound: "ROUTE_NOT_FOUND",
-  ClickHouseConnection: "CLICKHOUSE_CONNECTION",
+  GatewayRouteNotFound: "GATEWAY_ROUTE_NOT_FOUND",
+  ClickHouseUnavailable: "CLICKHOUSE_UNAVAILABLE",
   ServerError: "SERVER_ERROR",
 } as const;
 
-export type BoundaryErrorType =
-  (typeof BoundaryErrorType)[keyof typeof BoundaryErrorType];
+export type InfraErrorType =
+  (typeof InfraErrorType)[keyof typeof InfraErrorType];
 
 /**
  * Discriminated union for error data passed via React Router's `data()` helper.
  * Each variant only includes fields relevant to that error type, enforcing
  * valid combinations at compile time.
  */
-export type BoundaryErrorData =
-  | { errorType: typeof BoundaryErrorType.GatewayUnavailable }
-  | { errorType: typeof BoundaryErrorType.GatewayAuthFailed }
-  | { errorType: typeof BoundaryErrorType.RouteNotFound; routeInfo: string }
+export type InfraErrorData =
+  | { errorType: typeof InfraErrorType.GatewayUnavailable }
+  | { errorType: typeof InfraErrorType.GatewayAuthFailed }
+  | { errorType: typeof InfraErrorType.GatewayRouteNotFound; routeInfo: string }
   | {
-      errorType: typeof BoundaryErrorType.ClickHouseConnection;
+      errorType: typeof InfraErrorType.ClickHouseUnavailable;
       message?: string;
     }
-  | { errorType: typeof BoundaryErrorType.ServerError; message?: string };
+  | { errorType: typeof InfraErrorType.ServerError; message?: string };
 
 /**
  * Discriminated union for classified errors used in error rendering.
- * Mirrors BoundaryErrorData but uses 'type' for consistency with component props,
+ * Mirrors InfraErrorData but uses 'type' for consistency with component props,
  * and includes additional fields like 'status' for HTTP status codes.
  */
 export type ClassifiedError =
-  | { type: typeof BoundaryErrorType.GatewayUnavailable }
-  | { type: typeof BoundaryErrorType.GatewayAuthFailed }
-  | { type: typeof BoundaryErrorType.RouteNotFound; routeInfo: string }
-  | { type: typeof BoundaryErrorType.ClickHouseConnection; message?: string }
+  | { type: typeof InfraErrorType.GatewayUnavailable }
+  | { type: typeof InfraErrorType.GatewayAuthFailed }
+  | { type: typeof InfraErrorType.GatewayRouteNotFound; routeInfo: string }
+  | { type: typeof InfraErrorType.ClickHouseUnavailable; message?: string }
   | {
-      type: typeof BoundaryErrorType.ServerError;
+      type: typeof InfraErrorType.ServerError;
       message?: string;
       status?: number;
       stack?: string;
     };
 
 /**
- * Type guard to check if a value is BoundaryErrorData.
+ * Type guard to check if a value is InfraErrorData.
  */
-export function isBoundaryErrorData(
-  value: unknown,
-): value is BoundaryErrorData {
+export function isInfraErrorData(value: unknown): value is InfraErrorData {
   return (
     typeof value === "object" &&
     value !== null &&
     "errorType" in value &&
     typeof value.errorType === "string" &&
-    Object.values(BoundaryErrorType).includes(
-      value.errorType as BoundaryErrorType,
-    )
+    Object.values(InfraErrorType).includes(value.errorType as InfraErrorType)
   );
 }
 
@@ -692,20 +688,20 @@ export function isTensorZeroServerError(
 }
 
 /**
- * Returns a user-friendly label for a BoundaryErrorType.
+ * Returns a user-friendly label for an InfraErrorType.
  * Used in error dialogs and UI components.
  */
-export function getErrorLabel(type: BoundaryErrorType): string {
+export function getErrorLabel(type: InfraErrorType): string {
   switch (type) {
-    case BoundaryErrorType.GatewayUnavailable:
+    case InfraErrorType.GatewayUnavailable:
       return "Gateway Connection Error";
-    case BoundaryErrorType.GatewayAuthFailed:
+    case InfraErrorType.GatewayAuthFailed:
       return "Auth Error";
-    case BoundaryErrorType.RouteNotFound:
+    case InfraErrorType.GatewayRouteNotFound:
       return "Route Error";
-    case BoundaryErrorType.ClickHouseConnection:
+    case InfraErrorType.ClickHouseUnavailable:
       return "Database Error";
-    case BoundaryErrorType.ServerError:
+    case InfraErrorType.ServerError:
       return "Server Error";
     default: {
       const _exhaustiveCheck: never = type;
@@ -752,42 +748,42 @@ function extractErrorMessage(error: unknown): string {
  * Handles both direct Error instances and serialized error data from React Router boundaries.
  */
 export function classifyError(error: unknown): ClassifiedError {
-  if (isRouteErrorResponse(error) && isBoundaryErrorData(error.data)) {
+  if (isRouteErrorResponse(error) && isInfraErrorData(error.data)) {
     const { errorType } = error.data;
     switch (errorType) {
-      case BoundaryErrorType.GatewayUnavailable:
-        return { type: BoundaryErrorType.GatewayUnavailable };
-      case BoundaryErrorType.GatewayAuthFailed:
-        return { type: BoundaryErrorType.GatewayAuthFailed };
-      case BoundaryErrorType.RouteNotFound:
+      case InfraErrorType.GatewayUnavailable:
+        return { type: InfraErrorType.GatewayUnavailable };
+      case InfraErrorType.GatewayAuthFailed:
+        return { type: InfraErrorType.GatewayAuthFailed };
+      case InfraErrorType.GatewayRouteNotFound:
         return {
-          type: BoundaryErrorType.RouteNotFound,
+          type: InfraErrorType.GatewayRouteNotFound,
           routeInfo: error.data.routeInfo,
         };
-      case BoundaryErrorType.ClickHouseConnection:
+      case InfraErrorType.ClickHouseUnavailable:
         return {
-          type: BoundaryErrorType.ClickHouseConnection,
+          type: InfraErrorType.ClickHouseUnavailable,
           message: "message" in error.data ? error.data.message : undefined,
         };
-      case BoundaryErrorType.ServerError:
+      case InfraErrorType.ServerError:
         return {
-          type: BoundaryErrorType.ServerError,
+          type: InfraErrorType.ServerError,
           message: "message" in error.data ? error.data.message : undefined,
           status: error.status,
         };
       default: {
         const _exhaustiveCheck: never = errorType;
-        return { type: BoundaryErrorType.ServerError, status: error.status };
+        return { type: InfraErrorType.ServerError, status: error.status };
       }
     }
   }
 
   if (isGatewayConnectionError(error)) {
-    return { type: BoundaryErrorType.GatewayUnavailable };
+    return { type: InfraErrorType.GatewayUnavailable };
   }
 
   if (isAuthenticationError(error)) {
-    return { type: BoundaryErrorType.GatewayAuthFailed };
+    return { type: InfraErrorType.GatewayAuthFailed };
   }
 
   if (isGatewayRouteNotFoundError(error)) {
@@ -796,12 +792,12 @@ export function classifyError(error: unknown): ClassifiedError {
     const routeInfo = routeMatch
       ? `${routeMatch[1]} ${routeMatch[2]}`
       : errorMessage;
-    return { type: BoundaryErrorType.RouteNotFound, routeInfo };
+    return { type: InfraErrorType.GatewayRouteNotFound, routeInfo };
   }
 
   if (isClickHouseError(error)) {
     const message = error instanceof Error ? error.message : undefined;
-    return { type: BoundaryErrorType.ClickHouseConnection, message };
+    return { type: InfraErrorType.ClickHouseUnavailable, message };
   }
 
   const message = isRouteErrorResponse(error)
@@ -810,5 +806,5 @@ export function classifyError(error: unknown): ClassifiedError {
       ? error.message
       : undefined;
   const status = isRouteErrorResponse(error) ? error.status : undefined;
-  return { type: BoundaryErrorType.ServerError, message, status };
+  return { type: InfraErrorType.ServerError, message, status };
 }
