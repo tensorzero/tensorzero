@@ -104,7 +104,6 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                 "output_source": {
                     "type": "string",
                     "enum": ["none", "inference", "demonstration"],
-                    "default": "inference",
                     "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available, 'none' returns no output."
                 },
                 "limit": {
@@ -120,24 +119,278 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                     "description": "Fraction of data for validation (0.0 to 1.0, exclusive)."
                 },
                 "optimizer_config": {
-                    "type": "object",
-                    "description": "The optimizer configuration.",
-                    "properties": {
-                        "type": {
-                            "type": "string",
-                            "enum": ["dicl", "openai_sft", "fireworks_sft", "gcp_vertex_gemini_sft", "gepa", "together_sft"],
-                            "description": "Optimizer type: 'dicl' (dynamic in-context learning), 'openai_sft'/'fireworks_sft'/'gcp_vertex_gemini_sft'/'together_sft' (supervised fine-tuning on various providers), 'gepa' (genetic prompt algorithm)."
+                    "description": "The optimizer configuration. Use 'type' to select the optimizer.",
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "description": "OpenAI supervised fine-tuning configuration.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["openai_sft"],
+                                    "description": "Optimizer type identifier."
+                                },
+                                "model": {
+                                    "type": "string",
+                                    "description": "The model to fine-tune (e.g., 'gpt-4.1-2025-04-14')."
+                                },
+                                "batch_size": {
+                                    "type": "integer",
+                                    "description": "Batch size for training."
+                                },
+                                "learning_rate_multiplier": {
+                                    "type": "number",
+                                    "description": "Learning rate multiplier."
+                                },
+                                "n_epochs": {
+                                    "type": "integer",
+                                    "description": "Number of training epochs."
+                                },
+                                "seed": {
+                                    "type": "integer",
+                                    "description": "Random seed for reproducibility."
+                                },
+                                "suffix": {
+                                    "type": "string",
+                                    "description": "Suffix for the fine-tuned model name in OpenAI."
+                                }
+                            },
+                            "required": ["type", "model"]
                         },
-                        "model_name": {
-                            "type": "string",
-                            "description": "Model to fine-tune (for SFT/DPO)."
+                        {
+                            "type": "object",
+                            "description": "Fireworks supervised fine-tuning configuration.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["fireworks_sft"],
+                                    "description": "Optimizer type identifier."
+                                },
+                                "model": {
+                                    "type": "string",
+                                    "description": "The model to fine-tune."
+                                },
+                                "epochs": {
+                                    "type": "integer",
+                                    "description": "Number of training epochs."
+                                },
+                                "learning_rate": {
+                                    "type": "number",
+                                    "description": "Learning rate for training."
+                                },
+                                "batch_size": {
+                                    "type": "integer",
+                                    "description": "Batch size (in tokens) for training."
+                                },
+                                "max_context_length": {
+                                    "type": "integer",
+                                    "description": "Maximum context length."
+                                },
+                                "lora_rank": {
+                                    "type": "integer",
+                                    "description": "Rank of the LoRA matrix."
+                                },
+                                "early_stop": {
+                                    "type": "boolean",
+                                    "description": "Whether to enable early stopping."
+                                },
+                                "display_name": {
+                                    "type": "string",
+                                    "description": "Display name for the fine-tuning job."
+                                },
+                                "output_model": {
+                                    "type": "string",
+                                    "description": "Model ID for the resulting fine-tuned model."
+                                },
+                                "deploy_after_training": {
+                                    "type": "boolean",
+                                    "description": "Whether to deploy the model after training."
+                                }
+                            },
+                            "required": ["type", "model"]
                         },
-                        "num_epochs": {
-                            "type": "integer",
-                            "description": "Number of training epochs (for SFT/DPO)."
+                        {
+                            "type": "object",
+                            "description": "GCP Vertex Gemini supervised fine-tuning configuration.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["gcp_vertex_gemini_sft"],
+                                    "description": "Optimizer type identifier."
+                                },
+                                "model": {
+                                    "type": "string",
+                                    "description": "The model to fine-tune (e.g., 'gemini-2.5-flash')."
+                                },
+                                "learning_rate_multiplier": {
+                                    "type": "number",
+                                    "description": "Learning rate multiplier."
+                                },
+                                "adapter_size": {
+                                    "type": "integer",
+                                    "description": "Adapter size for fine-tuning."
+                                },
+                                "n_epochs": {
+                                    "type": "integer",
+                                    "description": "Number of training epochs."
+                                },
+                                "seed": {
+                                    "type": "integer",
+                                    "description": "Random seed for reproducibility."
+                                },
+                                "tuned_model_display_name": {
+                                    "type": "string",
+                                    "description": "Display name for the tuned model."
+                                }
+                            },
+                            "required": ["type", "model"]
+                        },
+                        {
+                            "type": "object",
+                            "description": "Together AI supervised fine-tuning configuration.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["together_sft"],
+                                    "description": "Optimizer type identifier."
+                                },
+                                "model": {
+                                    "type": "string",
+                                    "description": "The base model to fine-tune."
+                                },
+                                "n_epochs": {
+                                    "type": "integer",
+                                    "description": "Number of training epochs. Default: 1."
+                                },
+                                "n_checkpoints": {
+                                    "type": "integer",
+                                    "description": "Number of checkpoints to save. Default: 1."
+                                },
+                                "learning_rate": {
+                                    "type": "number",
+                                    "description": "Learning rate. Default: 0.00001."
+                                },
+                                "warmup_ratio": {
+                                    "type": "number",
+                                    "description": "Warmup ratio. Default: 0.0."
+                                },
+                                "suffix": {
+                                    "type": "string",
+                                    "description": "Suffix for the fine-tuned model name."
+                                }
+                            },
+                            "required": ["type", "model"]
+                        },
+                        {
+                            "type": "object",
+                            "description": "Dynamic In-Context Learning (DICL) optimization configuration.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["dicl"],
+                                    "description": "Optimizer type identifier."
+                                },
+                                "embedding_model": {
+                                    "type": "string",
+                                    "description": "The embedding model to use (e.g., 'openai::text-embedding-3-small')."
+                                },
+                                "variant_name": {
+                                    "type": "string",
+                                    "description": "Name for the DICL variant to create."
+                                },
+                                "function_name": {
+                                    "type": "string",
+                                    "description": "Name of the function to optimize."
+                                },
+                                "dimensions": {
+                                    "type": "integer",
+                                    "description": "Dimensions of the embeddings. Uses model default if not specified."
+                                },
+                                "batch_size": {
+                                    "type": "integer",
+                                    "description": "Batch size for getting embeddings. Default: 128."
+                                },
+                                "max_concurrency": {
+                                    "type": "integer",
+                                    "description": "Maximum concurrency for embeddings. Default: 10."
+                                },
+                                "k": {
+                                    "type": "integer",
+                                    "description": "Number of nearest neighbors for DICL. Default: 10."
+                                },
+                                "model": {
+                                    "type": "string",
+                                    "description": "Model for the DICL variant. Default: 'openai::gpt-5-mini-2025-08-07'."
+                                },
+                                "append_to_existing_variants": {
+                                    "type": "boolean",
+                                    "description": "Whether to append to existing variants. Default: false."
+                                }
+                            },
+                            "required": ["type", "embedding_model", "variant_name", "function_name"]
+                        },
+                        {
+                            "type": "object",
+                            "description": "GEPA (Genetic Evolution with Pareto Analysis) prompt optimization configuration.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["gepa"],
+                                    "description": "Optimizer type identifier."
+                                },
+                                "function_name": {
+                                    "type": "string",
+                                    "description": "Name of the function to optimize."
+                                },
+                                "evaluation_name": {
+                                    "type": "string",
+                                    "description": "Name of the evaluation used to score candidate variants."
+                                },
+                                "analysis_model": {
+                                    "type": "string",
+                                    "description": "Model for analysis (e.g., 'anthropic::claude-sonnet-4-5-20250929')."
+                                },
+                                "mutation_model": {
+                                    "type": "string",
+                                    "description": "Model for mutation (e.g., 'anthropic::claude-sonnet-4-5-20250929')."
+                                },
+                                "initial_variants": {
+                                    "type": "array",
+                                    "items": { "type": "string" },
+                                    "description": "Optional list of variant names to initialize GEPA with."
+                                },
+                                "variant_prefix": {
+                                    "type": "string",
+                                    "description": "Prefix for newly created optimized variants."
+                                },
+                                "batch_size": {
+                                    "type": "integer",
+                                    "description": "Number of samples to analyze per iteration. Default: 5."
+                                },
+                                "max_iterations": {
+                                    "type": "integer",
+                                    "description": "Maximum training iterations. Default: 1."
+                                },
+                                "max_concurrency": {
+                                    "type": "integer",
+                                    "description": "Maximum concurrent inference calls. Default: 10."
+                                },
+                                "seed": {
+                                    "type": "integer",
+                                    "description": "Random seed for reproducibility."
+                                },
+                                "timeout": {
+                                    "type": "integer",
+                                    "description": "Client timeout in seconds. Default: 300."
+                                },
+                                "max_tokens": {
+                                    "type": "integer",
+                                    "description": "Max tokens for analysis/mutation model calls."
+                                }
+                            },
+                            "required": ["type", "function_name", "evaluation_name", "analysis_model", "mutation_model"]
                         }
-                    },
-                    "required": ["type"]
+                    ]
                 }
             },
             "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"]
