@@ -9,8 +9,8 @@ import {
 } from "~/components/ui/table";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import { toEpisodeUrl } from "~/utils/urls";
-import { Suspense, use } from "react";
-import { useLocation } from "react-router";
+import { Suspense } from "react";
+import { useLocation, Await, useAsyncError } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import type { EpisodesData } from "./route";
 
@@ -51,8 +51,25 @@ function SkeletonRows() {
   );
 }
 
-function TableBodyContent({ data }: { data: Promise<EpisodesData> }) {
-  const { episodes } = use(data);
+function TableErrorState() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load episodes";
+
+  return (
+    <TableRow>
+      <TableCell colSpan={3} className="text-center">
+        <div className="flex flex-col items-center gap-2 py-8 text-red-600">
+          <span className="font-medium">Error loading data</span>
+          <span className="text-muted-foreground text-sm">{message}</span>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function TableRows({ data }: { data: EpisodesData }) {
+  const { episodes } = data;
 
   if (episodes.length === 0) {
     return <TableEmptyState message="No episodes found" />;
@@ -103,7 +120,9 @@ export default function EpisodesTable({
         </TableHeader>
         <TableBody>
           <Suspense key={location.key} fallback={<SkeletonRows />}>
-            <TableBodyContent data={data} />
+            <Await resolve={data} errorElement={<TableErrorState />}>
+              {(resolvedData) => <TableRows data={resolvedData} />}
+            </Await>
           </Suspense>
         </TableBody>
       </Table>

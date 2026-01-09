@@ -32,6 +32,7 @@ import {
   isGatewayConnectionError,
   isClickHouseError,
   classifyError,
+  isClickHouseError,
   getErrorLabel,
   type ClassifiedError,
 } from "./utils/tensorzero/errors";

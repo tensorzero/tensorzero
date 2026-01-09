@@ -41,6 +41,7 @@ test.describe("Error Boundaries", () => {
       );
 
       // Should show an error (caught by layout boundary)
+      // PageErrorContent shows "Error {status}" format for resource 404s
       await expect(
         page.getByRole("heading", { name: "Error 404" }),
       ).toBeVisible();
@@ -57,7 +58,10 @@ test.describe("Error Boundaries", () => {
       );
 
       // Should show an error (caught by layout boundary)
-      await expect(page.getByRole("heading", { name: "Error" })).toBeVisible();
+      // PageErrorContent shows "Error {status}" format for resource 404s
+      await expect(
+        page.getByRole("heading", { name: "Error 404" }),
+      ).toBeVisible();
 
       // Sidebar should remain functional
       await expect(

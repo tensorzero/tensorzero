@@ -3,8 +3,9 @@ import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
+  Await,
   data,
-  isRouteErrorResponse,
+  useAsyncError,
   useNavigate,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
@@ -20,13 +21,12 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { Suspense, use, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
-import { logger } from "~/utils/logger";
 import type {
   StoredInference,
   FeedbackRow,
@@ -95,31 +95,33 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const tensorZeroClient = getTensorZeroClient();
 
-  // Start count queries early - these will be streamed to section headers
-  const numInferencesPromise = tensorZeroClient
-    .getEpisodeInferenceCount(episode_id)
-    .then((response) => response.inference_count);
+  // Check if episode exists by getting inference count upfront
+  const inferenceCountResponse =
+    await tensorZeroClient.getEpisodeInferenceCount(episode_id);
+  const numInferences = inferenceCountResponse.inference_count;
+
+  // Convert to number for comparison - JSON returns number, types may vary
+  if (Number(numInferences) === 0) {
+    throw data(`Episode "${episode_id}" not found`, { status: 404 });
+  }
+
+  // Count is already fetched, wrap in resolved promise for streaming
+  const numInferencesPromise = Promise.resolve(numInferences);
   const numFeedbacksPromise =
     tensorZeroClient.countFeedbackByTargetId(episode_id);
 
   // Stream inferences data - will be resolved in the component
-  // Throws error if no inferences found (episode doesn't exist)
   const inferencesDataPromise: Promise<InferencesData> =
     listInferencesWithPagination({
       episode_id,
       before: beforeInference ?? undefined,
       after: afterInference ?? undefined,
       limit,
-    }).then((result) => {
-      if (result.inferences.length === 0) {
-        throw Error(`Episode not found`);
-      }
-      return {
-        inferences: result.inferences,
-        hasNextPage: result.hasNextPage,
-        hasPreviousPage: result.hasPreviousPage,
-      };
-    });
+    }).then((result) => ({
+      inferences: result.inferences,
+      hasNextPage: result.hasNextPage,
+      hasPreviousPage: result.hasPreviousPage,
+    }));
 
   // Stream feedback data - will be resolved in the component
   // If there is a freshly inserted feedback, ClickHouse may take some time to
@@ -169,8 +171,8 @@ type FeedbackActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
 
-function InferencePagination({ data }: { data: Promise<InferencesData> }) {
-  const { inferences, hasNextPage, hasPreviousPage } = use(data);
+function InferencePaginationContent({ data }: { data: InferencesData }) {
+  const { inferences, hasNextPage, hasPreviousPage } = data;
   const navigate = useNavigate();
 
   const topInference = inferences.at(0);
@@ -199,6 +201,44 @@ function InferencePagination({ data }: { data: Promise<InferencesData> }) {
       disablePrevious={!hasPreviousPage}
       disableNext={!hasNextPage}
     />
+  );
+}
+
+function FeedbackSectionError() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load feedback";
+
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ID</TableHead>
+            <TableHead>Metric</TableHead>
+            <TableHead>Value</TableHead>
+            <TableHead>Tags</TableHead>
+            <TableHead>Time</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell colSpan={5} className="text-center">
+              <div className="flex flex-col items-center gap-2 py-8 text-red-600">
+                <span className="font-medium">Error loading data</span>
+                <span className="text-muted-foreground text-sm">{message}</span>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <PageButtons
+        onPreviousPage={() => {}}
+        onNextPage={() => {}}
+        disablePrevious
+        disableNext
+      />
+    </>
   );
 }
 
@@ -239,8 +279,8 @@ function FeedbackTableSkeleton() {
   );
 }
 
-function FeedbackSection({ data }: { data: Promise<FeedbackData> }) {
-  const { feedbacks, bounds, latestFeedbackByMetric } = use(data);
+function FeedbackSectionContent({ data }: { data: FeedbackData }) {
+  const { feedbacks, bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
@@ -390,7 +430,11 @@ export default function EpisodeDetailPage({
               />
             }
           >
-            <InferencePagination data={inferencesData} />
+            <Await resolve={inferencesData} errorElement={null}>
+              {(resolvedData) => (
+                <InferencePaginationContent data={resolvedData} />
+              )}
+            </Await>
           </Suspense>
         </SectionLayout>
 
@@ -417,38 +461,15 @@ export default function EpisodeDetailPage({
               </>
             }
           >
-            <FeedbackSection data={feedbackData} />
+            <Await
+              resolve={feedbackData}
+              errorElement={<FeedbackSectionError />}
+            >
+              {(resolvedData) => <FeedbackSectionContent data={resolvedData} />}
+            </Await>
           </Suspense>
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }
