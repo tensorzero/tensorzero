@@ -32,7 +32,7 @@ import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
 import { ActionBar } from "~/components/layout/ActionBar";
-import { DatasetSelect } from "~/components/dataset/DatasetSelect";
+import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { useFetcher } from "react-router";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
@@ -286,8 +286,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const [selectedDataset, setSelectedDataset] = useState<string>("");
 
   const config = useConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
+  const evaluation_config = config?.evaluations[evaluation_name];
+  if (!config || !evaluation_config) {
     throw data(
       `Evaluation config not found for evaluation ${evaluation_name}`,
       { status: 404 },
@@ -355,17 +355,19 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
       <PageHeader label="Evaluation" name={evaluation_name}>
         <BasicInfo evaluation_config={evaluation_config} />
         <ActionBar>
-          <DatasetSelect
+          <DatasetSelector
             selected={selectedDataset}
             onSelect={handleDatasetSelect}
             functionName={function_name}
-            allowCreation
             disabled={isReadOnly || selectedRows.size === 0}
-            placeholder={
+            label={
               selectedRows.size > 0
                 ? `Add ${selectedRows.size} selected ${selectedRows.size === 1 ? "inference" : "inferences"} to dataset`
                 : "Add selected inferences to dataset"
             }
+            buttonProps={{
+              size: "sm",
+            }}
           />
         </ActionBar>
       </PageHeader>

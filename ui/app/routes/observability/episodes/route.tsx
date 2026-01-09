@@ -1,6 +1,6 @@
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import { data, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import EpisodeSearchBar from "./EpisodeSearchBar";
 import {
@@ -8,10 +8,11 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { EpisodeByIdRow, TableBoundsWithCount } from "~/types/tensorzero";
 import { Suspense, use } from "react";
+import { isInfraError } from "~/utils/tensorzero/errors";
+import { logger } from "~/utils/logger";
 
 export type EpisodesData = {
   episodes: EpisodeByIdRow[];
@@ -30,10 +31,24 @@ export async function loader({ request }: Route.LoaderArgs) {
   const client = getTensorZeroClient();
 
   // Don't await - return promises for streaming
+  // Graceful degradation: return empty data on infra errors
   const episodesPromise = client
     .listEpisodes(limit, before, after)
-    .then((r) => r.episodes);
-  const boundsPromise = client.queryEpisodeTableBounds();
+    .then((r) => r.episodes)
+    .catch((error) => {
+      if (isInfraError(error)) {
+        logger.warn("Infrastructure unavailable, showing degraded episodes");
+        return [] as EpisodeByIdRow[];
+      }
+      throw error;
+    });
+  const boundsPromise = client.queryEpisodeTableBounds().catch((error) => {
+    if (isInfraError(error)) {
+      logger.warn("Infrastructure unavailable, showing degraded bounds");
+      return { first_id: null, last_id: null, count: BigInt(0) };
+    }
+    throw error;
+  });
 
   // Combine into single promise for pagination logic
   const dataPromise: Promise<EpisodesData> = Promise.all([
@@ -120,32 +135,4 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
       </SectionLayout>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

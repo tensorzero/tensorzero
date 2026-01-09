@@ -1,5 +1,5 @@
 import type { Route } from "./+types/route";
-import { isRouteErrorResponse, redirect, useNavigate } from "react-router";
+import { redirect, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -17,6 +17,7 @@ import {
 import { logger } from "~/utils/logger";
 import { toEvaluationUrl } from "~/utils/urls";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { isInfraError } from "~/utils/tensorzero/errors";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -24,18 +25,32 @@ export async function loader({ request }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const limit = parseInt(searchParams.get("limit") || "15");
 
-  const [totalEvaluationRuns, evaluationRunsResponse] = await Promise.all([
-    getTensorZeroClient().countEvaluationRuns(),
-    getTensorZeroClient().listEvaluationRuns(limit, offset),
-  ]);
-  const evaluationRuns = evaluationRunsResponse.runs;
+  try {
+    const [totalEvaluationRuns, evaluationRunsResponse] = await Promise.all([
+      getTensorZeroClient().countEvaluationRuns(),
+      getTensorZeroClient().listEvaluationRuns(limit, offset),
+    ]);
+    const evaluationRuns = evaluationRunsResponse.runs;
 
-  return {
-    totalEvaluationRuns,
-    evaluationRuns,
-    offset,
-    limit,
-  };
+    return {
+      totalEvaluationRuns,
+      evaluationRuns,
+      offset,
+      limit,
+    };
+  } catch (error) {
+    // Graceful degradation: return empty data on infra errors
+    if (isInfraError(error)) {
+      logger.warn("Infrastructure unavailable, showing degraded evaluations");
+      return {
+        totalEvaluationRuns: 0,
+        evaluationRuns: [],
+        offset,
+        limit,
+      };
+    }
+    throw error;
+  }
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -128,32 +143,4 @@ export default function EvaluationSummaryPage({
       />
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

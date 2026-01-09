@@ -22,7 +22,7 @@ import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
-import { DatasetCombobox } from "~/components/dataset/DatasetCombobox";
+import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { Combobox } from "~/components/ui/combobox";
 import { Evaluation } from "~/components/icons/Icons";
 import { GitBranch } from "lucide-react";
@@ -41,7 +41,7 @@ function EvaluationForm({
 }) {
   const fetcher = useFetcher();
   const config = useConfig();
-  const evaluation_names = Object.keys(config.evaluations);
+  const evaluation_names = Object.keys(config?.evaluations ?? {});
   const [selectedEvaluationName, setSelectedEvaluationName] = useState<
     string | null
   >(initialFormState?.evaluation_name ?? null);
@@ -68,7 +68,7 @@ function EvaluationForm({
   let isLoading = false;
   let function_name = null;
   let evaluatorNames: string[] = [];
-  if (selectedEvaluationName) {
+  if (selectedEvaluationName && config) {
     function_name =
       config.evaluations[selectedEvaluationName]?.function_name ?? null;
     evaluatorNames = Object.keys(
@@ -129,7 +129,7 @@ function EvaluationForm({
 
   // Initialize precision targets with empty string for all evaluators when evaluation changes
   useEffect(() => {
-    if (selectedEvaluationName) {
+    if (selectedEvaluationName && config) {
       const currentEvaluatorNames = Object.keys(
         config.evaluations[selectedEvaluationName]?.evaluators ?? {},
       );
@@ -147,7 +147,7 @@ function EvaluationForm({
         setPrecisionTargets(newLimits);
       }
     }
-  }, [selectedEvaluationName, config.evaluations, precisionTargets]);
+  }, [selectedEvaluationName, config, precisionTargets]);
 
   // Validate max_datapoints: must be empty or a positive integer
   const isMaxDatapointsValid =
@@ -203,7 +203,7 @@ function EvaluationForm({
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
         }}
         items={evaluation_names}
-        getPrefix={() => <Evaluation className="h-4 w-4 shrink-0" />}
+        getItemIcon={() => <Evaluation className="h-4 w-4 shrink-0" />}
         placeholder="Select evaluation"
         emptyMessage="No evaluations found"
       />
@@ -222,10 +222,12 @@ function EvaluationForm({
         value={selectedDatasetName ?? undefined}
       />
 
-      <DatasetCombobox
+      <DatasetSelector
+        label="Select a dataset"
         functionName={function_name ?? undefined}
-        selected={selectedDatasetName}
-        onSelect={(name) => setSelectedDatasetName(name)}
+        selected={selectedDatasetName ?? undefined}
+        onSelect={setSelectedDatasetName}
+        allowCreation={false}
         disabled={!selectedEvaluationName}
       />
 
@@ -263,7 +265,7 @@ function EvaluationForm({
         selected={selectedVariantName}
         onSelect={setSelectedVariantName}
         items={functionConfig ? Object.keys(functionConfig.variants) : []}
-        getPrefix={() => <GitBranch className="h-4 w-4 shrink-0" />}
+        getItemIcon={() => <GitBranch className="h-4 w-4 shrink-0" />}
         placeholder="Select variant"
         emptyMessage="No variants found"
         disabled={!selectedEvaluationName}

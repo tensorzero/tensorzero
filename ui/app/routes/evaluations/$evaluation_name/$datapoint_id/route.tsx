@@ -16,7 +16,6 @@ import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 import {
   data,
-  isRouteErrorResponse,
   Link,
   redirect,
   useFetcher,
@@ -228,8 +227,8 @@ export default function EvaluationDatapointPage({
   } = loaderData;
   const fetcher = useFetcher();
   const config = useConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
+  const evaluation_config = config?.evaluations[evaluation_name];
+  if (!config || !evaluation_config) {
     throw data(
       `Evaluation config not found for evaluation ${evaluation_name}`,
       { status: 404 },
@@ -390,8 +389,8 @@ const MetricRow = ({
 }) => {
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
-  const metricProperties = config.metrics[metric_name];
-  if (!metricProperties) {
+  const metricProperties = config?.metrics[metric_name];
+  if (!config || !metricProperties) {
     return null;
   }
   if (inferenceId === null) {
@@ -465,34 +464,6 @@ const MetricRow = ({
     </div>
   );
 };
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
-}
 
 type OutputsSectionProps = {
   outputsToDisplay: Array<{

@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -31,7 +30,9 @@ import {
   isAuthenticationError,
   isGatewayConnectionError,
   classifyError,
+  isClickHouseError,
   getErrorLabel,
+  type ClassifiedError,
 } from "./utils/tensorzero/errors";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
@@ -68,20 +69,47 @@ export async function loader() {
       getConfig(),
       checkAutopilotAvailable(),
     ]);
-    return { config, isReadOnly, autopilotAvailable };
+    return {
+      config,
+      isReadOnly,
+      autopilotAvailable,
+      infraError: null as ClassifiedError | null,
+    };
   } catch (e) {
-    // Throw typed errors that ErrorBoundary can handle
+    // Graceful degradation for infrastructure errors:
+    // Return fallback state so UI renders with dismissible error dialog.
+    // Child routes will handle their own errors via their error boundaries.
     if (isGatewayConnectionError(e)) {
-      throw data(
-        { errorType: InfraErrorType.GatewayUnavailable },
-        { status: 503 },
-      );
+      return {
+        config: undefined,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: InfraErrorType.GatewayUnavailable,
+        } as ClassifiedError,
+      };
     }
     if (isAuthenticationError(e)) {
-      throw data(
-        { errorType: InfraErrorType.GatewayAuthFailed },
-        { status: 401 },
-      );
+      return {
+        config: undefined,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: InfraErrorType.GatewayAuthFailed,
+        } as ClassifiedError,
+      };
+    }
+    if (isClickHouseError(e)) {
+      const message = e instanceof Error ? e.message : undefined;
+      return {
+        config: undefined,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: InfraErrorType.ClickHouseUnavailable,
+          message,
+        } as ClassifiedError,
+      };
     }
     throw e;
   }
@@ -107,7 +135,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
-  const { config, isReadOnly, autopilotAvailable } = loaderData;
+  const { config, isReadOnly, autopilotAvailable, infraError } = loaderData;
+  const [dialogOpen, setDialogOpen] = React.useState(true);
 
   return (
     <AppProviders>
@@ -120,6 +149,16 @@ export default function App({ loaderData }: Route.ComponentProps) {
                 <Outlet />
               </ContentLayout>
             </div>
+            {infraError && (
+              <ErrorDialog
+                open={dialogOpen}
+                onDismiss={() => setDialogOpen(false)}
+                onReopen={() => setDialogOpen(true)}
+                label={getErrorLabel(infraError.type)}
+              >
+                <ErrorContent error={infraError} />
+              </ErrorDialog>
+            )}
           </ConfigProvider>
         </AutopilotAvailableProvider>
       </ReadOnlyProvider>

@@ -1,12 +1,7 @@
 import { Plus } from "lucide-react";
 import { Suspense, use } from "react";
 import type { Route } from "./+types/route";
-import {
-  data,
-  isRouteErrorResponse,
-  useLocation,
-  useNavigate,
-} from "react-router";
+import { data, useLocation, useNavigate } from "react-router";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import {
   PageHeader,
@@ -16,7 +11,6 @@ import {
 import { ActionBar } from "~/components/layout/ActionBar";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
-import { logger } from "~/utils/logger";
 import { SessionsTableRows } from "../AutopilotSessionsTable";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import type { Session } from "~/types/tensorzero";
@@ -221,32 +215,4 @@ export default function AutopilotSessionsPage({
       </SectionLayout>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

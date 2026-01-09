@@ -1,17 +1,17 @@
 import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import InferencesTable, { type InferencesData } from "./InferencesTable";
-import { data, isRouteErrorResponse } from "react-router";
+import { data } from "react-router";
 import InferenceSearchBar from "./InferenceSearchBar";
 import {
   PageHeader,
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { logger } from "~/utils/logger";
 import type { InferenceFilter, InferenceMetadata } from "~/types/tensorzero";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { applyPaginationLogic } from "~/utils/pagination";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -50,7 +50,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     .listFunctionsWithInferenceCount()
     .then((countsInfo) =>
       countsInfo.reduce((acc, curr) => acc + curr.inference_count, 0),
-    );
+    )
+    .catch((error) => {
+      logger.error("Failed to load total inference count", error);
+      return 0;
+    });
 
   // Create promise for inferences data - will be streamed to the component
   const inferencesDataPromise: Promise<InferencesData> = (async () => {
@@ -105,7 +109,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       hasNextPage: inferenceResult.hasNextPage,
       hasPreviousPage: inferenceResult.hasPreviousPage,
     };
-  })();
+  })().catch((error) => {
+    logger.error("Failed to load inferences", error);
+    return { inferences: [], hasNextPage: false, hasPreviousPage: false };
+  });
 
   return {
     inferencesData: inferencesDataPromise,
@@ -148,32 +155,4 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       </SectionLayout>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

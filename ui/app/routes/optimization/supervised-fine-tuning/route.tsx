@@ -1,7 +1,6 @@
-import { data, type RouteHandle } from "react-router";
+import { data, type RouteHandle, redirect, useRevalidator } from "react-router";
 import { useEffect, useState } from "react";
-import { useRevalidator } from "react-router";
-import { redirect } from "react-router";
+import { PageErrorContent } from "~/components/ui/error";
 import { useConfig } from "~/context/config";
 import { dump_optimizer_output } from "~/utils/config/models";
 import type { Route } from "./+types/route";
@@ -195,4 +194,8 @@ export default function SupervisedFineTuning(props: Route.ComponentProps) {
     );
   }
   return <SupervisedFineTuningImpl {...loaderData} />;
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <PageErrorContent error={error} />;
 }

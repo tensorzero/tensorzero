@@ -11,35 +11,42 @@
 import { createContext, useContext } from "react";
 import type { UiConfig } from "~/types/tensorzero";
 
-const ConfigContext = createContext<UiConfig | null>(null);
+const ConfigContext = createContext<UiConfig | undefined>(undefined);
 
-export function useConfig() {
-  const config = useContext(ConfigContext);
-  if (!config) {
-    throw new Error("useConfig must be used within a ConfigProvider");
-  }
-  return config;
+/**
+ * Hook to get the TensorZero configuration.
+ * Returns undefined when config is unavailable due to infra errors.
+ * Components should handle undefined gracefully by showing empty/disabled states.
+ */
+export function useConfig(): UiConfig | undefined {
+  return useContext(ConfigContext);
 }
 
 /**
- * Hook to get a specific function configuration by name
+ * Hook to get a specific function configuration by name.
+ * Returns null if config unavailable or function not found.
  * @param functionName - The name of the function to retrieve
- * @returns The function configuration object or null if not found
+ * @returns The function configuration object or null
  */
 export function useFunctionConfig(functionName: string | null) {
   const config = useConfig();
-  if (!functionName) {
+  if (!config || !functionName) {
     return null;
   }
   // eslint-disable-next-line no-restricted-syntax
   return config.functions[functionName] || null;
 }
+
 /**
- * Hook to get all function configs
- * @returns The function configuration object or null if not found
+ * Hook to get all function configs.
+ * Returns null if config is unavailable.
+ * @returns The functions map or null
  */
 export function useAllFunctionConfigs() {
   const config = useConfig();
+  if (!config) {
+    return null;
+  }
   // eslint-disable-next-line no-restricted-syntax
   return config.functions;
 }
@@ -49,7 +56,7 @@ export function ConfigProvider({
   value,
 }: {
   children: React.ReactNode;
-  value: UiConfig;
+  value: UiConfig | undefined;
 }) {
   return (
     <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>
