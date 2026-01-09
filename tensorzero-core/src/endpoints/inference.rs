@@ -867,6 +867,42 @@ async fn find_function(
     }
 }
 
+/// Creates an artificial chunk containing `raw_usage` from previous model inferences (e.g. best-of-N candidates).
+/// Returns `None` if `include_raw_usage` is false or there are no non-cached entries with raw_usage.
+fn create_previous_raw_usage_chunk(
+    metadata: &InferenceMetadata,
+    function: &FunctionConfig,
+) -> Option<InferenceResultChunk> {
+    if !metadata.include_raw_usage {
+        return None;
+    }
+
+    // Filter out `raw_usage` from cached model inferences
+    let entries: Vec<RawUsageEntry> = metadata
+        .previous_model_inference_results
+        .iter()
+        .filter(|r| !r.cached)
+        .flat_map(|r| r.raw_usage.clone().unwrap_or_default())
+        .collect();
+
+    if entries.is_empty() {
+        return None;
+    }
+
+    let raw_usage = Some(entries);
+    let chunk = match function {
+        FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            raw_usage,
+            ..Default::default()
+        }),
+        FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw_usage,
+            ..Default::default()
+        }),
+    };
+    Some(chunk)
+}
+
 fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config>,
@@ -879,34 +915,10 @@ fn create_stream(
         let mut buffer = vec![];
 
         // If previous model inferences (e.g. best-of-N candidates) had `raw_usage`, emit them immediately in an artificial chunk.
-        if metadata.include_raw_usage {
-            // Filter out `raw_usage` from cached model inferences
-            let entries: Vec<RawUsageEntry> = metadata
-                .previous_model_inference_results
-                .iter()
-                .filter(|r| !r.cached)
-                .flat_map(|r| r.raw_usage.clone().unwrap_or_default())
-                .collect();
-
-            if !entries.is_empty() {
-                let raw_usage = Some(entries);
-
-                let chunk = match *function {
-                    FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
-                        raw_usage,
-                        ..Default::default()
-                    }),
-                    FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
-                        raw_usage,
-                        ..Default::default()
-                    }),
-                };
-
-                buffer.push(chunk.clone());
-
-                yield Ok(prepare_response_chunk(&metadata, chunk));
-             }
-        };
+        if let Some(chunk) = create_previous_raw_usage_chunk(&metadata, &function) {
+            buffer.push(chunk.clone());
+            yield Ok(prepare_response_chunk(&metadata, chunk));
+        }
 
         // Then, send all chunks but strip usage and finish reason
         let mut usages: Vec<Usage> = vec![];

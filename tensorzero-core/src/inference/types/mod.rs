@@ -3152,4 +3152,126 @@ mod tests {
         // Conflict: both old and new fields
         assert!(serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p", "model_name": "x"})).is_err());
     }
+
+    #[test]
+    fn test_get_finish_reason_sorts_by_id() {
+        // Create UUIDs sequentially - UUIDv7 encodes timestamp so later UUIDs are greater
+        let id_oldest = Uuid::now_v7();
+        let id_middle = Uuid::now_v7();
+        let id_newest = Uuid::now_v7();
+
+        // Verify our assumption that sequential UUIDv7s are ordered
+        assert!(
+            id_oldest < id_middle && id_middle < id_newest,
+            "UUIDv7s created sequentially should be monotonically increasing"
+        );
+
+        let usage = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(20),
+        };
+
+        // Create responses with different finish reasons and IDs
+        let response_oldest = ModelInferenceResponseWithMetadata {
+            id: id_oldest,
+            output: vec![],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: String::new(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test".into(),
+            model_name: "test".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::Stop),
+            raw_usage: None,
+        };
+
+        let response_middle = ModelInferenceResponseWithMetadata {
+            id: id_middle,
+            output: vec![],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: String::new(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test".into(),
+            model_name: "test".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::ToolCall),
+            raw_usage: None,
+        };
+
+        let response_newest = ModelInferenceResponseWithMetadata {
+            id: id_newest,
+            output: vec![],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: String::new(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test".into(),
+            model_name: "test".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::Length),
+            raw_usage: None,
+        };
+
+        // Test: passing results in order newest-first should still return newest's finish_reason
+        let results_newest_first = vec![
+            response_newest.clone(),
+            response_middle.clone(),
+            response_oldest.clone(),
+        ];
+        assert_eq!(
+            get_finish_reason(&results_newest_first),
+            Some(FinishReason::Length),
+            "Should return finish_reason from the entry with the largest ID (newest)"
+        );
+
+        // Test: passing results in order oldest-first should still return newest's finish_reason
+        let results_oldest_first = vec![
+            response_oldest.clone(),
+            response_middle.clone(),
+            response_newest.clone(),
+        ];
+        assert_eq!(
+            get_finish_reason(&results_oldest_first),
+            Some(FinishReason::Length),
+            "Should return finish_reason from the entry with the largest ID regardless of input order"
+        );
+
+        // Test: passing results in mixed order should still return newest's finish_reason
+        let results_mixed = vec![response_middle, response_newest.clone(), response_oldest];
+        assert_eq!(
+            get_finish_reason(&results_mixed),
+            Some(FinishReason::Length),
+            "Should return finish_reason from the entry with the largest ID regardless of input order"
+        );
+
+        // Test: single element
+        let results_single = vec![response_newest];
+        assert_eq!(
+            get_finish_reason(&results_single),
+            Some(FinishReason::Length),
+            "Single element should return its finish_reason"
+        );
+
+        // Test: empty slice
+        let results_empty: Vec<ModelInferenceResponseWithMetadata> = vec![];
+        assert_eq!(
+            get_finish_reason(&results_empty),
+            None,
+            "Empty slice should return None"
+        );
+    }
 }
