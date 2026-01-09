@@ -22,7 +22,8 @@ interface ToolDetailsProps {
 }
 
 export function ToolDetails({ toolName, onClose }: ToolDetailsProps) {
-  const { tools } = useConfig();
+  const config = useConfig();
+  const tools = config.tools;
 
   const [tool, setTool] = useState<StaticToolConfig | undefined>(
     Object.values(tools)[0],

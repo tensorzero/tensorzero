@@ -233,7 +233,9 @@ export default function CurationMetricSelector<
                       className="h-9"
                     />
                     <CommandList>
-                      <CommandEmpty>No metrics found</CommandEmpty>
+                      <CommandEmpty className="px-4 py-2 text-sm">
+                        No metrics found.
+                      </CommandEmpty>
                       <CommandGroup
                         heading={
                           <div className="text-fg-tertiary flex w-full items-center justify-between">
@@ -371,34 +373,28 @@ export default function CurationMetricSelector<
 
             <div className="text-muted-foreground space-y-1 text-sm">
               <div>
-                Feedbacks: {/* If data is loading, show skeleton */}
+                Feedbacks:{" "}
                 {isLoading ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is empty string (unselected), show loading skeleton */
-                field.value === "" ? (
+                ) : field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is null (selected "None"), show N/A */
-                field.value === null ? (
+                ) : field.value === null ? (
                   <span className="font-medium">N/A</span>
                 ) : (
-                  /* Otherwise show the actual feedback count */
                   <span className="font-medium">
                     {feedbackCount?.toLocaleString() ?? "0"}
                   </span>
                 )}
               </div>
               <div>
-                Curated Inferences: {/* If data is loading, show skeleton */}
+                Curated Inferences:{" "}
                 {isLoading ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is empty string (unselected), show loading skeleton */
-                field.value === "" ? (
+                ) : field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is null (selected "None"), show N/A */
-                field.value === null ? (
+                ) : field.value === null ? (
                   <span className="font-medium">N/A</span>
                 ) : (
-                  /* Otherwise show the actual curated inference count */
                   <span className="font-medium">
                     {curatedInferenceCount?.toLocaleString() ?? "0"}
                   </span>

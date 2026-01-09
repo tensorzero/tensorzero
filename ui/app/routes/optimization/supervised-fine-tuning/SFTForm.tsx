@@ -224,6 +224,7 @@ export function SFTForm({
           <Button
             type="submit"
             disabled={
+              !config ||
               submissionPhase !== "idle" ||
               isCuratedInferenceCountLow ||
               isReadOnly ||
