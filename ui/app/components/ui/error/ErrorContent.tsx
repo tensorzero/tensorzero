@@ -5,15 +5,20 @@ import {
   Server,
   Unplug,
 } from "lucide-react";
+import { isRouteErrorResponse } from "react-router";
 import {
   InfraErrorType,
   type ClassifiedError,
+  getPageErrorInfo,
 } from "~/utils/tensorzero/errors";
 import {
   ErrorContentCard,
   ErrorContentHeader,
   ErrorScope,
   ErrorInlineCode,
+  NotFoundDisplay,
+  PageErrorContainer,
+  PageErrorStack,
   StackTraceContent,
   TroubleshootingSection,
 } from "./ErrorContentPrimitives";
@@ -156,5 +161,38 @@ function ServerErrorContent({
       />
       {stack && <StackTraceContent stack={stack} scope={ErrorScope.App} />}
     </ErrorContentCard>
+  );
+}
+
+// ============================================================================
+// PAGE ERROR CONTENT
+// ============================================================================
+
+interface PageErrorContentProps {
+  error: unknown;
+}
+
+/**
+ * Renders page-scope errors inline.
+ * For layout ErrorBoundaries, use LayoutErrorBoundary instead - it handles
+ * both infra errors (dialog) and page errors (inline) automatically.
+ */
+export function PageErrorContent({ error }: PageErrorContentProps) {
+  // Special handling for 404s
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    return <NotFoundDisplay />;
+  }
+
+  const { title, message, status } = getPageErrorInfo(error);
+
+  return (
+    <PageErrorContainer>
+      <PageErrorStack
+        icon={AlertTriangle}
+        title={status ? `Error ${status}` : title}
+        description={message}
+        scope={ErrorScope.Page}
+      />
+    </PageErrorContainer>
   );
 }

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { PageErrorContent } from "./PageErrorContent";
+import { PageErrorContent } from "./ErrorContent";
 
 const meta = {
   title: "Error/PageErrorContent",

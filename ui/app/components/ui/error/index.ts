@@ -21,6 +21,5 @@
 
 export { RootErrorBoundaryLayout } from "./RootErrorBoundaryLayout";
 export { ErrorDialog } from "./ErrorDialog";
-export { ErrorContent } from "./ErrorContent";
-export { PageErrorContent } from "./PageErrorContent";
+export { ErrorContent, PageErrorContent } from "./ErrorContent";
 export { LayoutErrorBoundary } from "./LayoutErrorBoundary";

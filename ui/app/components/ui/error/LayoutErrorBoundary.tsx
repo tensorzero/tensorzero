@@ -1,19 +1,10 @@
 import * as React from "react";
-import { isRouteErrorResponse } from "react-router";
 import { ErrorDialog } from "./ErrorDialog";
-import { ErrorContent } from "./ErrorContent";
-import {
-  ErrorScope,
-  NotFoundDisplay,
-  PageErrorContainer,
-  PageErrorStack,
-} from "./ErrorContentPrimitives";
-import { AlertTriangle } from "lucide-react";
+import { ErrorContent, PageErrorContent } from "./ErrorContent";
 import {
   isInfraError,
   classifyError,
   getErrorLabel,
-  getPageErrorInfo,
 } from "~/utils/tensorzero/errors";
 
 interface LayoutErrorBoundaryProps {
@@ -43,21 +34,6 @@ export function LayoutErrorBoundary({ error }: LayoutErrorBoundaryProps) {
     );
   }
 
-  // Page-scope: 404s get special muted treatment
-  if (isRouteErrorResponse(error) && error.status === 404) {
-    return <NotFoundDisplay />;
-  }
-
-  // Page-scope: other errors
-  const { title, message, status } = getPageErrorInfo(error);
-  return (
-    <PageErrorContainer>
-      <PageErrorStack
-        icon={AlertTriangle}
-        title={status ? `Error ${status}` : title}
-        description={message}
-        scope={ErrorScope.Page}
-      />
-    </PageErrorContainer>
-  );
+  // Page errors -> inline display
+  return <PageErrorContent error={error} />;
 }
