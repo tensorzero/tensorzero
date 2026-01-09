@@ -29,7 +29,7 @@ use common::{get_config, get_tensorzero_client, init_tracing_for_tests};
 use durable::WorkerOptions;
 use evaluations::topk::{
     GlobalStoppingReason, ScoringFunctionType, TopKTaskOutput, TopKTaskParams, TopKTaskState,
-    VariantStatus, create_client,
+    TopKUpdate, VariantStatus, create_client,
 };
 use evaluations::{
     ClientInferenceExecutor, Clients, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
@@ -1245,4 +1245,275 @@ async fn test_topk_variant_failure_threshold() {
         "test failures mean_est {} != 0.0",
         test_failures.mean_est
     );
+}
+
+/// Test that top-k evaluation emits progress events via durable's emit_event.
+///
+/// This test verifies that:
+/// 1. Progress events are emitted after each batch via `topk_progress:{task_id}:{batch_idx}`
+/// 2. Completion events are emitted via both:
+///    - `topk_completed:{task_id}`
+///    - `topk_progress:{task_id}:{N}` (where N is the number of batches)
+/// 3. The event payloads contain correct data (variant summaries, statuses, etc.)
+///
+/// Setup is similar to test_topk_found_topk. We verify events by querying the durable
+/// events table directly after task completion.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_topk_emit_event_streaming() {
+    init_tracing_for_tests();
+    // Setup
+    let config = get_config().await;
+    let clickhouse = get_clickhouse().await;
+    let tensorzero_client = get_tensorzero_client().await;
+    let pg_pool = get_postgres_pool().await;
+
+    // Use a unique queue name for this test
+    let queue_name = format!("topk5_{}", Uuid::now_v7().simple());
+    ensure_queue_exists(&pg_pool, &queue_name).await;
+
+    // Create a unique dataset
+    let dataset_name = format!("topk_test_emit_{}", Uuid::now_v7());
+
+    // Write datapoints - use 25 to ensure we get progress updates
+    write_basic_test_datapoints(&dataset_name, 25).await;
+    clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(1)).await;
+
+    // Get the evaluation config
+    let evaluation_config = config
+        .evaluations
+        .get("test_topk_evaluation")
+        .expect("test_topk_evaluation not found in config")
+        .clone();
+
+    let EvaluationConfig::Inference(_inference_config) = &*evaluation_config;
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+
+    // Use echo and empty variants (same as test_topk_found_topk)
+    let variant_names = vec![
+        "echo".to_string(),
+        "empty".to_string(),
+        "empty2".to_string(),
+    ];
+
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+    let clients = Arc::new(Clients {
+        inference_executor,
+        clickhouse_client: clickhouse.clone(),
+    });
+
+    let state = TopKTaskState { clients };
+
+    let durable_client = create_client(pg_pool.clone(), state, Some(&queue_name))
+        .await
+        .expect("Failed to create durable client");
+
+    // Use batch_size=5 so we get multiple batches (25/5 = 5 batches max)
+    let EvaluationConfig::Inference(ref inference_config) = *evaluation_config;
+    let params = TopKTaskParams {
+        evaluation_name: "test_topk_evaluation".to_string(),
+        dataset_name: dataset_name.clone(),
+        variant_names: variant_names.clone(),
+        k_min: 1,
+        k_max: 1,
+        epsilon: None,
+        max_datapoints: Some(25),
+        batch_size: Some(5), // 5 batches of 5 datapoints each
+        variant_failure_threshold: 1.0,
+        evaluator_failure_threshold: 1.0,
+        concurrency: 10,
+        inference_cache: CacheEnabledMode::Off,
+        evaluation_config: EvaluationConfig::Inference(inference_config.clone()),
+        function_configs,
+        scoring_function: ScoringFunctionType::AverageEvaluatorScore,
+    };
+
+    // Spawn the task
+    let spawn_result = durable_client
+        .spawn::<evaluations::topk::TopKTask>(params)
+        .await
+        .expect("Failed to spawn top-k task");
+
+    let task_id = spawn_result.task_id;
+
+    // Start the worker
+    let worker = durable_client
+        .start_worker(WorkerOptions {
+            poll_interval: Duration::from_millis(100),
+            claim_timeout: Duration::from_secs(60),
+            ..Default::default()
+        })
+        .await
+        .expect("Failed to start worker");
+
+    // Wait for task completion (with timeout)
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(180);
+
+    loop {
+        if start.elapsed() > timeout {
+            worker.shutdown().await;
+            panic!("Top-k task timed out after {timeout:?}");
+        }
+
+        let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
+        let state: Option<(String,)> = query_as(AssertSqlSafe(query))
+            .bind(spawn_result.task_id)
+            .fetch_optional(&pg_pool)
+            .await
+            .expect("Failed to query task state");
+
+        if let Some((state,)) = state {
+            if state == "completed" {
+                break;
+            } else if state == "failed" {
+                worker.shutdown().await;
+                panic!("Top-k task failed");
+            }
+        }
+
+        sleep(Duration::from_millis(500)).await;
+    }
+
+    worker.shutdown().await;
+
+    // === Verify emitted events by querying the events table ===
+
+    // 1. Query all progress events (one per batch) and verify multiple batches were emitted
+    let progress_event_prefix = format!("topk_progress:{task_id}:");
+    let query = format!(
+        "SELECT event_name, payload FROM durable.e_{queue_name} WHERE event_name LIKE $1 ORDER BY event_name"
+    );
+    let progress_results: Vec<(String, serde_json::Value)> = query_as(AssertSqlSafe(query))
+        .bind(format!("{progress_event_prefix}%"))
+        .fetch_all(&pg_pool)
+        .await
+        .expect("Failed to query progress events");
+
+    // Verify we got at least 2 batches (this catches the first-writer-wins regression)
+    assert!(
+        progress_results.len() >= 2,
+        "Expected at least 2 progress events (one per batch), got {}. \
+         This may indicate the first-writer-wins regression where only the first batch is emitted.",
+        progress_results.len()
+    );
+
+    // Verify each batch has valid data and num_datapoints_processed increases.
+    // The last event in the sequence should be a Completed event (at batch index N).
+    let mut prev_datapoints_processed = 0;
+    let num_progress_events = progress_results.len();
+    for (idx, (event_name, payload)) in progress_results.iter().enumerate() {
+        // Verify event name has correct batch index
+        let expected_event_name = format!("{progress_event_prefix}{idx}");
+        assert_eq!(
+            event_name, &expected_event_name,
+            "Event name mismatch at index {idx}"
+        );
+
+        let progress_update: TopKUpdate =
+            serde_json::from_value(payload.clone()).expect("Failed to deserialize progress event");
+
+        let is_last = idx == num_progress_events - 1;
+
+        match progress_update {
+            TopKUpdate::BatchProgress(batch) => {
+                assert!(
+                    !is_last,
+                    "Last event should be Completed, not BatchProgress"
+                );
+                assert_ne!(
+                    batch.evaluation_run_id,
+                    uuid::Uuid::nil(),
+                    "Progress event should have a valid evaluation_run_id"
+                );
+                assert_eq!(
+                    batch.total_datapoints, 25,
+                    "Progress event should have correct total_datapoints"
+                );
+                assert!(
+                    batch.num_datapoints_processed > prev_datapoints_processed,
+                    "num_datapoints_processed should increase: batch {idx} has {} but previous was {}",
+                    batch.num_datapoints_processed,
+                    prev_datapoints_processed
+                );
+                prev_datapoints_processed = batch.num_datapoints_processed;
+                assert_eq!(
+                    batch.variant_summaries.len(),
+                    3,
+                    "Should have 3 variant summaries"
+                );
+                assert!(
+                    batch.variant_summaries.contains_key("echo"),
+                    "Should have echo variant summary"
+                );
+                assert_eq!(
+                    batch.variant_statuses.len(),
+                    3,
+                    "Should have 3 variant statuses"
+                );
+            }
+            TopKUpdate::Completed(completed) => {
+                // The batch-style completion event should be the last one
+                assert!(
+                    is_last,
+                    "Completed event should only appear at the last index, but found at {idx}"
+                );
+                assert_ne!(
+                    completed.evaluation_run_id,
+                    uuid::Uuid::nil(),
+                    "Batch-style completion event should have a valid evaluation_run_id"
+                );
+            }
+        }
+    }
+
+    // 2. Query the completion event
+    let completion_event_name = format!("topk_completed:{task_id}");
+    let query = format!("SELECT payload FROM durable.e_{queue_name} WHERE event_name = $1");
+    let completion_result: Option<(serde_json::Value,)> = query_as(AssertSqlSafe(query))
+        .bind(&completion_event_name)
+        .fetch_optional(&pg_pool)
+        .await
+        .expect("Failed to query completion event");
+
+    let completion_payload = completion_result.expect("Completion event should have been emitted");
+    let completion_update: TopKUpdate = serde_json::from_value(completion_payload.0)
+        .expect("Failed to deserialize completion event");
+
+    match completion_update {
+        TopKUpdate::Completed(completed) => {
+            // The event payload contains evaluation_run_id (generated inside the task)
+            assert_ne!(
+                completed.evaluation_run_id,
+                uuid::Uuid::nil(),
+                "Completion event should have a valid evaluation_run_id"
+            );
+
+            // Verify stopping reason
+            match &completed.stopping_reason {
+                GlobalStoppingReason::TopKFound { k, top_variants } => {
+                    assert_eq!(*k, 1, "Should have found top-1");
+                    assert!(
+                        top_variants.contains(&"echo".to_string()),
+                        "Echo should be in top variants"
+                    );
+                }
+                other => {
+                    panic!("Expected TopKFound, got: {other:?}");
+                }
+            }
+
+            // Verify final variant statuses
+            assert_eq!(
+                completed.final_variant_statuses.get("echo"),
+                Some(&VariantStatus::Include),
+                "Echo should be Included in completion event"
+            );
+        }
+        TopKUpdate::BatchProgress(_) => panic!("Expected Completed event, got BatchProgress"),
+    }
 }
