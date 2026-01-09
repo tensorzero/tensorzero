@@ -1286,13 +1286,13 @@ impl UninitializedProviderConfig {
             } => {
                 // Emit deprecation warning if allow_auto_detect_region is used
                 if allow_auto_detect_region {
-                    tracing::warn!(
-                        "The `allow_auto_detect_region` field is deprecated for aws_bedrock. \
-                         Use `region = \"sdk\"` instead to enable auto-detection."
+                    crate::utils::deprecation_warning(
+                        "The `allow_auto_detect_region` field is deprecated for `aws_bedrock`. \
+                         Use `region = \"sdk\"` instead to enable auto-detection. (#5596)",
                     );
                 }
 
-                // Convert CredentialLocationWithFallback to AWSRegion
+                // Convert CredentialLocationOrHardcoded to AWSRegion
                 let aws_region = region
                     .map(|loc| AWSRegion::from_credential_location(loc, "aws_bedrock"))
                     .transpose()?
@@ -1356,13 +1356,13 @@ impl UninitializedProviderConfig {
             } => {
                 // Emit deprecation warning if allow_auto_detect_region is used
                 if allow_auto_detect_region {
-                    tracing::warn!(
-                        "The `allow_auto_detect_region` field is deprecated for aws_sagemaker. \
-                         Use `region = \"sdk\"` instead to enable auto-detection."
+                    crate::utils::deprecation_warning(
+                        "The `allow_auto_detect_region` field is deprecated for `aws_sagemaker`. \
+                         Use `region = \"sdk\"` instead to enable auto-detection. (#5596)",
                     );
                 }
 
-                // Convert CredentialLocationWithFallback to AWSRegion
+                // Convert CredentialLocationOrHardcoded to AWSRegion
                 let aws_region = region
                     .map(|loc| AWSRegion::from_credential_location(loc, "aws_sagemaker"))
                     .transpose()?
