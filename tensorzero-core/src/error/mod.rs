@@ -613,6 +613,9 @@ pub enum ErrorDetails {
         message: String,
         status_code: Option<u16>,
     },
+    NotImplemented {
+        message: String,
+    },
 }
 impl ErrorDetails {
     /// Defines the error level for logging this error
@@ -743,6 +746,7 @@ impl ErrorDetails {
             ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::AutopilotUnavailable => tracing::Level::WARN,
             ErrorDetails::Autopilot { .. } => tracing::Level::ERROR,
+            ErrorDetails::NotImplemented { .. } => tracing::Level::WARN,
         }
     }
 
@@ -906,6 +910,7 @@ impl ErrorDetails {
             ErrorDetails::Autopilot { status_code, .. } => status_code
                 .and_then(|code| StatusCode::from_u16(code).ok())
                 .unwrap_or(StatusCode::BAD_GATEWAY),
+            ErrorDetails::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
         }
     }
 
@@ -1648,6 +1653,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Autopilot { message, .. } => {
                 write!(f, "Autopilot API error: {message}")
+            }
+            ErrorDetails::NotImplemented { message } => {
+                write!(f, "Feature not implemented: {message}")
             }
         }
     }

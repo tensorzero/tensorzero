@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use feedback::FeedbackQueries;
@@ -88,6 +90,32 @@ impl TimeWindow {
             TimeWindow::Week => "week",
             TimeWindow::Month => "month",
             TimeWindow::Cumulative => "year", // Cumulative uses a full year as fallback
+        }
+    }
+
+    /// Converts a time window to PostgreSQL date_trunc interval string.
+    pub fn to_postgres_interval_string(&self) -> &'static str {
+        match self {
+            TimeWindow::Minute => "minute",
+            TimeWindow::Hour => "hour",
+            TimeWindow::Day => "day",
+            TimeWindow::Week => "week",
+            TimeWindow::Month => "month",
+            TimeWindow::Cumulative => "year", // Won't be used but makes match exhaustive
+        }
+    }
+
+    /// Converts the time window to a Duration.
+    pub fn to_duration(&self) -> Duration {
+        match self {
+            TimeWindow::Minute => Duration::from_secs(60),
+            TimeWindow::Hour => Duration::from_secs(60 * 60),
+            TimeWindow::Day => Duration::from_secs(24 * 60 * 60),
+            TimeWindow::Week => Duration::from_secs(7 * 24 * 60 * 60),
+            TimeWindow::Month => Duration::from_secs(30 * 24 * 60 * 60),
+
+            // Cumulative uses a full year as fallback.
+            TimeWindow::Cumulative => Duration::from_secs(365 * 24 * 60 * 60),
         }
     }
 }

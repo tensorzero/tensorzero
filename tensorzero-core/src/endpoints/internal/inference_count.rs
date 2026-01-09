@@ -14,6 +14,7 @@ use crate::db::inference_count::{
     GetFunctionThroughputByVariantParams, InferenceCountQueries, VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
+use crate::feature_flags::flags;
 use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -130,15 +131,24 @@ pub async fn get_inference_count_handler(
     Path(function_name): Path<String>,
     Query(params): Query<InferenceCountQueryParams>,
 ) -> Result<Json<InferenceCountResponse>, Error> {
-    Ok(Json(
+    let response = if flags::ENABLE_POSTGRES_DATA_READ.get() {
+        get_inference_count(
+            &app_state.config,
+            &app_state.postgres_connection_info,
+            &function_name,
+            params,
+        )
+        .await?
+    } else {
         get_inference_count(
             &app_state.config,
             &app_state.clickhouse_connection_info,
             &function_name,
             params,
         )
-        .await?,
-    ))
+        .await?
+    };
+    Ok(Json(response))
 }
 
 /// HTTP handler for the feedback stats endpoint
@@ -156,7 +166,16 @@ pub async fn get_inference_with_feedback_count_handler(
     Path((function_name, metric_name)): Path<(String, String)>,
     Query(params): Query<InferenceWithFeedbackCountQueryParams>,
 ) -> Result<Json<InferenceWithFeedbackCountResponse>, Error> {
-    Ok(Json(
+    let response = if flags::ENABLE_POSTGRES_DATA_READ.get() {
+        get_inference_with_feedback_count(
+            &app_state.config,
+            &app_state.postgres_connection_info,
+            function_name,
+            metric_name,
+            params,
+        )
+        .await?
+    } else {
         get_inference_with_feedback_count(
             &app_state.config,
             &app_state.clickhouse_connection_info,
@@ -164,8 +183,9 @@ pub async fn get_inference_with_feedback_count_handler(
             metric_name,
             params,
         )
-        .await?,
-    ))
+        .await?
+    };
+    Ok(Json(response))
 }
 
 /// Core business logic for getting inference count
@@ -296,13 +316,23 @@ pub async fn get_function_throughput_by_variant_handler(
     Path(function_name): Path<String>,
     Query(params): Query<FunctionThroughputByVariantQueryParams>,
 ) -> Result<Json<GetFunctionThroughputByVariantResponse>, Error> {
-    let response = get_function_throughput_by_variant(
-        &state.config,
-        &state.clickhouse_connection_info,
-        &function_name,
-        params,
-    )
-    .await?;
+    let response = if flags::ENABLE_POSTGRES_DATA_READ.get() {
+        get_function_throughput_by_variant(
+            &state.config,
+            &state.postgres_connection_info,
+            &function_name,
+            params,
+        )
+        .await?
+    } else {
+        get_function_throughput_by_variant(
+            &state.config,
+            &state.clickhouse_connection_info,
+            &function_name,
+            params,
+        )
+        .await?
+    };
     Ok(Json(response))
 }
 
@@ -334,7 +364,11 @@ pub async fn get_function_throughput_by_variant(
 pub async fn list_functions_with_inference_count_handler(
     State(state): State<AppStateData>,
 ) -> Result<Json<ListFunctionsWithInferenceCountResponse>, Error> {
-    let response = list_functions_with_inference_count(&state.clickhouse_connection_info).await?;
+    let response = if flags::ENABLE_POSTGRES_DATA_READ.get() {
+        list_functions_with_inference_count(&state.postgres_connection_info).await?
+    } else {
+        list_functions_with_inference_count(&state.clickhouse_connection_info).await?
+    };
     Ok(Json(response))
 }
 

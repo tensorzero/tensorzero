@@ -11,6 +11,7 @@ use crate::error::{Error, ErrorDetails};
 use super::HealthCheckable;
 
 pub mod experimentation;
+pub mod inference_count;
 pub mod rate_limiting;
 
 const RUN_MIGRATIONS_COMMAND: &str = "Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres";
