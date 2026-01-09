@@ -680,24 +680,6 @@ beta_structured_outputs = true
 
 <Accordion title='type: "aws_bedrock"'>
 
-##### `allow_auto_detect_region`
-
-- **Type:** boolean
-- **Required:** no (default: `false`)
-
-<Warning>
-  **Deprecated:** Use `region = "sdk"` instead to enable auto-detection.
-</Warning>
-
-Defines whether to automatically detect the AWS region to use with the Bedrock API.
-Under the hood, the gateway will use the AWS SDK to try to detect the region.
-Alternatively, you can specify the region manually with the `region` field (recommended).
-
-<Warning>
-  Enabling this setting makes SDK initialization slow in non-AWS environments.
-  We recommend specifying the `region` field explicitly instead.
-</Warning>
-
 ##### `model_id`
 
 - **Type:** string
@@ -736,7 +718,7 @@ The supported locations are:
 - Static values (e.g., `"us-east-1"`)
 - `env::VAR_NAME` - read from environment variable at startup
 - `path::/path/to/file` - read from file at startup
-- `dynamic::key_name` - resolve at request time from `credentials` field
+- `dynamic::key_name` - resolve at inference time from `credentials` field
 - `sdk` - use AWS SDK auto-detection
 - `none` - treat as unspecified (useful in fallback configurations)
 
@@ -793,24 +775,6 @@ endpoint_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
 </Accordion>
 
 <Accordion title='type: "aws_sagemaker"'>
-
-##### `allow_auto_detect_region`
-
-- **Type:** boolean
-- **Required:** no (default: `false`)
-
-<Warning>
-  **Deprecated:** Use `region = "sdk"` instead to enable auto-detection.
-</Warning>
-
-Defines whether to automatically detect the AWS region to use with the SageMaker API.
-Under the hood, the gateway will use the AWS SDK to try to detect the region.
-Alternatively, you can specify the region manually with the `region` field (recommended).
-
-<Warning>
-  Enabling this setting makes SDK initialization slow in non-AWS environments.
-  We recommend specifying the `region` field explicitly instead.
-</Warning>
 
 ##### `endpoint_name`
 

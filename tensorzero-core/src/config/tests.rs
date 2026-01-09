@@ -1687,7 +1687,7 @@ async fn test_bedrock_err_no_auto_detect_region() {
         .expect_err("Failed to load bedrock");
     let err_msg = err.to_string();
     assert!(
-        err_msg.contains("requires a region to be provided, or `allow_auto_detect_region = true`"),
+        err_msg.contains("AWS bedrock provider requires a region"),
         "Unexpected error message: {err_msg}"
     );
 }

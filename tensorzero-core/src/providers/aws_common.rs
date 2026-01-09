@@ -22,7 +22,8 @@ use crate::{
         extra_headers::FullExtraHeadersConfig,
     },
     model::{
-        CredentialLocation, CredentialLocationWithFallback, EndpointLocation, ModelProvider,
+        CredentialLocation, CredentialLocationOrHardcoded,
+        CredentialLocationOrHardcodedWithFallback, CredentialLocationWithFallback, ModelProvider,
         ModelProviderRequestInfo,
     },
 };
@@ -41,47 +42,17 @@ pub enum AWSEndpointUrl {
 }
 
 impl AWSEndpointUrl {
-    /// Create AWSEndpointUrl from EndpointLocation (used by Azure - kept for compatibility).
-    pub fn from_location(location: EndpointLocation, provider_type: &str) -> Result<Self, Error> {
-        match location {
-            EndpointLocation::Static(url_str) => {
-                let url = parse_and_warn_endpoint(&url_str, provider_type)?;
-                Ok(AWSEndpointUrl::Static(url))
-            }
-            EndpointLocation::Env(env_var) => {
-                let url_str = std::env::var(&env_var).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Environment variable `{env_var}` not found. \
-                             Your configuration for a `{provider_type}` provider requires this variable for `endpoint_url`."
-                        ),
-                    })
-                })?;
-                let url = parse_and_warn_endpoint(&url_str, provider_type)?;
-                Ok(AWSEndpointUrl::Static(url))
-            }
-            EndpointLocation::Dynamic(key_name) => {
-                tracing::warn!(
-                    "You configured a dynamic `endpoint_url` for a `{provider_type}` provider. \
-                     Only use this setting with trusted clients. \
-                     An untrusted client can exfiltrate your AWS credentials with a malicious endpoint."
-                );
-                Ok(AWSEndpointUrl::Dynamic(key_name))
-            }
-        }
-    }
-
-    /// Create AWSEndpointUrl from CredentialLocationWithFallback.
+    /// Create AWSEndpointUrl from CredentialLocationOrHardcodedWithFallback.
     /// Returns None for None/Sdk variants since they don't apply to endpoints.
     pub fn from_credential_location(
-        location: CredentialLocationWithFallback,
+        location: CredentialLocationOrHardcodedWithFallback,
         provider_type: &str,
     ) -> Result<Option<Self>, Error> {
         match location {
-            CredentialLocationWithFallback::Single(loc) => {
+            CredentialLocationOrHardcodedWithFallback::Single(loc) => {
                 Self::from_single_credential_location(loc, provider_type)
             }
-            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+            CredentialLocationOrHardcodedWithFallback::WithFallback { default, fallback } => {
                 let primary = Self::from_single_credential_location(default, provider_type)?;
                 let fallback_endpoint =
                     Self::from_single_credential_location(fallback, provider_type)?;
@@ -106,70 +77,76 @@ impl AWSEndpointUrl {
     }
 
     fn from_single_credential_location(
-        location: CredentialLocation,
+        location: CredentialLocationOrHardcoded,
         provider_type: &str,
     ) -> Result<Option<Self>, Error> {
         match location {
-            CredentialLocation::Env(env_var) => {
-                let url_str = std::env::var(&env_var).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Environment variable `{env_var}` not found. \
-                             Your configuration for a `{provider_type}` provider requires this variable for `endpoint_url`."
-                        ),
-                    })
-                })?;
+            CredentialLocationOrHardcoded::Hardcoded(url_str) => {
                 let url = parse_and_warn_endpoint(&url_str, provider_type)?;
                 Ok(Some(AWSEndpointUrl::Static(url)))
             }
-            CredentialLocation::PathFromEnv(env_var) => {
-                let path = std::env::var(&env_var).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
+            CredentialLocationOrHardcoded::Location(loc) => match loc {
+                CredentialLocation::Env(env_var) => {
+                    let url_str = std::env::var(&env_var).map_err(|_| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Environment variable `{env_var}` not found. \
+                                 Your configuration for a `{provider_type}` provider requires this variable for `endpoint_url`."
+                            ),
+                        })
+                    })?;
+                    let url = parse_and_warn_endpoint(&url_str, provider_type)?;
+                    Ok(Some(AWSEndpointUrl::Static(url)))
+                }
+                CredentialLocation::PathFromEnv(env_var) => {
+                    let path = std::env::var(&env_var).map_err(|_| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Environment variable `{env_var}` not found. \
+                                 Your configuration for a `{provider_type}` provider requires this variable for `endpoint_url` path."
+                            ),
+                        })
+                    })?;
+                    let url_str = std::fs::read_to_string(&path).map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to read endpoint URL from file `{path}` for `{provider_type}`: {e}"
+                            ),
+                        })
+                    })?;
+                    let url = parse_and_warn_endpoint(url_str.trim(), provider_type)?;
+                    Ok(Some(AWSEndpointUrl::Static(url)))
+                }
+                CredentialLocation::Dynamic(key_name) => {
+                    tracing::warn!(
+                        "You configured a dynamic `endpoint_url` for a `{provider_type}` provider. \
+                         Only use this setting with trusted clients. \
+                         An untrusted client can exfiltrate your AWS credentials with a malicious endpoint."
+                    );
+                    Ok(Some(AWSEndpointUrl::Dynamic(key_name)))
+                }
+                CredentialLocation::Path(path) => {
+                    let url_str = std::fs::read_to_string(&path).map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to read endpoint URL from file `{path}` for `{provider_type}`: {e}"
+                            ),
+                        })
+                    })?;
+                    let url = parse_and_warn_endpoint(url_str.trim(), provider_type)?;
+                    Ok(Some(AWSEndpointUrl::Static(url)))
+                }
+                CredentialLocation::Sdk => {
+                    // SDK doesn't make sense for endpoint_url
+                    Err(Error::new(ErrorDetails::Config {
                         message: format!(
-                            "Environment variable `{env_var}` not found. \
-                             Your configuration for a `{provider_type}` provider requires this variable for `endpoint_url` path."
+                            "`endpoint_url = \"sdk\"` is not supported for `{provider_type}`. \
+                             Use a static URL, `env::`, `path::`, or `dynamic::` instead."
                         ),
-                    })
-                })?;
-                let url_str = std::fs::read_to_string(&path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to read endpoint URL from file `{path}` for `{provider_type}`: {e}"
-                        ),
-                    })
-                })?;
-                let url = parse_and_warn_endpoint(url_str.trim(), provider_type)?;
-                Ok(Some(AWSEndpointUrl::Static(url)))
-            }
-            CredentialLocation::Dynamic(key_name) => {
-                tracing::warn!(
-                    "You configured a dynamic `endpoint_url` for a `{provider_type}` provider. \
-                     Only use this setting with trusted clients. \
-                     An untrusted client can exfiltrate your AWS credentials with a malicious endpoint."
-                );
-                Ok(Some(AWSEndpointUrl::Dynamic(key_name)))
-            }
-            CredentialLocation::Path(path) => {
-                let url_str = std::fs::read_to_string(&path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to read endpoint URL from file `{path}` for `{provider_type}`: {e}"
-                        ),
-                    })
-                })?;
-                let url = parse_and_warn_endpoint(url_str.trim(), provider_type)?;
-                Ok(Some(AWSEndpointUrl::Static(url)))
-            }
-            CredentialLocation::Sdk => {
-                // SDK doesn't make sense for endpoint_url
-                Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "`endpoint_url = \"sdk\"` is not supported for `{provider_type}`. \
-                         Use a static URL, `env::`, `path::`, or `dynamic::` instead."
-                    ),
-                }))
-            }
-            CredentialLocation::None => Ok(None),
+                    }))
+                }
+                CredentialLocation::None => Ok(None),
+            },
         }
     }
 
@@ -232,17 +209,17 @@ pub enum AWSRegion {
 }
 
 impl AWSRegion {
-    /// Create AWSRegion from CredentialLocationWithFallback.
+    /// Create AWSRegion from CredentialLocationOrHardcodedWithFallback.
     /// Returns None for None variant.
     pub fn from_credential_location(
-        location: CredentialLocationWithFallback,
+        location: CredentialLocationOrHardcodedWithFallback,
         provider_type: &str,
     ) -> Result<Option<Self>, Error> {
         match location {
-            CredentialLocationWithFallback::Single(loc) => {
+            CredentialLocationOrHardcodedWithFallback::Single(loc) => {
                 Self::from_single_credential_location(loc, provider_type)
             }
-            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+            CredentialLocationOrHardcodedWithFallback::WithFallback { default, fallback } => {
                 let primary = Self::from_single_credential_location(default, provider_type)?;
                 let fallback_region =
                     Self::from_single_credential_location(fallback, provider_type)?;
@@ -267,56 +244,61 @@ impl AWSRegion {
     }
 
     fn from_single_credential_location(
-        location: CredentialLocation,
+        location: CredentialLocationOrHardcoded,
         provider_type: &str,
     ) -> Result<Option<Self>, Error> {
         match location {
-            CredentialLocation::Env(env_var) => {
-                let region_str = std::env::var(&env_var).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Environment variable `{env_var}` not found. \
-                             Your configuration for a `{provider_type}` provider requires this variable for `region`."
-                        ),
-                    })
-                })?;
+            CredentialLocationOrHardcoded::Hardcoded(region_str) => {
                 Ok(Some(AWSRegion::Static(Region::new(region_str))))
             }
-            CredentialLocation::PathFromEnv(env_var) => {
-                let path = std::env::var(&env_var).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Environment variable `{env_var}` not found. \
-                             Your configuration for a `{provider_type}` provider requires this variable for `region` path."
-                        ),
-                    })
-                })?;
-                let region_str = std::fs::read_to_string(&path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to read region from file `{path}` for `{provider_type}`: {e}"
-                        ),
-                    })
-                })?;
-                Ok(Some(AWSRegion::Static(Region::new(
-                    region_str.trim().to_string(),
-                ))))
-            }
-            CredentialLocation::Dynamic(key_name) => Ok(Some(AWSRegion::Dynamic(key_name))),
-            CredentialLocation::Path(path) => {
-                let region_str = std::fs::read_to_string(&path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to read region from file `{path}` for `{provider_type}`: {e}"
-                        ),
-                    })
-                })?;
-                Ok(Some(AWSRegion::Static(Region::new(
-                    region_str.trim().to_string(),
-                ))))
-            }
-            CredentialLocation::Sdk => Ok(Some(AWSRegion::Sdk)),
-            CredentialLocation::None => Ok(None),
+            CredentialLocationOrHardcoded::Location(loc) => match loc {
+                CredentialLocation::Env(env_var) => {
+                    let region_str = std::env::var(&env_var).map_err(|_| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Environment variable `{env_var}` not found. \
+                                 Your configuration for a `{provider_type}` provider requires this variable for `region`."
+                            ),
+                        })
+                    })?;
+                    Ok(Some(AWSRegion::Static(Region::new(region_str))))
+                }
+                CredentialLocation::PathFromEnv(env_var) => {
+                    let path = std::env::var(&env_var).map_err(|_| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Environment variable `{env_var}` not found. \
+                                 Your configuration for a `{provider_type}` provider requires this variable for `region` path."
+                            ),
+                        })
+                    })?;
+                    let region_str = std::fs::read_to_string(&path).map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to read region from file `{path}` for `{provider_type}`: {e}"
+                            ),
+                        })
+                    })?;
+                    Ok(Some(AWSRegion::Static(Region::new(
+                        region_str.trim().to_string(),
+                    ))))
+                }
+                CredentialLocation::Dynamic(key_name) => Ok(Some(AWSRegion::Dynamic(key_name))),
+                CredentialLocation::Path(path) => {
+                    let region_str = std::fs::read_to_string(&path).map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to read region from file `{path}` for `{provider_type}`: {e}"
+                            ),
+                        })
+                    })?;
+                    Ok(Some(AWSRegion::Static(Region::new(
+                        region_str.trim().to_string(),
+                    ))))
+                }
+                CredentialLocation::Sdk => Ok(Some(AWSRegion::Sdk)),
+                CredentialLocation::None => Ok(None),
+            },
         }
     }
 
@@ -428,8 +410,13 @@ impl AWSCredentials {
             })),
             (Some(access_key_id), Some(secret_access_key)) => {
                 // Both provided - convert to AWSCredentials
-                Self::from_locations(access_key_id, secret_access_key, session_token, provider_type)
-                    .map(Some)
+                Self::from_locations(
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    provider_type,
+                )
+                .map(Some)
             }
         }
     }
@@ -640,11 +627,6 @@ impl AWSCredentials {
             self,
             AWSCredentials::Dynamic { .. } | AWSCredentials::WithFallback { .. }
         )
-    }
-
-    /// Returns true if this credential has fallback configured.
-    pub fn has_fallback(&self) -> bool {
-        matches!(self, AWSCredentials::WithFallback { .. })
     }
 
     /// Returns true if this credential has fallback to static or SDK credentials.
@@ -1038,96 +1020,5 @@ pub fn build_interceptor(
                 })?;
             Ok(raw_response)
         },
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_aws_endpoint_from_static_valid_amazonaws() {
-        let endpoint = AWSEndpointUrl::from_location(
-            EndpointLocation::Static("https://bedrock-runtime.us-east-1.amazonaws.com".to_string()),
-            "aws_bedrock",
-        )
-        .unwrap();
-        assert!(matches!(endpoint, AWSEndpointUrl::Static(_)));
-        assert_eq!(
-            endpoint.get_static_url().unwrap().as_str(),
-            "https://bedrock-runtime.us-east-1.amazonaws.com/"
-        );
-    }
-
-    #[test]
-    fn test_aws_endpoint_from_static_valid_api_aws() {
-        let endpoint = AWSEndpointUrl::from_location(
-            EndpointLocation::Static("https://bedrock.us-east-1.api.aws".to_string()),
-            "aws_bedrock",
-        )
-        .unwrap();
-        assert!(matches!(endpoint, AWSEndpointUrl::Static(_)));
-    }
-
-    #[test]
-    fn test_aws_endpoint_from_static_case_insensitive() {
-        // Should not panic or error - domain check is case-insensitive
-        let endpoint = AWSEndpointUrl::from_location(
-            EndpointLocation::Static("https://bedrock-runtime.us-east-1.AMAZONAWS.COM".to_string()),
-            "aws_bedrock",
-        )
-        .unwrap();
-        assert!(matches!(endpoint, AWSEndpointUrl::Static(_)));
-    }
-
-    #[test]
-    fn test_aws_endpoint_from_static_non_aws_warns_but_succeeds() {
-        // Non-AWS domains should succeed (with a warning logged)
-        let endpoint = AWSEndpointUrl::from_location(
-            EndpointLocation::Static("http://localhost:4566".to_string()),
-            "aws_bedrock",
-        )
-        .unwrap();
-        assert!(matches!(endpoint, AWSEndpointUrl::Static(_)));
-    }
-
-    #[test]
-    fn test_aws_endpoint_from_static_invalid_url_fails() {
-        let result = AWSEndpointUrl::from_location(
-            EndpointLocation::Static("not-a-valid-url".to_string()),
-            "aws_bedrock",
-        );
-        assert!(result.is_err(), "Invalid URL should return an error");
-        let err = result.unwrap_err();
-        assert!(
-            err.to_string().contains("Invalid endpoint URL"),
-            "Error should mention invalid endpoint URL, but got: {err}"
-        );
-    }
-
-    #[test]
-    fn test_aws_endpoint_from_dynamic() {
-        let endpoint = AWSEndpointUrl::from_location(
-            EndpointLocation::Dynamic("my_endpoint_key".to_string()),
-            "aws_bedrock",
-        )
-        .unwrap();
-        assert!(matches!(endpoint, AWSEndpointUrl::Dynamic(_)));
-        // Dynamic endpoints don't have a static URL
-        assert!(endpoint.get_static_url().is_none());
-    }
-
-    #[test]
-    fn test_aws_endpoint_from_env_missing_fails() {
-        let result = AWSEndpointUrl::from_location(
-            EndpointLocation::Env("NONEXISTENT_AWS_ENDPOINT_VAR_12345".to_string()),
-            "aws_bedrock",
-        );
-        assert!(result.is_err(), "Missing env var should return an error");
-        let err = result.unwrap_err();
-        assert!(
-            err.to_string().contains("Environment variable"),
-            "Error should mention environment variable, but got: {err}"
-        );
     }
 }
