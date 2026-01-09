@@ -27,6 +27,7 @@ import {
 import { NotFoundDisplay } from "./components/ui/error/ErrorContentPrimitives";
 import {
   InfraErrorType,
+  isInfraErrorData,
   isAuthenticationError,
   isGatewayConnectionError,
   classifyError,
@@ -130,24 +131,20 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const [open, setOpen] = React.useState(true);
 
   // Client 404s (page not found in React Router) - show in content area with sidebar
-  // React Router sets data to undefined for true "no route matched" 404s.
-  // Resource 404s (e.g. inference not found) have string data and go through classifyError.
-  // Gateway errors are not RouteErrorResponses and also go through classifyError.
-  if (
-    isRouteErrorResponse(error) &&
-    error.status === 404 &&
-    error.data === undefined
-  ) {
-    return (
-      <AppProviders>
-        <div className="fixed inset-0 flex">
-          <AppSidebar />
-          <ContentLayout>
-            <NotFoundDisplay />
-          </ContentLayout>
-        </div>
-      </AppProviders>
-    );
+  // Check that it's not an infrastructure error (those go through classifyError)
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    if (!isInfraErrorData(error.data)) {
+      return (
+        <AppProviders>
+          <div className="fixed inset-0 flex">
+            <AppSidebar />
+            <ContentLayout>
+              <NotFoundDisplay />
+            </ContentLayout>
+          </div>
+        </AppProviders>
+      );
+    }
   }
 
   // All other errors use the dismissible modal pattern with sidebar visible

@@ -41,16 +41,14 @@ test.describe("Error Boundaries", () => {
       );
 
       // Should show an error (caught by layout boundary)
-      const errorVisible = await page
-        .getByText(/error|not found/i)
-        .first()
-        .isVisible()
-        .catch(() => false);
-
-      expect(errorVisible).toBe(true);
+      await expect(
+        page.getByRole("heading", { name: "404: Not Found" }),
+      ).toBeVisible();
 
       // Sidebar should remain functional
-      await expect(page.getByText("Inferences")).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Inferences" }).first(),
+      ).toBeVisible();
     });
 
     test("should show error for non-existent episode", async ({ page }) => {
@@ -58,49 +56,37 @@ test.describe("Error Boundaries", () => {
         "/observability/episodes/00000000-0000-0000-0000-000000000000",
       );
 
-      // Should show an error
-      const errorVisible = await page
-        .getByText(/error|not found/i)
-        .first()
-        .isVisible()
-        .catch(() => false);
-
-      expect(errorVisible).toBe(true);
+      // Should show an error (caught by layout boundary)
+      await expect(page.getByRole("heading", { name: "Error" })).toBeVisible();
 
       // Sidebar should remain functional
-      await expect(page.getByText("Episodes")).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Episodes" }).first(),
+      ).toBeVisible();
     });
 
     test("should show error for non-existent dataset", async ({ page }) => {
       await page.goto("/datasets/this-dataset-does-not-exist-xyz");
 
-      // Should show an error
-      const errorVisible = await page
-        .getByText(/error|not found/i)
-        .first()
-        .isVisible()
-        .catch(() => false);
-
-      expect(errorVisible).toBe(true);
+      // Should show an error (caught by layout boundary)
+      await expect(page.getByRole("heading", { name: "Error" })).toBeVisible();
 
       // Sidebar should remain functional
-      await expect(page.getByText("Datasets")).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Datasets" }).first(),
+      ).toBeVisible();
     });
 
     test("should show error for non-existent function", async ({ page }) => {
       await page.goto("/observability/functions/this_function_does_not_exist");
 
-      // Should show an error
-      const errorVisible = await page
-        .getByText(/error|not found/i)
-        .first()
-        .isVisible()
-        .catch(() => false);
-
-      expect(errorVisible).toBe(true);
+      // Should show an error (caught by layout boundary)
+      await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
 
       // Sidebar should remain functional
-      await expect(page.getByText("Functions")).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Functions" }).first(),
+      ).toBeVisible();
     });
   });
 
