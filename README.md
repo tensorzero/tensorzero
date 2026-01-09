@@ -103,7 +103,7 @@ You can access any provider using the TensorZero Python client.
 from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 
 
-with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
+with TensorZeroGateway.build_embedded(...) as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
         # Try other providers easily: "anthropic::claude-sonnet-4-5-20250929"
@@ -137,12 +137,7 @@ from tensorzero import patch_openai_client
 
 client = OpenAI()
 
-patch_openai_client(
-    client,
-    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
-    config_file="config/tensorzero.toml",
-    async_setup=False,
-)
+patch_openai_client(client, ...)
 
 response = client.chat.completions.create(
     model="tensorzero::model_name::openai::gpt-4o-mini",
