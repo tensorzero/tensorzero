@@ -1101,18 +1101,18 @@ pub enum UninitializedProviderConfig {
     AWSBedrock {
         model_id: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        region: Option<CredentialLocationOrHardcodedWithFallback>,
+        region: Option<CredentialLocationOrHardcoded>,
         /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
         #[cfg_attr(test, ts(type = "string | null"))]
-        endpoint_url: Option<CredentialLocationOrHardcodedWithFallback>,
+        endpoint_url: Option<CredentialLocationOrHardcoded>,
         #[cfg_attr(test, ts(type = "string | null"))]
-        access_key_id: Option<CredentialLocationWithFallback>,
+        access_key_id: Option<CredentialLocation>,
         #[cfg_attr(test, ts(type = "string | null"))]
-        secret_access_key: Option<CredentialLocationWithFallback>,
+        secret_access_key: Option<CredentialLocation>,
         #[cfg_attr(test, ts(type = "string | null"))]
-        session_token: Option<CredentialLocationWithFallback>,
+        session_token: Option<CredentialLocation>,
     },
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
@@ -1120,19 +1120,19 @@ pub enum UninitializedProviderConfig {
         endpoint_name: String,
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        region: Option<CredentialLocationOrHardcodedWithFallback>,
+        region: Option<CredentialLocationOrHardcoded>,
         /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
         hosted_provider: HostedProviderKind,
         #[cfg_attr(test, ts(type = "string | null"))]
-        endpoint_url: Option<CredentialLocationOrHardcodedWithFallback>,
+        endpoint_url: Option<CredentialLocationOrHardcoded>,
         #[cfg_attr(test, ts(type = "string | null"))]
-        access_key_id: Option<CredentialLocationWithFallback>,
+        access_key_id: Option<CredentialLocation>,
         #[cfg_attr(test, ts(type = "string | null"))]
-        secret_access_key: Option<CredentialLocationWithFallback>,
+        secret_access_key: Option<CredentialLocation>,
         #[cfg_attr(test, ts(type = "string | null"))]
-        session_token: Option<CredentialLocationWithFallback>,
+        session_token: Option<CredentialLocation>,
     },
     Azure {
         deployment_id: String,
@@ -2260,7 +2260,8 @@ impl ModelProvider {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -2377,18 +2378,10 @@ impl Serialize for CredentialLocationOrHardcoded {
     where
         S: serde::Serializer,
     {
-        let s = match self {
-            CredentialLocationOrHardcoded::Hardcoded(inner) => inner.clone(),
-            CredentialLocationOrHardcoded::Location(loc) => match loc {
-                CredentialLocation::Env(inner) => format!("env::{inner}"),
-                CredentialLocation::PathFromEnv(inner) => format!("path_from_env::{inner}"),
-                CredentialLocation::Dynamic(inner) => format!("dynamic::{inner}"),
-                CredentialLocation::Path(inner) => format!("path::{inner}"),
-                CredentialLocation::Sdk => "sdk".to_string(),
-                CredentialLocation::None => "none".to_string(),
-            },
-        };
-        serializer.serialize_str(&s)
+        match self {
+            CredentialLocationOrHardcoded::Hardcoded(inner) => serializer.serialize_str(inner),
+            CredentialLocationOrHardcoded::Location(loc) => loc.serialize(serializer),
+        }
     }
 }
 

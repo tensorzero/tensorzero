@@ -22,61 +22,23 @@ use crate::{
         extra_headers::FullExtraHeadersConfig,
     },
     model::{
-        CredentialLocation, CredentialLocationOrHardcoded,
-        CredentialLocationOrHardcodedWithFallback, CredentialLocationWithFallback, ModelProvider,
-        ModelProviderRequestInfo,
+        CredentialLocation, CredentialLocationOrHardcoded, ModelProvider, ModelProviderRequestInfo,
     },
 };
 
 use super::helpers::inject_extra_request_data;
 
-/// AWS endpoint configuration supporting static, env, dynamic, and fallback resolution.
+/// AWS endpoint configuration supporting static, env, and dynamic resolution.
 #[derive(Clone, Debug)]
 pub enum AWSEndpointUrl {
     Static(Url),
     Dynamic(String),
-    DynamicWithFallback {
-        primary: String,
-        fallback: Box<AWSEndpointUrl>,
-    },
 }
 
 impl AWSEndpointUrl {
-    /// Create AWSEndpointUrl from CredentialLocationOrHardcodedWithFallback.
+    /// Create AWSEndpointUrl from CredentialLocationOrHardcoded.
     /// Returns None for None/Sdk variants since they don't apply to endpoints.
     pub fn from_credential_location(
-        location: CredentialLocationOrHardcodedWithFallback,
-        provider_type: &str,
-    ) -> Result<Option<Self>, Error> {
-        match location {
-            CredentialLocationOrHardcodedWithFallback::Single(loc) => {
-                Self::from_single_credential_location(loc, provider_type)
-            }
-            CredentialLocationOrHardcodedWithFallback::WithFallback { default, fallback } => {
-                let primary = Self::from_single_credential_location(default, provider_type)?;
-                let fallback_endpoint =
-                    Self::from_single_credential_location(fallback, provider_type)?;
-
-                match (primary, fallback_endpoint) {
-                    (None, None) => Ok(None),
-                    (Some(p), None) => Ok(Some(p)),
-                    (None, Some(f)) => Ok(Some(f)),
-                    (Some(AWSEndpointUrl::Dynamic(key)), Some(f)) => {
-                        Ok(Some(AWSEndpointUrl::DynamicWithFallback {
-                            primary: key,
-                            fallback: Box::new(f),
-                        }))
-                    }
-                    (Some(p), Some(_)) => {
-                        // If primary is static, just use it (fallback doesn't matter for static)
-                        Ok(Some(p))
-                    }
-                }
-            }
-        }
-    }
-
-    fn from_single_credential_location(
         location: CredentialLocationOrHardcoded,
         provider_type: &str,
     ) -> Result<Option<Self>, Error> {
@@ -154,7 +116,7 @@ impl AWSEndpointUrl {
     pub fn get_static_url(&self) -> Option<&Url> {
         match self {
             AWSEndpointUrl::Static(url) => Some(url),
-            AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. } => None,
+            AWSEndpointUrl::Dynamic(_) => None,
         }
     }
 
@@ -176,74 +138,23 @@ impl AWSEndpointUrl {
                 warn_if_not_aws_domain(&url);
                 Ok(url)
             }
-            AWSEndpointUrl::DynamicWithFallback { primary, fallback } => {
-                // Try primary first, fall back if key not found
-                match credentials.get(primary) {
-                    Some(url_str) => {
-                        let url = Url::parse(url_str.expose_secret()).map_err(|_| {
-                            Error::new(ErrorDetails::InvalidDynamicEndpoint {
-                                url: url_str.expose_secret().to_string(),
-                            })
-                        })?;
-                        warn_if_not_aws_domain(&url);
-                        Ok(url)
-                    }
-                    None => fallback.resolve(credentials),
-                }
-            }
         }
     }
 }
 
-/// AWS region configuration supporting static, env, dynamic, sdk, and fallback resolution.
+/// AWS region configuration supporting static, env, dynamic, and sdk resolution.
 #[derive(Clone, Debug)]
 pub enum AWSRegion {
     Static(Region),
     Dynamic(String),
-    DynamicWithFallback {
-        primary: String,
-        fallback: Box<AWSRegion>,
-    },
     /// Use AWS SDK to auto-detect region (equivalent to allow_auto_detect_region = true)
     Sdk,
 }
 
 impl AWSRegion {
-    /// Create AWSRegion from CredentialLocationOrHardcodedWithFallback.
+    /// Create AWSRegion from CredentialLocationOrHardcoded.
     /// Returns None for None variant.
     pub fn from_credential_location(
-        location: CredentialLocationOrHardcodedWithFallback,
-        provider_type: &str,
-    ) -> Result<Option<Self>, Error> {
-        match location {
-            CredentialLocationOrHardcodedWithFallback::Single(loc) => {
-                Self::from_single_credential_location(loc, provider_type)
-            }
-            CredentialLocationOrHardcodedWithFallback::WithFallback { default, fallback } => {
-                let primary = Self::from_single_credential_location(default, provider_type)?;
-                let fallback_region =
-                    Self::from_single_credential_location(fallback, provider_type)?;
-
-                match (primary, fallback_region) {
-                    (None, None) => Ok(None),
-                    (Some(p), None) => Ok(Some(p)),
-                    (None, Some(f)) => Ok(Some(f)),
-                    (Some(AWSRegion::Dynamic(key)), Some(f)) => {
-                        Ok(Some(AWSRegion::DynamicWithFallback {
-                            primary: key,
-                            fallback: Box::new(f),
-                        }))
-                    }
-                    (Some(p), Some(_)) => {
-                        // If primary is static/sdk, just use it (fallback doesn't matter)
-                        Ok(Some(p))
-                    }
-                }
-            }
-        }
-    }
-
-    fn from_single_credential_location(
         location: CredentialLocationOrHardcoded,
         provider_type: &str,
     ) -> Result<Option<Self>, Error> {
@@ -306,21 +217,13 @@ impl AWSRegion {
     pub fn get_static_region(&self) -> Option<&Region> {
         match self {
             AWSRegion::Static(region) => Some(region),
-            AWSRegion::Dynamic(_) | AWSRegion::DynamicWithFallback { .. } | AWSRegion::Sdk => None,
+            AWSRegion::Dynamic(_) | AWSRegion::Sdk => None,
         }
     }
 
-    /// Returns true if this is the Sdk variant (requires auto-detect at runtime).
-    pub fn is_sdk(&self) -> bool {
-        matches!(self, AWSRegion::Sdk)
-    }
-
-    /// Returns true if any part of this region requires dynamic resolution at request time.
+    /// Returns true if this region requires dynamic resolution at request time.
     pub fn is_dynamic(&self) -> bool {
-        matches!(
-            self,
-            AWSRegion::Dynamic(_) | AWSRegion::DynamicWithFallback { .. }
-        )
+        matches!(self, AWSRegion::Dynamic(_))
     }
 
     /// Resolve region at runtime (for dynamic regions).
@@ -335,13 +238,6 @@ impl AWSRegion {
                 })?;
                 Ok(Region::new(region_str.expose_secret().to_string()))
             }
-            AWSRegion::DynamicWithFallback { primary, fallback } => {
-                // Try primary first, fall back if key not found
-                match credentials.get(primary) {
-                    Some(region_str) => Ok(Region::new(region_str.expose_secret().to_string())),
-                    None => fallback.resolve(credentials),
-                }
-            }
             AWSRegion::Sdk => {
                 // This should not be called at runtime - Sdk regions are resolved at construction time
                 Err(Error::new(ErrorDetails::InternalError {
@@ -352,7 +248,7 @@ impl AWSRegion {
     }
 }
 
-/// AWS credentials configuration supporting static (env), dynamic, sdk, and fallback resolution.
+/// AWS credentials configuration supporting static (env), dynamic, and sdk resolution.
 #[derive(Clone, Debug)]
 pub enum AWSCredentials {
     /// Credentials resolved from env vars at startup
@@ -369,20 +265,15 @@ pub enum AWSCredentials {
     },
     /// Use AWS SDK credential chain (default behavior)
     Sdk,
-    /// Try default first, fall back if missing
-    WithFallback {
-        default: Box<AWSCredentials>,
-        fallback: Box<AWSCredentials>,
-    },
 }
 
 impl AWSCredentials {
     /// Create AWSCredentials from flattened credential location fields.
     /// Returns None if no credentials are specified (use SDK default).
     pub fn from_fields(
-        access_key_id: Option<CredentialLocationWithFallback>,
-        secret_access_key: Option<CredentialLocationWithFallback>,
-        session_token: Option<CredentialLocationWithFallback>,
+        access_key_id: Option<CredentialLocation>,
+        secret_access_key: Option<CredentialLocation>,
+        session_token: Option<CredentialLocation>,
         provider_type: &str,
     ) -> Result<Option<Self>, Error> {
         // Validate: both access_key_id and secret_access_key must be provided together
@@ -422,82 +313,6 @@ impl AWSCredentials {
     }
 
     fn from_locations(
-        access_key_id: CredentialLocationWithFallback,
-        secret_access_key: CredentialLocationWithFallback,
-        session_token: Option<CredentialLocationWithFallback>,
-        provider_type: &str,
-    ) -> Result<Self, Error> {
-        // For simplicity, we process the Single case first
-        // The WithFallback case requires matching structures across all fields
-        match (access_key_id, secret_access_key) {
-            (
-                CredentialLocationWithFallback::Single(ak_loc),
-                CredentialLocationWithFallback::Single(sk_loc),
-            ) => {
-                let st_loc = session_token.map(|st| match st {
-                    CredentialLocationWithFallback::Single(loc) => Ok(loc),
-                    CredentialLocationWithFallback::WithFallback { .. } => {
-                        Err(Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "`session_token` cannot use fallback when `access_key_id` and `secret_access_key` do not use fallback for `{provider_type}`."
-                            ),
-                        }))
-                    }
-                }).transpose()?;
-
-                Self::from_single_locations(ak_loc, sk_loc, st_loc, provider_type)
-            }
-            (
-                CredentialLocationWithFallback::WithFallback {
-                    default: ak_default,
-                    fallback: ak_fallback,
-                },
-                CredentialLocationWithFallback::WithFallback {
-                    default: sk_default,
-                    fallback: sk_fallback,
-                },
-            ) => {
-                // Both have fallback - create nested structure
-                let (st_default, st_fallback) = match session_token {
-                    None => (None, None),
-                    Some(CredentialLocationWithFallback::Single(_)) => {
-                        return Err(Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "`session_token` must use fallback when `access_key_id` and `secret_access_key` use fallback for `{provider_type}`."
-                            ),
-                        }));
-                    }
-                    Some(CredentialLocationWithFallback::WithFallback { default, fallback }) => {
-                        (Some(default), Some(fallback))
-                    }
-                };
-
-                let default_creds =
-                    Self::from_single_locations(ak_default, sk_default, st_default, provider_type)?;
-                let fallback_creds = Self::from_single_locations(
-                    ak_fallback,
-                    sk_fallback,
-                    st_fallback,
-                    provider_type,
-                )?;
-
-                Ok(AWSCredentials::WithFallback {
-                    default: Box::new(default_creds),
-                    fallback: Box::new(fallback_creds),
-                })
-            }
-            _ => {
-                // Mismatched fallback structure
-                Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "`access_key_id` and `secret_access_key` must both use fallback or both not use fallback for `{provider_type}`."
-                    ),
-                }))
-            }
-        }
-    }
-
-    fn from_single_locations(
         access_key_id: CredentialLocation,
         secret_access_key: CredentialLocation,
         session_token: Option<CredentialLocation>,
@@ -615,50 +430,13 @@ impl AWSCredentials {
                 None, // expiration
                 "tensorzero",
             )),
-            AWSCredentials::Dynamic { .. }
-            | AWSCredentials::Sdk
-            | AWSCredentials::WithFallback { .. } => None,
+            AWSCredentials::Dynamic { .. } | AWSCredentials::Sdk => None,
         }
     }
 
-    /// Returns true if any part of this credential requires dynamic resolution at request time.
+    /// Returns true if this credential requires dynamic resolution at request time.
     pub fn is_dynamic(&self) -> bool {
-        matches!(
-            self,
-            AWSCredentials::Dynamic { .. } | AWSCredentials::WithFallback { .. }
-        )
-    }
-
-    /// Returns true if this credential has fallback to static or SDK credentials.
-    /// This is used to detect potential credential exfiltration risks when combined
-    /// with dynamic endpoints.
-    pub fn has_static_or_sdk_fallback(&self) -> bool {
-        match self {
-            AWSCredentials::Static { .. } | AWSCredentials::Sdk => false,
-            AWSCredentials::Dynamic { .. } => false,
-            AWSCredentials::WithFallback { default, fallback } => {
-                // If default is dynamic, check if fallback contains static/SDK credentials
-                if matches!(default.as_ref(), AWSCredentials::Dynamic { .. }) {
-                    fallback.contains_static_or_sdk()
-                } else {
-                    // Default is static/SDK, so already risky at the top level
-                    // (but this would be caught by the static credentials check separately)
-                    // Check if fallback adds additional risk
-                    default.has_static_or_sdk_fallback() || fallback.has_static_or_sdk_fallback()
-                }
-            }
-        }
-    }
-
-    /// Returns true if this credential contains static or SDK credentials anywhere in the chain.
-    fn contains_static_or_sdk(&self) -> bool {
-        match self {
-            AWSCredentials::Static { .. } | AWSCredentials::Sdk => true,
-            AWSCredentials::Dynamic { .. } => false,
-            AWSCredentials::WithFallback { default, fallback } => {
-                default.contains_static_or_sdk() || fallback.contains_static_or_sdk()
-            }
-        }
+        matches!(self, AWSCredentials::Dynamic { .. })
     }
 
     /// Resolve credentials at runtime (for dynamic credentials).
@@ -724,13 +502,6 @@ impl AWSCredentials {
                     message: "AWSCredentials::Sdk should be resolved at construction time, not at request time".to_string(),
                 }))
             }
-            AWSCredentials::WithFallback { default, fallback } => {
-                // Try default first, fall back if any key is not found
-                match default.resolve(credentials) {
-                    Ok(creds) => Ok(creds),
-                    Err(_) => fallback.resolve(credentials),
-                }
-            }
         }
     }
 }
@@ -758,30 +529,26 @@ fn validate_aws_credential_location(
 }
 
 /// Warn if there's a potential credential exfiltration risk.
-/// This occurs when dynamic endpoint_url is configured with credentials that have fallback
-/// to static or SDK credentials.
+/// This occurs when dynamic endpoint_url is configured with static or SDK credentials.
 pub fn warn_if_credential_exfiltration_risk(
     endpoint_url: &Option<AWSEndpointUrl>,
     credentials: &Option<AWSCredentials>,
     provider_type: &str,
 ) {
-    let has_dynamic_endpoint = endpoint_url.as_ref().is_some_and(|ep| {
-        matches!(
-            ep,
-            AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
-        )
-    });
-    // Only warn if there's a fallback to static/SDK credentials that could be exfiltrated.
-    // If fallback is also dynamic, there's no exfiltration risk (client controls all credentials).
-    let has_exfiltrable_fallback = credentials
+    let has_dynamic_endpoint = endpoint_url
         .as_ref()
-        .is_some_and(|c| c.has_static_or_sdk_fallback());
+        .is_some_and(|ep| matches!(ep, AWSEndpointUrl::Dynamic(_)));
 
-    if has_dynamic_endpoint && has_exfiltrable_fallback {
+    // Warn if there are static or SDK credentials that could be exfiltrated via dynamic endpoint.
+    // If credentials are also dynamic, there's no exfiltration risk (client controls all credentials).
+    let has_exfiltrable_credentials = credentials
+        .as_ref()
+        .is_some_and(|c| matches!(c, AWSCredentials::Static { .. } | AWSCredentials::Sdk));
+
+    if has_dynamic_endpoint && has_exfiltrable_credentials {
         tracing::warn!(
-            "You configured a dynamic `endpoint_url` with credential fallback for a `{provider_type}` provider. \
-             This is a potential security risk: a malicious client could provide invalid dynamic credentials, \
-             causing fallback to static credentials, which could then be exfiltrated via a malicious endpoint. \
+            "You configured a dynamic `endpoint_url` with static or SDK credentials for a `{provider_type}` provider. \
+             This is a potential security risk: a malicious client could exfiltrate your credentials via a malicious endpoint. \
              Only use this configuration with fully trusted clients."
         );
     }

@@ -334,10 +334,7 @@ impl InferenceProvider for AWSBedrockProvider {
 
         // Build config override for dynamic region, endpoint, and/or credentials
         let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
-        let has_dynamic_endpoint = matches!(
-            &self.endpoint_url,
-            Some(AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. })
-        );
+        let has_dynamic_endpoint = matches!(&self.endpoint_url, Some(AWSEndpointUrl::Dynamic(_)));
         let has_dynamic_credentials = self.credentials.as_ref().is_some_and(|c| c.is_dynamic());
 
         let output = if has_dynamic_region || has_dynamic_endpoint || has_dynamic_credentials {
@@ -350,10 +347,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 override_builder = override_builder.region(resolved_region);
             }
             if let Some(endpoint_url) = &self.endpoint_url
-                && matches!(
-                    endpoint_url,
-                    AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
-                )
+                && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
             {
                 let url = endpoint_url.resolve(dynamic_api_keys)?;
                 override_builder = override_builder.endpoint_url(url.as_str());
@@ -512,10 +506,7 @@ impl InferenceProvider for AWSBedrockProvider {
 
         // Build config override for dynamic region, endpoint, and/or credentials
         let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
-        let has_dynamic_endpoint = matches!(
-            &self.endpoint_url,
-            Some(AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. })
-        );
+        let has_dynamic_endpoint = matches!(&self.endpoint_url, Some(AWSEndpointUrl::Dynamic(_)));
         let has_dynamic_credentials = self.credentials.as_ref().is_some_and(|c| c.is_dynamic());
 
         let stream = if has_dynamic_region || has_dynamic_endpoint || has_dynamic_credentials {
@@ -528,10 +519,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 override_builder = override_builder.region(resolved_region);
             }
             if let Some(endpoint_url) = &self.endpoint_url
-                && matches!(
-                    endpoint_url,
-                    AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
-                )
+                && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
             {
                 let url = endpoint_url.resolve(dynamic_api_keys)?;
                 override_builder = override_builder.endpoint_url(url.as_str());

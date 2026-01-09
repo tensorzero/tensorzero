@@ -129,10 +129,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             new_config = new_config.region(resolved_region);
         }
         if let Some(endpoint_url) = &self.endpoint_url
-            && matches!(
-                endpoint_url,
-                AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
-            )
+            && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
         {
             let url = endpoint_url.resolve(dynamic_api_keys)?;
             new_config = new_config.endpoint_url(url.as_str());
@@ -233,10 +230,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             new_config = new_config.region(resolved_region);
         }
         if let Some(endpoint_url) = &self.endpoint_url
-            && matches!(
-                endpoint_url,
-                AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
-            )
+            && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
         {
             let url = endpoint_url.resolve(dynamic_api_keys)?;
             new_config = new_config.endpoint_url(url.as_str());
