@@ -749,8 +749,7 @@ region = "us-east-2"
 # or: region = "path::/etc/secrets/aws-region"
 # or: region = "dynamic::bedrock-region"
 # or: region = "sdk"  # auto-detect using AWS SDK
-# or with fallback:
-# region = { default = "dynamic::bedrock-region", fallback = "env::AWS_REGION" }
+# or: region = { default = "dynamic::bedrock-region", fallback = "env::AWS_REGION" }
 # ...
 ```
 
@@ -782,8 +781,7 @@ endpoint_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
 # or: endpoint_url = "env::BEDROCK_ENDPOINT_URL"
 # or: endpoint_url = "path::/etc/secrets/bedrock-endpoint"
 # or: endpoint_url = "dynamic::bedrock-endpoint-url"
-# or with fallback:
-# endpoint_url = { default = "dynamic::bedrock-endpoint", fallback = "env::BEDROCK_ENDPOINT_URL" }
+# or: endpoint_url = { default = "dynamic::bedrock-endpoint", fallback = "env::BEDROCK_ENDPOINT_URL" }
 ```
 
 <Warning>
@@ -886,8 +884,7 @@ region = "us-east-2"
 # or: region = "path::/etc/secrets/aws-region"
 # or: region = "dynamic::sagemaker-region"
 # or: region = "sdk"  # auto-detect using AWS SDK
-# or with fallback:
-# region = { default = "dynamic::sagemaker-region", fallback = "env::AWS_REGION" }
+# or: region = { default = "dynamic::sagemaker-region", fallback = "env::AWS_REGION" }
 # ...
 ```
 
@@ -921,8 +918,7 @@ endpoint_url = "https://runtime.sagemaker.us-east-1.amazonaws.com"
 # or: endpoint_url = "env::SAGEMAKER_ENDPOINT_URL"
 # or: endpoint_url = "path::/etc/secrets/sagemaker-endpoint"
 # or: endpoint_url = "dynamic::sagemaker-endpoint-url"
-# or with fallback:
-# endpoint_url = { default = "dynamic::sagemaker-endpoint", fallback = "env::SAGEMAKER_ENDPOINT_URL" }
+# or: endpoint_url = { default = "dynamic::sagemaker-endpoint", fallback = "env::SAGEMAKER_ENDPOINT_URL" }
 ```
 
 <Warning>

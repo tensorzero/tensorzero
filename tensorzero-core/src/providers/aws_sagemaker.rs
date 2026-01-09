@@ -2,7 +2,8 @@ use crate::http::TensorzeroHttpClient;
 use crate::inference::types::Latency;
 use crate::inference::{InferenceProvider, WrappedProvider};
 use crate::providers::aws_common::{
-    AWSEndpointUrl, AWSRegion, InterceptorAndRawBody, build_interceptor,
+    AWSCredentials, AWSEndpointUrl, AWSRegion, InterceptorAndRawBody, build_interceptor,
+    warn_if_credential_exfiltration_risk,
 };
 use crate::{
     cache::ModelProviderRequest,
@@ -44,6 +45,8 @@ pub struct AWSSagemakerProvider {
     region: Option<AWSRegion>,
     #[serde(skip)]
     endpoint_url: Option<AWSEndpointUrl>,
+    #[serde(skip)]
+    credentials: Option<AWSCredentials>,
 }
 
 impl AWSSagemakerProvider {
@@ -53,6 +56,7 @@ impl AWSSagemakerProvider {
         static_region: Option<Region>,
         region: Option<AWSRegion>,
         endpoint_url: Option<AWSEndpointUrl>,
+        credentials: Option<AWSCredentials>,
     ) -> Result<Self, Error> {
         let config = aws_common::config_with_region(PROVIDER_TYPE, static_region).await?;
 
@@ -65,6 +69,16 @@ impl AWSSagemakerProvider {
             config_builder = config_builder.endpoint_url(url.as_str());
         }
 
+        // Apply static credentials at construction time
+        if let Some(ref creds) = credentials
+            && let Some(static_creds) = creds.get_static_credentials()
+        {
+            config_builder = config_builder.credentials_provider(static_creds);
+        }
+
+        // Warn about potential credential exfiltration risk
+        warn_if_credential_exfiltration_risk(&endpoint_url, &credentials, PROVIDER_TYPE);
+
         let client = aws_sdk_sagemakerruntime::Client::from_conf(config_builder.clone().build());
 
         Ok(Self {
@@ -74,6 +88,7 @@ impl AWSSagemakerProvider {
             base_config: config_builder,
             region,
             endpoint_url,
+            credentials,
         })
     }
 }
@@ -106,7 +121,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
 
-        // Apply dynamic region and/or endpoint URL if configured
+        // Apply dynamic region, endpoint URL, and/or credentials if configured
         if let Some(region) = &self.region
             && region.is_dynamic()
         {
@@ -121,6 +136,12 @@ impl InferenceProvider for AWSSagemakerProvider {
         {
             let url = endpoint_url.resolve(dynamic_api_keys)?;
             new_config = new_config.endpoint_url(url.as_str());
+        }
+        if let Some(credentials) = &self.credentials
+            && credentials.is_dynamic()
+        {
+            let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
+            new_config = new_config.credentials_provider(resolved_credentials);
         }
 
         let start_time = Instant::now();
@@ -204,7 +225,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
 
-        // Apply dynamic region and/or endpoint URL if configured
+        // Apply dynamic region, endpoint URL, and/or credentials if configured
         if let Some(region) = &self.region
             && region.is_dynamic()
         {
@@ -219,6 +240,12 @@ impl InferenceProvider for AWSSagemakerProvider {
         {
             let url = endpoint_url.resolve(dynamic_api_keys)?;
             new_config = new_config.endpoint_url(url.as_str());
+        }
+        if let Some(credentials) = &self.credentials
+            && credentials.is_dynamic()
+        {
+            let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
+            new_config = new_config.credentials_provider(resolved_credentials);
         }
 
         let start_time = Instant::now();

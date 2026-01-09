@@ -262,7 +262,6 @@ export * from "./RateLimitingConfigScope";
 export * from "./RateLimitingConfigScopes";
 export * from "./RawText";
 export * from "./RawUsageEntry";
-export * from "./RegionLocation";
 export * from "./RenderedSample";
 export * from "./ResolvedContentBlock";
 export * from "./ResolvedInput";

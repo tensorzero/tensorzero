@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use aws_config::{Region, meta::region::RegionProviderChain};
+use aws_credential_types::Credentials;
 use aws_smithy_runtime_api::client::interceptors::Intercept;
 use aws_smithy_runtime_api::client::interceptors::context::AfterDeserializationInterceptorContextRef;
 use aws_smithy_runtime_api::client::interceptors::context::BeforeTransmitInterceptorContextMut;
@@ -10,7 +11,7 @@ use aws_smithy_types::body::SdkBody;
 use aws_smithy_types::config_bag::ConfigBag;
 use aws_types::SdkConfig;
 use reqwest::StatusCode;
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
 use crate::{
@@ -366,6 +367,441 @@ impl AWSRegion {
                 }))
             }
         }
+    }
+}
+
+/// AWS credentials configuration supporting static (env), dynamic, sdk, and fallback resolution.
+#[derive(Clone, Debug)]
+pub enum AWSCredentials {
+    /// Credentials resolved from env vars at startup
+    Static {
+        access_key_id: String,
+        secret_access_key: SecretString,
+        session_token: Option<SecretString>,
+    },
+    /// Credentials resolved dynamically at request time
+    Dynamic {
+        access_key_id_key: String,
+        secret_access_key_key: String,
+        session_token_key: Option<String>,
+    },
+    /// Use AWS SDK credential chain (default behavior)
+    Sdk,
+    /// Try default first, fall back if missing
+    WithFallback {
+        default: Box<AWSCredentials>,
+        fallback: Box<AWSCredentials>,
+    },
+}
+
+impl AWSCredentials {
+    /// Create AWSCredentials from flattened credential location fields.
+    /// Returns None if no credentials are specified (use SDK default).
+    pub fn from_fields(
+        access_key_id: Option<CredentialLocationWithFallback>,
+        secret_access_key: Option<CredentialLocationWithFallback>,
+        session_token: Option<CredentialLocationWithFallback>,
+        provider_type: &str,
+    ) -> Result<Option<Self>, Error> {
+        // Validate: both access_key_id and secret_access_key must be provided together
+        match (access_key_id, secret_access_key) {
+            (None, None) => {
+                // No credentials specified - also validate session_token is None
+                if session_token.is_some() {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "`session_token` cannot be specified without `access_key_id` and `secret_access_key` for `{provider_type}`."
+                        ),
+                    }));
+                }
+                Ok(None)
+            }
+            (Some(_), None) => Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`access_key_id` requires `secret_access_key` to also be specified for `{provider_type}`."
+                ),
+            })),
+            (None, Some(_)) => Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`secret_access_key` requires `access_key_id` to also be specified for `{provider_type}`."
+                ),
+            })),
+            (Some(access_key_id), Some(secret_access_key)) => {
+                // Both provided - convert to AWSCredentials
+                Self::from_locations(access_key_id, secret_access_key, session_token, provider_type)
+                    .map(Some)
+            }
+        }
+    }
+
+    fn from_locations(
+        access_key_id: CredentialLocationWithFallback,
+        secret_access_key: CredentialLocationWithFallback,
+        session_token: Option<CredentialLocationWithFallback>,
+        provider_type: &str,
+    ) -> Result<Self, Error> {
+        // For simplicity, we process the Single case first
+        // The WithFallback case requires matching structures across all fields
+        match (access_key_id, secret_access_key) {
+            (
+                CredentialLocationWithFallback::Single(ak_loc),
+                CredentialLocationWithFallback::Single(sk_loc),
+            ) => {
+                let st_loc = session_token.map(|st| match st {
+                    CredentialLocationWithFallback::Single(loc) => Ok(loc),
+                    CredentialLocationWithFallback::WithFallback { .. } => {
+                        Err(Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "`session_token` cannot use fallback when `access_key_id` and `secret_access_key` do not use fallback for `{provider_type}`."
+                            ),
+                        }))
+                    }
+                }).transpose()?;
+
+                Self::from_single_locations(ak_loc, sk_loc, st_loc, provider_type)
+            }
+            (
+                CredentialLocationWithFallback::WithFallback {
+                    default: ak_default,
+                    fallback: ak_fallback,
+                },
+                CredentialLocationWithFallback::WithFallback {
+                    default: sk_default,
+                    fallback: sk_fallback,
+                },
+            ) => {
+                // Both have fallback - create nested structure
+                let (st_default, st_fallback) = match session_token {
+                    None => (None, None),
+                    Some(CredentialLocationWithFallback::Single(_)) => {
+                        return Err(Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "`session_token` must use fallback when `access_key_id` and `secret_access_key` use fallback for `{provider_type}`."
+                            ),
+                        }));
+                    }
+                    Some(CredentialLocationWithFallback::WithFallback { default, fallback }) => {
+                        (Some(default), Some(fallback))
+                    }
+                };
+
+                let default_creds =
+                    Self::from_single_locations(ak_default, sk_default, st_default, provider_type)?;
+                let fallback_creds = Self::from_single_locations(
+                    ak_fallback,
+                    sk_fallback,
+                    st_fallback,
+                    provider_type,
+                )?;
+
+                Ok(AWSCredentials::WithFallback {
+                    default: Box::new(default_creds),
+                    fallback: Box::new(fallback_creds),
+                })
+            }
+            _ => {
+                // Mismatched fallback structure
+                Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`access_key_id` and `secret_access_key` must both use fallback or both not use fallback for `{provider_type}`."
+                    ),
+                }))
+            }
+        }
+    }
+
+    fn from_single_locations(
+        access_key_id: CredentialLocation,
+        secret_access_key: CredentialLocation,
+        session_token: Option<CredentialLocation>,
+        provider_type: &str,
+    ) -> Result<Self, Error> {
+        // Validate all locations are allowed types
+        validate_aws_credential_location(&access_key_id, "access_key_id", provider_type)?;
+        validate_aws_credential_location(&secret_access_key, "secret_access_key", provider_type)?;
+        if let Some(ref st) = session_token {
+            validate_aws_credential_location(st, "session_token", provider_type)?;
+        }
+
+        // Convert based on location types
+        match (&access_key_id, &secret_access_key) {
+            (CredentialLocation::Sdk, CredentialLocation::Sdk) => {
+                // session_token should also be Sdk or None
+                if let Some(ref st) = session_token
+                    && !matches!(st, CredentialLocation::Sdk)
+                {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "When using `sdk` for credentials, `session_token` must also be `sdk` or omitted for `{provider_type}`."
+                        ),
+                    }));
+                }
+                Ok(AWSCredentials::Sdk)
+            }
+            (CredentialLocation::Env(ak_var), CredentialLocation::Env(sk_var)) => {
+                // Static credentials from environment
+                let ak = std::env::var(ak_var).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Environment variable `{ak_var}` not found for `access_key_id` in `{provider_type}`."
+                        ),
+                    })
+                })?;
+                let sk = std::env::var(sk_var).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Environment variable `{sk_var}` not found for `secret_access_key` in `{provider_type}`."
+                        ),
+                    })
+                })?;
+                let st = match session_token {
+                    None => None,
+                    Some(CredentialLocation::Env(st_var)) => {
+                        let st = std::env::var(&st_var).map_err(|_| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "Environment variable `{st_var}` not found for `session_token` in `{provider_type}`."
+                                ),
+                            })
+                        })?;
+                        Some(SecretString::new(st.into()))
+                    }
+                    Some(CredentialLocation::Sdk) => None, // Sdk means use SDK, which doesn't provide session token separately
+                    _ => {
+                        return Err(Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "When using `env::` for `access_key_id` and `secret_access_key`, `session_token` must also use `env::` or be omitted for `{provider_type}`."
+                            ),
+                        }));
+                    }
+                };
+                Ok(AWSCredentials::Static {
+                    access_key_id: ak,
+                    secret_access_key: SecretString::new(sk.into()),
+                    session_token: st,
+                })
+            }
+            (CredentialLocation::Dynamic(ak_key), CredentialLocation::Dynamic(sk_key)) => {
+                // Dynamic credentials from request
+                let st_key = match session_token {
+                    None => None,
+                    Some(CredentialLocation::Dynamic(st_key)) => Some(st_key),
+                    Some(CredentialLocation::Sdk) => None,
+                    _ => {
+                        return Err(Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "When using `dynamic::` for `access_key_id` and `secret_access_key`, `session_token` must also use `dynamic::` or be omitted for `{provider_type}`."
+                            ),
+                        }));
+                    }
+                };
+                Ok(AWSCredentials::Dynamic {
+                    access_key_id_key: ak_key.clone(),
+                    secret_access_key_key: sk_key.clone(),
+                    session_token_key: st_key,
+                })
+            }
+            _ => {
+                // Mismatched types (e.g., one env:: and one dynamic::)
+                Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`access_key_id` and `secret_access_key` must use the same source type (both `env::`, both `dynamic::`, or both `sdk`) for `{provider_type}`."
+                    ),
+                }))
+            }
+        }
+    }
+
+    /// Get static credentials if available (for use at construction time).
+    pub fn get_static_credentials(&self) -> Option<Credentials> {
+        match self {
+            AWSCredentials::Static {
+                access_key_id,
+                secret_access_key,
+                session_token,
+            } => Some(Credentials::new(
+                access_key_id.clone(),
+                secret_access_key.expose_secret().to_string(),
+                session_token
+                    .as_ref()
+                    .map(|st| st.expose_secret().to_string()),
+                None, // expiration
+                "tensorzero",
+            )),
+            AWSCredentials::Dynamic { .. }
+            | AWSCredentials::Sdk
+            | AWSCredentials::WithFallback { .. } => None,
+        }
+    }
+
+    /// Returns true if any part of this credential requires dynamic resolution at request time.
+    pub fn is_dynamic(&self) -> bool {
+        matches!(
+            self,
+            AWSCredentials::Dynamic { .. } | AWSCredentials::WithFallback { .. }
+        )
+    }
+
+    /// Returns true if this credential has fallback configured.
+    pub fn has_fallback(&self) -> bool {
+        matches!(self, AWSCredentials::WithFallback { .. })
+    }
+
+    /// Returns true if this credential has fallback to static or SDK credentials.
+    /// This is used to detect potential credential exfiltration risks when combined
+    /// with dynamic endpoints.
+    pub fn has_static_or_sdk_fallback(&self) -> bool {
+        match self {
+            AWSCredentials::Static { .. } | AWSCredentials::Sdk => false,
+            AWSCredentials::Dynamic { .. } => false,
+            AWSCredentials::WithFallback { default, fallback } => {
+                // If default is dynamic, check if fallback contains static/SDK credentials
+                if matches!(default.as_ref(), AWSCredentials::Dynamic { .. }) {
+                    fallback.contains_static_or_sdk()
+                } else {
+                    // Default is static/SDK, so already risky at the top level
+                    // (but this would be caught by the static credentials check separately)
+                    // Check if fallback adds additional risk
+                    default.has_static_or_sdk_fallback() || fallback.has_static_or_sdk_fallback()
+                }
+            }
+        }
+    }
+
+    /// Returns true if this credential contains static or SDK credentials anywhere in the chain.
+    fn contains_static_or_sdk(&self) -> bool {
+        match self {
+            AWSCredentials::Static { .. } | AWSCredentials::Sdk => true,
+            AWSCredentials::Dynamic { .. } => false,
+            AWSCredentials::WithFallback { default, fallback } => {
+                default.contains_static_or_sdk() || fallback.contains_static_or_sdk()
+            }
+        }
+    }
+
+    /// Resolve credentials at runtime (for dynamic credentials).
+    pub fn resolve(&self, credentials: &InferenceCredentials) -> Result<Credentials, Error> {
+        match self {
+            AWSCredentials::Static {
+                access_key_id,
+                secret_access_key,
+                session_token,
+            } => Ok(Credentials::new(
+                access_key_id.clone(),
+                secret_access_key.expose_secret().to_string(),
+                session_token
+                    .as_ref()
+                    .map(|st| st.expose_secret().to_string()),
+                None,
+                "tensorzero",
+            )),
+            AWSCredentials::Dynamic {
+                access_key_id_key,
+                secret_access_key_key,
+                session_token_key,
+            } => {
+                let ak = credentials.get(access_key_id_key).ok_or_else(|| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "aws".to_string(),
+                        message: format!(
+                            "Dynamic `access_key_id` with key `{access_key_id_key}` is missing"
+                        ),
+                    })
+                })?;
+                let sk = credentials.get(secret_access_key_key).ok_or_else(|| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "aws".to_string(),
+                        message: format!("Dynamic `secret_access_key` with key `{secret_access_key_key}` is missing"),
+                    })
+                })?;
+                let st = session_token_key
+                    .as_ref()
+                    .map(|key| {
+                        credentials.get(key).ok_or_else(|| {
+                            Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: "aws".to_string(),
+                                message: format!(
+                                    "Dynamic `session_token` with key `{key}` is missing"
+                                ),
+                            })
+                        })
+                    })
+                    .transpose()?;
+
+                Ok(Credentials::new(
+                    ak.expose_secret().to_string(),
+                    sk.expose_secret().to_string(),
+                    st.map(|s| s.expose_secret().to_string()),
+                    None,
+                    "tensorzero",
+                ))
+            }
+            AWSCredentials::Sdk => {
+                // This should not be called at runtime - Sdk credentials are resolved at construction time
+                Err(Error::new(ErrorDetails::InternalError {
+                    message: "AWSCredentials::Sdk should be resolved at construction time, not at request time".to_string(),
+                }))
+            }
+            AWSCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back if any key is not found
+                match default.resolve(credentials) {
+                    Ok(creds) => Ok(creds),
+                    Err(_) => fallback.resolve(credentials),
+                }
+            }
+        }
+    }
+}
+
+/// Validate that a credential location is allowed for AWS credentials.
+/// Only env::, dynamic::, and sdk are allowed.
+fn validate_aws_credential_location(
+    location: &CredentialLocation,
+    field_name: &str,
+    provider_type: &str,
+) -> Result<(), Error> {
+    match location {
+        CredentialLocation::Env(_) | CredentialLocation::Dynamic(_) | CredentialLocation::Sdk => {
+            Ok(())
+        }
+        CredentialLocation::Path(_)
+        | CredentialLocation::PathFromEnv(_)
+        | CredentialLocation::None => Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "Invalid `{field_name}` for `{provider_type}` provider: \
+                 only `env::`, `dynamic::`, and `sdk` are supported."
+            ),
+        })),
+    }
+}
+
+/// Warn if there's a potential credential exfiltration risk.
+/// This occurs when dynamic endpoint_url is configured with credentials that have fallback
+/// to static or SDK credentials.
+pub fn warn_if_credential_exfiltration_risk(
+    endpoint_url: &Option<AWSEndpointUrl>,
+    credentials: &Option<AWSCredentials>,
+    provider_type: &str,
+) {
+    let has_dynamic_endpoint = endpoint_url.as_ref().is_some_and(|ep| {
+        matches!(
+            ep,
+            AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
+        )
+    });
+    // Only warn if there's a fallback to static/SDK credentials that could be exfiltrated.
+    // If fallback is also dynamic, there's no exfiltration risk (client controls all credentials).
+    let has_exfiltrable_fallback = credentials
+        .as_ref()
+        .is_some_and(|c| c.has_static_or_sdk_fallback());
+
+    if has_dynamic_endpoint && has_exfiltrable_fallback {
+        tracing::warn!(
+            "You configured a dynamic `endpoint_url` with credential fallback for a `{provider_type}` provider. \
+             This is a potential security risk: a malicious client could provide invalid dynamic credentials, \
+             causing fallback to static credentials, which could then be exfiltrated via a malicious endpoint. \
+             Only use this configuration with fully trusted clients."
+        );
     }
 }
 

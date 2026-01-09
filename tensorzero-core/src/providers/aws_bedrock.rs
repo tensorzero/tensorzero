@@ -23,7 +23,8 @@ use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::aws_common::{
-    self, AWSEndpointUrl, AWSRegion, InterceptorAndRawBody, build_interceptor,
+    self, AWSCredentials, AWSEndpointUrl, AWSRegion, InterceptorAndRawBody, build_interceptor,
+    warn_if_credential_exfiltration_risk,
 };
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
@@ -64,6 +65,8 @@ pub struct AWSBedrockProvider {
     region: Option<AWSRegion>,
     #[serde(skip)]
     endpoint_url: Option<AWSEndpointUrl>,
+    #[serde(skip)]
+    credentials: Option<AWSCredentials>,
 }
 
 fn apply_inference_params(
@@ -181,6 +184,7 @@ impl AWSBedrockProvider {
         static_region: Option<Region>,
         region: Option<AWSRegion>,
         endpoint_url: Option<AWSEndpointUrl>,
+        credentials: Option<AWSCredentials>,
         http_client: TensorzeroHttpClient,
     ) -> Result<Self, Error> {
         let mut config_builder = aws_sdk_bedrockruntime::config::Builder::from(
@@ -195,6 +199,16 @@ impl AWSBedrockProvider {
             config_builder = config_builder.endpoint_url(url.as_str());
         }
 
+        // Apply static credentials at construction time
+        if let Some(ref creds) = credentials
+            && let Some(static_creds) = creds.get_static_credentials()
+        {
+            config_builder = config_builder.credentials_provider(static_creds);
+        }
+
+        // Warn about potential credential exfiltration risk
+        warn_if_credential_exfiltration_risk(&endpoint_url, &credentials, PROVIDER_TYPE);
+
         let client = aws_sdk_bedrockruntime::Client::from_conf(config_builder.build());
 
         Ok(Self {
@@ -202,6 +216,7 @@ impl AWSBedrockProvider {
             client,
             region,
             endpoint_url,
+            credentials,
         })
     }
 
@@ -317,14 +332,15 @@ impl InferenceProvider for AWSBedrockProvider {
         let start_time = Instant::now();
         let customized = bedrock_request.customize().interceptor(interceptor);
 
-        // Build config override for dynamic region and/or endpoint
+        // Build config override for dynamic region, endpoint, and/or credentials
         let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
         let has_dynamic_endpoint = matches!(
             &self.endpoint_url,
             Some(AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. })
         );
+        let has_dynamic_credentials = self.credentials.as_ref().is_some_and(|c| c.is_dynamic());
 
-        let output = if has_dynamic_region || has_dynamic_endpoint {
+        let output = if has_dynamic_region || has_dynamic_endpoint || has_dynamic_credentials {
             let mut override_builder = aws_sdk_bedrockruntime::config::Builder::new();
 
             if let Some(region) = &self.region
@@ -341,6 +357,12 @@ impl InferenceProvider for AWSBedrockProvider {
             {
                 let url = endpoint_url.resolve(dynamic_api_keys)?;
                 override_builder = override_builder.endpoint_url(url.as_str());
+            }
+            if let Some(credentials) = &self.credentials
+                && credentials.is_dynamic()
+            {
+                let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
+                override_builder = override_builder.credentials_provider(resolved_credentials);
             }
 
             customized.config_override(override_builder).send().await
@@ -488,14 +510,15 @@ impl InferenceProvider for AWSBedrockProvider {
         let start_time = Instant::now();
         let customized = bedrock_request.customize().interceptor(interceptor);
 
-        // Build config override for dynamic region and/or endpoint
+        // Build config override for dynamic region, endpoint, and/or credentials
         let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
         let has_dynamic_endpoint = matches!(
             &self.endpoint_url,
             Some(AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. })
         );
+        let has_dynamic_credentials = self.credentials.as_ref().is_some_and(|c| c.is_dynamic());
 
-        let stream = if has_dynamic_region || has_dynamic_endpoint {
+        let stream = if has_dynamic_region || has_dynamic_endpoint || has_dynamic_credentials {
             let mut override_builder = aws_sdk_bedrockruntime::config::Builder::new();
 
             if let Some(region) = &self.region
@@ -512,6 +535,12 @@ impl InferenceProvider for AWSBedrockProvider {
             {
                 let url = endpoint_url.resolve(dynamic_api_keys)?;
                 override_builder = override_builder.endpoint_url(url.as_str());
+            }
+            if let Some(credentials) = &self.credentials
+                && credentials.is_dynamic()
+            {
+                let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
+                override_builder = override_builder.credentials_provider(resolved_credentials);
             }
 
             customized.config_override(override_builder).send().await
@@ -1290,6 +1319,7 @@ mod tests {
             Some(Region::new("uk-hogwarts-1")),
             None,
             None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1304,6 +1334,7 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("uk-hogwarts-1")),
+            None,
             None,
             None,
             TensorzeroHttpClient::new_testing().unwrap(),
@@ -1326,6 +1357,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1343,6 +1375,7 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("me-shire-2")),
+            None,
             None,
             None,
             TensorzeroHttpClient::new_testing().unwrap(),

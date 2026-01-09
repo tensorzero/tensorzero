@@ -29,7 +29,7 @@ use crate::config::{
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::model_table::ProviderKind;
-use crate::providers::aws_common::{AWSEndpointUrl, AWSRegion};
+use crate::providers::aws_common::{AWSCredentials, AWSEndpointUrl, AWSRegion};
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
@@ -1107,6 +1107,12 @@ pub enum UninitializedProviderConfig {
         allow_auto_detect_region: bool,
         #[cfg_attr(test, ts(type = "string | null"))]
         endpoint_url: Option<CredentialLocationWithFallback>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        access_key_id: Option<CredentialLocationWithFallback>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        secret_access_key: Option<CredentialLocationWithFallback>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        session_token: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
@@ -1121,6 +1127,12 @@ pub enum UninitializedProviderConfig {
         hosted_provider: HostedProviderKind,
         #[cfg_attr(test, ts(type = "string | null"))]
         endpoint_url: Option<CredentialLocationWithFallback>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        access_key_id: Option<CredentialLocationWithFallback>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        secret_access_key: Option<CredentialLocationWithFallback>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        session_token: Option<CredentialLocationWithFallback>,
     },
     Azure {
         deployment_id: String,
@@ -1268,6 +1280,9 @@ impl UninitializedProviderConfig {
                 region,
                 allow_auto_detect_region,
                 endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
             } => {
                 // Emit deprecation warning if allow_auto_detect_region is used
                 if allow_auto_detect_region {
@@ -1315,12 +1330,21 @@ impl UninitializedProviderConfig {
                     .transpose()?
                     .flatten();
 
+                // Convert credential fields to AWSCredentials
+                let aws_credentials = AWSCredentials::from_fields(
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    "aws_bedrock",
+                )?;
+
                 ProviderConfig::AWSBedrock(
                     AWSBedrockProvider::new(
                         model_id,
                         static_region,
                         Some(aws_region),
                         endpoint_url,
+                        aws_credentials,
                         http_client,
                     )
                     .await?,
@@ -1333,6 +1357,9 @@ impl UninitializedProviderConfig {
                 model_name,
                 hosted_provider,
                 endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
             } => {
                 // Emit deprecation warning if allow_auto_detect_region is used
                 if allow_auto_detect_region {
@@ -1373,6 +1400,14 @@ impl UninitializedProviderConfig {
                     .transpose()?
                     .flatten();
 
+                // Convert credential fields to AWSCredentials
+                let aws_credentials = AWSCredentials::from_fields(
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    "aws_sagemaker",
+                )?;
+
                 let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
                     match hosted_provider {
                         HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
@@ -1410,6 +1445,7 @@ impl UninitializedProviderConfig {
                         static_region,
                         Some(aws_region),
                         endpoint_url,
+                        aws_credentials,
                     )
                     .await?,
                 )
