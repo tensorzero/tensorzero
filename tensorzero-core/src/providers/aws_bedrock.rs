@@ -223,6 +223,44 @@ impl AWSBedrockProvider {
     pub fn model_id(&self) -> &str {
         &self.model_id
     }
+
+    /// Build a config override builder for dynamic region, endpoint, and/or credentials.
+    /// Returns None if no dynamic fields are configured.
+    fn build_dynamic_config_override(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<Option<aws_sdk_bedrockruntime::config::Builder>, Error> {
+        let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
+        let has_dynamic_endpoint = matches!(&self.endpoint_url, Some(AWSEndpointUrl::Dynamic(_)));
+        let has_dynamic_credentials = self.credentials.as_ref().is_some_and(|c| c.is_dynamic());
+
+        if !has_dynamic_region && !has_dynamic_endpoint && !has_dynamic_credentials {
+            return Ok(None);
+        }
+
+        let mut override_builder = aws_sdk_bedrockruntime::config::Builder::new();
+
+        if let Some(region) = &self.region
+            && region.is_dynamic()
+        {
+            let resolved_region = region.resolve(dynamic_api_keys)?;
+            override_builder = override_builder.region(resolved_region);
+        }
+        if let Some(endpoint_url) = &self.endpoint_url
+            && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
+        {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
+            override_builder = override_builder.endpoint_url(url.as_str());
+        }
+        if let Some(credentials) = &self.credentials
+            && credentials.is_dynamic()
+        {
+            let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
+            override_builder = override_builder.credentials_provider(resolved_credentials);
+        }
+
+        Ok(Some(override_builder))
+    }
 }
 
 impl InferenceProvider for AWSBedrockProvider {
@@ -332,48 +370,23 @@ impl InferenceProvider for AWSBedrockProvider {
         let start_time = Instant::now();
         let customized = bedrock_request.customize().interceptor(interceptor);
 
-        // Build config override for dynamic region, endpoint, and/or credentials
-        let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
-        let has_dynamic_endpoint = matches!(&self.endpoint_url, Some(AWSEndpointUrl::Dynamic(_)));
-        let has_dynamic_credentials = self.credentials.as_ref().is_some_and(|c| c.is_dynamic());
-
-        let output = if has_dynamic_region || has_dynamic_endpoint || has_dynamic_credentials {
-            let mut override_builder = aws_sdk_bedrockruntime::config::Builder::new();
-
-            if let Some(region) = &self.region
-                && region.is_dynamic()
-            {
-                let resolved_region = region.resolve(dynamic_api_keys)?;
-                override_builder = override_builder.region(resolved_region);
+        let output =
+            if let Some(override_builder) = self.build_dynamic_config_override(dynamic_api_keys)? {
+                customized.config_override(override_builder).send().await
+            } else {
+                customized.send().await
             }
-            if let Some(endpoint_url) = &self.endpoint_url
-                && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
-            {
-                let url = endpoint_url.resolve(dynamic_api_keys)?;
-                override_builder = override_builder.endpoint_url(url.as_str());
-            }
-            if let Some(credentials) = &self.credentials
-                && credentials.is_dynamic()
-            {
-                let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
-                override_builder = override_builder.credentials_provider(resolved_credentials);
-            }
-
-            customized.config_override(override_builder).send().await
-        } else {
-            customized.send().await
-        }
-        .map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error sending request to AWS Bedrock: {:?}",
-                    DisplayErrorContext(&e)
-                ),
-                raw_request: get_raw_request().ok(),
-                raw_response: get_raw_response().ok(),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error sending request to AWS Bedrock: {:?}",
+                        DisplayErrorContext(&e)
+                    ),
+                    raw_request: get_raw_request().ok(),
+                    raw_response: get_raw_response().ok(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
 
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
@@ -504,48 +517,23 @@ impl InferenceProvider for AWSBedrockProvider {
         let start_time = Instant::now();
         let customized = bedrock_request.customize().interceptor(interceptor);
 
-        // Build config override for dynamic region, endpoint, and/or credentials
-        let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
-        let has_dynamic_endpoint = matches!(&self.endpoint_url, Some(AWSEndpointUrl::Dynamic(_)));
-        let has_dynamic_credentials = self.credentials.as_ref().is_some_and(|c| c.is_dynamic());
-
-        let stream = if has_dynamic_region || has_dynamic_endpoint || has_dynamic_credentials {
-            let mut override_builder = aws_sdk_bedrockruntime::config::Builder::new();
-
-            if let Some(region) = &self.region
-                && region.is_dynamic()
-            {
-                let resolved_region = region.resolve(dynamic_api_keys)?;
-                override_builder = override_builder.region(resolved_region);
+        let stream =
+            if let Some(override_builder) = self.build_dynamic_config_override(dynamic_api_keys)? {
+                customized.config_override(override_builder).send().await
+            } else {
+                customized.send().await
             }
-            if let Some(endpoint_url) = &self.endpoint_url
-                && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
-            {
-                let url = endpoint_url.resolve(dynamic_api_keys)?;
-                override_builder = override_builder.endpoint_url(url.as_str());
-            }
-            if let Some(credentials) = &self.credentials
-                && credentials.is_dynamic()
-            {
-                let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
-                override_builder = override_builder.credentials_provider(resolved_credentials);
-            }
-
-            customized.config_override(override_builder).send().await
-        } else {
-            customized.send().await
-        }
-        .map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error sending request to AWS Bedrock: {}",
-                    DisplayErrorContext(&e)
-                ),
-                raw_request: get_raw_request().ok(),
-                raw_response: get_raw_response().ok(),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error sending request to AWS Bedrock: {}",
+                        DisplayErrorContext(&e)
+                    ),
+                    raw_request: get_raw_request().ok(),
+                    raw_response: get_raw_response().ok(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
 
         let raw_request = get_raw_request()?;
 

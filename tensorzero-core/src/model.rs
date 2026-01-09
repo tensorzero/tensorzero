@@ -1284,7 +1284,7 @@ impl UninitializedProviderConfig {
                 secret_access_key,
                 session_token,
             } => {
-                // Emit deprecation warning if allow_auto_detect_region is used
+                // If no region specified and `allow_auto_detect_region` (deprecated) is set, use `region = "sdk"`
                 if allow_auto_detect_region {
                     crate::utils::deprecation_warning(
                         "The `allow_auto_detect_region` field is deprecated for `aws_bedrock`. \
@@ -1298,7 +1298,7 @@ impl UninitializedProviderConfig {
                     .transpose()?
                     .flatten();
 
-                // If no region specified and allow_auto_detect_region is set, treat as sdk
+                // If no region specified and `allow_auto_detect_region` (deprecated) is set, use `region = "sdk"`
                 let aws_region = if aws_region.is_none() && allow_auto_detect_region {
                     Some(AWSRegion::Sdk)
                 } else {
@@ -1354,7 +1354,7 @@ impl UninitializedProviderConfig {
                 secret_access_key,
                 session_token,
             } => {
-                // Emit deprecation warning if allow_auto_detect_region is used
+                // If no region specified and `allow_auto_detect_region` (deprecated) is set, use `region = "sdk"`
                 if allow_auto_detect_region {
                     crate::utils::deprecation_warning(
                         "The `allow_auto_detect_region` field is deprecated for `aws_sagemaker`. \
@@ -1368,7 +1368,7 @@ impl UninitializedProviderConfig {
                     .transpose()?
                     .flatten();
 
-                // If no region specified and allow_auto_detect_region is set, treat as sdk
+                // If no region specified and `allow_auto_detect_region` (deprecated) is set, use `region = "sdk"`
                 let aws_region = if aws_region.is_none() && allow_auto_detect_region {
                     Some(AWSRegion::Sdk)
                 } else {

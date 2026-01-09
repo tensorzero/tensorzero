@@ -147,7 +147,7 @@ impl AWSEndpointUrl {
 pub enum AWSRegion {
     Static(Region),
     Dynamic(String),
-    /// Use AWS SDK to auto-detect region (equivalent to allow_auto_detect_region = true)
+    /// Use AWS SDK to auto-detect region.
     Sdk,
 }
 
@@ -541,9 +541,10 @@ pub fn warn_if_credential_exfiltration_risk(
 
     // Warn if there are static or SDK credentials that could be exfiltrated via dynamic endpoint.
     // If credentials are also dynamic, there's no exfiltration risk (client controls all credentials).
-    let has_exfiltrable_credentials = credentials
+    // When credentials is None, the SDK default credential chain is used, which is also exfiltrable.
+    let has_exfiltrable_credentials = !credentials
         .as_ref()
-        .is_some_and(|c| matches!(c, AWSCredentials::Static { .. } | AWSCredentials::Sdk));
+        .is_some_and(|c| matches!(c, AWSCredentials::Dynamic { .. }));
 
     if has_dynamic_endpoint && has_exfiltrable_credentials {
         tracing::warn!(

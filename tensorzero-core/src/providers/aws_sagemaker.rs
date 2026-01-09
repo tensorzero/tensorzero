@@ -91,6 +91,33 @@ impl AWSSagemakerProvider {
             credentials,
         })
     }
+
+    /// Apply dynamic region, endpoint URL, and/or credentials to a config builder.
+    fn apply_dynamic_overrides(
+        &self,
+        mut config: aws_sdk_sagemakerruntime::config::Builder,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<aws_sdk_sagemakerruntime::config::Builder, Error> {
+        if let Some(region) = &self.region
+            && region.is_dynamic()
+        {
+            let resolved_region = region.resolve(dynamic_api_keys)?;
+            config = config.region(resolved_region);
+        }
+        if let Some(endpoint_url) = &self.endpoint_url
+            && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
+        {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
+            config = config.endpoint_url(url.as_str());
+        }
+        if let Some(credentials) = &self.credentials
+            && credentials.is_dynamic()
+        {
+            let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
+            config = config.credentials_provider(resolved_credentials);
+        }
+        Ok(config)
+    }
 }
 
 impl InferenceProvider for AWSSagemakerProvider {
@@ -115,31 +142,11 @@ impl InferenceProvider for AWSSagemakerProvider {
         // Use our custom `reqwest::Client` when making requests to Sagemaker.
         // This ensures that our HTTP proxy (TENSORZERO_E2E_PROXY) is used
         // here when it's enabled.
-
-        let mut new_config = self
+        let new_config = self
             .base_config
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
-
-        // Apply dynamic region, endpoint URL, and/or credentials if configured
-        if let Some(region) = &self.region
-            && region.is_dynamic()
-        {
-            let resolved_region = region.resolve(dynamic_api_keys)?;
-            new_config = new_config.region(resolved_region);
-        }
-        if let Some(endpoint_url) = &self.endpoint_url
-            && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
-        {
-            let url = endpoint_url.resolve(dynamic_api_keys)?;
-            new_config = new_config.endpoint_url(url.as_str());
-        }
-        if let Some(credentials) = &self.credentials
-            && credentials.is_dynamic()
-        {
-            let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
-            new_config = new_config.credentials_provider(resolved_credentials);
-        }
+        let new_config = self.apply_dynamic_overrides(new_config, dynamic_api_keys)?;
 
         let start_time = Instant::now();
         let res = self
@@ -217,30 +224,11 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
 
         // See `infer` for more details
-        let mut new_config = self
+        let new_config = self
             .base_config
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
-
-        // Apply dynamic region, endpoint URL, and/or credentials if configured
-        if let Some(region) = &self.region
-            && region.is_dynamic()
-        {
-            let resolved_region = region.resolve(dynamic_api_keys)?;
-            new_config = new_config.region(resolved_region);
-        }
-        if let Some(endpoint_url) = &self.endpoint_url
-            && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
-        {
-            let url = endpoint_url.resolve(dynamic_api_keys)?;
-            new_config = new_config.endpoint_url(url.as_str());
-        }
-        if let Some(credentials) = &self.credentials
-            && credentials.is_dynamic()
-        {
-            let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
-            new_config = new_config.credentials_provider(resolved_credentials);
-        }
+        let new_config = self.apply_dynamic_overrides(new_config, dynamic_api_keys)?;
 
         let start_time = Instant::now();
         let res = self

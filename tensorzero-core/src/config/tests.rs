@@ -1709,7 +1709,7 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
         model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-        allow_auto_detect_region = true
+        region = "sdk
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
@@ -1743,7 +1743,7 @@ async fn test_bedrock_region_and_allow_auto() {
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
         model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-        allow_auto_detect_region = true
+        region = "sdk
         region = "us-east-2"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
