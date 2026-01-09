@@ -1,9 +1,10 @@
 import { Plus } from "lucide-react";
-import { Suspense, use } from "react";
+import { Suspense } from "react";
 import type { Route } from "./+types/route";
 import {
+  Await,
   data,
-  isRouteErrorResponse,
+  useAsyncError,
   useLocation,
   useNavigate,
 } from "react-router";
@@ -16,7 +17,6 @@ import {
 import { ActionBar } from "~/components/layout/ActionBar";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
-import { logger } from "~/utils/logger";
 import { SessionsTableRows } from "../AutopilotSessionsTable";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import type { Session } from "~/types/tensorzero";
@@ -97,17 +97,35 @@ function SkeletonRows() {
   );
 }
 
-// Resolves promise and renders table rows
+// Error state for failed data load
+function TableErrorState() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load sessions";
+
+  return (
+    <TableRow>
+      <TableCell colSpan={2} className="text-center">
+        <div className="flex flex-col items-center gap-2 py-8 text-red-600">
+          <span className="font-medium">Error loading data</span>
+          <span className="text-muted-foreground text-sm">{message}</span>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// Renders table rows from resolved data
 function TableBodyContent({
   data,
   gatewayVersion,
   uiVersion,
 }: {
-  data: Promise<SessionsData>;
+  data: SessionsData;
   gatewayVersion?: string;
   uiVersion?: string;
 }) {
-  const { sessions } = use(data);
+  const { sessions } = data;
 
   return (
     <SessionsTableRows
@@ -118,19 +136,19 @@ function TableBodyContent({
   );
 }
 
-// Resolves promise and renders pagination
+// Renders pagination from resolved data
 function PaginationContent({
   data,
   offset,
   onPreviousPage,
   onNextPage,
 }: {
-  data: Promise<SessionsData>;
+  data: SessionsData;
   offset: number;
   onPreviousPage: () => void;
   onNextPage: () => void;
 }) {
-  const { hasMore } = use(data);
+  const { hasMore } = data;
 
   return (
     <PageButtons
@@ -192,11 +210,15 @@ export default function AutopilotSessionsPage({
           </TableHeader>
           <TableBody>
             <Suspense key={location.search} fallback={<SkeletonRows />}>
-              <TableBodyContent
-                data={sessionsData}
-                gatewayVersion={gatewayVersion}
-                uiVersion={uiVersion}
-              />
+              <Await resolve={sessionsData} errorElement={<TableErrorState />}>
+                {(resolvedData) => (
+                  <TableBodyContent
+                    data={resolvedData}
+                    gatewayVersion={gatewayVersion}
+                    uiVersion={uiVersion}
+                  />
+                )}
+              </Await>
             </Suspense>
           </TableBody>
         </Table>
@@ -211,42 +233,18 @@ export default function AutopilotSessionsPage({
             />
           }
         >
-          <PaginationContent
-            data={sessionsData}
-            offset={offset}
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-          />
+          <Await resolve={sessionsData} errorElement={null}>
+            {(resolvedData) => (
+              <PaginationContent
+                data={resolvedData}
+                offset={offset}
+                onPreviousPage={handlePreviousPage}
+                onNextPage={handleNextPage}
+              />
+            )}
+          </Await>
         </Suspense>
       </SectionLayout>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }
