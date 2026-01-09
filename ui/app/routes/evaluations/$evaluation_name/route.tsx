@@ -286,7 +286,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const [selectedDataset, setSelectedDataset] = useState<string>("");
 
   const config = useConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
+  const evaluation_config = config?.evaluations[evaluation_name];
   if (!evaluation_config) {
     throw data(
       `Evaluation config not found for evaluation ${evaluation_name}`,

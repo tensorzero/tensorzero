@@ -26,7 +26,7 @@ export function SFTForm({
   submissionPhase,
   setSubmissionPhase,
 }: {
-  config: UiConfig;
+  config: UiConfig | undefined;
   submissionPhase: "idle" | "submitting" | "pending" | "complete";
   setSubmissionPhase: (
     phase: "idle" | "submitting" | "pending" | "complete",
@@ -224,6 +224,7 @@ export function SFTForm({
           <Button
             type="submit"
             disabled={
+              !config ||
               submissionPhase !== "idle" ||
               isCuratedInferenceCountLow ||
               isReadOnly ||
