@@ -2321,20 +2321,6 @@ pub enum CredentialLocationOrHardcoded {
     Location(CredentialLocation),
 }
 
-/// Credential location (or hardcoded) with optional fallback support.
-/// Used for non-sensitive fields like AWS region and endpoint_url.
-#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
-#[ts(export)]
-pub enum CredentialLocationOrHardcodedWithFallback {
-    /// Single credential location or hardcoded value
-    Single(CredentialLocationOrHardcoded),
-    /// With fallback
-    WithFallback {
-        default: CredentialLocationOrHardcoded,
-        fallback: CredentialLocationOrHardcoded,
-    },
-}
-
 impl<'de> Deserialize<'de> for CredentialLocationOrHardcoded {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -2381,91 +2367,6 @@ impl Serialize for CredentialLocationOrHardcoded {
         match self {
             CredentialLocationOrHardcoded::Hardcoded(inner) => serializer.serialize_str(inner),
             CredentialLocationOrHardcoded::Location(loc) => loc.serialize(serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for CredentialLocationOrHardcodedWithFallback {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::{Error, MapAccess, Visitor};
-        use std::fmt;
-
-        struct CredentialLocationOrHardcodedWithFallbackVisitor;
-
-        impl<'de> Visitor<'de> for CredentialLocationOrHardcodedWithFallbackVisitor {
-            type Value = CredentialLocationOrHardcodedWithFallback;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str(
-                    "a string (credential location or hardcoded value) or a map with 'default' and 'fallback' keys",
-                )
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                let location = CredentialLocationOrHardcoded::deserialize(
-                    serde::de::value::StrDeserializer::new(value),
-                )?;
-                Ok(CredentialLocationOrHardcodedWithFallback::Single(location))
-            }
-
-            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                let mut default: Option<CredentialLocationOrHardcoded> = None;
-                let mut fallback: Option<CredentialLocationOrHardcoded> = None;
-
-                while let Some(key) = map.next_key::<String>()? {
-                    match key.as_str() {
-                        "default" => {
-                            let value: String = map.next_value()?;
-                            default = Some(CredentialLocationOrHardcoded::deserialize(
-                                serde::de::value::StrDeserializer::new(&value),
-                            )?);
-                        }
-                        "fallback" => {
-                            let value: String = map.next_value()?;
-                            fallback = Some(CredentialLocationOrHardcoded::deserialize(
-                                serde::de::value::StrDeserializer::new(&value),
-                            )?);
-                        }
-                        _ => {
-                            return Err(Error::unknown_field(&key, &["default", "fallback"]));
-                        }
-                    }
-                }
-
-                let default = default.ok_or_else(|| Error::missing_field("default"))?;
-                let fallback = fallback.ok_or_else(|| Error::missing_field("fallback"))?;
-
-                Ok(CredentialLocationOrHardcodedWithFallback::WithFallback { default, fallback })
-            }
-        }
-
-        deserializer.deserialize_any(CredentialLocationOrHardcodedWithFallbackVisitor)
-    }
-}
-
-impl Serialize for CredentialLocationOrHardcodedWithFallback {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            CredentialLocationOrHardcodedWithFallback::Single(loc) => loc.serialize(serializer),
-            CredentialLocationOrHardcodedWithFallback::WithFallback { default, fallback } => {
-                use serde::ser::SerializeMap;
-                let mut map = serializer.serialize_map(Some(2))?;
-                map.serialize_entry("default", default)?;
-                map.serialize_entry("fallback", fallback)?;
-                map.end()
-            }
         }
     }
 }
@@ -4102,14 +4003,12 @@ mod tests {
     fn test_credential_location_or_hardcoded_accepts_hardcoded() {
         // CredentialLocationOrHardcoded should accept hardcoded values
         let json = r#""us-east-1""#;
-        let result: CredentialLocationOrHardcodedWithFallback = serde_json::from_str(json).unwrap();
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
         match result {
-            CredentialLocationOrHardcodedWithFallback::Single(
-                CredentialLocationOrHardcoded::Hardcoded(value),
-            ) => {
+            CredentialLocationOrHardcoded::Hardcoded(value) => {
                 assert_eq!(value, "us-east-1");
             }
-            _ => panic!("Expected Single(Hardcoded)"),
+            CredentialLocationOrHardcoded::Location(_) => panic!("Expected Hardcoded"),
         }
     }
 
@@ -4117,42 +4016,27 @@ mod tests {
     fn test_credential_location_or_hardcoded_accepts_env() {
         // CredentialLocationOrHardcoded should also accept env:: prefixed values
         let json = r#""env::AWS_REGION""#;
-        let result: CredentialLocationOrHardcodedWithFallback = serde_json::from_str(json).unwrap();
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        #[expect(clippy::wildcard_enum_match_arm)]
         match result {
-            CredentialLocationOrHardcodedWithFallback::Single(
-                CredentialLocationOrHardcoded::Location(CredentialLocation::Env(key)),
-            ) => {
+            CredentialLocationOrHardcoded::Location(CredentialLocation::Env(key)) => {
                 assert_eq!(key, "AWS_REGION");
             }
-            _ => panic!("Expected Single(Location(Env))"),
+            _ => panic!("Expected Location(Env)"),
         }
     }
 
     #[test]
-    fn test_credential_location_or_hardcoded_with_fallback() {
-        // Test fallback with hardcoded value
-        let json = r#"{"default": "dynamic::region_key", "fallback": "us-east-1"}"#;
-        let result: CredentialLocationOrHardcodedWithFallback = serde_json::from_str(json).unwrap();
+    fn test_credential_location_or_hardcoded_accepts_dynamic() {
+        // CredentialLocationOrHardcoded should accept dynamic:: prefixed values
+        let json = r#""dynamic::region_key""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        #[expect(clippy::wildcard_enum_match_arm)]
         match result {
-            CredentialLocationOrHardcodedWithFallback::WithFallback { default, fallback } => {
-                match default {
-                    CredentialLocationOrHardcoded::Location(CredentialLocation::Dynamic(key)) => {
-                        assert_eq!(key, "region_key");
-                    }
-                    _ => panic!("Expected dynamic default"),
-                }
-                match fallback {
-                    CredentialLocationOrHardcoded::Hardcoded(value) => {
-                        assert_eq!(value, "us-east-1");
-                    }
-                    CredentialLocationOrHardcoded::Location(_) => {
-                        panic!("Expected hardcoded fallback")
-                    }
-                }
+            CredentialLocationOrHardcoded::Location(CredentialLocation::Dynamic(key)) => {
+                assert_eq!(key, "region_key");
             }
-            CredentialLocationOrHardcodedWithFallback::Single(_) => {
-                panic!("Expected WithFallback")
-            }
+            _ => panic!("Expected Location(Dynamic)"),
         }
     }
 }
