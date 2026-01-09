@@ -11,6 +11,11 @@ on:
         type: boolean
         required: false
         default: true
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
   release:
     types: [released]
 
