@@ -64,10 +64,10 @@ export const AuthenticationFailed: Story = {
   },
 };
 
-export const GatewayRouteNotFound: Story = {
+export const GatewayEndpointNotFound: Story = {
   args: {
     error: {
-      type: InfraErrorType.GatewayRouteNotFound,
+      type: InfraErrorType.GatewayEndpointNotFound,
       routeInfo: "GET /api/v1/unknown",
     },
     label: "Route Error",

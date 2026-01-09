@@ -1,4 +1,4 @@
-export { RootErrorBoundaryLayout } from "./RootErrorBoundaryLayout";
+export { ErrorShell } from "./ErrorShell";
 export { ErrorDialog } from "./ErrorDialog";
-export { ErrorContent, PageErrorContent } from "./ErrorContent";
+export { ErrorContent, PageErrorContent, PageNotFound } from "./ErrorContent";
 export { LayoutErrorBoundary } from "./LayoutErrorBoundary";

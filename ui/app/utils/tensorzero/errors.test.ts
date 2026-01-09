@@ -6,7 +6,7 @@ import {
   isAuthenticationError,
   isClickHouseError,
   isGatewayConnectionError,
-  isGatewayRouteNotFoundError,
+  isGatewayEndpointNotFoundError,
   TensorZeroServerError,
   classifyError,
   getErrorLabel,
@@ -16,7 +16,9 @@ describe("InfraErrorType", () => {
   it("should have expected error type values", () => {
     expect(InfraErrorType.GatewayUnavailable).toBe("GATEWAY_UNAVAILABLE");
     expect(InfraErrorType.GatewayAuthFailed).toBe("GATEWAY_AUTH_FAILED");
-    expect(InfraErrorType.GatewayRouteNotFound).toBe("GATEWAY_ROUTE_NOT_FOUND");
+    expect(InfraErrorType.GatewayEndpointNotFound).toBe(
+      "GATEWAY_ENDPOINT_NOT_FOUND",
+    );
     expect(InfraErrorType.ClickHouseUnavailable).toBe("CLICKHOUSE_UNAVAILABLE");
     expect(InfraErrorType.ServerError).toBe("SERVER_ERROR");
   });
@@ -30,7 +32,7 @@ describe("isInfraErrorData", () => {
 
   it("should return true for InfraErrorData with optional fields", () => {
     const data = {
-      errorType: InfraErrorType.GatewayRouteNotFound,
+      errorType: InfraErrorType.GatewayEndpointNotFound,
       message: "Some message",
       routeInfo: "GET /api/test",
     };
@@ -113,57 +115,57 @@ describe("isClickHouseError", () => {
   });
 });
 
-describe("isGatewayRouteNotFoundError", () => {
+describe("isGatewayEndpointNotFoundError", () => {
   it("should return true for TensorZeroServerError.RouteNotFound instance", () => {
     const error = new TensorZeroServerError.RouteNotFound(
       "Route not found: GET /api/unknown",
     );
-    expect(isGatewayRouteNotFoundError(error)).toBe(true);
+    expect(isGatewayEndpointNotFoundError(error)).toBe(true);
   });
 
   it("should return true for error with matching message pattern", () => {
     // Errors get serialized across React Router boundary, losing instanceof
     const error = new Error("Route not found: GET /api/unknown");
-    expect(isGatewayRouteNotFoundError(error)).toBe(true);
+    expect(isGatewayEndpointNotFoundError(error)).toBe(true);
   });
 
   it("should return true for plain object with matching message", () => {
     const serializedError = { message: "Route not found: POST /api/test" };
-    expect(isGatewayRouteNotFoundError(serializedError)).toBe(true);
+    expect(isGatewayEndpointNotFoundError(serializedError)).toBe(true);
   });
 
   it("should return false for error with non-matching message", () => {
     const error = new Error("Something went wrong");
-    expect(isGatewayRouteNotFoundError(error)).toBe(false);
+    expect(isGatewayEndpointNotFoundError(error)).toBe(false);
   });
 
   it("should return false for error with partial message match", () => {
     const error = new Error("Cannot route not found");
-    expect(isGatewayRouteNotFoundError(error)).toBe(false);
+    expect(isGatewayEndpointNotFoundError(error)).toBe(false);
   });
 
   it("should return false for null", () => {
-    expect(isGatewayRouteNotFoundError(null)).toBe(false);
+    expect(isGatewayEndpointNotFoundError(null)).toBe(false);
   });
 
   it("should return false for undefined", () => {
-    expect(isGatewayRouteNotFoundError(undefined)).toBe(false);
+    expect(isGatewayEndpointNotFoundError(undefined)).toBe(false);
   });
 
   it("should return false for string", () => {
-    expect(isGatewayRouteNotFoundError("Route not found: GET /api")).toBe(
+    expect(isGatewayEndpointNotFoundError("Route not found: GET /api")).toBe(
       false,
     );
   });
 
   it("should return false for object without message property", () => {
-    expect(isGatewayRouteNotFoundError({ error: "Route not found" })).toBe(
+    expect(isGatewayEndpointNotFoundError({ error: "Route not found" })).toBe(
       false,
     );
   });
 
   it("should return false for object with non-string message", () => {
-    expect(isGatewayRouteNotFoundError({ message: 404 })).toBe(false);
+    expect(isGatewayEndpointNotFoundError({ message: 404 })).toBe(false);
   });
 });
 
@@ -285,13 +287,13 @@ describe("classifyError", () => {
     expect(result.type).toBe(InfraErrorType.GatewayAuthFailed);
   });
 
-  it("should classify RouteNotFound error as GatewayRouteNotFound with routeInfo", () => {
+  it("should classify RouteNotFound error as GatewayEndpointNotFound with routeInfo", () => {
     const error = new TensorZeroServerError.RouteNotFound(
       "Route not found: GET /api/unknown",
     );
     const result = classifyError(error);
-    expect(result.type).toBe(InfraErrorType.GatewayRouteNotFound);
-    if (result.type === InfraErrorType.GatewayRouteNotFound) {
+    expect(result.type).toBe(InfraErrorType.GatewayEndpointNotFound);
+    if (result.type === InfraErrorType.GatewayEndpointNotFound) {
       expect(result.routeInfo).toBe("GET /api/unknown");
     }
   });
@@ -344,8 +346,8 @@ describe("getErrorLabel", () => {
     expect(getErrorLabel(InfraErrorType.GatewayAuthFailed)).toBe("Auth Error");
   });
 
-  it("should return correct label for GatewayRouteNotFound", () => {
-    expect(getErrorLabel(InfraErrorType.GatewayRouteNotFound)).toBe(
+  it("should return correct label for GatewayEndpointNotFound", () => {
+    expect(getErrorLabel(InfraErrorType.GatewayEndpointNotFound)).toBe(
       "Route Error",
     );
   });

@@ -1,33 +1,21 @@
 import * as React from "react";
-import { FileQuestion, type LucideIcon } from "lucide-react";
+import { type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
-export const ErrorScope = {
-  App: "APP",
-  Page: "PAGE",
-} as const;
-
-export type ErrorScope = (typeof ErrorScope)[keyof typeof ErrorScope];
-
 interface ErrorContentCardProps {
   children: React.ReactNode;
-  scope?: ErrorScope;
   className?: string;
 }
 
 export function ErrorContentCard({
   children,
-  scope = ErrorScope.Page,
   className,
 }: ErrorContentCardProps) {
   return (
     <Card
       className={cn(
-        "w-[26rem] max-w-full shadow-none",
-        scope === ErrorScope.App
-          ? "rounded-none border-none bg-transparent"
-          : "bg-card border",
+        "w-[26rem] max-w-full rounded-none border-none bg-transparent shadow-none",
         className,
       )}
     >
@@ -40,41 +28,20 @@ interface ErrorContentHeaderProps {
   icon: LucideIcon;
   title: string;
   description: string;
-  scope?: ErrorScope;
 }
 
 export function ErrorContentHeader({
   icon: Icon,
   title,
   description,
-  scope = ErrorScope.Page,
 }: ErrorContentHeaderProps) {
   return (
     <CardHeader>
       <div className="flex items-center gap-4">
-        <Icon
-          className={cn(
-            "h-6 w-6 shrink-0",
-            scope === ErrorScope.App ? "text-red-400" : "text-red-500",
-          )}
-        />
+        <Icon className="h-6 w-6 shrink-0 text-red-500 dark:text-red-400" />
         <div className="min-w-0 flex-1">
-          <CardTitle
-            className={cn(
-              "font-medium",
-              scope === ErrorScope.App ? "text-neutral-100" : "text-foreground",
-            )}
-          >
-            {title}
-          </CardTitle>
-          <p
-            className={cn(
-              "mt-1.5 text-sm break-words",
-              scope === ErrorScope.App
-                ? "text-neutral-400"
-                : "text-muted-foreground",
-            )}
-          >
+          <CardTitle className="text-foreground font-medium">{title}</CardTitle>
+          <p className="text-muted-foreground mt-1.5 text-sm break-words">
             {description}
           </p>
         </div>
@@ -85,47 +52,21 @@ export function ErrorContentHeader({
 
 interface TroubleshootingSectionProps {
   children: React.ReactNode;
-  scope?: ErrorScope;
 }
 
 // Children are auto-numbered as an ordered list (1, 2, 3...)
 export function TroubleshootingSection({
   children,
-  scope = ErrorScope.Page,
 }: TroubleshootingSectionProps) {
   return (
-    <CardContent
-      className={cn(
-        "p-6",
-        scope === ErrorScope.App ? "border-t border-neutral-900" : "border-t",
-      )}
-    >
-      <h4
-        className={cn(
-          "mb-3 text-sm font-medium",
-          scope === ErrorScope.App ? "text-neutral-100" : "text-foreground",
-        )}
-      >
+    <CardContent className="border-t p-6">
+      <h4 className="text-foreground mb-3 text-sm font-medium">
         What to check:
       </h4>
-      <ol
-        className={cn(
-          "space-y-2 text-sm",
-          scope === ErrorScope.App
-            ? "text-neutral-400"
-            : "text-muted-foreground",
-        )}
-      >
+      <ol className="text-muted-foreground space-y-2 text-sm">
         {React.Children.map(children, (child, index) => (
           <li key={index} className="flex items-start gap-2">
-            <span
-              className={cn(
-                "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs",
-                scope === ErrorScope.App
-                  ? "bg-neutral-800 text-neutral-300"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
+            <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
               {index + 1}
             </span>
             <span>{child}</span>
@@ -138,20 +79,11 @@ export function TroubleshootingSection({
 
 interface ErrorInlineCodeProps {
   children: React.ReactNode;
-  scope?: ErrorScope;
 }
 
-export function ErrorInlineCode({
-  children,
-  scope = ErrorScope.Page,
-}: ErrorInlineCodeProps) {
+export function ErrorInlineCode({ children }: ErrorInlineCodeProps) {
   return (
-    <code
-      className={cn(
-        "rounded px-1 py-0.5 font-mono text-xs",
-        scope === ErrorScope.App ? "bg-neutral-800" : "bg-muted",
-      )}
-    >
+    <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">
       {children}
     </code>
   );
@@ -159,41 +91,16 @@ export function ErrorInlineCode({
 
 interface StackTraceContentProps {
   stack: string;
-  scope?: ErrorScope;
 }
 
-export function StackTraceContent({
-  stack,
-  scope = ErrorScope.Page,
-}: StackTraceContentProps) {
+export function StackTraceContent({ stack }: StackTraceContentProps) {
   return (
-    <CardContent
-      className={cn(
-        "flex h-40 flex-col p-6",
-        scope === ErrorScope.App ? "border-t border-neutral-900" : "border-t",
-      )}
-    >
-      <pre
-        className={cn(
-          "min-h-0 flex-1 overflow-auto rounded p-3 font-mono text-xs",
-          scope === ErrorScope.App
-            ? "bg-neutral-900 text-neutral-400"
-            : "bg-muted text-muted-foreground",
-        )}
-      >
+    <CardContent className="flex h-40 flex-col border-t p-6">
+      <pre className="bg-muted text-muted-foreground min-h-0 flex-1 overflow-auto rounded p-3 font-mono text-xs">
         {stack}
       </pre>
     </CardContent>
   );
-}
-
-interface PageErrorStackProps {
-  icon: LucideIcon;
-  title: string;
-  description: string;
-  scope?: ErrorScope;
-  /** Use muted gray styling instead of red (e.g., for 404s) */
-  muted?: boolean;
 }
 
 export function PageErrorContainer({
@@ -208,57 +115,30 @@ export function PageErrorContainer({
   );
 }
 
-export function NotFoundDisplay() {
-  return (
-    <PageErrorContainer>
-      <PageErrorStack
-        icon={FileQuestion}
-        title="Page Not Found"
-        description="The page you're looking for doesn't exist."
-        scope={ErrorScope.Page}
-        muted
-      />
-    </PageErrorContainer>
-  );
+interface PageErrorStackProps {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  /** Use muted gray styling instead of red (e.g., for 404s) */
+  muted?: boolean;
 }
 
 export function PageErrorStack({
   icon: Icon,
   title,
   description,
-  scope = ErrorScope.Page,
   muted = false,
 }: PageErrorStackProps) {
-  const iconColor = muted
-    ? "text-neutral-300"
-    : scope === ErrorScope.App
-      ? "text-red-400"
-      : "text-red-500";
-
   return (
-    <div
-      className={cn(
-        "flex w-[26rem] max-w-full flex-col items-center px-8 py-10 text-center",
-        scope === ErrorScope.App && "bg-transparent",
-      )}
-    >
-      <Icon className={cn("mb-4 h-10 w-10", iconColor)} />
-      <h2
+    <div className="flex w-[26rem] max-w-full flex-col items-center px-8 py-10 text-center">
+      <Icon
         className={cn(
-          "text-xl font-medium",
-          scope === ErrorScope.App ? "text-neutral-100" : "text-foreground",
+          "mb-4 h-10 w-10",
+          muted ? "text-muted-foreground" : "text-red-500 dark:text-red-400",
         )}
-      >
-        {title}
-      </h2>
-      <p
-        className={cn(
-          "mt-2 max-w-xs text-sm break-words",
-          scope === ErrorScope.App
-            ? "text-neutral-400"
-            : "text-muted-foreground",
-        )}
-      >
+      />
+      <h2 className="text-foreground text-xl font-medium">{title}</h2>
+      <p className="text-muted-foreground mt-2 max-w-xs text-sm break-words">
         {description}
       </p>
     </div>

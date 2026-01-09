@@ -14,7 +14,7 @@ import { isErrorLike } from "~/utils/common";
 export const InfraErrorType = {
   GatewayUnavailable: "GATEWAY_UNAVAILABLE",
   GatewayAuthFailed: "GATEWAY_AUTH_FAILED",
-  GatewayRouteNotFound: "GATEWAY_ROUTE_NOT_FOUND",
+  GatewayEndpointNotFound: "GATEWAY_ENDPOINT_NOT_FOUND",
   ClickHouseUnavailable: "CLICKHOUSE_UNAVAILABLE",
   ServerError: "SERVER_ERROR",
 } as const;
@@ -30,7 +30,10 @@ export type InfraErrorType =
 export type InfraErrorData =
   | { errorType: typeof InfraErrorType.GatewayUnavailable }
   | { errorType: typeof InfraErrorType.GatewayAuthFailed }
-  | { errorType: typeof InfraErrorType.GatewayRouteNotFound; routeInfo: string }
+  | {
+      errorType: typeof InfraErrorType.GatewayEndpointNotFound;
+      routeInfo: string;
+    }
   | {
       errorType: typeof InfraErrorType.ClickHouseUnavailable;
       message?: string;
@@ -45,7 +48,7 @@ export type InfraErrorData =
 export type ClassifiedError =
   | { type: typeof InfraErrorType.GatewayUnavailable }
   | { type: typeof InfraErrorType.GatewayAuthFailed }
-  | { type: typeof InfraErrorType.GatewayRouteNotFound; routeInfo: string }
+  | { type: typeof InfraErrorType.GatewayEndpointNotFound; routeInfo: string }
   | { type: typeof InfraErrorType.ClickHouseUnavailable; message?: string }
   | {
       type: typeof InfraErrorType.ServerError;
@@ -118,7 +121,7 @@ export function isAuthenticationError(error: unknown): boolean {
  * - Direct TensorZeroServerError.RouteNotFound instances (server-side)
  * - Message pattern matching (for serialized errors)
  */
-export function isGatewayRouteNotFoundError(error: unknown): boolean {
+export function isGatewayEndpointNotFoundError(error: unknown): boolean {
   if (error instanceof TensorZeroServerError.RouteNotFound) {
     return true;
   }
@@ -179,7 +182,7 @@ export function isInfraError(error: unknown): boolean {
   return (
     isGatewayConnectionError(error) ||
     isAuthenticationError(error) ||
-    isGatewayRouteNotFoundError(error) ||
+    isGatewayEndpointNotFoundError(error) ||
     isClickHouseError(error)
   );
 }
@@ -697,7 +700,7 @@ export function getErrorLabel(type: InfraErrorType): string {
       return "Gateway Connection Error";
     case InfraErrorType.GatewayAuthFailed:
       return "Auth Error";
-    case InfraErrorType.GatewayRouteNotFound:
+    case InfraErrorType.GatewayEndpointNotFound:
       return "Route Error";
     case InfraErrorType.ClickHouseUnavailable:
       return "Database Error";
@@ -755,9 +758,9 @@ export function classifyError(error: unknown): ClassifiedError {
         return { type: InfraErrorType.GatewayUnavailable };
       case InfraErrorType.GatewayAuthFailed:
         return { type: InfraErrorType.GatewayAuthFailed };
-      case InfraErrorType.GatewayRouteNotFound:
+      case InfraErrorType.GatewayEndpointNotFound:
         return {
-          type: InfraErrorType.GatewayRouteNotFound,
+          type: InfraErrorType.GatewayEndpointNotFound,
           routeInfo: error.data.routeInfo,
         };
       case InfraErrorType.ClickHouseUnavailable:
@@ -786,13 +789,13 @@ export function classifyError(error: unknown): ClassifiedError {
     return { type: InfraErrorType.GatewayAuthFailed };
   }
 
-  if (isGatewayRouteNotFoundError(error)) {
+  if (isGatewayEndpointNotFoundError(error)) {
     const errorMessage = extractErrorMessage(error);
     const routeMatch = errorMessage.match(/Route not found: (\w+) (.+)/);
     const routeInfo = routeMatch
       ? `${routeMatch[1]} ${routeMatch[2]}`
       : errorMessage;
-    return { type: InfraErrorType.GatewayRouteNotFound, routeInfo };
+    return { type: InfraErrorType.GatewayEndpointNotFound, routeInfo };
   }
 
   if (isClickHouseError(error)) {

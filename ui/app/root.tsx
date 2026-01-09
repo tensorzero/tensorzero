@@ -20,11 +20,11 @@ import {
 } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
 import {
-  RootErrorBoundaryLayout,
+  ErrorShell,
   ErrorContent,
   ErrorDialog,
+  PageNotFound,
 } from "./components/ui/error";
-import { NotFoundDisplay } from "./components/ui/error/ErrorContentPrimitives";
 import {
   InfraErrorType,
   isInfraErrorData,
@@ -139,7 +139,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           <div className="fixed inset-0 flex">
             <AppSidebar />
             <ContentLayout>
-              <NotFoundDisplay />
+              <PageNotFound />
             </ContentLayout>
           </div>
         </AppProviders>
@@ -152,7 +152,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const label = getErrorLabel(classified.type);
 
   return (
-    <RootErrorBoundaryLayout>
+    <ErrorShell>
       <ErrorDialog
         open={open}
         onDismiss={() => setOpen(false)}
@@ -161,6 +161,6 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       >
         <ErrorContent error={classified} />
       </ErrorDialog>
-    </RootErrorBoundaryLayout>
+    </ErrorShell>
   );
 }

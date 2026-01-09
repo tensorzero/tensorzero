@@ -34,16 +34,16 @@ export function ErrorDialog({
             aria-describedby={undefined}
             onOpenAutoFocus={(e) => e.preventDefault()}
           >
-            <DialogContentBox className="dark max-h-[90vh] w-fit gap-0 overflow-hidden rounded-lg bg-neutral-950 p-0 text-neutral-100">
+            <DialogContentBox className="dark bg-background text-foreground max-h-[90vh] w-fit gap-0 overflow-hidden rounded-lg p-0">
               {children}
 
               <DialogPrimitive.Close
                 className={cn(
                   "absolute top-4 right-4",
                   "cursor-pointer rounded-sm",
-                  "text-neutral-400 opacity-70",
-                  "transition-opacity hover:text-neutral-100 hover:opacity-100",
-                  "focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 focus:ring-offset-neutral-950 focus:outline-hidden",
+                  "text-muted-foreground opacity-70",
+                  "hover:text-foreground transition-opacity hover:opacity-100",
+                  "focus:ring-ring focus:ring-offset-background focus:ring-2 focus:ring-offset-2 focus:outline-hidden",
                   "disabled:pointer-events-none",
                 )}
               >

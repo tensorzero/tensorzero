@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Database,
+  FileQuestion,
   KeyRound,
   Server,
   Unplug,
@@ -14,9 +15,7 @@ import {
 import {
   ErrorContentCard,
   ErrorContentHeader,
-  ErrorScope,
   ErrorInlineCode,
-  NotFoundDisplay,
   PageErrorContainer,
   PageErrorStack,
   StackTraceContent,
@@ -33,8 +32,8 @@ export function ErrorContent({ error }: ErrorContentProps) {
       return <GatewayUnavailableContent />;
     case InfraErrorType.GatewayAuthFailed:
       return <GatewayAuthContent />;
-    case InfraErrorType.GatewayRouteNotFound:
-      return <GatewayRouteNotFoundContent routeInfo={error.routeInfo} />;
+    case InfraErrorType.GatewayEndpointNotFound:
+      return <GatewayEndpointNotFoundContent routeInfo={error.routeInfo} />;
     case InfraErrorType.ClickHouseUnavailable:
       return <ClickHouseContent message={error.message} />;
     case InfraErrorType.ServerError:
@@ -54,20 +53,16 @@ export function ErrorContent({ error }: ErrorContentProps) {
 
 function GatewayUnavailableContent() {
   return (
-    <ErrorContentCard scope={ErrorScope.App}>
+    <ErrorContentCard>
       <ErrorContentHeader
         icon={Unplug}
         title="Gateway Unavailable"
         description="Unable to connect to the TensorZero Gateway."
-        scope={ErrorScope.App}
       />
-      <TroubleshootingSection scope={ErrorScope.App}>
+      <TroubleshootingSection>
         <>Ensure the Gateway is running and accessible</>
         <>
-          Verify the{" "}
-          <ErrorInlineCode scope={ErrorScope.App}>
-            TENSORZERO_GATEWAY_URL
-          </ErrorInlineCode>{" "}
+          Verify the <ErrorInlineCode>TENSORZERO_GATEWAY_URL</ErrorInlineCode>{" "}
           environment variable
         </>
         <>Check for network connectivity issues</>
@@ -78,20 +73,16 @@ function GatewayUnavailableContent() {
 
 function GatewayAuthContent() {
   return (
-    <ErrorContentCard scope={ErrorScope.App}>
+    <ErrorContentCard>
       <ErrorContentHeader
         icon={KeyRound}
         title="Authentication Failed"
         description="Unable to authenticate with the TensorZero Gateway."
-        scope={ErrorScope.App}
       />
-      <TroubleshootingSection scope={ErrorScope.App}>
+      <TroubleshootingSection>
         <>
-          Verify{" "}
-          <ErrorInlineCode scope={ErrorScope.App}>
-            TENSORZERO_API_KEY
-          </ErrorInlineCode>{" "}
-          is set correctly
+          Verify <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode> is set
+          correctly
         </>
         <>Ensure the API key has not expired or been revoked</>
         <>Check Gateway logs for authentication details</>
@@ -100,16 +91,15 @@ function GatewayAuthContent() {
   );
 }
 
-function GatewayRouteNotFoundContent({ routeInfo }: { routeInfo: string }) {
+function GatewayEndpointNotFoundContent({ routeInfo }: { routeInfo: string }) {
   return (
-    <ErrorContentCard scope={ErrorScope.App}>
+    <ErrorContentCard>
       <ErrorContentHeader
         icon={Server}
-        title="Gateway Route Not Found"
+        title="Gateway Endpoint Not Found"
         description={`The Gateway returned 404 for: ${routeInfo}`}
-        scope={ErrorScope.App}
       />
-      <TroubleshootingSection scope={ErrorScope.App}>
+      <TroubleshootingSection>
         <>Ensure the UI and Gateway versions are compatible</>
         <>Try refreshing the page or restarting the Gateway</>
         <>Check Gateway logs for more details</>
@@ -120,20 +110,16 @@ function GatewayRouteNotFoundContent({ routeInfo }: { routeInfo: string }) {
 
 function ClickHouseContent({ message }: { message?: string }) {
   return (
-    <ErrorContentCard scope={ErrorScope.App}>
+    <ErrorContentCard>
       <ErrorContentHeader
         icon={Database}
         title="ClickHouse Connection Error"
         description={message || "Unable to connect to the ClickHouse database."}
-        scope={ErrorScope.App}
       />
-      <TroubleshootingSection scope={ErrorScope.App}>
+      <TroubleshootingSection>
         <>Verify ClickHouse is running and accessible</>
         <>
-          Check the{" "}
-          <ErrorInlineCode scope={ErrorScope.App}>
-            CLICKHOUSE_URL
-          </ErrorInlineCode>{" "}
+          Check the <ErrorInlineCode>CLICKHOUSE_URL</ErrorInlineCode>{" "}
           environment variable
         </>
         <>Review Gateway logs for connection details</>
@@ -152,15 +138,27 @@ function ServerErrorContent({
   stack?: string;
 }) {
   return (
-    <ErrorContentCard scope={ErrorScope.App}>
+    <ErrorContentCard>
       <ErrorContentHeader
         icon={AlertTriangle}
         title={status ? `Error ${status}` : "Something Went Wrong"}
         description={message || "An unexpected error occurred."}
-        scope={ErrorScope.App}
       />
-      {stack && <StackTraceContent stack={stack} scope={ErrorScope.App} />}
+      {stack && <StackTraceContent stack={stack} />}
     </ErrorContentCard>
+  );
+}
+
+export function PageNotFound() {
+  return (
+    <PageErrorContainer>
+      <PageErrorStack
+        icon={FileQuestion}
+        title="Page Not Found"
+        description="The page you're looking for doesn't exist."
+        muted
+      />
+    </PageErrorContainer>
   );
 }
 
@@ -169,13 +167,15 @@ interface PageErrorContentProps {
 }
 
 /**
- * Renders page-scope errors inline.
+ * Renders page-level errors inline.
  * For layout ErrorBoundaries, use LayoutErrorBoundary instead - it handles
  * both infra errors (dialog) and page errors (inline) automatically.
  */
 export function PageErrorContent({ error }: PageErrorContentProps) {
-  if (isRouteErrorResponse(error) && error.status === 404) {
-    return <NotFoundDisplay />;
+  // Client 404s (no route matched) have no data - show generic "Page Not Found"
+  // Resource 404s (inference/dataset/etc not found) have data - show specific error
+  if (isRouteErrorResponse(error) && error.status === 404 && !error.data) {
+    return <PageNotFound />;
   }
 
   const { title, message, status } = getPageErrorInfo(error);
@@ -186,7 +186,6 @@ export function PageErrorContent({ error }: PageErrorContentProps) {
         icon={AlertTriangle}
         title={status ? `Error ${status}` : title}
         description={message}
-        scope={ErrorScope.Page}
       />
     </PageErrorContainer>
   );
