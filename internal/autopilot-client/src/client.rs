@@ -417,6 +417,21 @@ impl AutopilotClient {
             },
             _ => None,
         };
+        if session_id == Uuid::nil() && request.config_snapshot_hash.is_none() {
+            return Err(AutopilotError::Http {
+                status_code: 400,
+                message: "Config snapshot hash must be set if a new session is being started"
+                    .to_string(),
+            });
+        }
+        if session_id != Uuid::nil() && request.config_snapshot_hash.is_some() {
+            return Err(AutopilotError::Http {
+                status_code: 400,
+                message:
+                    "Config snapshot hash must not be set if an existing session is being used"
+                        .to_string(),
+            });
+        }
 
         let url = self
             .base_url

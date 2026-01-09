@@ -135,9 +135,8 @@ pub struct AutopilotSideInfo {
     /// The session ID for this autopilot session.
     pub session_id: Uuid,
 
-    /// An optional hash of the current configuration.
-    /// Set if you would like to start from a particular config for a tool call.
-    pub config_snapshot_hash: Option<String>,
+    /// A hash of the current configuration.
+    pub config_snapshot_hash: String,
 
     /// Settings for optimization workflows run on the gateway by autopilot.
     pub optimization: OptimizationWorkflowSideInfo,
@@ -191,12 +190,10 @@ impl AutopilotSideInfo {
             "tensorzero::autopilot::session_id".to_string(),
             self.session_id.to_string(),
         );
-        if let Some(config_hash) = &self.config_snapshot_hash {
-            tags.insert(
-                "tensorzero::autopilot::config_snapshot_hash".to_string(),
-                config_hash.clone(),
-            );
-        }
+        tags.insert(
+            "tensorzero::autopilot::config_snapshot_hash".to_string(),
+            self.config_snapshot_hash.clone(),
+        );
         tags
     }
 }
@@ -264,6 +261,8 @@ pub struct CreateEventRequest {
     /// This should only apply to Message events.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_user_message_event_id: Option<Uuid>,
+    /// Must be set if the session id is nil and we are starting a new session
+    pub config_snapshot_hash: Option<String>,
 }
 
 /// Query parameters for listing events.

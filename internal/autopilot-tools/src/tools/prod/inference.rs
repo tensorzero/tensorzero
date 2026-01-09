@@ -168,24 +168,21 @@ impl SimpleTool for InferenceTool {
             ..Default::default()
         };
 
-        let response = if let Some(hash) = side_info.config_snapshot_hash {
-            let snapshot_hash: SnapshotHash =
-                hash.parse().map_err(|_: std::convert::Infallible| {
+        let snapshot_hash: SnapshotHash =
+            side_info
+                .config_snapshot_hash
+                .parse()
+                .map_err(|_: std::convert::Infallible| {
                     AutopilotToolError::validation("Invalid snapshot hash")
                 })?;
-            ctx.client()
-                .action(
-                    snapshot_hash,
-                    ActionInput::Inference(Box::new(client_params)),
-                )
-                .await
-                .map_err(|e| AutopilotToolError::client_error("inference", e))?
-        } else {
-            ctx.client()
-                .inference(client_params)
-                .await
-                .map_err(|e| AutopilotToolError::client_error("inference", e))?
-        };
+        let response = ctx
+            .client()
+            .action(
+                snapshot_hash,
+                ActionInput::Inference(Box::new(client_params)),
+            )
+            .await
+            .map_err(|e| AutopilotToolError::client_error("inference", e))?;
 
         Ok(response)
     }

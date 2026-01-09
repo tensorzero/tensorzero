@@ -54,7 +54,7 @@ async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -130,7 +130,7 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: Some(test_snapshot_hash.to_string()),
+        config_snapshot_hash: test_snapshot_hash.to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -193,7 +193,7 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -237,7 +237,7 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -286,7 +286,7 @@ async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -322,7 +322,7 @@ async fn test_list_inferences_tool_error(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
