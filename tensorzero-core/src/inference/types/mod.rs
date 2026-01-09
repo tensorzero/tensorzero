@@ -767,6 +767,7 @@ impl RateLimitedInputContent for ToolCallWrapper {
 
 impl RateLimitedInputContent for File {
     fn estimated_input_token_usage(&self) -> u64 {
+        // TODO: improve this estimate
         10_000
     }
 }
@@ -2244,14 +2245,23 @@ mod tests {
 
         assert_eq!(
             InputMessageContent::Template(template.clone()).estimated_input_token_usage(),
-            template_expected
+            template_expected,
+            "Template token estimation mismatch: expected {}, got {}",
+            template_expected,
+            InputMessageContent::Template(template.clone()).estimated_input_token_usage()
         );
         assert_eq!(
             InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
                 tool_call.clone()
             ))
             .estimated_input_token_usage(),
-            tool_call_expected
+            tool_call_expected,
+            "ToolCall token estimation mismatch: expected {}, got {}",
+            tool_call_expected,
+            InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                tool_call.clone()
+            ))
+            .estimated_input_token_usage()
         );
 
         let message = InputMessage {
