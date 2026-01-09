@@ -17,11 +17,6 @@ interface ErrorDialogProps {
   label?: string;
 }
 
-/**
- * Dialog for dismissible error states.
- * Reuses Dialog primitives with persistent error indicator when dismissed.
- * Uses dark theme styling to complement the dark overlay.
- */
 export function ErrorDialog({
   children,
   open,

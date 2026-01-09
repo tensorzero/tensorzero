@@ -164,10 +164,6 @@ function ServerErrorContent({
   );
 }
 
-// ============================================================================
-// PAGE ERROR CONTENT
-// ============================================================================
-
 interface PageErrorContentProps {
   error: unknown;
 }
@@ -178,7 +174,6 @@ interface PageErrorContentProps {
  * both infra errors (dialog) and page errors (inline) automatically.
  */
 export function PageErrorContent({ error }: PageErrorContentProps) {
-  // Special handling for 404s
   if (isRouteErrorResponse(error) && error.status === 404) {
     return <NotFoundDisplay />;
   }

@@ -3,11 +3,6 @@ import { FileQuestion, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
-/**
- * Error scope based on the nature of the failure:
- * - App: App-level errors (gateway, auth, DB) - dark overlay in ErrorDialog
- * - Page: Page-level errors (404, API failures) - light card, inline or standalone
- */
 export const ErrorScope = {
   App: "APP",
   Page: "PAGE",
@@ -21,10 +16,6 @@ interface ErrorContentCardProps {
   className?: string;
 }
 
-/**
- * Container card for error content.
- * Card border is determined by scope: App floats without border, Page has border.
- */
 export function ErrorContentCard({
   children,
   scope = ErrorScope.Page,
@@ -52,10 +43,6 @@ interface ErrorContentHeaderProps {
   scope?: ErrorScope;
 }
 
-/**
- * Header for error content. Colors adapt to scope.
- * Separator border (if needed) is handled by body components via border-t.
- */
 export function ErrorContentHeader({
   icon: Icon,
   title,
@@ -209,10 +196,6 @@ interface PageErrorStackProps {
   muted?: boolean;
 }
 
-/**
- * Centered container for page-level error displays.
- * Used by error boundaries to center content in the available space.
- */
 export function PageErrorContainer({
   children,
 }: {
@@ -225,10 +208,6 @@ export function PageErrorContainer({
   );
 }
 
-/**
- * Standard 404 "Page Not Found" display.
- * Reusable across root, layout, and route error boundaries.
- */
 export function NotFoundDisplay() {
   return (
     <PageErrorContainer>
@@ -243,11 +222,6 @@ export function NotFoundDisplay() {
   );
 }
 
-/**
- * Standalone error display for simple errors without troubleshooting steps.
- * Vertical layout: large icon above, centered text below.
- * No card border for cleaner appearance.
- */
 export function PageErrorStack({
   icon: Icon,
   title,
