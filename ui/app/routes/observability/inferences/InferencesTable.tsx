@@ -468,6 +468,7 @@ export default function InferencesTable({
                 <InferenceFilterBuilder
                   inferenceFilter={filterAdvanced}
                   setInferenceFilter={setFilterAdvanced}
+                  functionName={filterFunctionName}
                 />
               </div>
             </div>
