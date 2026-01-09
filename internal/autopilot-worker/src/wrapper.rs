@@ -9,7 +9,7 @@ use autopilot_tools::AutopilotToolError;
 use durable_tools::{
     CreateEventGatewayRequest, EventPayload, NonControlToolError, SimpleTool, SimpleToolContext,
     TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
-    ToolResult as DurableToolResult,
+    ToolResult as DurableToolResult, ToolResultExt,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -97,7 +97,9 @@ where
             },
         )?;
         // Execute the underlying tool
-        let result = T::execute(llm_params, side_info, ctx).await;
+        let result = T::execute(llm_params, side_info, ctx)
+            .await
+            .propagate_control()?;
 
         // Prepare the outcome for the autopilot API
         let tool_name = T::name().to_string();
@@ -109,7 +111,7 @@ where
                 })
             }
             Err(e) => ToolOutcome::Failure {
-                error: tool_error_to_json(e),
+                error: tool_error_to_json(ToolError::NonControl(e)),
             },
         };
 

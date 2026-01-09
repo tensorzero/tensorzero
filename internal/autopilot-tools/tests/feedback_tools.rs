@@ -43,7 +43,7 @@ async fn test_feedback_tool_comment(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -102,7 +102,7 @@ async fn test_feedback_tool_float_metric(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -154,7 +154,7 @@ async fn test_feedback_tool_boolean_metric(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -198,7 +198,7 @@ async fn test_feedback_tool_error(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -240,7 +240,7 @@ async fn test_get_latest_feedback_by_metric_tool_success(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -287,7 +287,7 @@ async fn test_get_latest_feedback_by_metric_tool_empty_result(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -331,7 +331,7 @@ async fn test_get_latest_feedback_by_metric_tool_error(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -377,7 +377,7 @@ async fn test_get_feedback_by_variant_tool_success(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -426,7 +426,7 @@ async fn test_get_feedback_by_variant_tool_with_variant_filter(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -474,7 +474,7 @@ async fn test_get_feedback_by_variant_tool_empty_result(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -513,7 +513,7 @@ async fn test_get_feedback_by_variant_tool_error(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 

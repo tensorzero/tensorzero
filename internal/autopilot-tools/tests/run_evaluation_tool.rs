@@ -58,7 +58,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: Default::default(),
     };
 
@@ -128,7 +128,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: Default::default(),
     };
 
@@ -195,7 +195,7 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: Default::default(),
     };
 
@@ -256,7 +256,7 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: Default::default(),
     };
 

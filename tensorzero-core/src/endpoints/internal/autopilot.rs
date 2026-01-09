@@ -147,11 +147,18 @@ pub async fn create_event_handler(
         .ok_or_else(|| Error::new(ErrorDetails::AutopilotUnavailable))?;
 
     // Construct the full request with deployment_id
+    // If starting a new session (nil session_id), include the current config hash
+    let config_snapshot_hash = if session_id.is_nil() {
+        Some(app_state.config.hash.to_string())
+    } else {
+        None
+    };
     let request = CreateEventRequest {
         deployment_id,
         tensorzero_version: TENSORZERO_VERSION.to_string(),
         payload: http_request.payload,
         previous_user_message_event_id: http_request.previous_user_message_event_id,
+        config_snapshot_hash,
     };
 
     let response = create_event(&client, session_id, request).await?;

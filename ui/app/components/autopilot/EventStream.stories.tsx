@@ -59,7 +59,7 @@ const toolingEvents: Event[] = [
         side_info: {
           tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
           session_id: sessionId,
-          config_snapshot_hash: null,
+          config_snapshot_hash: "hi",
           optimization: {
             poll_interval_secs: BigInt(60),
             max_wait_secs: BigInt(86400),
@@ -140,7 +140,7 @@ const mixedEvents: Event[] = [
         side_info: {
           tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
           session_id: sessionId,
-          config_snapshot_hash: null,
+          config_snapshot_hash: "hi",
           optimization: {
             poll_interval_secs: BigInt(60),
             max_wait_secs: BigInt(86400),
@@ -323,7 +323,7 @@ const longFormEvents: Event[] = [
         side_info: {
           tool_call_event_id: "8c9d0e1f-2a3b-4c4d-9e5f-1234567890e1",
           session_id: sessionId,
-          config_snapshot_hash: null,
+          config_snapshot_hash: "hi",
           optimization: {
             poll_interval_secs: BigInt(60),
             max_wait_secs: BigInt(86400),
