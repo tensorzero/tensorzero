@@ -73,7 +73,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Quick sync check - if not configured, return immediately
   if (!isPostgresAvailable()) {
     return {
-      postgresConfigured: false as const,
+      postgresAvailable: false as const,
       apiKeysPromise: null,
       offset: 0,
       limit: 0,
@@ -82,7 +82,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Return immediately, defer the actual postgres work
   return {
-    postgresConfigured: true as const,
+    postgresAvailable: true as const,
     apiKeysPromise: fetchApiKeys(limit, offset),
     offset,
     limit,
@@ -393,9 +393,9 @@ function ApiKeysContent({
 }
 
 export default function AuthPage({ loaderData }: Route.ComponentProps) {
-  const { postgresConfigured, apiKeysPromise, offset, limit } = loaderData;
+  const { postgresAvailable, apiKeysPromise, offset, limit } = loaderData;
 
-  if (!postgresConfigured) {
+  if (!postgresAvailable) {
     return <PostgresNotConfiguredState />;
   }
 
