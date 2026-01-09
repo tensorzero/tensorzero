@@ -84,6 +84,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    // Dynamic region provider - passes region at request time
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-bedrock-dynamic-region".to_string(),
+        model_name: "claude-3-haiku-aws-bedrock-dynamic-region".into(),
+        model_provider_name: "aws-bedrock-dynamic-region".into(),
+        credentials: HashMap::from([("aws_bedrock_region".to_string(), "us-east-1".to_string())]),
+    }];
+
     E2ETestProviders {
         simple_inference: simple_inference_providers,
         extra_body_inference: extra_body_providers,
@@ -91,7 +100,7 @@ async fn get_providers() -> E2ETestProviders {
         reasoning_inference: vec![],
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
-        inference_params_dynamic_credentials: vec![],
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: vec![],
         provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: standard_providers.clone(),

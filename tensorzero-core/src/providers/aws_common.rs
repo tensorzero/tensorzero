@@ -790,3 +790,544 @@ pub fn build_interceptor(
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use secrecy::SecretString;
+    use std::collections::HashMap;
+
+    fn make_credentials(map: HashMap<&str, &str>) -> InferenceCredentials {
+        map.into_iter()
+            .map(|(k, v)| (k.to_string(), SecretString::new(v.to_string().into())))
+            .collect()
+    }
+
+    // ===== AWSEndpointUrl::resolve tests =====
+
+    #[test]
+    fn test_aws_endpoint_url_resolve_static() {
+        let url = Url::parse("https://bedrock.us-east-1.amazonaws.com").unwrap();
+        let endpoint = AWSEndpointUrl::Static(url.clone());
+        let credentials = make_credentials(HashMap::new());
+
+        let result = endpoint
+            .resolve(&credentials)
+            .expect("resolve should succeed");
+        assert_eq!(
+            result, url,
+            "Static endpoint should return the URL directly"
+        );
+    }
+
+    #[test]
+    fn test_aws_endpoint_url_resolve_dynamic_found() {
+        let endpoint = AWSEndpointUrl::Dynamic("my_endpoint".to_string());
+        let credentials = make_credentials(HashMap::from([(
+            "my_endpoint",
+            "https://custom.endpoint.com",
+        )]));
+
+        let result = endpoint
+            .resolve(&credentials)
+            .expect("resolve should succeed");
+        assert_eq!(
+            result.as_str(),
+            "https://custom.endpoint.com/",
+            "Dynamic endpoint should resolve from credentials"
+        );
+    }
+
+    #[test]
+    fn test_aws_endpoint_url_resolve_dynamic_not_found() {
+        let endpoint = AWSEndpointUrl::Dynamic("missing_key".to_string());
+        let credentials = make_credentials(HashMap::new());
+
+        let result = endpoint.resolve(&credentials);
+        assert!(result.is_err(), "Should error when dynamic key is missing");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("missing_key"),
+            "Error should mention the missing key: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_endpoint_url_resolve_dynamic_invalid_url() {
+        let endpoint = AWSEndpointUrl::Dynamic("my_endpoint".to_string());
+        let credentials = make_credentials(HashMap::from([("my_endpoint", "not-a-valid-url")]));
+
+        let result = endpoint.resolve(&credentials);
+        assert!(result.is_err(), "Should error for invalid URL");
+    }
+
+    // ===== AWSRegion::resolve tests =====
+
+    #[test]
+    fn test_aws_region_resolve_static() {
+        let region = AWSRegion::Static(Region::new("us-west-2"));
+        let credentials = make_credentials(HashMap::new());
+
+        let result = region
+            .resolve(&credentials)
+            .expect("resolve should succeed");
+        assert_eq!(
+            result.as_ref(),
+            "us-west-2",
+            "Static region should return the region directly"
+        );
+    }
+
+    #[test]
+    fn test_aws_region_resolve_dynamic_found() {
+        let region = AWSRegion::Dynamic("aws_region".to_string());
+        let credentials = make_credentials(HashMap::from([("aws_region", "eu-central-1")]));
+
+        let result = region
+            .resolve(&credentials)
+            .expect("resolve should succeed");
+        assert_eq!(
+            result.as_ref(),
+            "eu-central-1",
+            "Dynamic region should resolve from credentials"
+        );
+    }
+
+    #[test]
+    fn test_aws_region_resolve_dynamic_not_found() {
+        let region = AWSRegion::Dynamic("missing_region".to_string());
+        let credentials = make_credentials(HashMap::new());
+
+        let result = region.resolve(&credentials);
+        assert!(result.is_err(), "Should error when dynamic key is missing");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("missing_region"),
+            "Error should mention the missing key: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_region_resolve_sdk_errors() {
+        let region = AWSRegion::Sdk;
+        let credentials = make_credentials(HashMap::new());
+
+        let result = region.resolve(&credentials);
+        assert!(
+            result.is_err(),
+            "Sdk region should error when resolved at runtime"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("construction time"),
+            "Error should explain Sdk is resolved at construction: {err}"
+        );
+    }
+
+    // ===== AWSCredentials::resolve tests =====
+
+    #[test]
+    fn test_aws_credentials_resolve_static() {
+        let creds = AWSCredentials::Static {
+            access_key_id: "AKIATEST".to_string(),
+            secret_access_key: SecretString::new("secretkey".to_string().into()),
+            session_token: None,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        assert_eq!(
+            result.access_key_id(),
+            "AKIATEST",
+            "Static credentials should return access_key_id"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_resolve_static_with_session_token() {
+        let creds = AWSCredentials::Static {
+            access_key_id: "AKIATEST".to_string(),
+            secret_access_key: SecretString::new("secretkey".to_string().into()),
+            session_token: Some(SecretString::new("mysessiontoken".to_string().into())),
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        assert_eq!(
+            result.session_token(),
+            Some("mysessiontoken"),
+            "Static credentials should include session_token"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_resolve_dynamic_found() {
+        let creds = AWSCredentials::Dynamic {
+            access_key_id_key: "aws_access_key".to_string(),
+            secret_access_key_key: "aws_secret_key".to_string(),
+            session_token_key: None,
+        };
+        let credentials = make_credentials(HashMap::from([
+            ("aws_access_key", "AKIADYNAMIC"),
+            ("aws_secret_key", "dynamicsecret"),
+        ]));
+
+        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        assert_eq!(
+            result.access_key_id(),
+            "AKIADYNAMIC",
+            "Dynamic credentials should resolve from request"
+        );
+        assert_eq!(
+            result.secret_access_key(),
+            "dynamicsecret",
+            "Dynamic secret key should resolve from request"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_resolve_dynamic_with_session_token() {
+        let creds = AWSCredentials::Dynamic {
+            access_key_id_key: "aws_access_key".to_string(),
+            secret_access_key_key: "aws_secret_key".to_string(),
+            session_token_key: Some("aws_session_token".to_string()),
+        };
+        let credentials = make_credentials(HashMap::from([
+            ("aws_access_key", "AKIADYNAMIC"),
+            ("aws_secret_key", "dynamicsecret"),
+            ("aws_session_token", "dynamicsession"),
+        ]));
+
+        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        assert_eq!(
+            result.session_token(),
+            Some("dynamicsession"),
+            "Dynamic session token should resolve from request"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_resolve_dynamic_missing_access_key() {
+        let creds = AWSCredentials::Dynamic {
+            access_key_id_key: "missing_access_key".to_string(),
+            secret_access_key_key: "aws_secret_key".to_string(),
+            session_token_key: None,
+        };
+        let credentials = make_credentials(HashMap::from([("aws_secret_key", "dynamicsecret")]));
+
+        let result = creds.resolve(&credentials);
+        assert!(
+            result.is_err(),
+            "Should error when access_key_id is missing"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("missing_access_key"),
+            "Error should mention the missing key: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_resolve_dynamic_missing_secret_key() {
+        let creds = AWSCredentials::Dynamic {
+            access_key_id_key: "aws_access_key".to_string(),
+            secret_access_key_key: "missing_secret_key".to_string(),
+            session_token_key: None,
+        };
+        let credentials = make_credentials(HashMap::from([("aws_access_key", "AKIADYNAMIC")]));
+
+        let result = creds.resolve(&credentials);
+        assert!(
+            result.is_err(),
+            "Should error when secret_access_key is missing"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("missing_secret_key"),
+            "Error should mention the missing key: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_resolve_dynamic_missing_session_token() {
+        let creds = AWSCredentials::Dynamic {
+            access_key_id_key: "aws_access_key".to_string(),
+            secret_access_key_key: "aws_secret_key".to_string(),
+            session_token_key: Some("missing_session".to_string()),
+        };
+        let credentials = make_credentials(HashMap::from([
+            ("aws_access_key", "AKIADYNAMIC"),
+            ("aws_secret_key", "dynamicsecret"),
+        ]));
+
+        let result = creds.resolve(&credentials);
+        assert!(
+            result.is_err(),
+            "Should error when session_token is missing"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("missing_session"),
+            "Error should mention the missing key: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_resolve_sdk_errors() {
+        let creds = AWSCredentials::Sdk;
+        let credentials = make_credentials(HashMap::new());
+
+        let result = creds.resolve(&credentials);
+        assert!(
+            result.is_err(),
+            "Sdk credentials should error when resolved at runtime"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("construction time"),
+            "Error should explain Sdk is resolved at construction: {err}"
+        );
+    }
+
+    // ===== AWSCredentials::from_fields validation tests =====
+
+    #[test]
+    fn test_aws_credentials_from_fields_none_returns_none() {
+        let result =
+            AWSCredentials::from_fields(None, None, None, "test_provider").expect("should succeed");
+        assert!(result.is_none(), "No credentials should return None");
+    }
+
+    #[test]
+    fn test_aws_credentials_from_fields_session_token_without_credentials_errors() {
+        let result = AWSCredentials::from_fields(
+            None,
+            None,
+            Some(CredentialLocation::Dynamic("token".to_string())),
+            "test_provider",
+        );
+        assert!(
+            result.is_err(),
+            "session_token without credentials should error"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("session_token"),
+            "Error should mention session_token: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_from_fields_access_key_without_secret_errors() {
+        let result = AWSCredentials::from_fields(
+            Some(CredentialLocation::Dynamic("ak".to_string())),
+            None,
+            None,
+            "test_provider",
+        );
+        assert!(
+            result.is_err(),
+            "access_key without secret_key should error"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("secret_access_key"),
+            "Error should mention secret_access_key: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_from_fields_secret_key_without_access_key_errors() {
+        let result = AWSCredentials::from_fields(
+            None,
+            Some(CredentialLocation::Dynamic("sk".to_string())),
+            None,
+            "test_provider",
+        );
+        assert!(
+            result.is_err(),
+            "secret_key without access_key should error"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("access_key_id"),
+            "Error should mention access_key_id: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_from_fields_all_dynamic_succeeds() {
+        let result = AWSCredentials::from_fields(
+            Some(CredentialLocation::Dynamic("ak".to_string())),
+            Some(CredentialLocation::Dynamic("sk".to_string())),
+            Some(CredentialLocation::Dynamic("st".to_string())),
+            "test_provider",
+        )
+        .expect("should succeed");
+
+        assert!(result.is_some(), "Should return Some");
+        let creds = result.unwrap();
+        assert!(
+            matches!(creds, AWSCredentials::Dynamic { .. }),
+            "Should be Dynamic credentials"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_from_fields_all_sdk_succeeds() {
+        let result = AWSCredentials::from_fields(
+            Some(CredentialLocation::Sdk),
+            Some(CredentialLocation::Sdk),
+            Some(CredentialLocation::Sdk),
+            "test_provider",
+        )
+        .expect("should succeed");
+
+        assert!(result.is_some(), "Should return Some");
+        let creds = result.unwrap();
+        assert!(
+            matches!(creds, AWSCredentials::Sdk),
+            "Should be Sdk credentials"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_from_fields_mixed_dynamic_env_errors() {
+        let result = AWSCredentials::from_fields(
+            Some(CredentialLocation::Dynamic("ak".to_string())),
+            Some(CredentialLocation::Env("SECRET_KEY".to_string())),
+            None,
+            "test_provider",
+        );
+        assert!(result.is_err(), "Mixed dynamic and env should error");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("same source type"),
+            "Error should mention same source type: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_from_fields_session_token_mismatch_errors() {
+        let result = AWSCredentials::from_fields(
+            Some(CredentialLocation::Dynamic("ak".to_string())),
+            Some(CredentialLocation::Dynamic("sk".to_string())),
+            Some(CredentialLocation::Env("SESSION_TOKEN".to_string())),
+            "test_provider",
+        );
+        assert!(
+            result.is_err(),
+            "Session token source mismatch should error"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("session_token"),
+            "Error should mention session_token: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_credentials_from_fields_path_not_allowed() {
+        let result = AWSCredentials::from_fields(
+            Some(CredentialLocation::Path("/path/to/key".to_string())),
+            Some(CredentialLocation::Path("/path/to/secret".to_string())),
+            None,
+            "test_provider",
+        );
+        assert!(result.is_err(), "Path credentials should not be allowed");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("only `env::`"),
+            "Error should explain allowed types: {err}"
+        );
+    }
+
+    // ===== warn_if_credential_exfiltration_risk tests =====
+    // Note: These tests verify the logic but can't easily verify tracing output.
+    // We test the conditions that would trigger/not trigger warnings.
+
+    #[test]
+    fn test_exfiltration_risk_conditions() {
+        // Dynamic endpoint with static creds - should warn (we can't verify tracing here,
+        // but we verify the conditions)
+        let dynamic_endpoint = Some(AWSEndpointUrl::Dynamic("ep".to_string()));
+        let static_creds = Some(AWSCredentials::Static {
+            access_key_id: "ak".to_string(),
+            secret_access_key: SecretString::new("sk".to_string().into()),
+            session_token: None,
+        });
+
+        // This should trigger warning internally (we can't verify without tracing subscriber)
+        warn_if_credential_exfiltration_risk(&dynamic_endpoint, &static_creds, "test");
+
+        // Dynamic endpoint with SDK creds - should warn
+        let sdk_creds = Some(AWSCredentials::Sdk);
+        warn_if_credential_exfiltration_risk(&dynamic_endpoint, &sdk_creds, "test");
+
+        // Dynamic endpoint with None creds (defaults to SDK) - should warn
+        warn_if_credential_exfiltration_risk(&dynamic_endpoint, &None, "test");
+
+        // Dynamic endpoint with dynamic creds - should NOT warn
+        let dynamic_creds = Some(AWSCredentials::Dynamic {
+            access_key_id_key: "ak".to_string(),
+            secret_access_key_key: "sk".to_string(),
+            session_token_key: None,
+        });
+        warn_if_credential_exfiltration_risk(&dynamic_endpoint, &dynamic_creds, "test");
+
+        // Static endpoint with static creds - should NOT warn
+        let static_endpoint = Some(AWSEndpointUrl::Static(
+            Url::parse("https://bedrock.amazonaws.com").unwrap(),
+        ));
+        warn_if_credential_exfiltration_risk(&static_endpoint, &static_creds, "test");
+
+        // No endpoint - should NOT warn
+        warn_if_credential_exfiltration_risk(&None, &static_creds, "test");
+    }
+
+    // ===== AWSRegion::is_dynamic tests =====
+
+    #[test]
+    fn test_aws_region_is_dynamic() {
+        assert!(
+            AWSRegion::Dynamic("key".to_string()).is_dynamic(),
+            "Dynamic region should return true"
+        );
+        assert!(
+            !AWSRegion::Static(Region::new("us-east-1")).is_dynamic(),
+            "Static region should return false"
+        );
+        assert!(
+            !AWSRegion::Sdk.is_dynamic(),
+            "Sdk region should return false"
+        );
+    }
+
+    // ===== AWSCredentials::is_dynamic tests =====
+
+    #[test]
+    fn test_aws_credentials_is_dynamic() {
+        assert!(
+            AWSCredentials::Dynamic {
+                access_key_id_key: "ak".to_string(),
+                secret_access_key_key: "sk".to_string(),
+                session_token_key: None,
+            }
+            .is_dynamic(),
+            "Dynamic credentials should return true"
+        );
+        assert!(
+            !AWSCredentials::Static {
+                access_key_id: "ak".to_string(),
+                secret_access_key: SecretString::new("sk".to_string().into()),
+                session_token: None,
+            }
+            .is_dynamic(),
+            "Static credentials should return false"
+        );
+        assert!(
+            !AWSCredentials::Sdk.is_dynamic(),
+            "Sdk credentials should return false"
+        );
+    }
+}

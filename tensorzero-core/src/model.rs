@@ -1119,8 +1119,14 @@ fn build_aws_provider_config(
         })
     })?;
 
-    // For static regions, use at construction time. For dynamic/sdk, pass None.
-    let static_region = aws_region.get_static_region().cloned();
+    // For static regions, use at construction time.
+    // For SDK regions, pass None to use the default provider chain.
+    // For dynamic regions, use a fallback region for construction (will be overridden at request time).
+    let static_region = match &aws_region {
+        AWSRegion::Static(region) => Some(region.clone()),
+        AWSRegion::Sdk => None,
+        AWSRegion::Dynamic(_) => Some(Region::new("us-east-1")),
+    };
 
     let endpoint_url = endpoint_url
         .map(|loc| AWSEndpointUrl::from_credential_location(loc, provider_type))
