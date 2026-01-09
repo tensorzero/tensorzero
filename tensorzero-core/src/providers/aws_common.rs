@@ -10,17 +10,110 @@ use aws_smithy_types::body::SdkBody;
 use aws_smithy_types::config_bag::ConfigBag;
 use aws_types::SdkConfig;
 use reqwest::StatusCode;
+use secrecy::ExposeSecret;
+use url::Url;
 
 use crate::{
+    endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
         ModelInferenceRequest, extra_body::FullExtraBodyConfig,
         extra_headers::FullExtraHeadersConfig,
     },
-    model::{ModelProvider, ModelProviderRequestInfo},
+    model::{EndpointLocation, ModelProvider, ModelProviderRequestInfo},
 };
 
 use super::helpers::inject_extra_request_data;
+
+/// AWS endpoint configuration supporting static, env, and dynamic resolution.
+#[derive(Clone, Debug)]
+pub enum AWSEndpoint {
+    Static(Url),
+    Dynamic(String),
+}
+
+impl AWSEndpoint {
+    /// Create AWSEndpoint from EndpointLocation, resolving env vars at startup.
+    pub fn from_location(location: EndpointLocation, provider_type: &str) -> Result<Self, Error> {
+        match location {
+            EndpointLocation::Static(url_str) => {
+                let url = parse_and_warn_endpoint(&url_str, provider_type)?;
+                Ok(AWSEndpoint::Static(url))
+            }
+            EndpointLocation::Env(env_var) => {
+                let url_str = std::env::var(&env_var).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Environment variable `{env_var}` not found for {provider_type} endpoint"
+                        ),
+                    })
+                })?;
+                let url = parse_and_warn_endpoint(&url_str, provider_type)?;
+                Ok(AWSEndpoint::Static(url))
+            }
+            EndpointLocation::Dynamic(key_name) => {
+                tracing::warn!(
+                    "Using dynamic endpoint `{key_name}` for {provider_type} provider. \
+                     Dynamic endpoints can be set by untrusted clients, \
+                     which may enable credential exfiltration attacks."
+                );
+                Ok(AWSEndpoint::Dynamic(key_name))
+            }
+        }
+    }
+
+    /// Get static URL if available (for use at construction time).
+    pub fn get_static_url(&self) -> Option<&Url> {
+        match self {
+            AWSEndpoint::Static(url) => Some(url),
+            AWSEndpoint::Dynamic(_) => None,
+        }
+    }
+
+    /// Resolve endpoint URL at runtime (for dynamic endpoints).
+    pub fn resolve(&self, credentials: &InferenceCredentials) -> Result<Url, Error> {
+        match self {
+            AWSEndpoint::Static(url) => Ok(url.clone()),
+            AWSEndpoint::Dynamic(key_name) => {
+                let url_str = credentials.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicEndpointNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                let url = Url::parse(url_str.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::InvalidDynamicEndpoint {
+                        url: url_str.expose_secret().to_string(),
+                    })
+                })?;
+                warn_if_not_aws_domain(&url);
+                Ok(url)
+            }
+        }
+    }
+}
+
+fn parse_and_warn_endpoint(url_str: &str, provider_type: &str) -> Result<Url, Error> {
+    let url = Url::parse(url_str).map_err(|e| {
+        Error::new(ErrorDetails::Config {
+            message: format!("Invalid endpoint URL `{url_str}` for {provider_type}: {e}"),
+        })
+    })?;
+    warn_if_not_aws_domain(&url);
+    Ok(url)
+}
+
+fn warn_if_not_aws_domain(url: &Url) {
+    if let Some(host) = url.host_str() {
+        let host_lower = host.to_lowercase();
+        if !host_lower.ends_with(".amazonaws.com") && !host_lower.ends_with(".api.aws") {
+            tracing::warn!(
+                "AWS endpoint URL `{url}` does not appear to be an AWS domain \
+                 (expected *.amazonaws.com or *.api.aws). \
+                 Requests will be sent to this endpoint."
+            );
+        }
+    }
+}
 
 pub async fn config_with_region(
     provider_type: &str,
@@ -232,5 +325,96 @@ pub fn build_interceptor(
                 })?;
             Ok(raw_response)
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aws_endpoint_from_static_valid_amazonaws() {
+        let endpoint = AWSEndpoint::from_location(
+            EndpointLocation::Static("https://bedrock-runtime.us-east-1.amazonaws.com".to_string()),
+            "aws_bedrock",
+        )
+        .unwrap();
+        assert!(matches!(endpoint, AWSEndpoint::Static(_)));
+        assert_eq!(
+            endpoint.get_static_url().unwrap().as_str(),
+            "https://bedrock-runtime.us-east-1.amazonaws.com/"
+        );
+    }
+
+    #[test]
+    fn test_aws_endpoint_from_static_valid_api_aws() {
+        let endpoint = AWSEndpoint::from_location(
+            EndpointLocation::Static("https://bedrock.us-east-1.api.aws".to_string()),
+            "aws_bedrock",
+        )
+        .unwrap();
+        assert!(matches!(endpoint, AWSEndpoint::Static(_)));
+    }
+
+    #[test]
+    fn test_aws_endpoint_from_static_case_insensitive() {
+        // Should not panic or error - domain check is case-insensitive
+        let endpoint = AWSEndpoint::from_location(
+            EndpointLocation::Static("https://bedrock-runtime.us-east-1.AMAZONAWS.COM".to_string()),
+            "aws_bedrock",
+        )
+        .unwrap();
+        assert!(matches!(endpoint, AWSEndpoint::Static(_)));
+    }
+
+    #[test]
+    fn test_aws_endpoint_from_static_non_aws_warns_but_succeeds() {
+        // Non-AWS domains should succeed (with a warning logged)
+        let endpoint = AWSEndpoint::from_location(
+            EndpointLocation::Static("http://localhost:4566".to_string()),
+            "aws_bedrock",
+        )
+        .unwrap();
+        assert!(matches!(endpoint, AWSEndpoint::Static(_)));
+    }
+
+    #[test]
+    fn test_aws_endpoint_from_static_invalid_url_fails() {
+        let result = AWSEndpoint::from_location(
+            EndpointLocation::Static("not-a-valid-url".to_string()),
+            "aws_bedrock",
+        );
+        assert!(result.is_err(), "Invalid URL should return an error");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("Invalid endpoint URL"),
+            "Error should mention invalid endpoint URL, but got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_aws_endpoint_from_dynamic() {
+        let endpoint = AWSEndpoint::from_location(
+            EndpointLocation::Dynamic("my_endpoint_key".to_string()),
+            "aws_bedrock",
+        )
+        .unwrap();
+        assert!(matches!(endpoint, AWSEndpoint::Dynamic(_)));
+        // Dynamic endpoints don't have a static URL
+        assert!(endpoint.get_static_url().is_none());
+    }
+
+    #[test]
+    fn test_aws_endpoint_from_env_missing_fails() {
+        let result = AWSEndpoint::from_location(
+            EndpointLocation::Env("NONEXISTENT_AWS_ENDPOINT_VAR_12345".to_string()),
+            "aws_bedrock",
+        );
+        assert!(result.is_err(), "Missing env var should return an error");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("Environment variable"),
+            "Error should mention environment variable, but got: {err}"
+        );
     }
 }

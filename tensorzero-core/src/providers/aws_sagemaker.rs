@@ -1,7 +1,7 @@
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::Latency;
 use crate::inference::{InferenceProvider, WrappedProvider};
-use crate::providers::aws_common::{InterceptorAndRawBody, build_interceptor};
+use crate::providers::aws_common::{AWSEndpoint, InterceptorAndRawBody, build_interceptor};
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
@@ -38,6 +38,8 @@ pub struct AWSSagemakerProvider {
     pub hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
     #[serde(skip)]
     base_config: aws_sdk_sagemakerruntime::config::Builder,
+    #[serde(skip)]
+    endpoint: Option<AWSEndpoint>,
 }
 
 impl AWSSagemakerProvider {
@@ -45,15 +47,27 @@ impl AWSSagemakerProvider {
         endpoint_name: String,
         hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
         region: Option<Region>,
+        endpoint: Option<AWSEndpoint>,
     ) -> Result<Self, Error> {
         let config = aws_common::config_with_region(PROVIDER_TYPE, region).await?;
-        let client = aws_sdk_sagemakerruntime::Client::new(&config);
+
+        let mut config_builder = aws_sdk_sagemakerruntime::config::Builder::from(&config);
+
+        // Apply static endpoint URL at construction time
+        if let Some(ref ep) = endpoint
+            && let Some(url) = ep.get_static_url()
+        {
+            config_builder = config_builder.endpoint_url(url.as_str());
+        }
+
+        let client = aws_sdk_sagemakerruntime::Client::from_conf(config_builder.clone().build());
 
         Ok(Self {
             endpoint_name,
             client,
             hosted_provider,
-            base_config: aws_sdk_sagemakerruntime::config::Builder::from(&config),
+            base_config: config_builder,
+            endpoint,
         })
     }
 }
@@ -63,7 +77,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         &'a self,
         request: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = self.hosted_provider.make_body(request).await?;
@@ -81,10 +95,17 @@ impl InferenceProvider for AWSSagemakerProvider {
         // This ensures that our HTTP proxy (TENSORZERO_E2E_PROXY) is used
         // here when it's enabled.
 
-        let new_config = self
+        let mut new_config = self
             .base_config
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
+
+        // Apply dynamic endpoint URL if configured
+        if let Some(AWSEndpoint::Dynamic(key_name)) = &self.endpoint {
+            let url = AWSEndpoint::Dynamic(key_name.clone()).resolve(dynamic_api_keys)?;
+            new_config = new_config.endpoint_url(url.as_str());
+        }
+
         let start_time = Instant::now();
         let res = self
             .client
@@ -145,7 +166,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         &'a self,
         request: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = self.hosted_provider.make_body(request).await?;
@@ -161,10 +182,17 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
 
         // See `infer` for more details
-        let new_config = self
+        let mut new_config = self
             .base_config
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
+
+        // Apply dynamic endpoint URL if configured
+        if let Some(AWSEndpoint::Dynamic(key_name)) = &self.endpoint {
+            let url = AWSEndpoint::Dynamic(key_name.clone()).resolve(dynamic_api_keys)?;
+            new_config = new_config.endpoint_url(url.as_str());
+        }
+
         let start_time = Instant::now();
         let res = self
             .client

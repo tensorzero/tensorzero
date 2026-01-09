@@ -29,6 +29,7 @@ use crate::config::{
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::model_table::ProviderKind;
+use crate::providers::aws_common::AWSEndpoint;
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
@@ -981,6 +982,7 @@ pub struct ModelProviderRequestInfo {
 #[serde(rename_all = "lowercase")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
+#[expect(clippy::large_enum_variant)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     #[serde(rename = "aws_bedrock")]
@@ -1101,6 +1103,8 @@ pub enum UninitializedProviderConfig {
         region: Option<String>,
         #[serde(default)]
         allow_auto_detect_region: bool,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        endpoint_url: Option<EndpointLocation>,
     },
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
@@ -1111,6 +1115,8 @@ pub enum UninitializedProviderConfig {
         #[serde(default)]
         allow_auto_detect_region: bool,
         hosted_provider: HostedProviderKind,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        endpoint_url: Option<EndpointLocation>,
     },
     Azure {
         deployment_id: String,
@@ -1257,14 +1263,19 @@ impl UninitializedProviderConfig {
                 model_id,
                 region,
                 allow_auto_detect_region,
+                endpoint_url,
             } => {
                 let region = region.map(aws_types::region::Region::new);
                 if region.is_none() && !allow_auto_detect_region {
                     return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
+                let endpoint = endpoint_url
+                    .map(|loc| AWSEndpoint::from_location(loc, "aws_bedrock"))
+                    .transpose()?;
+
                 ProviderConfig::AWSBedrock(
-                    AWSBedrockProvider::new(model_id, region, http_client).await?,
+                    AWSBedrockProvider::new(model_id, region, endpoint, http_client).await?,
                 )
             }
             UninitializedProviderConfig::AWSSagemaker {
@@ -1273,11 +1284,16 @@ impl UninitializedProviderConfig {
                 allow_auto_detect_region,
                 model_name,
                 hosted_provider,
+                endpoint_url,
             } => {
                 let region = region.map(aws_types::region::Region::new);
                 if region.is_none() && !allow_auto_detect_region {
                     return Err(Error::new(ErrorDetails::Config { message: "AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
+
+                let endpoint = endpoint_url
+                    .map(|loc| AWSEndpoint::from_location(loc, "aws_sagemaker"))
+                    .transpose()?;
 
                 let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
                     match hosted_provider {
@@ -1310,7 +1326,7 @@ impl UninitializedProviderConfig {
                     };
 
                 ProviderConfig::AWSSagemaker(
-                    AWSSagemakerProvider::new(endpoint_name, self_hosted, region).await?,
+                    AWSSagemakerProvider::new(endpoint_name, self_hosted, region, endpoint).await?,
                 )
             }
             UninitializedProviderConfig::Azure {

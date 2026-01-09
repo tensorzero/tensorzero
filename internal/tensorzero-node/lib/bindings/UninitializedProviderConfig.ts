@@ -17,6 +17,7 @@ export type UninitializedProviderConfig =
       model_id: string;
       region: string | null;
       allow_auto_detect_region: boolean;
+      endpoint_url: string | null;
     }
   | {
       type: "aws_sagemaker";
@@ -25,6 +26,7 @@ export type UninitializedProviderConfig =
       region: string | null;
       allow_auto_detect_region: boolean;
       hosted_provider: HostedProviderKind;
+      endpoint_url: string | null;
     }
   | {
       type: "azure";

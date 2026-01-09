@@ -22,7 +22,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::aws_common::{self, InterceptorAndRawBody, build_interceptor};
+use super::aws_common::{self, AWSEndpoint, InterceptorAndRawBody, build_interceptor};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -58,6 +58,8 @@ pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
     client: aws_sdk_bedrockruntime::Client,
+    #[serde(skip)]
+    endpoint: Option<AWSEndpoint>,
 }
 
 fn apply_inference_params(
@@ -173,16 +175,28 @@ impl AWSBedrockProvider {
     pub async fn new(
         model_id: String,
         region: Option<Region>,
+        endpoint: Option<AWSEndpoint>,
         http_client: TensorzeroHttpClient,
     ) -> Result<Self, Error> {
-        let config = aws_sdk_bedrockruntime::config::Builder::from(
+        let mut config_builder = aws_sdk_bedrockruntime::config::Builder::from(
             &aws_common::config_with_region(PROVIDER_TYPE, region).await?,
         )
-        .http_client(super::aws_http_client::Client::new(http_client))
-        .build();
-        let client = aws_sdk_bedrockruntime::Client::from_conf(config);
+        .http_client(super::aws_http_client::Client::new(http_client));
 
-        Ok(Self { model_id, client })
+        // Apply static endpoint URL at construction time
+        if let Some(ref ep) = endpoint
+            && let Some(url) = ep.get_static_url()
+        {
+            config_builder = config_builder.endpoint_url(url.as_str());
+        }
+
+        let client = aws_sdk_bedrockruntime::Client::from_conf(config_builder.build());
+
+        Ok(Self {
+            model_id,
+            client,
+            endpoint,
+        })
     }
 
     pub fn model_id(&self) -> &str {
@@ -202,7 +216,7 @@ impl InferenceProvider for AWSBedrockProvider {
         }: ModelProviderRequest<'a>,
         // We've already taken in this client when the provider was constructed
         _http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
@@ -295,22 +309,30 @@ impl InferenceProvider for AWSBedrockProvider {
         } = build_interceptor(request, model_provider, model_name.to_string());
 
         let start_time = Instant::now();
-        let output = bedrock_request
-            .customize()
-            .interceptor(interceptor)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error sending request to AWS Bedrock: {:?}",
-                        DisplayErrorContext(&e)
-                    ),
-                    raw_request: get_raw_request().ok(),
-                    raw_response: get_raw_response().ok(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+        let customized = bedrock_request.customize().interceptor(interceptor);
+        let output = match &self.endpoint {
+            Some(AWSEndpoint::Dynamic(key_name)) => {
+                let url = AWSEndpoint::Dynamic(key_name.clone()).resolve(dynamic_api_keys)?;
+                customized
+                    .config_override(
+                        aws_sdk_bedrockruntime::config::Builder::new().endpoint_url(url.as_str()),
+                    )
+                    .send()
+                    .await
+            }
+            _ => customized.send().await,
+        }
+        .map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error sending request to AWS Bedrock: {:?}",
+                    DisplayErrorContext(&e)
+                ),
+                raw_request: get_raw_request().ok(),
+                raw_response: get_raw_response().ok(),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
 
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
@@ -345,7 +367,7 @@ impl InferenceProvider for AWSBedrockProvider {
         }: ModelProviderRequest<'a>,
         // We've already taken in this client when the provider was constructed
         _http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         // TODO (#55): add support for guardrails and additional fields
@@ -439,22 +461,30 @@ impl InferenceProvider for AWSBedrockProvider {
         } = build_interceptor(request, model_provider, model_name.to_string());
 
         let start_time = Instant::now();
-        let stream = bedrock_request
-            .customize()
-            .interceptor(interceptor)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error sending request to AWS Bedrock: {}",
-                        DisplayErrorContext(&e)
-                    ),
-                    raw_request: get_raw_request().ok(),
-                    raw_response: get_raw_response().ok(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+        let customized = bedrock_request.customize().interceptor(interceptor);
+        let stream = match &self.endpoint {
+            Some(AWSEndpoint::Dynamic(key_name)) => {
+                let url = AWSEndpoint::Dynamic(key_name.clone()).resolve(dynamic_api_keys)?;
+                customized
+                    .config_override(
+                        aws_sdk_bedrockruntime::config::Builder::new().endpoint_url(url.as_str()),
+                    )
+                    .send()
+                    .await
+            }
+            _ => customized.send().await,
+        }
+        .map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error sending request to AWS Bedrock: {}",
+                    DisplayErrorContext(&e)
+                ),
+                raw_request: get_raw_request().ok(),
+                raw_response: get_raw_response().ok(),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
 
         let raw_request = get_raw_request()?;
 
@@ -1214,6 +1244,7 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("uk-hogwarts-1")),
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1228,6 +1259,7 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("uk-hogwarts-1")),
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1246,6 +1278,7 @@ mod tests {
         let err = AWSBedrockProvider::new(
             "test".to_string(),
             None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1263,6 +1296,7 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("me-shire-2")),
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
