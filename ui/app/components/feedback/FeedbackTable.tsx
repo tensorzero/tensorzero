@@ -30,7 +30,7 @@ export default function FeedbackTable({
   latestFeedbackIdByMetric?: Record<string, string>;
 }) {
   const config = useConfig();
-  const metrics = config?.metrics ?? {};
+  const metrics = config.metrics;
 
   const anyOverwrites = useMemo(() => {
     // Metric name => array of feedback IDs

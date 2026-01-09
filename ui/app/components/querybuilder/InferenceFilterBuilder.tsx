@@ -291,7 +291,7 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
   depth,
 }: FilterNodeProps) {
   const config = useConfig();
-  const metrics = config?.metrics ?? {};
+  const metrics = config.metrics;
 
   // Handle AND/OR groups
   if (filter.type === "and" || filter.type === "or") {
@@ -359,7 +359,7 @@ const AddMetricPopover = memo(function AddMetricPopover({
   const config = useConfig();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const metrics = config?.metrics ?? {};
+  const metrics = config.metrics;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

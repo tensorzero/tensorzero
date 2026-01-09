@@ -41,7 +41,7 @@ function EvaluationForm({
 }) {
   const fetcher = useFetcher();
   const config = useConfig();
-  const evaluation_names = Object.keys(config?.evaluations ?? {});
+  const evaluation_names = Object.keys(config.evaluations);
   const [selectedEvaluationName, setSelectedEvaluationName] = useState<
     string | null
   >(initialFormState?.evaluation_name ?? null);

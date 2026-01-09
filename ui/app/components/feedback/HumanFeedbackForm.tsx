@@ -40,7 +40,7 @@ export function HumanFeedbackForm({
   const config = useConfig();
   // If there is no inference output this is likely an episode-level feedback and
   // we should filter demonstration out of the list of metrics.
-  const configMetrics = config?.metrics ?? {};
+  const configMetrics = config.metrics;
   const metrics = filterInferenceEvaluationMetrics(
     inferenceOutput === undefined
       ? filterMetricsByLevel(configMetrics, "episode")

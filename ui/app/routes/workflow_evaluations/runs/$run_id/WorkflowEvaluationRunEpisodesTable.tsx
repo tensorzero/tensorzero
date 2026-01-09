@@ -143,7 +143,7 @@ function FeedbackMetricValue({
   episodeId: string;
 }) {
   const config = useConfig();
-  const metricConfig = config?.metrics[metricName];
+  const metricConfig = config.metrics[metricName];
 
   // Handle comment type using FeedbackValue component
   if (metricName === "comment") {
@@ -187,7 +187,7 @@ function MetricHeader({
     (stat) => stat.metric_name === metricName,
   );
   const config = useConfig();
-  const metricConfig = config?.metrics[metricName];
+  const metricConfig = config.metrics[metricName];
 
   // Handle comment type - just show the name without tooltip
   if (metricName === "comment") {

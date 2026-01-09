@@ -40,8 +40,8 @@ export default function EvaluationFeedbackEditor({
   const [feedback, setFeedback] = useState<string | null>(null);
   const { getColor } = useColorAssigner();
   const config = useConfig();
-  const metricConfig = config?.metrics[metricName];
-  if (!config || !metricConfig) {
+  const metricConfig = config.metrics[metricName];
+  if (!metricConfig) {
     logger.warn(`Metric ${metricName} not found`);
     return null;
   }

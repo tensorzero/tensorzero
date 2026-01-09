@@ -11,26 +11,39 @@
 import { createContext, useContext } from "react";
 import type { UiConfig } from "~/types/tensorzero";
 
-const ConfigContext = createContext<UiConfig | undefined>(undefined);
+/**
+ * Default empty config used when the gateway is unavailable.
+ * Components will see empty lists/objects rather than crashing.
+ */
+export const EMPTY_CONFIG: UiConfig = {
+  functions: {},
+  metrics: {},
+  tools: {},
+  evaluations: {},
+  model_names: [],
+  config_hash: "",
+};
+
+const ConfigContext = createContext<UiConfig>(EMPTY_CONFIG);
 
 /**
  * Hook to get the TensorZero configuration.
- * Returns undefined when config is unavailable due to infra errors.
- * Components should handle undefined gracefully by showing empty/disabled states.
+ * Always returns a UiConfig object (never undefined).
+ * When config is unavailable, returns EMPTY_CONFIG with empty collections.
  */
-export function useConfig(): UiConfig | undefined {
+export function useConfig(): UiConfig {
   return useContext(ConfigContext);
 }
 
 /**
  * Hook to get a specific function configuration by name.
- * Returns null if config unavailable or function not found.
+ * Returns null if function not found.
  * @param functionName - The name of the function to retrieve
  * @returns The function configuration object or null
  */
 export function useFunctionConfig(functionName: string | null) {
   const config = useConfig();
-  if (!config || !functionName) {
+  if (!functionName) {
     return null;
   }
   // eslint-disable-next-line no-restricted-syntax
@@ -39,12 +52,11 @@ export function useFunctionConfig(functionName: string | null) {
 
 /**
  * Hook to get all function configs.
- * Returns undefined if config is unavailable.
  */
 export function useAllFunctionConfigs() {
   const config = useConfig();
   // eslint-disable-next-line no-restricted-syntax
-  return config?.functions;
+  return config.functions;
 }
 
 export function ConfigProvider({
@@ -52,7 +64,7 @@ export function ConfigProvider({
   value,
 }: {
   children: React.ReactNode;
-  value: UiConfig | undefined;
+  value: UiConfig;
 }) {
   return (
     <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>

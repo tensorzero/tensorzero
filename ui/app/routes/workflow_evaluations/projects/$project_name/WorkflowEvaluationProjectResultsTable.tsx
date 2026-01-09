@@ -177,7 +177,7 @@ export function WorkflowEvaluationProjectResultsTable({
                             );
 
                             const value = feedbackMap.get(metric_name);
-                            const metricConfig = config?.metrics[metric_name];
+                            const metricConfig = config.metrics[metric_name];
 
                             return (
                               <TableCell
@@ -226,8 +226,8 @@ const MetricHeader = ({
   summaryStats: WorkflowEvaluationStatisticsByRunId[];
 }) => {
   const config = useConfig();
-  const metricProperties = config?.metrics[metric_name];
-  if (!config || !metricProperties) {
+  const metricProperties = config.metrics[metric_name];
+  if (!metricProperties) {
     return null;
   }
   return (

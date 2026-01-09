@@ -40,7 +40,7 @@ export function MetricSelector({
             <SelectItem key={metric.metric_name} value={metric.metric_name}>
               <div className="flex items-center justify-between">
                 <span className="mr-2">{metric.metric_name}</span>
-                {config?.metrics[metric.metric_name] && (
+                {config.metrics[metric.metric_name] && (
                   <FeedbackBadges
                     metric={config.metrics[metric.metric_name]!}
                   />

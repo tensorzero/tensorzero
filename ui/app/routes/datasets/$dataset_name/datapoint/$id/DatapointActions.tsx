@@ -52,10 +52,7 @@ export function DatapointActions({
   };
 
   const config = useConfig();
-  const modelsSet = new Set<string>([
-    ...variants,
-    ...(config?.model_names ?? []),
-  ]);
+  const modelsSet = new Set<string>([...variants, ...config.model_names]);
   const models = [...modelsSet].sort();
 
   const isDefault = function_name === DEFAULT_FUNCTION;

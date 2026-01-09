@@ -493,7 +493,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                   input={inputs[index]}
                                   functionName={functionName}
                                   functionConfig={functionConfig}
-                                  toolsConfig={config?.tools ?? {}}
+                                  toolsConfig={config.tools}
                                 />
                               </div>
                             );
