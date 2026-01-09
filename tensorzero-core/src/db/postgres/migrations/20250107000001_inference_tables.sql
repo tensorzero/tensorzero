@@ -25,7 +25,8 @@ CREATE TABLE chat_inference (
     tool_params TEXT,
     inference_params JSONB,
     processing_time_ms INTEGER,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Derived from UUIDv7 id (like ClickHouse's MATERIALIZED UUIDv7ToDateTime(id))
+    timestamp TIMESTAMPTZ GENERATED ALWAYS AS (uuid_v7_to_timestamp(id)) STORED,
     tags JSONB NOT NULL DEFAULT '{}',
     extra_body JSONB,
     ttft_ms INTEGER,
@@ -43,20 +44,20 @@ CREATE INDEX idx_chat_inference_episode ON chat_inference(episode_id);
 CREATE INDEX idx_chat_inference_timestamp ON chat_inference(timestamp DESC);
 CREATE INDEX idx_chat_inference_tags ON chat_inference USING GIN(tags);
 
--- Compound index for list queries with ordering (most common query pattern)
--- Used by: inference_queries.rs:225 (i.function_name = {function_name_param_placeholder})
---          inference_queries.rs:754 (same pattern for datapoints)
---          query_builder/mod.rs:2801 (ORDER BY i.timestamp DESC NULLS LAST, toUInt128(i.id) DESC)
+-- Compound index for list queries with time filtering
+-- Used by: inference_queries.rs:225 (WHERE function_name = X AND timestamp >= Y)
 --          inference_count.rs:40,71 (WHERE function_name = {function_name:String})
-CREATE INDEX idx_chat_inference_function_ts_id
-    ON chat_inference(function_name, timestamp DESC, id DESC);
+-- Note: Since UUIDv7 is time-ordered, timestamp DESC provides equivalent ordering to id DESC
+CREATE INDEX idx_chat_inference_function_ts
+    ON chat_inference(function_name, timestamp DESC);
 
--- Episode queries with ordering
+-- Episode queries with id-based ordering (no timestamp filter typical)
 -- Used by: inference_queries.rs:248 (i.episode_id = {episode_id_param_placeholder})
 --          inference_queries.rs:337 (episode_id = {episode_id:UUID})
 --          test_helpers.rs:227 (SELECT * FROM ChatInference WHERE episode_id = ...)
-CREATE INDEX idx_chat_inference_episode_ts
-    ON chat_inference(episode_id, timestamp DESC);
+-- Note: UUIDv7 id provides chronological ordering directly
+CREATE INDEX idx_chat_inference_episode_id
+    ON chat_inference(episode_id, id DESC);
 
 -- Variant statistics optimization
 -- Used by: inference_count.rs:71-73 (WHERE function_name = ... GROUP BY variant_name)
@@ -89,7 +90,8 @@ CREATE TABLE json_inference (
     output_schema TEXT,
     inference_params JSONB,
     processing_time_ms INTEGER,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Derived from UUIDv7 id (like ClickHouse's MATERIALIZED UUIDv7ToDateTime(id))
+    timestamp TIMESTAMPTZ GENERATED ALWAYS AS (uuid_v7_to_timestamp(id)) STORED,
     tags JSONB NOT NULL DEFAULT '{}',
     extra_body JSONB,
     ttft_ms INTEGER,
@@ -103,15 +105,15 @@ CREATE INDEX idx_json_inference_episode ON json_inference(episode_id);
 CREATE INDEX idx_json_inference_timestamp ON json_inference(timestamp DESC);
 CREATE INDEX idx_json_inference_tags ON json_inference USING GIN(tags);
 
--- Compound index for list queries with ordering
+-- Compound index for list queries with time filtering
 -- Same query patterns as chat_inference (inference_queries.rs generates UNION ALL)
-CREATE INDEX idx_json_inference_function_ts_id
-    ON json_inference(function_name, timestamp DESC, id DESC);
+CREATE INDEX idx_json_inference_function_ts
+    ON json_inference(function_name, timestamp DESC);
 
--- Episode queries with ordering
+-- Episode queries with id-based ordering (no timestamp filter typical)
 -- Same query patterns as chat_inference
-CREATE INDEX idx_json_inference_episode_ts
-    ON json_inference(episode_id, timestamp DESC);
+CREATE INDEX idx_json_inference_episode_id
+    ON json_inference(episode_id, id DESC);
 
 -- Variant statistics optimization
 -- Same query patterns as chat_inference
@@ -140,7 +142,8 @@ CREATE TABLE model_inference (
     output_tokens INTEGER,
     response_time_ms INTEGER,
     ttft_ms INTEGER,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Derived from UUIDv7 id (like ClickHouse's MATERIALIZED UUIDv7ToDateTime(id))
+    timestamp TIMESTAMPTZ GENERATED ALWAYS AS (uuid_v7_to_timestamp(id)) STORED,
     system TEXT,
     input_messages JSONB,
     output JSONB,

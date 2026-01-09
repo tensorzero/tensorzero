@@ -19,7 +19,8 @@ CREATE TABLE boolean_metric_feedback (
     target_id UUID NOT NULL,
     metric_name TEXT NOT NULL,
     value BOOLEAN NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Derived from UUIDv7 id
+    timestamp TIMESTAMPTZ GENERATED ALWAYS AS (uuid_v7_to_timestamp(id)) STORED,
     tags JSONB NOT NULL DEFAULT '{}',
     snapshot_hash BYTEA
 );
@@ -39,7 +40,8 @@ CREATE TABLE float_metric_feedback (
     target_id UUID NOT NULL,
     metric_name TEXT NOT NULL,
     value REAL NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Derived from UUIDv7 id
+    timestamp TIMESTAMPTZ GENERATED ALWAYS AS (uuid_v7_to_timestamp(id)) STORED,
     tags JSONB NOT NULL DEFAULT '{}',
     snapshot_hash BYTEA
 );
@@ -59,7 +61,8 @@ CREATE TABLE comment_feedback (
     target_id UUID NOT NULL,
     target_type target_type_enum NOT NULL,
     value TEXT NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Derived from UUIDv7 id
+    timestamp TIMESTAMPTZ GENERATED ALWAYS AS (uuid_v7_to_timestamp(id)) STORED,
     tags JSONB NOT NULL DEFAULT '{}',
     snapshot_hash BYTEA
 );
@@ -76,7 +79,8 @@ CREATE TABLE demonstration_feedback (
     id UUID PRIMARY KEY,
     inference_id UUID NOT NULL,
     value TEXT NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Derived from UUIDv7 id
+    timestamp TIMESTAMPTZ GENERATED ALWAYS AS (uuid_v7_to_timestamp(id)) STORED,
     tags JSONB NOT NULL DEFAULT '{}',
     snapshot_hash BYTEA
 );

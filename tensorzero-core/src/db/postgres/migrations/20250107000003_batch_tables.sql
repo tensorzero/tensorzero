@@ -58,7 +58,8 @@ CREATE TABLE batch_model_inference (
     allowed_tools TEXT,
     tool_choice TEXT,
     parallel_tool_calls BOOLEAN,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Derived from UUIDv7 inference_id
+    timestamp TIMESTAMPTZ GENERATED ALWAYS AS (uuid_v7_to_timestamp(inference_id)) STORED,
     snapshot_hash BYTEA
 );
 
