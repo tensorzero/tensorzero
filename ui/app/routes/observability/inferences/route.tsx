@@ -11,7 +11,6 @@ import {
 import type { InferenceFilter, InferenceMetadata } from "~/types/tensorzero";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { applyPaginationLogic } from "~/utils/pagination";
-import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -45,16 +44,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const needsFullInferences = search_query || filters;
 
   // Create promise for total count - will be streamed to the component
+  // Errors propagate to the UI where they can be handled gracefully
   const client = getTensorZeroClient();
   const totalInferencesPromise = client
     .listFunctionsWithInferenceCount()
     .then((countsInfo) =>
       countsInfo.reduce((acc, curr) => acc + curr.inference_count, 0),
-    )
-    .catch((error) => {
-      logger.error("Failed to load total inference count", error);
-      return 0;
-    });
+    );
 
   // Create promise for inferences data - will be streamed to the component
   const inferencesDataPromise: Promise<InferencesData> = (async () => {
@@ -109,10 +105,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       hasNextPage: inferenceResult.hasNextPage,
       hasPreviousPage: inferenceResult.hasPreviousPage,
     };
-  })().catch((error) => {
-    logger.error("Failed to load inferences", error);
-    return { inferences: [], hasNextPage: false, hasPreviousPage: false };
-  });
+  })();
 
   return {
     inferencesData: inferencesDataPromise,

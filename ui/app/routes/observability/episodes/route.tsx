@@ -10,7 +10,8 @@ import {
 } from "~/components/layout/PageLayout";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { EpisodeByIdRow, TableBoundsWithCount } from "~/types/tensorzero";
-import { Suspense, use } from "react";
+import { Suspense } from "react";
+import { Await } from "react-router";
 
 export type EpisodesData = {
   episodes: EpisodeByIdRow[];
@@ -47,14 +48,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-function PaginationContent({
+function PaginationButtons({
   data,
   limit,
 }: {
-  data: Promise<EpisodesData>;
+  data: EpisodesData;
   limit: number;
 }) {
-  const { episodes, bounds } = use(data);
+  const { episodes, bounds } = data;
   const navigate = useNavigate();
 
   const topEpisode = episodes.at(0);
@@ -111,7 +112,11 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
             />
           }
         >
-          <PaginationContent data={dataPromise} limit={limit} />
+          <Await resolve={dataPromise} errorElement={null}>
+            {(resolvedData) => (
+              <PaginationButtons data={resolvedData} limit={limit} />
+            )}
+          </Await>
         </Suspense>
       </SectionLayout>
     </PageLayout>

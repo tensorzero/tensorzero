@@ -3,7 +3,9 @@ import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
+  Await,
   data,
+  useAsyncError,
   useNavigate,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
@@ -19,7 +21,7 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { Suspense, use, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
@@ -98,7 +100,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     await tensorZeroClient.getEpisodeInferenceCount(episode_id);
   const numInferences = inferenceCountResponse.inference_count;
 
-  if (numInferences === 0n) {
+  // Convert to number for comparison - JSON returns number, types may vary
+  if (Number(numInferences) === 0) {
     throw data(`Episode "${episode_id}" not found`, { status: 404 });
   }
 
@@ -168,8 +171,8 @@ type FeedbackActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
 
-function InferencePagination({ data }: { data: Promise<InferencesData> }) {
-  const { inferences, hasNextPage, hasPreviousPage } = use(data);
+function InferencePaginationContent({ data }: { data: InferencesData }) {
+  const { inferences, hasNextPage, hasPreviousPage } = data;
   const navigate = useNavigate();
 
   const topInference = inferences.at(0);
@@ -198,6 +201,44 @@ function InferencePagination({ data }: { data: Promise<InferencesData> }) {
       disablePrevious={!hasPreviousPage}
       disableNext={!hasNextPage}
     />
+  );
+}
+
+function FeedbackSectionError() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load feedback";
+
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ID</TableHead>
+            <TableHead>Metric</TableHead>
+            <TableHead>Value</TableHead>
+            <TableHead>Tags</TableHead>
+            <TableHead>Time</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell colSpan={5} className="text-center">
+              <div className="flex flex-col items-center gap-2 py-8 text-red-600">
+                <span className="font-medium">Error loading data</span>
+                <span className="text-muted-foreground text-sm">{message}</span>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <PageButtons
+        onPreviousPage={() => {}}
+        onNextPage={() => {}}
+        disablePrevious
+        disableNext
+      />
+    </>
   );
 }
 
@@ -238,8 +279,8 @@ function FeedbackTableSkeleton() {
   );
 }
 
-function FeedbackSection({ data }: { data: Promise<FeedbackData> }) {
-  const { feedbacks, bounds, latestFeedbackByMetric } = use(data);
+function FeedbackSectionContent({ data }: { data: FeedbackData }) {
+  const { feedbacks, bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
@@ -389,7 +430,11 @@ export default function EpisodeDetailPage({
               />
             }
           >
-            <InferencePagination data={inferencesData} />
+            <Await resolve={inferencesData} errorElement={null}>
+              {(resolvedData) => (
+                <InferencePaginationContent data={resolvedData} />
+              )}
+            </Await>
           </Suspense>
         </SectionLayout>
 
@@ -416,7 +461,12 @@ export default function EpisodeDetailPage({
               </>
             }
           >
-            <FeedbackSection data={feedbackData} />
+            <Await
+              resolve={feedbackData}
+              errorElement={<FeedbackSectionError />}
+            >
+              {(resolvedData) => <FeedbackSectionContent data={resolvedData} />}
+            </Await>
           </Suspense>
         </SectionLayout>
       </SectionsGroup>
