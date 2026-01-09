@@ -14,6 +14,7 @@
  *    - Sidebar stays fully functional
  *
  * Components:
+ *    - LayoutErrorBoundary: Handles both infra (dialog) and page (inline) errors
  *    - PageErrorContent: Page errors only (for routes without layout boundaries)
  *    - RootErrorBoundaryLayout: Shell with sidebar for root-level errors
  */
@@ -22,3 +23,4 @@ export { RootErrorBoundaryLayout } from "./RootErrorBoundaryLayout";
 export { ErrorDialog } from "./ErrorDialog";
 export { ErrorContent } from "./ErrorContent";
 export { PageErrorContent } from "./PageErrorContent";
+export { LayoutErrorBoundary } from "./LayoutErrorBoundary";
