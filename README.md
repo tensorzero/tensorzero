@@ -236,26 +236,6 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 - [x] **[Export OpenTelemetry traces (OTLP)](https://www.tensorzero.com/docs/operations/export-opentelemetry-traces)** and **[export Prometheus metrics](https://www.tensorzero.com/docs/observability/export-prometheus-metrics)** to your favorite application observability tools
 - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
 
-#### TensorZero UI
-
-<video src="https://github.com/user-attachments/assets/a23e4c95-18fa-482c-8423-6078fb4cf285"></video>
-
-#### TensorZero SDK
-
-```python
-t0.experimental_list_inferences(
-  function_name="sales_agent",
-  variant_name="qwen3-promptv2",
-  filters=BooleanMetricFilter(
-      metric_name="converted_sale",
-      value=True,
-  ),
-  order_by=[OrderBy(by="timestamp", direction="descending")],
-  limit=100_000,
-  # ... and more ...
-)
-```
-
 <table>
 <tr></tr> <!-- flip highlight order -->
 <tr>
