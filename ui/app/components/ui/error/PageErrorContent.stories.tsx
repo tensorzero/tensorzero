@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { RouteErrorContent } from "./RouteErrorContent";
+import { PageErrorContent } from "./PageErrorContent";
 
 const meta = {
-  title: "Error/RouteErrorContent",
-  component: RouteErrorContent,
+  title: "Error/PageErrorContent",
+  component: PageErrorContent,
   parameters: {
     layout: "fullscreen",
   },
@@ -14,7 +14,7 @@ const meta = {
       </div>
     ),
   ],
-} satisfies Meta<typeof RouteErrorContent>;
+} satisfies Meta<typeof PageErrorContent>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

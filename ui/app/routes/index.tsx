@@ -389,6 +389,5 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
   return <LayoutErrorBoundary error={error} />;
 }

@@ -9,7 +9,6 @@ import { AutopilotUnavailableState } from "~/components/ui/error/AutopilotUnavai
 import { LayoutErrorBoundary } from "~/components/ui/error";
 import { isAutopilotUnavailableError } from "~/utils/tensorzero/errors";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
-import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
   crumb: () => [{ label: "Autopilot", noLink: true }],
@@ -37,8 +36,6 @@ export default function AutopilotLayout() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
   // Autopilot unavailable gets special treatment
   if (
     isRouteErrorResponse(error) &&

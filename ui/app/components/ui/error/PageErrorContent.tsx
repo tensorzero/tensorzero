@@ -8,7 +8,7 @@ import {
 } from "./ErrorContentPrimitives";
 import { isRouteErrorResponse } from "react-router";
 
-interface RouteErrorContentProps {
+interface PageErrorContentProps {
   error: unknown;
 }
 
@@ -17,7 +17,7 @@ interface RouteErrorContentProps {
  * For layout ErrorBoundaries, use LayoutErrorBoundary instead - it handles
  * both infra errors (dialog) and page errors (inline) automatically.
  */
-export function RouteErrorContent({ error }: RouteErrorContentProps) {
+export function PageErrorContent({ error }: PageErrorContentProps) {
   // Special handling for 404s
   if (isRouteErrorResponse(error) && error.status === 404) {
     return <NotFoundDisplay />;

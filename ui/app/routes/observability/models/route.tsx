@@ -1,6 +1,6 @@
 import { data, type RouteHandle } from "react-router";
 import type { Route } from "./+types/route";
-import { RouteErrorContent } from "~/components/ui/error";
+import { PageErrorContent } from "~/components/ui/error";
 import { logger } from "~/utils/logger";
 import { isInfraError } from "~/utils/tensorzero/errors";
 
@@ -114,6 +114,5 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-  return <RouteErrorContent error={error} />;
+  return <PageErrorContent error={error} />;
 }

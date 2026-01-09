@@ -6,8 +6,7 @@ import {
   type ShouldRevalidateFunctionArgs,
   useNavigation,
 } from "react-router";
-import { RouteErrorContent } from "~/components/ui/error";
-import { logger } from "~/utils/logger";
+import { PageErrorContent } from "~/components/ui/error";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
@@ -589,8 +588,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-  return <RouteErrorContent error={error} />;
+  return <PageErrorContent error={error} />;
 }
 
 function GridRow({

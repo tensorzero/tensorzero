@@ -15,12 +15,12 @@
  *
  * Components:
  *    - LayoutErrorBoundary: Handles both infra (dialog) and page (inline) errors
- *    - RouteErrorContent: Page errors only (for routes without layout boundaries)
+ *    - PageErrorContent: Page errors only (for routes without layout boundaries)
  *    - RootErrorBoundaryLayout: Shell with sidebar for root-level errors
  */
 
 export { RootErrorBoundaryLayout } from "./RootErrorBoundaryLayout";
 export { ErrorDialog } from "./ErrorDialog";
 export { ErrorContent } from "./ErrorContent";
-export { RouteErrorContent } from "./RouteErrorContent";
+export { PageErrorContent } from "./PageErrorContent";
 export { LayoutErrorBoundary } from "./LayoutErrorBoundary";

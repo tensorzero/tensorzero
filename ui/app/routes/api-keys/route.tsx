@@ -8,7 +8,7 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
-import { RouteErrorContent } from "~/components/ui/error";
+import { PageErrorContent } from "~/components/ui/error";
 import {
   getPostgresClient,
   isPostgresAvailable,
@@ -21,7 +21,6 @@ import {
   ErrorContentCard,
   ErrorContentHeader,
   ErrorInlineCode,
-  PageErrorStack,
   TroubleshootingSection,
 } from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertTriangle, Database } from "lucide-react";
@@ -226,12 +225,10 @@ function ApiKeysLoadingState() {
     <PageLayout>
       <PageHeader heading="TensorZero API Keys" />
       <SectionLayout>
-        {/* AuthActions placeholder */}
         <div className="flex justify-end">
           <Skeleton className="h-8 w-32" />
         </div>
 
-        {/* Table placeholder */}
         <Table>
           <TableHeader>
             <TableRow>
@@ -264,7 +261,6 @@ function ApiKeysLoadingState() {
           </TableBody>
         </Table>
 
-        {/* PageButtons placeholder */}
         <div className="mt-4 flex items-center justify-center gap-2">
           <Skeleton className="h-9 w-9 rounded-md" />
           <Skeleton className="h-9 w-9 rounded-md" />
@@ -283,12 +279,13 @@ function PostgresNotConfiguredState() {
       </SectionLayout>
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8 pt-16 pb-20">
         <div className="pointer-events-auto">
-          <PageErrorStack
-            icon={Database}
-            title="Postgres Not Configured"
-            description="A Postgres database connection is required to manage API keys. Set the TENSORZERO_POSTGRES_URL environment variable and restart the UI server."
-            muted
-          />
+          <ErrorContentCard>
+            <ErrorContentHeader
+              icon={Database}
+              title="Postgres Not Configured"
+              description="A Postgres database connection is required to manage API keys. Set the TENSORZERO_POSTGRES_URL environment variable and restart the UI server."
+            />
+          </ErrorContentCard>
         </div>
       </div>
     </PageLayout>
@@ -414,6 +411,5 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-  return <RouteErrorContent error={error} />;
+  return <PageErrorContent error={error} />;
 }
