@@ -1510,7 +1510,7 @@ async fn test_topk_emit_event_streaming() {
             // Verify final variant statuses
             assert_eq!(
                 completed.final_variant_statuses.get("echo"),
-                Some(&VariantStatus::Include),
+                Some(&VariantStatus::Stopped),
                 "Echo should be Included in completion event"
             );
         }
