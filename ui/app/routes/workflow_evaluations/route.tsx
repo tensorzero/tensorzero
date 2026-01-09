@@ -10,8 +10,6 @@ import {
 import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
 import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { isInfraError } from "~/utils/tensorzero/errors";
-import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -21,55 +19,32 @@ export async function loader({ request }: Route.LoaderArgs) {
   const projectOffset = parseInt(searchParams.get("projectOffset") || "0");
   const projectLimit = parseInt(searchParams.get("projectLimit") || "15");
 
-  try {
-    const tensorZeroClient = getTensorZeroClient();
-    const [
-      workflowEvaluationRunsResponse,
-      count,
-      workflowEvaluationProjectsResponse,
-      projectCount,
-    ] = await Promise.all([
-      tensorZeroClient.listWorkflowEvaluationRuns(runLimit, runOffset),
-      tensorZeroClient.countWorkflowEvaluationRuns(),
-      tensorZeroClient.getWorkflowEvaluationProjects(
-        projectLimit,
-        projectOffset,
-      ),
-      tensorZeroClient.countWorkflowEvaluationProjects(),
-    ]);
-    const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
-    const workflowEvaluationProjects =
-      workflowEvaluationProjectsResponse.projects;
+  const tensorZeroClient = getTensorZeroClient();
+  const [
+    workflowEvaluationRunsResponse,
+    count,
+    workflowEvaluationProjectsResponse,
+    projectCount,
+  ] = await Promise.all([
+    tensorZeroClient.listWorkflowEvaluationRuns(runLimit, runOffset),
+    tensorZeroClient.countWorkflowEvaluationRuns(),
+    tensorZeroClient.getWorkflowEvaluationProjects(projectLimit, projectOffset),
+    tensorZeroClient.countWorkflowEvaluationProjects(),
+  ]);
+  const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
+  const workflowEvaluationProjects =
+    workflowEvaluationProjectsResponse.projects;
 
-    return {
-      workflowEvaluationRuns,
-      count,
-      workflowEvaluationProjects,
-      projectCount,
-      runOffset,
-      runLimit,
-      projectOffset,
-      projectLimit,
-    };
-  } catch (error) {
-    // Graceful degradation: return empty data on infra errors
-    if (isInfraError(error)) {
-      logger.warn(
-        "Infrastructure unavailable, showing degraded workflow evaluations",
-      );
-      return {
-        workflowEvaluationRuns: [],
-        count: 0,
-        workflowEvaluationProjects: [],
-        projectCount: 0,
-        runOffset,
-        runLimit,
-        projectOffset,
-        projectLimit,
-      };
-    }
-    throw error;
-  }
+  return {
+    workflowEvaluationRuns,
+    count,
+    workflowEvaluationProjects,
+    projectCount,
+    runOffset,
+    runLimit,
+    projectOffset,
+    projectLimit,
+  };
 }
 
 export default function EvaluationSummaryPage({

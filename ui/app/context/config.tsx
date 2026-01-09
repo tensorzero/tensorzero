@@ -39,16 +39,12 @@ export function useFunctionConfig(functionName: string | null) {
 
 /**
  * Hook to get all function configs.
- * Returns null if config is unavailable.
- * @returns The functions map or null
+ * Returns undefined if config is unavailable.
  */
 export function useAllFunctionConfigs() {
   const config = useConfig();
-  if (!config) {
-    return null;
-  }
   // eslint-disable-next-line no-restricted-syntax
-  return config.functions;
+  return config?.functions;
 }
 
 export function ConfigProvider({

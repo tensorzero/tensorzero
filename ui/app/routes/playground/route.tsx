@@ -336,7 +336,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
               datasetName: null,
             })
           }
-          functions={useAllFunctionConfigs() ?? {}}
+          functions={useAllFunctionConfigs()}
         />
       </div>
       <div className="flex max-w-180 flex-col gap-2">

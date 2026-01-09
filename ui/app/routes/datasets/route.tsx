@@ -9,22 +9,11 @@ import {
 } from "~/components/layout/PageLayout";
 import { DatasetsActions } from "./DatasetsActions";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { isInfraError } from "~/utils/tensorzero/errors";
-import { logger } from "~/utils/logger";
 
 export async function loader() {
-  // Don't await - return promise directly for streaming
-  // Graceful degradation: return empty data on infra errors
   const dataPromise = getTensorZeroClient()
     .listDatasets({})
-    .then((r) => r.datasets)
-    .catch((error) => {
-      if (isInfraError(error)) {
-        logger.warn("Infrastructure unavailable, showing degraded datasets");
-        return [];
-      }
-      throw error;
-    });
+    .then((r) => r.datasets);
   const countPromise = dataPromise.then((d) => d.length);
 
   return {

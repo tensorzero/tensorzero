@@ -404,7 +404,7 @@ export default function DatasetRowTable({
                     <FunctionSelector
                       selected={filterFunctionName}
                       onSelect={setFilterFunctionName}
-                      functions={functions ?? {}}
+                      functions={functions}
                     />
                   </div>
                   {filterFunctionName && (
