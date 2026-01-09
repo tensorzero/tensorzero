@@ -99,6 +99,7 @@ impl Optimizer for DiclOptimizationConfig {
         );
 
         // Convert RenderedSample inputs to strings for embedding using stored_input
+        // IMPORTANT: we use `sample.stored_input` which has NOT templated the prompts
         let input_texts: Vec<String> = train_examples
             .iter()
             .map(|sample| {
@@ -359,6 +360,7 @@ async fn process_embedding_batch(
         // We don't currently use API keys for optimization workflows
         scope_info: ScopeInfo::new(tags.clone(), None),
         relay: None,
+        include_raw_usage: false,
     };
 
     let response = embedding_model_config

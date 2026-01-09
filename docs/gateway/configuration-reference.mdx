@@ -178,6 +178,23 @@ Setting this value too low may cause legitimate requests to timeout before recei
 
 </Warning>
 
+### `metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`
+
+- **Type:** array of floats
+- **Required:** no (default: disabled)
+
+Enable the `tensorzero_inference_latency_overhead_seconds_histogram` Prometheus metric with the specified histogram buckets.
+This metric tracks the latency overhead introduced by TensorZero on HTTP requests.
+
+The buckets must be in strictly ascending order and contain at least one value.
+
+```toml title="tensorzero.toml"
+[gateway.metrics]
+tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
+```
+
+See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
+
 ### `observability.async_writes`
 
 - **Type:** boolean
@@ -794,7 +811,7 @@ You only need to set the `deployment_id` and `endpoint` fields.
 ##### `api_key_location`
 
 - **Type:** string or object
-- **Required:** no (default: `env::AZURE_OPENAI_API_KEY` unless set otherwise in `provider_type.azure.defaults.api_key_location`)
+- **Required:** no (default: `env::AZURE_API_KEY` unless set otherwise in `provider_type.azure.defaults.api_key_location`)
 
 Defines the location of the API key for the Azure OpenAI provider.
 
@@ -808,9 +825,9 @@ See [the API reference](/gateway/api-reference/inference/#credentials) and [Cred
 [models.gpt-4o-mini.providers.azure]
 # ...
 type = "azure"
-api_key_location = "dynamic::azure_openai_api_key"
-# api_key_location = "env::ALTERNATE_AZURE_OPENAI_API_KEY"
-# api_key_location = { default = "dynamic::azure_openai_api_key", fallback = "env::AZURE_OPENAI_API_KEY" }
+api_key_location = "dynamic::azure_api_key"
+# api_key_location = "env::ALTERNATE_AZURE_API_KEY"
+# api_key_location = { default = "dynamic::azure_api_key", fallback = "env::AZURE_API_KEY" }
 # ...
 ```
 
@@ -1902,7 +1919,7 @@ api_key_location = "dynamic::anthropic_api_key"
 ##### `defaults.api_key_location`
 
 - **Type:** string or object
-- **Required:** no (default: `env::AZURE_OPENAI_API_KEY`)
+- **Required:** no (default: `env::AZURE_API_KEY`)
 
 Defines the default location of the API key for Azure models.
 
@@ -1913,8 +1930,8 @@ The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_N
 ```toml title="tensorzero.toml"
 [provider_types.azure.defaults]
 # ...
-api_key_location = "dynamic::azure_openai_api_key"
-# api_key_location = { default = "dynamic::azure_openai_api_key", fallback = "env::AZURE_OPENAI_API_KEY" }
+api_key_location = "dynamic::azure_api_key"
+# api_key_location = { default = "dynamic::azure_api_key", fallback = "env::AZURE_API_KEY" }
 # ...
 ```
 

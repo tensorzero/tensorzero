@@ -137,6 +137,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             latency,
             request.model_name,
             request.provider_name,
+            request.model_inference_id,
         )
     }
 
@@ -256,7 +257,12 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
         let stream = self
             .hosted_provider
-            .stream_events(Box::pin(event_stream), start_time.into(), &raw_request)
+            .stream_events(
+                Box::pin(event_stream),
+                start_time.into(),
+                &raw_request,
+                request.model_inference_id,
+            )
             .peekable();
         Ok((stream, raw_request))
     }

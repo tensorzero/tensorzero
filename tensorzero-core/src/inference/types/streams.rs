@@ -8,8 +8,8 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
     ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
     Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, RequestMessage, Text, Thought, ThoughtSummaryBlock, ToolCall,
-    Unknown, Usage,
+    ProviderInferenceResponseArgs, RawUsageEntry, RequestMessage, Text, Thought,
+    ThoughtSummaryBlock, ToolCall, Unknown, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -31,6 +31,8 @@ pub struct ProviderInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub raw_response: String,
     pub latency: Duration,
     pub finish_reason: Option<FinishReason>,
@@ -84,6 +86,8 @@ pub struct ChatInferenceResultChunk {
     pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub latency: Duration,
     pub raw_response: String,
     pub finish_reason: Option<FinishReason>,
@@ -96,6 +100,8 @@ pub struct JsonInferenceResultChunk {
     pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub latency: Duration,
     pub raw_response: String,
     pub finish_reason: Option<FinishReason>,
@@ -120,6 +126,13 @@ impl InferenceResultChunk {
         match self {
             InferenceResultChunk::Chat(chunk) => chunk.usage.as_ref(),
             InferenceResultChunk::Json(chunk) => chunk.usage.as_ref(),
+        }
+    }
+
+    pub fn raw_usage(&self) -> Option<&Vec<RawUsageEntry>> {
+        match self {
+            InferenceResultChunk::Chat(chunk) => chunk.raw_usage.as_ref(),
+            InferenceResultChunk::Json(chunk) => chunk.raw_usage.as_ref(),
         }
     }
 
@@ -151,6 +164,7 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
             content: chunk.content,
             created: chunk.created,
             usage: chunk.usage,
+            raw_usage: chunk.raw_usage,
             latency: chunk.latency,
             finish_reason: chunk.finish_reason,
             raw_response: chunk.raw_response,
@@ -166,14 +180,14 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     fn from(chunk: ProviderInferenceResponseChunk) -> Self {
         let mut raw = None;
         let mut thought = None;
-        for content in chunk.content {
+        for content in &chunk.content {
             match content {
                 ContentBlockChunk::ToolCall(tool_call) => {
                     raw = Some(tool_call.raw_arguments.to_owned());
                 }
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
-                    thought = thought_chunk.text;
+                    thought.clone_from(&thought_chunk.text);
                 }
                 ContentBlockChunk::Unknown(_) => {
                     // Unknown chunks are ignored for JSON functions
@@ -186,6 +200,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
             thought,
             created: chunk.created,
             usage: chunk.usage,
+            raw_usage: chunk.raw_usage,
             latency: chunk.latency,
             raw_response: chunk.raw_response,
             finish_reason: chunk.finish_reason,
@@ -219,6 +234,8 @@ pub struct CollectChunksArgs {
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
+    /// Pre-generated model inference ID for streaming (to match raw_usage entries)
+    pub model_inference_id: Uuid,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -245,6 +262,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         fetch_and_encode_input_files_before_inference,
         extra_body,
         extra_headers,
+        model_inference_id,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -271,6 +289,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     });
     // `usage` is `None` until we receive a chunk with usage information
     let mut usage: Option<Usage> = None;
+    // Collect raw_usage entries from chunks (relay or provider streaming)
+    let mut raw_usage_entries: Option<Vec<RawUsageEntry>> = None;
     let response_time = value
         .last()
         .ok_or_else(|| {
@@ -309,6 +329,12 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
             if let Some(ref mut u) = usage {
                 u.sum_strict(chunk_usage);
             }
+        }
+        // Accumulate raw_usage entries from relay or synthesized streams
+        if let Some(chunk_raw_usage) = chunk.raw_usage() {
+            raw_usage_entries
+                .get_or_insert_with(Vec::new)
+                .extend(chunk_raw_usage.iter().cloned());
         }
         match chunk {
             InferenceResultChunk::Chat(chunk) => {
@@ -356,8 +382,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                         ContentBlockOutput::Thought(Thought {
                                             text: Some(text),
                                             signature: None,
-                                            provider_type: provider_type.clone(),
                                             summary: None,
+                                            provider_type: provider_type.clone(),
                                         })
                                     },
                                     |block, text| {
@@ -570,8 +596,10 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         raw_response,
         // `usage` will be None if we don't see usage in any chunks, in which case we take the default value (fields as `None`)
         usage: usage.unwrap_or_default(),
+        raw_usage: raw_usage_entries,
         latency: latency.clone(),
         finish_reason,
+        id: model_inference_id,
     });
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, cached);
@@ -795,8 +823,8 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text,
                 signature: _,
-                provider_type: _,
                 summary: _,
+                provider_type: _,
             }) => {
                 assert_eq!(text, &Some("Thinking...".to_string()));
             }
@@ -834,6 +862,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -860,6 +889,7 @@ mod tests {
                 content,
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "{\"message\": \"Hello}".to_string(),
                 latency,
                 finish_reason: None,
@@ -874,6 +904,7 @@ mod tests {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
                 }),
+                raw_usage: None,
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -900,6 +931,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -963,6 +995,7 @@ mod tests {
                 thought: Some("Thought 1".to_string()),
                 created,
                 usage: Some(usage1),
+                raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -972,6 +1005,7 @@ mod tests {
                 thought: Some("Thought 2".to_string()),
                 created,
                 usage: Some(usage2),
+                raw_usage: None,
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -998,6 +1032,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1044,6 +1079,7 @@ mod tests {
                 thought: Some("Thought 1".to_string()),
                 created,
                 usage: Some(usage),
+                raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(100),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1053,6 +1089,7 @@ mod tests {
                 thought: None,
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "\"John\"}".to_string(),
                 latency: Duration::from_millis(200),
                 finish_reason: None,
@@ -1079,6 +1116,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1124,6 +1162,7 @@ mod tests {
                 thought: None,
                 created,
                 usage: Some(usage),
+                raw_usage: None,
                 raw_response: "{\"name\":\"John\",".to_string(),
                 latency: Duration::from_millis(100),
                 finish_reason: None,
@@ -1133,6 +1172,7 @@ mod tests {
                 thought: Some("Thought 2".to_string()),
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: String::new(),
                 latency: Duration::from_millis(200),
                 finish_reason: None,
@@ -1142,6 +1182,7 @@ mod tests {
                 thought: None,
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "\"age\":30}".to_string(),
                 latency: Duration::from_millis(300),
                 finish_reason: Some(FinishReason::Stop),
@@ -1168,6 +1209,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -1249,6 +1291,7 @@ mod tests {
                 thought: Some("Thought 1".to_string()),
                 created,
                 usage: Some(usage1),
+                raw_usage: None,
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1258,6 +1301,7 @@ mod tests {
                 thought: Some("Thought 2".to_string()),
                 created,
                 usage: Some(usage2),
+                raw_usage: None,
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -1284,6 +1328,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1359,6 +1404,7 @@ mod tests {
                 thought: Some("Thought 1".to_string()),
                 created,
                 usage: Some(usage1),
+                raw_usage: None,
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
@@ -1368,6 +1414,7 @@ mod tests {
                 thought: Some("Thought 2".to_string()),
                 created,
                 usage: Some(usage2),
+                raw_usage: None,
                 finish_reason: Some(FinishReason::ToolCall),
                 raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
@@ -1394,6 +1441,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1457,6 +1505,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "{\"message\": \"Hello}".to_string(),
                 latency,
                 finish_reason: None,
@@ -1514,6 +1563,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "my raw thought".to_string(),
                 latency,
                 finish_reason: None,
@@ -1528,6 +1578,7 @@ mod tests {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
                 }),
+                raw_usage: None,
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::Stop),
@@ -1543,6 +1594,7 @@ mod tests {
                 })],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "my other raw thought".to_string(),
                 latency,
                 finish_reason: None,
@@ -1569,6 +1621,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -1660,6 +1713,7 @@ mod tests {
                 })],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -1675,6 +1729,7 @@ mod tests {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
                 }),
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1702,6 +1757,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1740,6 +1796,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -1762,6 +1819,7 @@ mod tests {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
                 }),
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1789,6 +1847,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1825,6 +1884,7 @@ mod tests {
                 })],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -1840,6 +1900,7 @@ mod tests {
                     input_tokens: Some(5),
                     output_tokens: Some(10),
                 }),
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1867,6 +1928,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1901,6 +1963,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -1922,6 +1985,7 @@ mod tests {
                     input_tokens: Some(20),
                     output_tokens: Some(15),
                 }),
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -1949,6 +2013,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -1989,6 +2054,7 @@ mod tests {
                 input_tokens: Some(5),
                 output_tokens: Some(5),
             }),
+            raw_usage: None,
             raw_response: "chunk1".to_string(),
             latency,
             finish_reason: Some(FinishReason::ToolCall),
@@ -2015,6 +2081,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2055,6 +2122,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk1".to_string(),
                 latency,
                 finish_reason: None,
@@ -2079,6 +2147,7 @@ mod tests {
                 ],
                 created,
                 usage: None,
+                raw_usage: None,
                 raw_response: "chunk2".to_string(),
                 latency,
                 finish_reason: None,
@@ -2106,6 +2175,7 @@ mod tests {
                     input_tokens: Some(20),
                     output_tokens: Some(30),
                 }),
+                raw_usage: None,
                 raw_response: "chunk3".to_string(),
                 latency: Duration::from_millis(250),
                 finish_reason: Some(FinishReason::ToolCall),
@@ -2133,6 +2203,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
+            model_inference_id: Uuid::now_v7(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -2184,6 +2255,7 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
             }),
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: Some(FinishReason::ToolCall),
@@ -2211,6 +2283,7 @@ mod tests {
             })],
             created: 1234567890,
             usage: None,
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2232,6 +2305,7 @@ mod tests {
             })],
             created: 1234567890,
             usage: None,
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2264,6 +2338,7 @@ mod tests {
             ],
             created: 1234567890,
             usage: None,
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2278,6 +2353,7 @@ mod tests {
             content: vec![],
             created: 1234567890,
             usage: None,
+            raw_usage: None,
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
             finish_reason: None,

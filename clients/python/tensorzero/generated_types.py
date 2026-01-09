@@ -1075,17 +1075,18 @@ class GetInferencesRequest:
     """
     The IDs of the inferences to retrieve. Required.
     """
-    output_source: InferenceOutputSource
-    """
-    Source of the inference output.
-    Determines whether to return the original inference output or demonstration feedback
-    (manually-curated output) if available.
-    """
     function_name: str | None = None
     """
     Optional function name to filter by.
     Including this improves query performance since `function_name` is the first column
     in the ClickHouse primary key.
+    """
+    output_source: InferenceOutputSource | None = "inference"
+    """
+    Source of the inference output.
+    Determines whether to return the original inference output or demonstration feedback
+    (manually-curated output) if available.
+    Defaults to `Inference` if not specified.
     """
 
 
@@ -2070,11 +2071,6 @@ class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
     Create datapoints from an inference query.
     """
 
-    output_source: InferenceOutputSource
-    """
-    Source of the inference output. Determines whether to return the original
-    inference output or demonstration feedback (manually-curated output) if available.
-    """
     type: Literal["inference_query"] = "inference_query"
     after: str | None = None
     """
@@ -2121,6 +2117,12 @@ class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
     """
     Optional ordering criteria for the results.
     Supports multiple sort criteria (e.g., sort by timestamp then by metric).
+    """
+    output_source: InferenceOutputSource | None = "inference"
+    """
+    Source of the inference output. Determines whether to return the original
+    inference output or demonstration feedback (manually-curated output) if available.
+    Defaults to `Inference` if not specified.
     """
     search_query_experimental: str | None = None
     """
@@ -2285,11 +2287,6 @@ class ListInferencesRequest:
     Used by the `POST /v1/inferences/list_inferences` endpoint.
     """
 
-    output_source: InferenceOutputSource
-    """
-    Source of the inference output. Determines whether to return the original
-    inference output or demonstration feedback (manually-curated output) if available.
-    """
     after: str | None = None
     """
     Optional inference ID to paginate after (exclusive).
@@ -2335,6 +2332,12 @@ class ListInferencesRequest:
     """
     Optional ordering criteria for the results.
     Supports multiple sort criteria (e.g., sort by timestamp then by metric).
+    """
+    output_source: InferenceOutputSource | None = "inference"
+    """
+    Source of the inference output. Determines whether to return the original
+    inference output or demonstration feedback (manually-curated output) if available.
+    Defaults to `Inference` if not specified.
     """
     search_query_experimental: str | None = None
     """

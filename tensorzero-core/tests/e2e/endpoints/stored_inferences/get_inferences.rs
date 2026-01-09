@@ -35,6 +35,77 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
     Ok(inferences)
 }
 
+/// Test that output_source defaults to "inference" when not specified in the API request.
+/// This tests both list_inferences and get_inferences endpoints.
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_output_source_defaults_to_inference() {
+    let http_client = Client::new();
+
+    // Test list_inferences without output_source - should succeed and default to "inference"
+    let list_request = json!({
+        "function_name": "write_haiku",
+        "limit": 1
+    });
+
+    let list_resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&list_request)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        list_resp.status().is_success(),
+        "list_inferences should succeed without output_source: status={:?}",
+        list_resp.status()
+    );
+
+    let list_json: Value = list_resp.json().await.unwrap();
+    let inferences = list_json["inferences"]
+        .as_array()
+        .expect("Expected 'inferences' array");
+    assert!(
+        !inferences.is_empty(),
+        "Expected at least one inference from list_inferences"
+    );
+
+    // Extract an inference ID for the get_inferences test
+    let inference_id = inferences[0]["inference_id"].as_str().unwrap();
+
+    // Test get_inferences without output_source - should succeed and default to "inference"
+    let get_request = json!({
+        "ids": [inference_id]
+    });
+
+    let get_resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/get_inferences"))
+        .json(&get_request)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        get_resp.status().is_success(),
+        "get_inferences should succeed without output_source: status={:?}",
+        get_resp.status()
+    );
+
+    let get_json: Value = get_resp.json().await.unwrap();
+    let retrieved = get_json["inferences"]
+        .as_array()
+        .expect("Expected 'inferences' array");
+    assert_eq!(
+        retrieved.len(),
+        1,
+        "Expected exactly one inference from get_inferences"
+    );
+    assert_eq!(
+        retrieved[0]["inference_id"].as_str().unwrap(),
+        inference_id,
+        "Retrieved inference should match requested ID"
+    );
+}
+
 /// Helper function to call get_inferences via HTTP
 async fn get_inferences_by_ids(
     ids: Vec<Uuid>,

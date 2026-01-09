@@ -137,7 +137,7 @@ pub use streams::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
     UnknownChunk, collect_chunks,
 };
-pub use usage::Usage;
+pub use usage::{ApiType, RawUsageEntry, Usage};
 
 /*
  * Data flow in TensorZero
@@ -739,6 +739,65 @@ impl RateLimitedInputContent for Thought {
     }
 }
 
+impl RateLimitedInputContent for Template {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let Template { name, arguments } = self;
+        let args = &arguments.0;
+        let args_tokens: u64 = args
+            .iter()
+            .map(|(key, value)| {
+                get_estimated_tokens(key) + get_estimated_tokens(&value.to_string())
+            })
+            .sum();
+        get_estimated_tokens(name) + args_tokens
+    }
+}
+
+impl RateLimitedInputContent for ToolCallWrapper {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            ToolCallWrapper::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            ToolCallWrapper::InferenceResponseToolCall(tool_call) => {
+                get_estimated_tokens(&tool_call.raw_name)
+                    + get_estimated_tokens(&tool_call.raw_arguments)
+            }
+        }
+    }
+}
+
+impl RateLimitedInputContent for File {
+    fn estimated_input_token_usage(&self) -> u64 {
+        // TODO: improve this estimate
+        10_000
+    }
+}
+
+impl RateLimitedInputContent for InputMessageContent {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            InputMessageContent::Text(text) => text.estimated_input_token_usage(),
+            InputMessageContent::Template(template) => template.estimated_input_token_usage(),
+            InputMessageContent::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            InputMessageContent::ToolResult(tool_result) => {
+                tool_result.estimated_input_token_usage()
+            }
+            InputMessageContent::RawText(raw_text) => raw_text.estimated_input_token_usage(),
+            InputMessageContent::Thought(thought) => thought.estimated_input_token_usage(),
+            InputMessageContent::File(file) => file.estimated_input_token_usage(),
+            InputMessageContent::Unknown(_) => 0,
+        }
+    }
+}
+
+impl RateLimitedInputContent for InputMessage {
+    fn estimated_input_token_usage(&self) -> u64 {
+        self.content
+            .iter()
+            .map(RateLimitedInputContent::estimated_input_token_usage)
+            .sum()
+    }
+}
+
 /// Core representation of the types of content that could go into a model provider
 /// The `PartialEq` impl will panic if we try to compare a `LazyFile`, so we make it
 /// test-only to prevent production code from panicking.
@@ -1177,6 +1236,9 @@ pub struct ProviderInferenceResponse {
     pub usage: Usage,
     pub latency: Latency,
     pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    /// Constructed from provider raw usage entries or passed through from relay.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl ProviderInferenceResponse {
@@ -1228,6 +1290,8 @@ pub struct ModelInferenceResponse {
     pub model_provider_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1253,6 +1317,8 @@ pub struct ModelInferenceResponseWithMetadata {
     pub model_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1548,6 +1614,7 @@ impl ModelInferenceResponse {
             finish_reason: provider_inference_response.finish_reason,
             model_provider_name,
             cached,
+            raw_usage: provider_inference_response.raw_usage,
         }
     }
 
@@ -1574,6 +1641,8 @@ impl ModelInferenceResponse {
             finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
             cached: true,
+            // TensorZero cache hits are excluded from raw_usage list
+            raw_usage: None,
         }
     }
 }
@@ -1596,6 +1665,7 @@ impl ModelInferenceResponseWithMetadata {
             model_provider_name: model_inference_response.model_provider_name,
             model_name,
             cached: model_inference_response.cached,
+            raw_usage: model_inference_response.raw_usage,
         }
     }
 }
@@ -1679,15 +1749,18 @@ pub struct ProviderInferenceResponseArgs {
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub latency: Latency,
     pub finish_reason: Option<FinishReason>,
+    pub id: Uuid,
 }
 
 impl ProviderInferenceResponse {
     pub fn new(args: ProviderInferenceResponseArgs) -> Self {
         let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
+
         Self {
-            id: Uuid::now_v7(),
+            id: args.id,
             created: current_timestamp(),
             output: args.output,
             system: args.system,
@@ -1697,6 +1770,7 @@ impl ProviderInferenceResponse {
             usage: args.usage,
             latency: args.latency,
             finish_reason: args.finish_reason,
+            raw_usage: args.raw_usage,
         }
     }
 }
@@ -1983,6 +2057,27 @@ impl ProviderInferenceResponseChunk {
             content,
             created: current_timestamp(),
             usage,
+            raw_usage: None,
+            raw_response,
+            latency,
+            finish_reason,
+        }
+    }
+
+    /// Creates a new chunk with raw_usage passthrough (relay or synthesized streams)
+    pub fn new_with_raw_usage(
+        content: Vec<ContentBlockChunk>,
+        usage: Option<Usage>,
+        raw_response: String,
+        latency: Duration,
+        finish_reason: Option<FinishReason>,
+        raw_usage: Option<Vec<RawUsageEntry>>,
+    ) -> Self {
+        Self {
+            content,
+            created: current_timestamp(),
+            usage,
+            raw_usage,
             raw_response,
             latency,
             finish_reason,
@@ -2115,6 +2210,76 @@ mod tests {
     use serde_json::json;
     use tokio::time::Instant;
 
+    #[test]
+    fn test_rate_limited_input_message_content_estimation() {
+        let args_value = json!({"foo": "bar", "n": 1});
+        let args_map = args_value
+            .as_object()
+            .expect("template arguments should be object")
+            .clone();
+        let template = Template {
+            name: "tmpl".to_string(),
+            arguments: Arguments(args_map.clone()),
+        };
+
+        let tool_call = InferenceResponseToolCall {
+            id: "tool-1".to_string(),
+            raw_name: "raw_name".to_string(),
+            raw_arguments: "{\"x\":1}".to_string(),
+            name: Some("parsed".to_string()),
+            arguments: Some(json!({"x": 1})),
+        };
+
+        let foo_value = args_map
+            .get("foo")
+            .expect("expected foo argument")
+            .to_string();
+        let n_value = args_map.get("n").expect("expected n argument").to_string();
+        let template_expected = get_estimated_tokens("tmpl")
+            + get_estimated_tokens("foo")
+            + get_estimated_tokens(&foo_value)
+            + get_estimated_tokens("n")
+            + get_estimated_tokens(&n_value);
+        let tool_call_expected = get_estimated_tokens(&tool_call.raw_name)
+            + get_estimated_tokens(&tool_call.raw_arguments);
+
+        assert_eq!(
+            InputMessageContent::Template(template.clone()).estimated_input_token_usage(),
+            template_expected,
+            "Template token estimation mismatch: expected {}, got {}",
+            template_expected,
+            InputMessageContent::Template(template.clone()).estimated_input_token_usage()
+        );
+        assert_eq!(
+            InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                tool_call.clone()
+            ))
+            .estimated_input_token_usage(),
+            tool_call_expected,
+            "ToolCall token estimation mismatch: expected {}, got {}",
+            tool_call_expected,
+            InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                tool_call.clone()
+            ))
+            .estimated_input_token_usage()
+        );
+
+        let message = InputMessage {
+            role: Role::User,
+            content: vec![
+                InputMessageContent::Template(template),
+                InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                    tool_call,
+                )),
+                InputMessageContent::Text(Text {
+                    text: "hi".to_string(),
+                }),
+            ],
+        };
+        let message_expected = template_expected + tool_call_expected + get_estimated_tokens("hi");
+        assert_eq!(message.estimated_input_token_usage(), message_expected);
+    }
+
     #[tokio::test]
     async fn test_create_chat_inference_response() {
         // Case 1: No output schema
@@ -2141,6 +2306,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2190,6 +2356,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2242,6 +2409,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2290,6 +2458,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2358,6 +2527,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2444,6 +2614,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2539,6 +2710,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2590,6 +2762,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2665,6 +2838,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2722,6 +2896,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2919,6 +3094,7 @@ mod tests {
                 model_provider_name: "test_provider".into(),
                 model_name: "test_model".into(),
                 cached,
+                raw_usage: None,
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly

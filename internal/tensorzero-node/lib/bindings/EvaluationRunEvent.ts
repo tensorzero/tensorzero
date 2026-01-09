@@ -5,6 +5,9 @@ import type { EvaluationRunFatalErrorEvent } from "./EvaluationRunFatalErrorEven
 import type { EvaluationRunStartEvent } from "./EvaluationRunStartEvent";
 import type { EvaluationRunSuccessEvent } from "./EvaluationRunSuccessEvent";
 
+/**
+ * SSE event types for evaluation streaming.
+ */
 export type EvaluationRunEvent =
   | ({ type: "start" } & EvaluationRunStartEvent)
   | ({ type: "success" } & EvaluationRunSuccessEvent)

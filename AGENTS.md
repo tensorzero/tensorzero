@@ -1,7 +1,7 @@
 # Rust
 
 - Use `cargo check` for quick verification, restrict further (e.g. `cargo check --package tensorzero-core`) if appropriate. For complex changes, you might want to run `cargo check --all-targets --all-features`. Test suite compilation is slow.
-- If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` from `internal/tensorzero-node` (not root). Run `cargo check` first to catch compilation errors.
+- If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` (from root), then rebuild the NAPI bindings with `pnpm --filter=tensorzero-node build`. Run `cargo check` first to catch compilation errors.
 - If you change a signature of a struct, function, and so on, use `grep` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
 - Place crate imports at the top of the file or module using `use crate::...`. Avoid imports inside functions or tests. Avoid long inline crate paths.
 - Once you're done with your work, make sure to:
@@ -9,6 +9,7 @@
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
   - Run unit tests with `cargo test-unit-fast` which uses `nextest` under the hood.
 - When writing tests, key assertions should include a custom message stating the expected behavior.
+- Use `#[expect(clippy::...)]` instead of `#[allow(clippy::...)]`.
 
 ## For APIs
 
@@ -47,10 +48,6 @@ We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 # CI/CD
 
 - Most GitHub Actions workflows run on Unix only, but some also run on Windows and macOS. For workflows that run on multiple operating systems, ensure any bash scripts are compatible with all three platforms. You can check which OS a workflow uses by looking at the `runs-on` field. Setting `shell: bash` in the job definition is often sufficient.
-
-# UI
-
-- After modifying UI code, run from the `ui/` directory: `pnpm run format`, `pnpm run lint`, `pnpm run typecheck`. All commands must pass.
 
 # Misc
 

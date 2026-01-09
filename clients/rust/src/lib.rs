@@ -21,7 +21,7 @@ use uuid::Uuid;
 // Client core types
 pub use tensorzero_core::client::{
     Client, ClientBuilder, ClientBuilderMode, ClientMode, EmbeddedGateway, HTTPGateway,
-    get_config_no_verify_credentials,
+    PostgresConfig, get_config_no_verify_credentials,
 };
 
 // Client error types

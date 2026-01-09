@@ -22,8 +22,7 @@ env:
   AWS_REGION: "us-east-1"
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AZURE_AI_FOUNDRY_API_KEY: ${{ secrets.AZURE_AI_FOUNDRY_API_KEY }}
-  AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }}
-  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+  AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
   AZURE_OPENAI_EASTUS2_API_KEY: ${{ secrets.AZURE_OPENAI_EASTUS2_API_KEY }}
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -449,3 +448,16 @@ jobs:
       # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (github.event_name != 'pull_request' && contains(needs.*.result, 'skipped')) }}
         run: exit 1
+
+      # Post to Slack on failure for scheduled (cron) runs only.
+      # Scheduled runs bypass the provider-proxy cache to detect provider flakiness.
+      # See: https://github.com/tensorzero/tensorzero/issues/5380
+      - name: Post to Slack on failure (scheduled runs only)
+        if: failure() && github.event_name == 'schedule'
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: C09DM0RGDFG
+            text: "Live provider tests failed (scheduled run, no cache): <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"

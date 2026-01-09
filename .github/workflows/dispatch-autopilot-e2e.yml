@@ -1,0 +1,84 @@
+name: Dispatch Autopilot E2E Tests
+
+on:
+  workflow_call:
+    secrets:
+      AUTOPILOT_DISPATCH_APP_ID:
+        required: true
+      AUTOPILOT_DISPATCH_PRIVATE_KEY:
+        required: true
+
+jobs:
+  dispatch-autopilot:
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      contents: read
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
+          owner: tensorzero
+          repositories: autopilot
+
+      - name: Dispatch to autopilot
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: tensorzero/autopilot
+          event-type: tensorzero-main-updated
+          client-payload: |
+            {
+              "tensorzero_commit": "${{ github.sha }}",
+              "triggered_by": "${{ github.actor }}",
+              "source_run_id": "${{ github.run_id }}",
+              "source_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+
+      - name: Wait for autopilot workflow to complete
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        run: |
+          EXPECTED_NAME="Cross-Repo E2E (tensorzero/$SOURCE_RUN_ID)"
+          echo "Looking for workflow run with name: $EXPECTED_NAME"
+
+          sleep 10
+
+          # Find the workflow run by display_title (correlates to our specific dispatch)
+          for i in {1..120}; do
+            RUN_ID=$(gh api repos/tensorzero/autopilot/actions/runs \
+              -q ".workflow_runs[] | select(.display_title==\"$EXPECTED_NAME\") | .id")
+
+            if [ -n "$RUN_ID" ]; then
+              break
+            fi
+            sleep 5
+          done
+
+          if [ -z "$RUN_ID" ]; then
+            echo "Failed to find autopilot workflow run with name: $EXPECTED_NAME"
+            exit 1
+          fi
+
+          echo "Autopilot workflow: https://github.com/tensorzero/autopilot/actions/runs/$RUN_ID"
+
+          # Poll until complete
+          while true; do
+            RESULT=$(gh api "repos/tensorzero/autopilot/actions/runs/$RUN_ID" -q '{status: .status, conclusion: .conclusion}')
+            STATUS=$(echo "$RESULT" | jq -r '.status')
+            CONCLUSION=$(echo "$RESULT" | jq -r '.conclusion')
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                exit 0
+              else
+                exit 1
+              fi
+            fi
+
+            sleep 30
+          done

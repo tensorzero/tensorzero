@@ -8,9 +8,9 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::time::Duration;
+use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
-use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
 use durable_tools::EmbeddedClient;
@@ -103,6 +103,7 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_clickhouse_migrations {
+        tracing::info!("Applying ClickHouse migrations...");
         manual_run_clickhouse_migrations()
             .await
             .log_err_pretty("Failed to run ClickHouse migrations")?;
@@ -111,6 +112,7 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_postgres_migrations {
+        tracing::info!("Applying PostgreSQL migrations...");
         manual_run_postgres_migrations()
             .await
             .log_err_pretty("Failed to run PostgreSQL migrations")?;
@@ -259,17 +261,23 @@ async fn run() -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    let (router, in_flight_requests_counter) = router::build_axum_router(
+    let (router, in_flight_requests_data) = router::build_axum_router(
         base_path,
         delayed_log_config.otel_tracer.clone(),
         gateway_handle.app_state.clone(),
         metrics_handle,
     );
 
-    // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
-    let bind_address = config
-        .gateway
+    // Bind to the socket address specified in the CLI, config, or default to 0.0.0.0:3000
+    if args.bind_address.is_some() && config.gateway.bind_address.is_some() {
+        tracing::error!(
+            "You must not specify both `--bind-address` and `gateway.bind_address` in the config file."
+        );
+        return Err(ExitCode::FAILURE);
+    }
+    let bind_address = args
         .bind_address
+        .or(config.gateway.bind_address)
         .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 3000)));
 
     let listener = match tokio::net::TcpListener::bind(bind_address).await {
@@ -368,7 +376,7 @@ async fn run() -> Result<(), ExitCode> {
     tokio::spawn(monitor_server_shutdown(
         shutdown_signal,
         server_fut.clone(),
-        in_flight_requests_counter,
+        in_flight_requests_data,
     ));
 
     // Wait for the server to finish - this happens once the shutdown signal is received,
@@ -406,7 +414,7 @@ async fn run() -> Result<(), ExitCode> {
 async fn monitor_server_shutdown(
     shutdown_signal: impl Future<Output = ()>,
     server_fut: impl Future<Output = ()>,
-    in_flight_requests_counter: InFlightRequestsCounter,
+    in_flight_requests_data: InFlightRequestsData,
 ) {
     // First, wait for the shutdown signal
     shutdown_signal.await;
@@ -414,10 +422,23 @@ async fn monitor_server_shutdown(
     IntervalStream::new(tokio::time::interval(Duration::from_secs(5)))
         .take_until(server_fut)
         .for_each(|_| async {
+            let counts = in_flight_requests_data
+                .current_counts_by_route()
+                .collect::<Vec<_>>();
+
+            let total = counts.iter().map(|(_, count)| *count).sum::<u32>();
             tracing::info!(
                 "Server shutdown in progress: {} in-flight requests remaining",
-                in_flight_requests_counter.get()
+                total
             );
+            if total > 0 {
+                tracing::info!("In-flight requests by route:");
+                for (route, count) in counts {
+                    if count > 0 {
+                        tracing::info!("├ `{route}` -> {count} requests in flight");
+                    }
+                }
+            }
         })
         .await;
     tracing::info!("Server shutdown complete");
@@ -509,7 +530,9 @@ async fn spawn_autopilot_worker_if_configured(
     // Create an embedded TensorZero client using the gateway's state
     let t0_client = std::sync::Arc::new(EmbeddedClient::new(gateway_handle.app_state.clone()));
 
-    let config = AutopilotWorkerConfig::new(pool, t0_client);
+    // TODO: decide how we want to do autopilot config.
+    let default_max_attempts = 5;
+    let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts);
 
     Ok(Some(
         spawn_autopilot_worker(

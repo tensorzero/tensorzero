@@ -122,6 +122,7 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
             },
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         });
@@ -140,6 +141,7 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
             },
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         });
@@ -227,6 +229,7 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
             },
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         });
@@ -246,6 +249,7 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
             },
+            raw_usage: None,
             original_response: None,
             finish_reason: None,
         });

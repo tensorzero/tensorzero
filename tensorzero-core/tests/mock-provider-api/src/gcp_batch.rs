@@ -1,7 +1,7 @@
 use axum::{Json, extract::Path, http::StatusCode};
 use bytes::Bytes;
-use object_store::ObjectStore;
 use object_store::gcp::GoogleCloudStorageBuilder;
+use object_store::{ObjectStore, ObjectStoreExt};
 use serde::Deserialize;
 use serde_json::json;
 use std::{
@@ -490,7 +490,7 @@ async fn generate_and_upload_batch_output(
 
 /// Read a file from GCS
 async fn read_from_gcs(gs_url: &str) -> Result<Vec<u8>, anyhow::Error> {
-    let store_and_path = make_gcp_object_store(gs_url).await?;
+    let store_and_path = make_gcp_object_store(gs_url)?;
     let result = store_and_path.store.get(&store_and_path.path).await?;
     let bytes = result.bytes().await?;
     Ok(bytes.to_vec())
@@ -498,7 +498,7 @@ async fn read_from_gcs(gs_url: &str) -> Result<Vec<u8>, anyhow::Error> {
 
 /// Upload data to GCS
 async fn upload_to_gcs(gs_url: &str, data: &[u8]) -> Result<(), anyhow::Error> {
-    let store_and_path = make_gcp_object_store(gs_url).await?;
+    let store_and_path = make_gcp_object_store(gs_url)?;
     let bytes = Bytes::copy_from_slice(data);
     store_and_path
         .store
@@ -515,7 +515,7 @@ struct StoreAndPath {
 /// Create a GCS object store from a gs:// URL
 /// This uses service account credentials from GOOGLE_APPLICATION_CREDENTIALS if set,
 /// otherwise falls back to Application Default Credentials (ADC)
-async fn make_gcp_object_store(gs_url: &str) -> Result<StoreAndPath, anyhow::Error> {
+fn make_gcp_object_store(gs_url: &str) -> Result<StoreAndPath, anyhow::Error> {
     let bucket_and_path = gs_url
         .strip_prefix("gs://")
         .ok_or_else(|| anyhow::anyhow!("GCS url does not start with 'gs://': {gs_url}"))?;

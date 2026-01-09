@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { getClickhouseClient } from "~/utils/clickhouse/client.server";
 
 test("should show the episode list page", async ({ page }) => {
   await page.goto("/observability/episodes");
@@ -30,14 +29,9 @@ test("should not allow paging left when first loaded with no query parameters", 
 test("should not allow paging right when when at the end of episodes", async ({
   page,
 }) => {
-  const clickhouseClient = getClickhouseClient();
-  const resultSet = await clickhouseClient.query({
-    query:
-      "SELECT uint_to_uuid(min(episode_id_uint) + 1) as min_episode_id FROM EpisodeById",
-    format: "JSONEachRow",
-  });
-  const rows = await resultSet.json<{ min_episode_id: string }>();
-  await page.goto("/observability/episodes?before=" + rows[0].min_episode_id);
+  // This is taken from the fixtures database.
+  const minEpisodeId = "0192ced0-947e-74b3-a3d7-02fd2c54d638";
+  await page.goto("/observability/episodes?before=" + minEpisodeId);
 
   // Wait for the page to load
   await expect(page.getByText("Episode ID")).toBeVisible();
