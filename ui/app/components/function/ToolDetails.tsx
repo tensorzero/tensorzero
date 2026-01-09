@@ -26,12 +26,12 @@ export function ToolDetails({ toolName, onClose }: ToolDetailsProps) {
   const tools = config.tools;
 
   const [tool, setTool] = useState<StaticToolConfig | undefined>(
-    tools ? Object.values(tools)[0] : undefined,
+    Object.values(tools)[0],
   );
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!toolName || !tools) return;
+    if (!toolName) return;
 
     const tool = tools[toolName];
     if (!tool) throw new Error(`"${toolName}" is not present in config.tools`);

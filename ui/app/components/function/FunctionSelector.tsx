@@ -8,7 +8,7 @@ import { Combobox } from "~/components/ui/combobox";
 interface FunctionSelectorProps {
   selected: string | null;
   onSelect?: (functionName: string) => void;
-  functions: { [x: string]: FunctionConfig | undefined } | undefined;
+  functions: { [x: string]: FunctionConfig | undefined };
   hideDefaultFunction?: boolean;
   ariaLabel?: string;
 }
@@ -31,18 +31,15 @@ export function FunctionSelector({
 }: FunctionSelectorProps) {
   const functionNames = useMemo(
     () =>
-      functions
-        ? Object.keys(functions).filter(
-            (name) => !(hideDefaultFunction && name === DEFAULT_FUNCTION),
-          )
-        : [],
+      Object.keys(functions).filter(
+        (name) => !(hideDefaultFunction && name === DEFAULT_FUNCTION),
+      ),
     [functions, hideDefaultFunction],
   );
 
   const getPrefix = useCallback(
     (name: string | null) => {
       if (!name) return <Functions className="h-4 w-4 shrink-0" />;
-      if (!functions) return null;
       const fn = functions[name];
       return fn ? <FunctionTypeIcon type={fn.type} /> : null;
     },
@@ -56,11 +53,8 @@ export function FunctionSelector({
       items={functionNames}
       getPrefix={getPrefix}
       placeholder="Select function"
-      emptyMessage={
-        functions === undefined ? "Config unavailable" : "No functions found"
-      }
+      emptyMessage="No functions found"
       ariaLabel={ariaLabel}
-      disabled={functions === undefined}
     />
   );
 }

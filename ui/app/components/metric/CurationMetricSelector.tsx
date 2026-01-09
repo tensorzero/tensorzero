@@ -41,7 +41,7 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
   functionFieldName: Path<T>;
-  config: UiConfig | undefined;
+  config: UiConfig;
   addDemonstrations: boolean;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
@@ -78,13 +78,11 @@ export default function CurationMetricSelector<
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const metrics = config
-    ? (Object.fromEntries(
-        Object.entries(config.metrics).filter(([, v]) => v !== undefined),
-      ) as Record<string, FeedbackConfig>)
-    : ({} as Record<string, FeedbackConfig>);
+  const metrics = Object.fromEntries(
+    Object.entries(config.metrics).filter(([, v]) => v !== undefined),
+  ) as Record<string, FeedbackConfig>;
 
-  if (addDemonstrations && config) {
+  if (addDemonstrations) {
     metrics["demonstration"] = {
       type: "demonstration",
       level: "inference",
@@ -168,7 +166,7 @@ export default function CurationMetricSelector<
                     aria-labelledby={`${metricLabelId}-label`}
                     id={metricComboboxId}
                     className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
-                    disabled={!config || !functionValue || metricsLoading}
+                    disabled={!functionValue || metricsLoading}
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       {metricsLoading && (
@@ -376,9 +374,7 @@ export default function CurationMetricSelector<
             <div className="text-muted-foreground space-y-1 text-sm">
               <div>
                 Feedbacks:{" "}
-                {!config ? (
-                  <span className="text-muted-foreground/25">—</span>
-                ) : isLoading ? (
+                {isLoading ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
                 ) : field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
@@ -392,9 +388,7 @@ export default function CurationMetricSelector<
               </div>
               <div>
                 Curated Inferences:{" "}
-                {!config ? (
-                  <span className="text-muted-foreground/25">—</span>
-                ) : isLoading ? (
+                {isLoading ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
                 ) : field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />

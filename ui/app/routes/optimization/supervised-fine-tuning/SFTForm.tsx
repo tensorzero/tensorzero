@@ -26,7 +26,7 @@ export function SFTForm({
   submissionPhase,
   setSubmissionPhase,
 }: {
-  config: UiConfig | undefined;
+  config: UiConfig;
   submissionPhase: "idle" | "submitting" | "pending" | "complete";
   setSubmissionPhase: (
     phase: "idle" | "submitting" | "pending" | "complete",
