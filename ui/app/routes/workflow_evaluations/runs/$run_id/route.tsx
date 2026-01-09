@@ -1,9 +1,5 @@
 import type { Route } from "./+types/route";
-import {
-  isRouteErrorResponse,
-  useNavigate,
-  type RouteHandle,
-} from "react-router";
+import { data, useNavigate, type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -12,7 +8,6 @@ import {
 } from "~/components/layout/PageLayout";
 import BasicInfo from "./WorkflowEvaluationRunBasicInfo";
 import WorkflowEvaluationRunEpisodesTable from "./WorkflowEvaluationRunEpisodesTable";
-import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export const handle: RouteHandle = {
@@ -47,9 +42,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const statistics = statisticsResponse.statistics;
   const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
   if (workflowEvaluationRuns.length != 1) {
-    throw new Error(
-      `Expected exactly one workflow evaluation run, got ${workflowEvaluationRuns.length}`,
-    );
+    throw data(`Workflow evaluation run "${run_id}" not found`, {
+      status: 404,
+    });
   }
   const workflowEvaluationRun = workflowEvaluationRuns[0];
   return {
@@ -108,32 +103,4 @@ export default function WorkflowEvaluationRunSummaryPage({
       </SectionLayout>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

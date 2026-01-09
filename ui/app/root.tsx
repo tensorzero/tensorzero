@@ -30,6 +30,7 @@ import {
   isAuthenticationError,
   isGatewayConnectionError,
   classifyError,
+  isClickHouseError,
   getErrorLabel,
   type ClassifiedError,
 } from "./utils/tensorzero/errors";
@@ -75,7 +76,9 @@ export async function loader() {
       infraError: null as ClassifiedError | null,
     };
   } catch (e) {
-    // Graceful degradation: return error info so UI renders with overlay
+    // Graceful degradation for infrastructure errors:
+    // Return fallback state so UI renders with dismissible error dialog.
+    // Child routes will handle their own errors via their error boundaries.
     if (isGatewayConnectionError(e)) {
       return {
         config: EMPTY_CONFIG,
@@ -93,6 +96,18 @@ export async function loader() {
         autopilotAvailable: false,
         infraError: {
           type: InfraErrorType.GatewayAuthFailed,
+        } as ClassifiedError,
+      };
+    }
+    if (isClickHouseError(e)) {
+      const message = e instanceof Error ? e.message : undefined;
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: InfraErrorType.ClickHouseUnavailable,
+          message,
         } as ClassifiedError,
       };
     }
