@@ -33,6 +33,77 @@ test.describe("Error Boundaries", () => {
     });
   });
 
+  test.describe("Resource Not Found (Layout Boundaries)", () => {
+    test("should show error for non-existent inference", async ({ page }) => {
+      // Navigate to an inference ID that doesn't exist
+      await page.goto(
+        "/observability/inferences/00000000-0000-0000-0000-000000000000",
+      );
+
+      // Should show an error (caught by layout boundary)
+      const errorVisible = await page
+        .getByText(/error|not found/i)
+        .first()
+        .isVisible()
+        .catch(() => false);
+
+      expect(errorVisible).toBe(true);
+
+      // Sidebar should remain functional
+      await expect(page.getByText("Inferences")).toBeVisible();
+    });
+
+    test("should show error for non-existent episode", async ({ page }) => {
+      await page.goto(
+        "/observability/episodes/00000000-0000-0000-0000-000000000000",
+      );
+
+      // Should show an error
+      const errorVisible = await page
+        .getByText(/error|not found/i)
+        .first()
+        .isVisible()
+        .catch(() => false);
+
+      expect(errorVisible).toBe(true);
+
+      // Sidebar should remain functional
+      await expect(page.getByText("Episodes")).toBeVisible();
+    });
+
+    test("should show error for non-existent dataset", async ({ page }) => {
+      await page.goto("/datasets/this-dataset-does-not-exist-xyz");
+
+      // Should show an error
+      const errorVisible = await page
+        .getByText(/error|not found/i)
+        .first()
+        .isVisible()
+        .catch(() => false);
+
+      expect(errorVisible).toBe(true);
+
+      // Sidebar should remain functional
+      await expect(page.getByText("Datasets")).toBeVisible();
+    });
+
+    test("should show error for non-existent function", async ({ page }) => {
+      await page.goto("/observability/functions/this_function_does_not_exist");
+
+      // Should show an error
+      const errorVisible = await page
+        .getByText(/error|not found/i)
+        .first()
+        .isVisible()
+        .catch(() => false);
+
+      expect(errorVisible).toBe(true);
+
+      // Sidebar should remain functional
+      await expect(page.getByText("Functions")).toBeVisible();
+    });
+  });
+
   test.describe("Navigation Recovery", () => {
     test("should recover from error state when navigating to valid page", async ({
       page,

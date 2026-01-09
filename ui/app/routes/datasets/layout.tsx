@@ -1,4 +1,6 @@
 import { Outlet, type RouteHandle } from "react-router";
+import type { Route } from "./+types/layout";
+import { LayoutErrorBoundary } from "~/components/ui/error";
 
 export const handle: RouteHandle = {
   crumb: () => ["Datasets"],
@@ -6,4 +8,8 @@ export const handle: RouteHandle = {
 
 export default function DatasetsLayout() {
   return <Outlet />;
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <LayoutErrorBoundary error={error} />;
 }
