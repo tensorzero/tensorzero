@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+# TENSORZERO_START_FROM=large_chat_model_inference_v2 TENSORZERO_CHUNK_SIZE=50000 TENSORZERO_SKIP_TRUNCATE=1 TENSORZERO_SKIP_SMALL_FIXTURES=1 TENSORZERO_SKIP_LARGE_FIXTURES=1 ./ui/fixtures/load_fixtures_postgres.sh
+
 POSTGRES_URL="${TENSORZERO_POSTGRES_URL:-postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
