@@ -44,7 +44,8 @@ impl AWSEndpoint {
                 let url_str = std::env::var(&env_var).map_err(|_| {
                     Error::new(ErrorDetails::Config {
                         message: format!(
-                            "Environment variable `{env_var}` not found for {provider_type} endpoint"
+                            "Environment variable `{env_var}` not found. \
+                             Your configuration for a `{provider_type}` provider requires this variable for `endpoint_url`."
                         ),
                     })
                 })?;
@@ -53,9 +54,9 @@ impl AWSEndpoint {
             }
             EndpointLocation::Dynamic(key_name) => {
                 tracing::warn!(
-                    "Using dynamic endpoint `{key_name}` for {provider_type} provider. \
-                     Dynamic endpoints can be set by untrusted clients, \
-                     which may enable credential exfiltration attacks."
+                    "You configured a dynamic `endpoint_url` for a `{provider_type}` provider. \
+                     Only use this setting with trusted clients. \
+                     An untrusted client can exfiltrate your AWS credentials with a malicious endpoint."
                 );
                 Ok(AWSEndpoint::Dynamic(key_name))
             }

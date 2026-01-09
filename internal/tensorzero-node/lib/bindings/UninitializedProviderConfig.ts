@@ -15,18 +15,18 @@ export type UninitializedProviderConfig =
   | {
       type: "aws_bedrock";
       model_id: string;
-      region: string | null;
+      region?: string;
       allow_auto_detect_region: boolean;
-      endpoint_url: string | null;
+      endpoint_url: string;
     }
   | {
       type: "aws_sagemaker";
       endpoint_name: string;
       model_name: string;
-      region: string | null;
+      region?: string;
       allow_auto_detect_region: boolean;
       hosted_provider: HostedProviderKind;
-      endpoint_url: string | null;
+      endpoint_url: string;
     }
   | {
       type: "azure";
@@ -43,8 +43,8 @@ export type UninitializedProviderConfig =
     }
   | {
       type: "gcp_vertex_gemini";
-      model_id: string | null;
-      endpoint_id: string | null;
+      model_id?: string;
+      endpoint_id?: string;
       location: string;
       project_id: string;
       credential_location: string | null;
@@ -66,7 +66,7 @@ export type UninitializedProviderConfig =
   | {
       type: "openai";
       model_name: string;
-      api_base: string | null;
+      api_base?: string;
       api_key_location: string | null;
       api_type: OpenAIAPIType;
       include_encrypted_reasoning: boolean;

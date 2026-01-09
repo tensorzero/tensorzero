@@ -1080,7 +1080,7 @@ pub enum HostedProviderKind {
 }
 
 #[derive(ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[derive(Clone, Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
@@ -1103,7 +1103,7 @@ pub enum UninitializedProviderConfig {
         region: Option<String>,
         #[serde(default)]
         allow_auto_detect_region: bool,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(test, ts(type = "string"))]
         endpoint_url: Option<EndpointLocation>,
     },
     #[strum(serialize = "aws_sagemaker")]
@@ -1115,7 +1115,7 @@ pub enum UninitializedProviderConfig {
         #[serde(default)]
         allow_auto_detect_region: bool,
         hosted_provider: HostedProviderKind,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(test, ts(type = "string"))]
         endpoint_url: Option<EndpointLocation>,
     },
     Azure {
