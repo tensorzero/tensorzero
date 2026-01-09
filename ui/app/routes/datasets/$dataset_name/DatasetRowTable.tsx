@@ -18,8 +18,14 @@ import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter, Trash } from "lucide-react";
-import { Suspense, use, useState, useEffect } from "react";
-import { useFetcher, useNavigate, useLocation } from "react-router";
+import { Suspense, useState, useEffect } from "react";
+import {
+  Await,
+  useAsyncError,
+  useFetcher,
+  useNavigate,
+  useLocation,
+} from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -78,17 +84,35 @@ function SkeletonRows() {
   );
 }
 
-// Resolves promise and renders table rows
+// Error state for failed data load
+function TableErrorState() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load datapoints";
+
+  return (
+    <TableRow>
+      <TableCell colSpan={6} className="text-center">
+        <div className="flex flex-col items-center gap-2 py-8 text-red-600">
+          <span className="font-medium">Error loading data</span>
+          <span className="text-muted-foreground text-sm">{message}</span>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// Renders table rows from resolved data
 function TableBodyContent({
   data,
   dataset_name,
   onDeleteClick,
 }: {
-  data: Promise<DatasetRowsData>;
+  data: DatasetRowsData;
   dataset_name: string;
   onDeleteClick: (row: Datapoint) => void;
 }) {
-  const { rows } = use(data);
+  const { rows } = data;
 
   if (rows.length === 0) {
     return <TableEmptyState message="No datapoints found" />;
@@ -145,17 +169,17 @@ function TableBodyContent({
   );
 }
 
-// Resolves promise and renders pagination
+// Renders pagination from resolved data
 function PaginationContent({
   data,
   limit,
   offset,
 }: {
-  data: Promise<DatasetRowsData>;
+  data: DatasetRowsData;
   limit: number;
   offset: number;
 }) {
-  const { hasMore } = use(data);
+  const { hasMore } = data;
   const navigate = useNavigate();
 
   const handleNextPage = () => {
@@ -310,14 +334,18 @@ export default function DatasetRowTable({
         </TableHeader>
         <TableBody>
           <Suspense key={location.key} fallback={<SkeletonRows />}>
-            <TableBodyContent
-              data={data}
-              dataset_name={dataset_name}
-              onDeleteClick={(row) => {
-                setDatapointToDelete(row);
-                setDeleteDialogOpen(true);
-              }}
-            />
+            <Await resolve={data} errorElement={<TableErrorState />}>
+              {(resolvedData) => (
+                <TableBodyContent
+                  data={resolvedData}
+                  dataset_name={dataset_name}
+                  onDeleteClick={(row) => {
+                    setDatapointToDelete(row);
+                    setDeleteDialogOpen(true);
+                  }}
+                />
+              )}
+            </Await>
           </Suspense>
         </TableBody>
       </Table>
@@ -333,7 +361,15 @@ export default function DatasetRowTable({
           />
         }
       >
-        <PaginationContent data={data} limit={limit} offset={offset} />
+        <Await resolve={data} errorElement={null}>
+          {(resolvedData) => (
+            <PaginationContent
+              data={resolvedData}
+              limit={limit}
+              offset={offset}
+            />
+          )}
+        </Await>
       </Suspense>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

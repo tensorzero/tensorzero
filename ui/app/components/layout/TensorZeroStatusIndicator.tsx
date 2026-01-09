@@ -39,7 +39,7 @@ export default function TensorZeroStatusIndicator() {
               ? "Connecting to Gateway..."
               : status
                 ? `TensorZero Gateway ${serverVersion}`
-                : "Failed to connect to Gateway"}
+                : "Gateway Unavailable"}
         </div>
         {status && !versionsMatch && (
           <div className="ml-5">
