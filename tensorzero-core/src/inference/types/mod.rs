@@ -739,6 +739,65 @@ impl RateLimitedInputContent for Thought {
     }
 }
 
+impl RateLimitedInputContent for Template {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let Template { name, arguments } = self;
+        let args = &arguments.0;
+        let args_tokens: u64 = args
+            .iter()
+            .map(|(key, value)| {
+                get_estimated_tokens(key) + get_estimated_tokens(&value.to_string())
+            })
+            .sum();
+        get_estimated_tokens(name) + args_tokens
+    }
+}
+
+impl RateLimitedInputContent for ToolCallWrapper {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            ToolCallWrapper::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            ToolCallWrapper::InferenceResponseToolCall(tool_call) => {
+                get_estimated_tokens(&tool_call.raw_name)
+                    + get_estimated_tokens(&tool_call.raw_arguments)
+            }
+        }
+    }
+}
+
+impl RateLimitedInputContent for File {
+    fn estimated_input_token_usage(&self) -> u64 {
+        // TODO: improve this estimate
+        10_000
+    }
+}
+
+impl RateLimitedInputContent for InputMessageContent {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            InputMessageContent::Text(text) => text.estimated_input_token_usage(),
+            InputMessageContent::Template(template) => template.estimated_input_token_usage(),
+            InputMessageContent::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            InputMessageContent::ToolResult(tool_result) => {
+                tool_result.estimated_input_token_usage()
+            }
+            InputMessageContent::RawText(raw_text) => raw_text.estimated_input_token_usage(),
+            InputMessageContent::Thought(thought) => thought.estimated_input_token_usage(),
+            InputMessageContent::File(file) => file.estimated_input_token_usage(),
+            InputMessageContent::Unknown(_) => 0,
+        }
+    }
+}
+
+impl RateLimitedInputContent for InputMessage {
+    fn estimated_input_token_usage(&self) -> u64 {
+        self.content
+            .iter()
+            .map(RateLimitedInputContent::estimated_input_token_usage)
+            .sum()
+    }
+}
+
 /// Core representation of the types of content that could go into a model provider
 /// The `PartialEq` impl will panic if we try to compare a `LazyFile`, so we make it
 /// test-only to prevent production code from panicking.
@@ -2150,6 +2209,76 @@ mod tests {
     use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolChoice};
     use serde_json::json;
     use tokio::time::Instant;
+
+    #[test]
+    fn test_rate_limited_input_message_content_estimation() {
+        let args_value = json!({"foo": "bar", "n": 1});
+        let args_map = args_value
+            .as_object()
+            .expect("template arguments should be object")
+            .clone();
+        let template = Template {
+            name: "tmpl".to_string(),
+            arguments: Arguments(args_map.clone()),
+        };
+
+        let tool_call = InferenceResponseToolCall {
+            id: "tool-1".to_string(),
+            raw_name: "raw_name".to_string(),
+            raw_arguments: "{\"x\":1}".to_string(),
+            name: Some("parsed".to_string()),
+            arguments: Some(json!({"x": 1})),
+        };
+
+        let foo_value = args_map
+            .get("foo")
+            .expect("expected foo argument")
+            .to_string();
+        let n_value = args_map.get("n").expect("expected n argument").to_string();
+        let template_expected = get_estimated_tokens("tmpl")
+            + get_estimated_tokens("foo")
+            + get_estimated_tokens(&foo_value)
+            + get_estimated_tokens("n")
+            + get_estimated_tokens(&n_value);
+        let tool_call_expected = get_estimated_tokens(&tool_call.raw_name)
+            + get_estimated_tokens(&tool_call.raw_arguments);
+
+        assert_eq!(
+            InputMessageContent::Template(template.clone()).estimated_input_token_usage(),
+            template_expected,
+            "Template token estimation mismatch: expected {}, got {}",
+            template_expected,
+            InputMessageContent::Template(template.clone()).estimated_input_token_usage()
+        );
+        assert_eq!(
+            InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                tool_call.clone()
+            ))
+            .estimated_input_token_usage(),
+            tool_call_expected,
+            "ToolCall token estimation mismatch: expected {}, got {}",
+            tool_call_expected,
+            InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                tool_call.clone()
+            ))
+            .estimated_input_token_usage()
+        );
+
+        let message = InputMessage {
+            role: Role::User,
+            content: vec![
+                InputMessageContent::Template(template),
+                InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                    tool_call,
+                )),
+                InputMessageContent::Text(Text {
+                    text: "hi".to_string(),
+                }),
+            ],
+        };
+        let message_expected = template_expected + tool_call_expected + get_estimated_tokens("hi");
+        assert_eq!(message.estimated_input_token_usage(), message_expected);
+    }
 
     #[tokio::test]
     async fn test_create_chat_inference_response() {
