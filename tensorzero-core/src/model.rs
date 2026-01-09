@@ -34,6 +34,7 @@ use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use aws_types::region::Region;
 
 use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
@@ -1068,6 +1069,80 @@ impl ProviderConfig {
     }
 }
 
+/// Processed AWS provider configuration.
+struct AWSProviderConfig {
+    static_region: Option<Region>,
+    region: AWSRegion,
+    endpoint_url: Option<AWSEndpointUrl>,
+    credentials: Option<AWSCredentials>,
+}
+
+/// Helper to process common AWS provider configuration.
+fn build_aws_provider_config(
+    region: Option<CredentialLocationOrHardcoded>,
+    allow_auto_detect_region: bool,
+    endpoint_url: Option<CredentialLocationOrHardcoded>,
+    access_key_id: Option<CredentialLocation>,
+    secret_access_key: Option<CredentialLocation>,
+    session_token: Option<CredentialLocation>,
+    provider_type: &str,
+) -> Result<AWSProviderConfig, Error> {
+    // Emit deprecation warning if allow_auto_detect_region is used
+    if allow_auto_detect_region {
+        crate::utils::deprecation_warning(&format!(
+            "The `allow_auto_detect_region` field is deprecated for `{provider_type}`. \
+             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
+        ));
+    }
+
+    // Convert CredentialLocationOrHardcoded to AWSRegion
+    let aws_region = region
+        .map(|loc| AWSRegion::from_credential_location(loc, provider_type))
+        .transpose()?
+        .flatten();
+
+    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
+    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
+        Some(AWSRegion::Sdk)
+    } else {
+        aws_region
+    };
+
+    // Check if we have a region or need to error
+    let aws_region = aws_region.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "AWS {provider_type} provider requires a region. \
+                 Use `region = \"sdk\"` to enable auto-detection, \
+                 or specify a region like `region = \"us-east-1\"`."
+            ),
+        })
+    })?;
+
+    // For static regions, use at construction time. For dynamic/sdk, pass None.
+    let static_region = aws_region.get_static_region().cloned();
+
+    let endpoint_url = endpoint_url
+        .map(|loc| AWSEndpointUrl::from_credential_location(loc, provider_type))
+        .transpose()?
+        .flatten();
+
+    // Convert credential fields to AWSCredentials
+    let aws_credentials = AWSCredentials::from_fields(
+        access_key_id,
+        secret_access_key,
+        session_token,
+        provider_type,
+    )?;
+
+    Ok(AWSProviderConfig {
+        static_region,
+        region: aws_region,
+        endpoint_url,
+        credentials: aws_credentials,
+    })
+}
+
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -1284,47 +1359,10 @@ impl UninitializedProviderConfig {
                 secret_access_key,
                 session_token,
             } => {
-                // If no region specified and `allow_auto_detect_region` (deprecated) is set, use `region = "sdk"`
-                if allow_auto_detect_region {
-                    crate::utils::deprecation_warning(
-                        "The `allow_auto_detect_region` field is deprecated for `aws_bedrock`. \
-                         Use `region = \"sdk\"` instead to enable auto-detection. (#5596)",
-                    );
-                }
-
-                // Convert CredentialLocationOrHardcoded to AWSRegion
-                let aws_region = region
-                    .map(|loc| AWSRegion::from_credential_location(loc, "aws_bedrock"))
-                    .transpose()?
-                    .flatten();
-
-                // If no region specified and `allow_auto_detect_region` (deprecated) is set, use `region = "sdk"`
-                let aws_region = if aws_region.is_none() && allow_auto_detect_region {
-                    Some(AWSRegion::Sdk)
-                } else {
-                    aws_region
-                };
-
-                // Check if we have a region or need to error
-                let aws_region = aws_region.ok_or_else(|| {
-                    Error::new(ErrorDetails::Config {
-                        message: "AWS bedrock provider requires a region. \
-                                  Use `region = \"sdk\"` to enable auto-detection, \
-                                  or specify a region like `region = \"us-east-1\"`."
-                            .to_string(),
-                    })
-                })?;
-
-                // For static regions, use at construction time. For dynamic/sdk, pass None.
-                let static_region = aws_region.get_static_region().cloned();
-
-                let endpoint_url = endpoint_url
-                    .map(|loc| AWSEndpointUrl::from_credential_location(loc, "aws_bedrock"))
-                    .transpose()?
-                    .flatten();
-
-                // Convert credential fields to AWSCredentials
-                let aws_credentials = AWSCredentials::from_fields(
+                let aws_config = build_aws_provider_config(
+                    region,
+                    allow_auto_detect_region,
+                    endpoint_url,
                     access_key_id,
                     secret_access_key,
                     session_token,
@@ -1334,10 +1372,10 @@ impl UninitializedProviderConfig {
                 ProviderConfig::AWSBedrock(
                     AWSBedrockProvider::new(
                         model_id,
-                        static_region,
-                        Some(aws_region),
-                        endpoint_url,
-                        aws_credentials,
+                        aws_config.static_region,
+                        Some(aws_config.region),
+                        aws_config.endpoint_url,
+                        aws_config.credentials,
                         http_client,
                     )
                     .await?,
@@ -1354,47 +1392,10 @@ impl UninitializedProviderConfig {
                 secret_access_key,
                 session_token,
             } => {
-                // If no region specified and `allow_auto_detect_region` (deprecated) is set, use `region = "sdk"`
-                if allow_auto_detect_region {
-                    crate::utils::deprecation_warning(
-                        "The `allow_auto_detect_region` field is deprecated for `aws_sagemaker`. \
-                         Use `region = \"sdk\"` instead to enable auto-detection. (#5596)",
-                    );
-                }
-
-                // Convert CredentialLocationOrHardcoded to AWSRegion
-                let aws_region = region
-                    .map(|loc| AWSRegion::from_credential_location(loc, "aws_sagemaker"))
-                    .transpose()?
-                    .flatten();
-
-                // If no region specified and `allow_auto_detect_region` (deprecated) is set, use `region = "sdk"`
-                let aws_region = if aws_region.is_none() && allow_auto_detect_region {
-                    Some(AWSRegion::Sdk)
-                } else {
-                    aws_region
-                };
-
-                // Check if we have a region or need to error
-                let aws_region = aws_region.ok_or_else(|| {
-                    Error::new(ErrorDetails::Config {
-                        message: "AWS Sagemaker provider requires a region. \
-                                  Use `region = \"sdk\"` to enable auto-detection, \
-                                  or specify a region like `region = \"us-east-1\"`."
-                            .to_string(),
-                    })
-                })?;
-
-                // For static regions, use at construction time. For dynamic/sdk, pass None.
-                let static_region = aws_region.get_static_region().cloned();
-
-                let endpoint_url = endpoint_url
-                    .map(|loc| AWSEndpointUrl::from_credential_location(loc, "aws_sagemaker"))
-                    .transpose()?
-                    .flatten();
-
-                // Convert credential fields to AWSCredentials
-                let aws_credentials = AWSCredentials::from_fields(
+                let aws_config = build_aws_provider_config(
+                    region,
+                    allow_auto_detect_region,
+                    endpoint_url,
                     access_key_id,
                     secret_access_key,
                     session_token,
@@ -1435,10 +1436,10 @@ impl UninitializedProviderConfig {
                     AWSSagemakerProvider::new(
                         endpoint_name,
                         self_hosted,
-                        static_region,
-                        Some(aws_region),
-                        endpoint_url,
-                        aws_credentials,
+                        aws_config.static_region,
+                        Some(aws_config.region),
+                        aws_config.endpoint_url,
+                        aws_config.credentials,
                     )
                     .await?,
                 )

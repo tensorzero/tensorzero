@@ -1687,7 +1687,7 @@ async fn test_bedrock_err_no_auto_detect_region() {
         .expect_err("Failed to load bedrock");
     let err_msg = err.to_string();
     assert!(
-        err_msg.contains("AWS bedrock provider requires a region"),
+        err_msg.contains("AWS Bedrock provider requires a region"),
         "Unexpected error message: {err_msg}"
     );
 }
@@ -1709,16 +1709,16 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
         model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-        region = "sdk
+        region = "sdk"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
-        .expect_err("Failed to load bedrock");
+        .expect_err("Expected error when SDK cannot determine region");
     let err_msg = err.to_string();
     assert!(
-        err_msg.contains("Failed to determine AWS region."),
+        err_msg.contains("Failed to determine AWS region"),
         "Unexpected error message: {err_msg}"
     );
 }
@@ -1743,14 +1743,13 @@ async fn test_bedrock_region_and_allow_auto() {
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
         model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-        region = "sdk
         region = "us-east-2"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
-        .expect("Failed to construct config with valid AWS bedrock provider");
+        .expect("Failed to construct config with valid AWS Bedrock provider");
 }
 #[tokio::test]
 async fn test_config_load_no_config_file() {

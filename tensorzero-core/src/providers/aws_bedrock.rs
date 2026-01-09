@@ -1337,7 +1337,7 @@ mod tests {
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
-        .expect_err("AWS bedrock provider should fail when it cannot detect region");
+        .expect_err("AWS Bedrock provider should fail when it cannot detect region");
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to determine AWS region."),

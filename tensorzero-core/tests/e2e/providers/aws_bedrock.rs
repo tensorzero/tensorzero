@@ -105,7 +105,7 @@ async fn get_providers() -> E2ETestProviders {
         input_audio: vec![],
 
         shorthand_inference: vec![],
-        // AWS bedrock only works with SDK credentials
+        // AWS Bedrock only works with SDK credentials
         credential_fallbacks: vec![],
     }
 }
