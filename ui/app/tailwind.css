@@ -301,8 +301,8 @@
   }
 
   .dark {
-    --bg-primary: 0 0% 4%;
-    --bg-secondary: 0 0% 15%;
+    --background-primary: 0 0% 4%;
+    --background-secondary: 0 0% 15%;
     --background-tertiary: 0 0% 15%;
     --background-hover: 0 0% 18%;
     --foreground-primary: 0 0% 100%;
