@@ -1,12 +1,12 @@
 import { AlertTriangle } from "lucide-react";
 import {
   ErrorScope,
-  extractPageErrorInfo,
   NotFoundDisplay,
   PageErrorContainer,
   PageErrorStack,
 } from "./ErrorContentPrimitives";
 import { isRouteErrorResponse } from "react-router";
+import { getPageErrorInfo } from "~/utils/tensorzero/errors";
 
 interface PageErrorContentProps {
   error: unknown;
@@ -23,7 +23,7 @@ export function PageErrorContent({ error }: PageErrorContentProps) {
     return <NotFoundDisplay />;
   }
 
-  const { title, message, status } = extractPageErrorInfo(error);
+  const { title, message, status } = getPageErrorInfo(error);
 
   return (
     <PageErrorContainer>

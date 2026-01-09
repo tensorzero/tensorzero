@@ -1,6 +1,5 @@
 import * as React from "react";
 import { FileQuestion, type LucideIcon } from "lucide-react";
-import { isRouteErrorResponse } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
@@ -290,39 +289,4 @@ export function PageErrorStack({
       </p>
     </div>
   );
-}
-
-export interface PageErrorInfo {
-  title: string;
-  message: string;
-  status?: number;
-}
-
-/**
- * Extracts display-friendly error info from an unknown error.
- * Handles RouteErrorResponse, Error instances, and unknown values.
- */
-export function extractPageErrorInfo(error: unknown): PageErrorInfo {
-  if (isRouteErrorResponse(error)) {
-    return {
-      title: error.statusText || "Error",
-      message:
-        typeof error.data === "string"
-          ? error.data
-          : "An unexpected error occurred.",
-      status: error.status,
-    };
-  }
-
-  if (error instanceof Error) {
-    return {
-      title: "Error",
-      message: error.message,
-    };
-  }
-
-  return {
-    title: "Error",
-    message: "An unexpected error occurred.",
-  };
 }

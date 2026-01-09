@@ -4,7 +4,6 @@ import { ErrorDialog } from "./ErrorDialog";
 import { ErrorContent } from "./ErrorContent";
 import {
   ErrorScope,
-  extractPageErrorInfo,
   NotFoundDisplay,
   PageErrorContainer,
   PageErrorStack,
@@ -14,6 +13,7 @@ import {
   isInfraError,
   classifyError,
   getErrorLabel,
+  getPageErrorInfo,
 } from "~/utils/tensorzero/errors";
 
 interface LayoutErrorBoundaryProps {
@@ -49,7 +49,7 @@ export function LayoutErrorBoundary({ error }: LayoutErrorBoundaryProps) {
   }
 
   // Page-scope: other errors
-  const { title, message, status } = extractPageErrorInfo(error);
+  const { title, message, status } = getPageErrorInfo(error);
   return (
     <PageErrorContainer>
       <PageErrorStack
