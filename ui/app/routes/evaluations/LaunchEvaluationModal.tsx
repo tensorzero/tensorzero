@@ -22,7 +22,7 @@ import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { DatasetCombobox } from "~/components/dataset/DatasetCombobox";
 import { Combobox } from "~/components/ui/combobox";
 import { Evaluation } from "~/components/icons/Icons";
 import { GitBranch } from "lucide-react";
@@ -203,7 +203,7 @@ function EvaluationForm({
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
         }}
         items={evaluation_names}
-        getItemIcon={() => <Evaluation className="h-4 w-4 shrink-0" />}
+        getPrefix={() => <Evaluation className="h-4 w-4 shrink-0" />}
         placeholder="Select evaluation"
         emptyMessage="No evaluations found"
       />
@@ -222,12 +222,10 @@ function EvaluationForm({
         value={selectedDatasetName ?? undefined}
       />
 
-      <DatasetSelector
-        label="Select a dataset"
+      <DatasetCombobox
         functionName={function_name ?? undefined}
-        selected={selectedDatasetName ?? undefined}
-        onSelect={setSelectedDatasetName}
-        allowCreation={false}
+        selected={selectedDatasetName}
+        onSelect={(name) => setSelectedDatasetName(name)}
         disabled={!selectedEvaluationName}
       />
 
@@ -265,7 +263,7 @@ function EvaluationForm({
         selected={selectedVariantName}
         onSelect={setSelectedVariantName}
         items={functionConfig ? Object.keys(functionConfig.variants) : []}
-        getItemIcon={() => <GitBranch className="h-4 w-4 shrink-0" />}
+        getPrefix={() => <GitBranch className="h-4 w-4 shrink-0" />}
         placeholder="Select variant"
         emptyMessage="No variants found"
         disabled={!selectedEvaluationName}

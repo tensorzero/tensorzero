@@ -34,7 +34,7 @@ export function FunctionFormField<T extends FieldValues>({
                 field.onChange(value);
                 onSelect?.(value);
               }}
-              functions={functions}
+              functions={functions ?? {}}
               hideDefaultFunction={hideDefaultFunction}
               ariaLabel={label}
             />

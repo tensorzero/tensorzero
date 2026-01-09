@@ -163,7 +163,7 @@ export function NewDatapointForm() {
             <FunctionSelector
               selected={selectedFunction}
               onSelect={setSelectedFunction}
-              functions={functions}
+              functions={functions ?? {}}
               hideDefaultFunction
             />
           </div>

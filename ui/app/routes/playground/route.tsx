@@ -4,10 +4,10 @@ import {
   Link,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
+  isRouteErrorResponse,
   useNavigation,
 } from "react-router";
-import { PageErrorContent } from "~/components/ui/error";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { DatasetCombobox } from "~/components/dataset/DatasetCombobox";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import {
@@ -139,17 +139,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   try {
     config = await getConfig();
   } catch {
-    // Config unavailable (infra error) - return empty data
-    return {
-      functionName: null,
-      datasetName: null,
-      datapoints: [],
-      inputs: [],
-      totalDatapoints: 0,
-      offset,
-      limit,
-      dehydratedState: null,
-    };
+    throw data("Failed to load configuration", { status: 500 });
   }
 
   const functionConfig = functionName
@@ -260,7 +250,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [currentSearchParams, setSearchParams] = useSearchParams();
   const [editingVariant, setEditingVariant] =
     useState<PlaygroundVariantInfo | null>(null);
-
   const { variants, searchParams } = useMemo(() => {
     if (navigation.state !== "loading") {
       return {
@@ -333,7 +322,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="Playground" />
+      <PageHeader name="Playground" />
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Function</Label>
         <FunctionSelector
@@ -347,18 +336,16 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
               datasetName: null,
             })
           }
-          functions={useAllFunctionConfigs()}
+          functions={useAllFunctionConfigs() ?? {}}
         />
       </div>
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Dataset</Label>
-        <DatasetSelector
-          label="Select a dataset"
+        <DatasetCombobox
           functionName={functionName ?? undefined}
           disabled={!functionName}
-          selected={datasetName ?? undefined}
+          selected={datasetName}
           onSelect={(value) => updateSearchParams({ datasetName: value })}
-          allowCreation={false}
         />
       </div>
       <div className="flex max-w-180 flex-col gap-2">
@@ -588,7 +575,70 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  return <PageErrorContent error={error} />;
+  if (isRouteErrorResponse(error)) {
+    return (
+      <PageLayout>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900">
+              {error.status} {error.statusText}
+            </h1>
+            <p className="mt-4 text-lg text-gray-600">{error.data}</p>
+            <Link
+              to="/playground"
+              className="mt-6 inline-block rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            >
+              Go to Playground
+            </Link>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  } else if (error instanceof Error) {
+    return (
+      <PageLayout>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900">Error</h1>
+            <p className="mt-4 text-lg text-gray-600">{error.message}</p>
+            <details className="mt-4 max-w-2xl text-left">
+              <summary className="cursor-pointer text-sm text-gray-500">
+                Stack trace
+              </summary>
+              <pre className="mt-2 overflow-auto rounded bg-gray-100 p-4 text-xs">
+                {error.stack}
+              </pre>
+            </details>
+            <Link
+              to="/playground"
+              className="mt-6 inline-block rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            >
+              Go to Playground
+            </Link>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  } else {
+    return (
+      <PageLayout>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900">Unknown Error</h1>
+            <p className="mt-4 text-lg text-gray-600">
+              An unexpected error occurred. Please try again.
+            </p>
+            <Link
+              to="/playground"
+              className="mt-6 inline-block rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            >
+              Go to Playground
+            </Link>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
 }
 
 function GridRow({

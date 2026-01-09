@@ -364,7 +364,7 @@ export default function InferencesTable({
                     <FunctionSelector
                       selected={filterFunctionName}
                       onSelect={setFilterFunctionName}
-                      functions={functions}
+                      functions={functions ?? {}}
                       ariaLabel="Function filter"
                     />
                   </div>

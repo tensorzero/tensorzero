@@ -23,7 +23,7 @@ export default function FunctionFormField({ control }: FunctionFormFieldProps) {
             onSelect={(value) => {
               field.onChange(value);
             }}
-            functions={functions}
+            functions={functions ?? {}}
           />
         </FormItem>
       )}
