@@ -91,7 +91,7 @@ Need something else? TensorZero also supports **[any OpenAI-compatible API (e.g.
 <br>
 
 <details open>
-<summary><b>Usage: Python &mdash; TensorZero Client (Recommended)</b></summary>
+<summary><b>Usage: Python &mdash; TensorZero SDK</b></summary>
 
 You can access any provider using the TensorZero Python client.
 
