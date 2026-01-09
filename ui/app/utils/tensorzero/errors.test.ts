@@ -8,6 +8,8 @@ import {
   isGatewayConnectionError,
   isGatewayRouteNotFoundError,
   TensorZeroServerError,
+  classifyError,
+  getErrorLabel,
 } from "./errors";
 
 describe("InfraErrorType", () => {
@@ -258,5 +260,103 @@ describe("isAuthenticationError", () => {
   it("should return false for null and undefined", () => {
     expect(isAuthenticationError(null)).toBe(false);
     expect(isAuthenticationError(undefined)).toBe(false);
+  });
+});
+
+describe("classifyError", () => {
+  it("should classify GatewayConnectionError as GatewayUnavailable", () => {
+    const error = new GatewayConnectionError();
+    const result = classifyError(error);
+    expect(result.type).toBe(InfraErrorType.GatewayUnavailable);
+  });
+
+  it("should classify serialized GatewayConnectionError as GatewayUnavailable", () => {
+    const serializedError = {
+      name: "GatewayConnectionError",
+      message: "Failed",
+    };
+    const result = classifyError(serializedError);
+    expect(result.type).toBe(InfraErrorType.GatewayUnavailable);
+  });
+
+  it("should classify TensorZeroServerError with status 401 as GatewayAuthFailed", () => {
+    const error = new TensorZeroServerError("Unauthorized", { status: 401 });
+    const result = classifyError(error);
+    expect(result.type).toBe(InfraErrorType.GatewayAuthFailed);
+  });
+
+  it("should classify RouteNotFound error as GatewayRouteNotFound with routeInfo", () => {
+    const error = new TensorZeroServerError.RouteNotFound(
+      "Route not found: GET /api/unknown",
+    );
+    const result = classifyError(error);
+    expect(result.type).toBe(InfraErrorType.GatewayRouteNotFound);
+    if (result.type === InfraErrorType.GatewayRouteNotFound) {
+      expect(result.routeInfo).toBe("GET /api/unknown");
+    }
+  });
+
+  it("should classify ClickHouse errors as ClickHouseUnavailable", () => {
+    const error = new TensorZeroServerError.ClickHouseConnection(
+      "Connection failed",
+    );
+    const result = classifyError(error);
+    expect(result.type).toBe(InfraErrorType.ClickHouseUnavailable);
+    if (result.type === InfraErrorType.ClickHouseUnavailable) {
+      expect(result.message).toBe("Connection failed");
+    }
+  });
+
+  it("should classify generic Error as ServerError", () => {
+    const error = new Error("Something went wrong");
+    const result = classifyError(error);
+    expect(result.type).toBe(InfraErrorType.ServerError);
+    if (result.type === InfraErrorType.ServerError) {
+      expect(result.message).toBe("Something went wrong");
+    }
+  });
+
+  it("should classify TensorZeroServerError with 500 status as ServerError", () => {
+    const error = new TensorZeroServerError("Internal error", { status: 500 });
+    const result = classifyError(error);
+    expect(result.type).toBe(InfraErrorType.ServerError);
+  });
+
+  it("should classify null as ServerError", () => {
+    const result = classifyError(null);
+    expect(result.type).toBe(InfraErrorType.ServerError);
+  });
+
+  it("should classify undefined as ServerError", () => {
+    const result = classifyError(undefined);
+    expect(result.type).toBe(InfraErrorType.ServerError);
+  });
+});
+
+describe("getErrorLabel", () => {
+  it("should return correct label for GatewayUnavailable", () => {
+    expect(getErrorLabel(InfraErrorType.GatewayUnavailable)).toBe(
+      "Gateway Connection Error",
+    );
+  });
+
+  it("should return correct label for GatewayAuthFailed", () => {
+    expect(getErrorLabel(InfraErrorType.GatewayAuthFailed)).toBe("Auth Error");
+  });
+
+  it("should return correct label for GatewayRouteNotFound", () => {
+    expect(getErrorLabel(InfraErrorType.GatewayRouteNotFound)).toBe(
+      "Route Error",
+    );
+  });
+
+  it("should return correct label for ClickHouseUnavailable", () => {
+    expect(getErrorLabel(InfraErrorType.ClickHouseUnavailable)).toBe(
+      "Database Error",
+    );
+  });
+
+  it("should return correct label for ServerError", () => {
+    expect(getErrorLabel(InfraErrorType.ServerError)).toBe("Server Error");
   });
 });
