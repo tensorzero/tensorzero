@@ -6,15 +6,15 @@ import type { StatusResponse } from "~/types/tensorzero";
 
 /**
  * Loader that fetches the TensorZero Gateway status.
- * Returns undefined on connection failure.
+ * Returns null on connection failure.
  */
-export async function loader(): Promise<StatusResponse | undefined> {
+export async function loader(): Promise<StatusResponse | null> {
   try {
     const status = await getTensorZeroClient().status();
     return status;
   } catch (error) {
     logger.error("Failed to fetch TensorZero status:", error);
-    return undefined;
+    return null;
   }
 }
 
