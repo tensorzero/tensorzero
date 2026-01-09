@@ -13,7 +13,7 @@ import {
   type RouteHandle,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   PageHeader,
   PageLayout,
@@ -27,8 +27,12 @@ import type {
   FeedbackRow,
   FeedbackBounds,
   StoredInference,
+  Input,
 } from "~/types/tensorzero";
-import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
+import {
+  isJsonOutput,
+  type ParsedModelInferenceRow,
+} from "~/utils/clickhouse/inference";
 
 // Section components
 import BasicInfo from "./InferenceBasicInfo";
@@ -46,6 +50,13 @@ import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
+import { DemonstrationFeedbackButton } from "~/components/feedback/DemonstrationFeedbackButton";
+import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
+import {
+  prepareInferenceActionRequest,
+  useInferenceActionFetcher,
+  type VariantResponseInfo,
+} from "~/routes/api/tensorzero/inference.utils";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -57,6 +68,8 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
+import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
@@ -382,18 +395,25 @@ type ActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
 
+interface InferenceActionBarProps {
+  inference: StoredInference;
+  hasDemonstration: boolean;
+  usedVariants: string[];
+  onFeedbackAdded?: (redirectUrl?: string) => void;
+  onVariantSelect: (variant: string) => void;
+  isVariantLoading: boolean;
+}
+
 function InferenceActionBar({
   inference,
   hasDemonstration,
   usedVariants,
   onFeedbackAdded,
-}: {
-  inference: StoredInference;
-  hasDemonstration: boolean;
-  usedVariants: string[];
-  onFeedbackAdded?: (redirectUrl?: string) => void;
-}) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  onVariantSelect,
+  isVariantLoading,
+}: InferenceActionBarProps) {
+  const [isHumanFeedbackModalOpen, setIsHumanFeedbackModalOpen] =
+    useState(false);
   const functionConfig = useFunctionConfig(inference.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
   const config = useConfig();
@@ -418,7 +438,7 @@ function InferenceActionBar({
       humanFeedbackFetcher.data?.redirectTo
     ) {
       onFeedbackAdded?.(humanFeedbackFetcher.data.redirectTo);
-      setIsModalOpen(false);
+      setIsHumanFeedbackModalOpen(false);
       humanFeedbackFetcher.reset();
     }
   }, [humanFeedbackFetcher, onFeedbackAdded]);
@@ -427,10 +447,8 @@ function InferenceActionBar({
     <ActionBar>
       <TryWithButton
         options={options}
-        onSelect={() => {
-          /* TODO: implement variant response modal */
-        }}
-        isLoading={false}
+        onSelect={onVariantSelect}
+        isLoading={isVariantLoading}
         isDefaultFunction={isDefault}
       />
       <AddToDatasetButton
@@ -444,9 +462,9 @@ function InferenceActionBar({
         onOpenChange={(isOpen) => {
           if (humanFeedbackFetcher.state !== "idle") return;
           if (!isOpen) humanFeedbackFetcher.reset();
-          setIsModalOpen(isOpen);
+          setIsHumanFeedbackModalOpen(isOpen);
         }}
-        isOpen={isModalOpen}
+        isOpen={isHumanFeedbackModalOpen}
         trigger={<HumanFeedbackButton />}
       >
         <humanFeedbackFetcher.Form method="post" action="/api/feedback">
@@ -465,6 +483,21 @@ function InferenceActionBar({
   );
 }
 
+// --- Helper Functions ---
+
+function prepareDemonstrationFromVariantOutput(
+  variantOutput: VariantResponseInfo,
+) {
+  const output = variantOutput.output;
+  if (output === undefined) {
+    return undefined;
+  }
+  if (isJsonOutput(output)) {
+    return output.parsed;
+  }
+  return output;
+}
+
 // --- Main Page Component ---
 
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
@@ -481,6 +514,155 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Track resolved model inferences for usage calculation in modal
+  const [resolvedModelInferences, setResolvedModelInferences] = useState<
+    ParsedModelInferenceRow[] | null
+  >(null);
+
+  // Resolve model inferences promise when it completes
+  useEffect(() => {
+    modelInferencesPromise
+      .then(setResolvedModelInferences)
+      .catch(() => setResolvedModelInferences(null));
+  }, [modelInferencesPromise]);
+
+  // Variant response modal state
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const [lastRequestArgs, setLastRequestArgs] = useState<
+    Parameters<typeof prepareInferenceActionRequest>[0] | null
+  >(null);
+
+  // Variant inference fetcher
+  const variantInferenceFetcher = useInferenceActionFetcher();
+  const variantSource = "inference";
+  const variantInferenceIsLoading =
+    isVariantModalOpen &&
+    (variantInferenceFetcher.state === "submitting" ||
+      variantInferenceFetcher.state === "loading");
+
+  const { submit } = variantInferenceFetcher;
+  const processVariantRequest = (
+    option: string,
+    args: Parameters<typeof prepareInferenceActionRequest>[0],
+  ) => {
+    try {
+      const request = prepareInferenceActionRequest(args);
+
+      setSelectedVariant(option);
+      setIsVariantModalOpen(true);
+      setLastRequestArgs(args);
+
+      try {
+        void submit({ data: JSON.stringify(request) });
+      } catch (stringifyError) {
+        logger.error("Failed to stringify request:", stringifyError);
+        toast.error({
+          title: "Request Error",
+          description: "Failed to prepare the request. Please try again.",
+        });
+        setSelectedVariant(null);
+        setIsVariantModalOpen(false);
+      }
+    } catch (error) {
+      logger.error("Failed to prepare inference request:", error);
+
+      let errorMessage = "Failed to prepare the request. Please try again.";
+      if (error instanceof Error) {
+        if (error.message.includes("Extra body is not supported")) {
+          errorMessage =
+            "This inference contains extra body parameters which are not supported in the UI.";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+      }
+
+      toast.error({
+        title: "Request Preparation Error",
+        description: errorMessage,
+      });
+    }
+  };
+
+  // Check if function is default to determine handler type
+  const isDefaultFunction = inference.function_name === DEFAULT_FUNCTION;
+
+  const handleVariantOrModelSelect = (option: string) => {
+    processVariantRequest(option, {
+      resource: inference,
+      input: resolvedInput as Input,
+      source: variantSource,
+      ...(isDefaultFunction ? { model_name: option } : { variant: option }),
+    });
+  };
+
+  const handleVariantRefresh = () => {
+    if (!lastRequestArgs) {
+      return;
+    }
+
+    try {
+      const request = prepareInferenceActionRequest(lastRequestArgs);
+      request.cache_options = {
+        ...request.cache_options,
+        enabled: "write_only",
+      };
+      submit({ data: JSON.stringify(request) });
+    } catch (error) {
+      logger.error("Failed to prepare inference request for refresh:", error);
+      toast.error({
+        title: "Request Preparation Error",
+        description: "Failed to refresh inference. Please try again.",
+      });
+    }
+  };
+
+  // Handle feedback added callback
+  const handleFeedbackAdded = useCallback(
+    (redirectUrl?: string) => {
+      if (redirectUrl) {
+        const url = new URL(redirectUrl, window.location.origin);
+        const newFeedbackIdParam = url.searchParams.get("newFeedbackId");
+        if (newFeedbackIdParam) {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.delete("beforeFeedback");
+          currentUrl.searchParams.delete("afterFeedback");
+          currentUrl.searchParams.set("newFeedbackId", newFeedbackIdParam);
+          navigate(currentUrl.pathname + currentUrl.search);
+        }
+      }
+    },
+    [navigate],
+  );
+
+  // Demonstration feedback fetcher
+  const demonstrationFeedbackFetcher = useFetcherWithReset<ActionData>();
+  const {
+    data: demonstrationFeedbackData,
+    state: demonstrationFeedbackState,
+    reset: resetDemonstrationFeedbackFetcher,
+  } = demonstrationFeedbackFetcher;
+  const demonstrationFeedbackFormError =
+    demonstrationFeedbackState === "idle"
+      ? (demonstrationFeedbackData?.error ?? null)
+      : null;
+
+  useEffect(() => {
+    const currentState = demonstrationFeedbackState;
+    const fetcherData = demonstrationFeedbackData;
+    if (currentState === "idle" && fetcherData?.redirectTo) {
+      handleFeedbackAdded(fetcherData.redirectTo);
+      setIsVariantModalOpen(false);
+      setSelectedVariant(null);
+      resetDemonstrationFeedbackFetcher();
+    }
+  }, [
+    demonstrationFeedbackData,
+    demonstrationFeedbackState,
+    resetDemonstrationFeedbackFetcher,
+    handleFeedbackAdded,
+  ]);
+
   // Show toast when feedback is successfully added
   useEffect(() => {
     if (newFeedbackId) {
@@ -489,21 +671,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     }
     return;
   }, [newFeedbackId, toast]);
-
-  // Handle feedback added callback
-  const handleFeedbackAdded = (redirectUrl?: string) => {
-    if (redirectUrl) {
-      const url = new URL(redirectUrl, window.location.origin);
-      const newFeedbackIdParam = url.searchParams.get("newFeedbackId");
-      if (newFeedbackIdParam) {
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.delete("beforeFeedback");
-        currentUrl.searchParams.delete("afterFeedback");
-        currentUrl.searchParams.set("newFeedbackId", newFeedbackIdParam);
-        navigate(currentUrl.pathname + currentUrl.search);
-      }
-    }
-  };
 
   return (
     <PageLayout>
@@ -517,6 +684,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           hasDemonstration={hasDemonstration}
           usedVariants={usedVariants}
           onFeedbackAdded={handleFeedbackAdded}
+          onVariantSelect={handleVariantOrModelSelect}
+          isVariantLoading={variantInferenceIsLoading}
         />
       </PageHeader>
 
@@ -603,6 +772,57 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </Suspense>
         </SectionLayout>
       </SectionsGroup>
+
+      {selectedVariant && (
+        <VariantResponseModal
+          isOpen={isVariantModalOpen}
+          isLoading={variantInferenceIsLoading}
+          error={variantInferenceFetcher.error?.message}
+          variantResponse={variantInferenceFetcher.data?.info ?? null}
+          rawResponse={variantInferenceFetcher.data?.raw ?? null}
+          onClose={() => {
+            setIsVariantModalOpen(false);
+            setSelectedVariant(null);
+            setLastRequestArgs(null);
+          }}
+          item={inference}
+          inferenceUsage={
+            resolvedModelInferences
+              ? getTotalInferenceUsage(resolvedModelInferences)
+              : undefined
+          }
+          selectedVariant={selectedVariant}
+          source={variantSource}
+          onRefresh={lastRequestArgs ? handleVariantRefresh : null}
+        >
+          {variantInferenceFetcher.data?.info && (
+            <demonstrationFeedbackFetcher.Form
+              method="post"
+              action="/api/feedback"
+            >
+              <input type="hidden" name="metricName" value="demonstration" />
+              <input
+                type="hidden"
+                name="inferenceId"
+                value={inference.inference_id}
+              />
+              <input
+                type="hidden"
+                name="value"
+                value={JSON.stringify(
+                  prepareDemonstrationFromVariantOutput(
+                    variantInferenceFetcher.data.info,
+                  ),
+                )}
+              />
+              <DemonstrationFeedbackButton
+                isSubmitting={demonstrationFeedbackState === "submitting"}
+                submissionError={demonstrationFeedbackFormError}
+              />
+            </demonstrationFeedbackFetcher.Form>
+          )}
+        </VariantResponseModal>
+      )}
     </PageLayout>
   );
 }
