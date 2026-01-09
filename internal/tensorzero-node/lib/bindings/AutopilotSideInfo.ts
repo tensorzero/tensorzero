@@ -20,10 +20,9 @@ export type AutopilotSideInfo = {
    */
   session_id: string;
   /**
-   * An optional hash of the current configuration.
-   * Set if you would like to start from a particular config for a tool call.
+   * A hash of the current configuration.
    */
-  config_snapshot_hash: string | null;
+  config_snapshot_hash: string;
   /**
    * Settings for optimization workflows run on the gateway by autopilot.
    */
