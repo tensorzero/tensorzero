@@ -14,6 +14,7 @@ use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
 use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
 use tensorzero_core::endpoints::TensorzeroAuthMiddlewareState;
+use tensorzero_core::feature_flags::feature_flags_middleware;
 use tensorzero_core::observability::TracerWrapper;
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
@@ -57,6 +58,7 @@ pub fn build_axum_router(
     // increase the default body limit from 2MB to 100MB
     let final_router = router
         .layer(axum::middleware::from_fn(add_version_header))
+        .layer(axum::middleware::from_fn(feature_flags_middleware))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         // Accept encoded requests and transparently decompress them.
         // Supported encodings: gzip, br, zstd.
