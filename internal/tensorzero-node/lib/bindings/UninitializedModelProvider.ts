@@ -27,17 +27,25 @@ export type UninitializedModelProvider = {
       type: "aws_bedrock";
       model_id: string;
       region?: string;
+      /**
+       * Infer the `region` using the AWS SDK if not provided.
+       * NB: This setting makes SDK initialization slow in non-AWS environments, so we don't enable it by default.
+       */
       allow_auto_detect_region: boolean;
-      endpoint_url: string;
+      endpoint_url?: string;
     }
   | {
       type: "aws_sagemaker";
       endpoint_name: string;
       model_name: string;
       region?: string;
+      /**
+       * Infer the `region` using the AWS SDK if not provided.
+       * NB: This setting makes SDK initialization slow in non-AWS environments, so we don't enable it by default.
+       */
       allow_auto_detect_region: boolean;
       hosted_provider: HostedProviderKind;
-      endpoint_url: string;
+      endpoint_url?: string;
     }
   | {
       type: "azure";

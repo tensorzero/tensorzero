@@ -22,7 +22,9 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::aws_common::{self, AWSEndpoint, InterceptorAndRawBody, build_interceptor};
+use super::aws_common::{
+    self, AWSEndpointUrl, AWSRegion, InterceptorAndRawBody, build_interceptor,
+};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -59,7 +61,9 @@ pub struct AWSBedrockProvider {
     #[serde(skip)]
     client: aws_sdk_bedrockruntime::Client,
     #[serde(skip)]
-    endpoint: Option<AWSEndpoint>,
+    region: Option<AWSRegion>,
+    #[serde(skip)]
+    endpoint_url: Option<AWSEndpointUrl>,
 }
 
 fn apply_inference_params(
@@ -174,17 +178,18 @@ fn number_from_i32(value: i32) -> Number {
 impl AWSBedrockProvider {
     pub async fn new(
         model_id: String,
-        region: Option<Region>,
-        endpoint: Option<AWSEndpoint>,
+        static_region: Option<Region>,
+        region: Option<AWSRegion>,
+        endpoint_url: Option<AWSEndpointUrl>,
         http_client: TensorzeroHttpClient,
     ) -> Result<Self, Error> {
         let mut config_builder = aws_sdk_bedrockruntime::config::Builder::from(
-            &aws_common::config_with_region(PROVIDER_TYPE, region).await?,
+            &aws_common::config_with_region(PROVIDER_TYPE, static_region).await?,
         )
         .http_client(super::aws_http_client::Client::new(http_client));
 
         // Apply static endpoint URL at construction time
-        if let Some(ref ep) = endpoint
+        if let Some(ref ep) = endpoint_url
             && let Some(url) = ep.get_static_url()
         {
             config_builder = config_builder.endpoint_url(url.as_str());
@@ -195,7 +200,8 @@ impl AWSBedrockProvider {
         Ok(Self {
             model_id,
             client,
-            endpoint,
+            region,
+            endpoint_url,
         })
     }
 
@@ -310,17 +316,36 @@ impl InferenceProvider for AWSBedrockProvider {
 
         let start_time = Instant::now();
         let customized = bedrock_request.customize().interceptor(interceptor);
-        let output = match &self.endpoint {
-            Some(AWSEndpoint::Dynamic(key_name)) => {
-                let url = AWSEndpoint::Dynamic(key_name.clone()).resolve(dynamic_api_keys)?;
-                customized
-                    .config_override(
-                        aws_sdk_bedrockruntime::config::Builder::new().endpoint_url(url.as_str()),
-                    )
-                    .send()
-                    .await
+
+        // Build config override for dynamic region and/or endpoint
+        let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
+        let has_dynamic_endpoint = matches!(
+            &self.endpoint_url,
+            Some(AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. })
+        );
+
+        let output = if has_dynamic_region || has_dynamic_endpoint {
+            let mut override_builder = aws_sdk_bedrockruntime::config::Builder::new();
+
+            if let Some(region) = &self.region
+                && region.is_dynamic()
+            {
+                let resolved_region = region.resolve(dynamic_api_keys)?;
+                override_builder = override_builder.region(resolved_region);
             }
-            _ => customized.send().await,
+            if let Some(endpoint_url) = &self.endpoint_url
+                && matches!(
+                    endpoint_url,
+                    AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
+                )
+            {
+                let url = endpoint_url.resolve(dynamic_api_keys)?;
+                override_builder = override_builder.endpoint_url(url.as_str());
+            }
+
+            customized.config_override(override_builder).send().await
+        } else {
+            customized.send().await
         }
         .map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
@@ -462,17 +487,36 @@ impl InferenceProvider for AWSBedrockProvider {
 
         let start_time = Instant::now();
         let customized = bedrock_request.customize().interceptor(interceptor);
-        let stream = match &self.endpoint {
-            Some(AWSEndpoint::Dynamic(key_name)) => {
-                let url = AWSEndpoint::Dynamic(key_name.clone()).resolve(dynamic_api_keys)?;
-                customized
-                    .config_override(
-                        aws_sdk_bedrockruntime::config::Builder::new().endpoint_url(url.as_str()),
-                    )
-                    .send()
-                    .await
+
+        // Build config override for dynamic region and/or endpoint
+        let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
+        let has_dynamic_endpoint = matches!(
+            &self.endpoint_url,
+            Some(AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. })
+        );
+
+        let stream = if has_dynamic_region || has_dynamic_endpoint {
+            let mut override_builder = aws_sdk_bedrockruntime::config::Builder::new();
+
+            if let Some(region) = &self.region
+                && region.is_dynamic()
+            {
+                let resolved_region = region.resolve(dynamic_api_keys)?;
+                override_builder = override_builder.region(resolved_region);
             }
-            _ => customized.send().await,
+            if let Some(endpoint_url) = &self.endpoint_url
+                && matches!(
+                    endpoint_url,
+                    AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
+                )
+            {
+                let url = endpoint_url.resolve(dynamic_api_keys)?;
+                override_builder = override_builder.endpoint_url(url.as_str());
+            }
+
+            customized.config_override(override_builder).send().await
+        } else {
+            customized.send().await
         }
         .map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
@@ -1245,6 +1289,7 @@ mod tests {
             "test".to_string(),
             Some(Region::new("uk-hogwarts-1")),
             None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1259,6 +1304,7 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("uk-hogwarts-1")),
+            None,
             None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
@@ -1279,6 +1325,7 @@ mod tests {
             "test".to_string(),
             None,
             None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1296,6 +1343,7 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("me-shire-2")),
+            None,
             None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )

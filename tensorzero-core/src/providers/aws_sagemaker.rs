@@ -1,7 +1,9 @@
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::Latency;
 use crate::inference::{InferenceProvider, WrappedProvider};
-use crate::providers::aws_common::{AWSEndpoint, InterceptorAndRawBody, build_interceptor};
+use crate::providers::aws_common::{
+    AWSEndpointUrl, AWSRegion, InterceptorAndRawBody, build_interceptor,
+};
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
@@ -39,22 +41,25 @@ pub struct AWSSagemakerProvider {
     #[serde(skip)]
     base_config: aws_sdk_sagemakerruntime::config::Builder,
     #[serde(skip)]
-    endpoint: Option<AWSEndpoint>,
+    region: Option<AWSRegion>,
+    #[serde(skip)]
+    endpoint_url: Option<AWSEndpointUrl>,
 }
 
 impl AWSSagemakerProvider {
     pub async fn new(
         endpoint_name: String,
         hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
-        region: Option<Region>,
-        endpoint: Option<AWSEndpoint>,
+        static_region: Option<Region>,
+        region: Option<AWSRegion>,
+        endpoint_url: Option<AWSEndpointUrl>,
     ) -> Result<Self, Error> {
-        let config = aws_common::config_with_region(PROVIDER_TYPE, region).await?;
+        let config = aws_common::config_with_region(PROVIDER_TYPE, static_region).await?;
 
         let mut config_builder = aws_sdk_sagemakerruntime::config::Builder::from(&config);
 
         // Apply static endpoint URL at construction time
-        if let Some(ref ep) = endpoint
+        if let Some(ref ep) = endpoint_url
             && let Some(url) = ep.get_static_url()
         {
             config_builder = config_builder.endpoint_url(url.as_str());
@@ -67,7 +72,8 @@ impl AWSSagemakerProvider {
             client,
             hosted_provider,
             base_config: config_builder,
-            endpoint,
+            region,
+            endpoint_url,
         })
     }
 }
@@ -100,9 +106,20 @@ impl InferenceProvider for AWSSagemakerProvider {
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
 
-        // Apply dynamic endpoint URL if configured
-        if let Some(AWSEndpoint::Dynamic(key_name)) = &self.endpoint {
-            let url = AWSEndpoint::Dynamic(key_name.clone()).resolve(dynamic_api_keys)?;
+        // Apply dynamic region and/or endpoint URL if configured
+        if let Some(region) = &self.region
+            && region.is_dynamic()
+        {
+            let resolved_region = region.resolve(dynamic_api_keys)?;
+            new_config = new_config.region(resolved_region);
+        }
+        if let Some(endpoint_url) = &self.endpoint_url
+            && matches!(
+                endpoint_url,
+                AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
+            )
+        {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
             new_config = new_config.endpoint_url(url.as_str());
         }
 
@@ -187,9 +204,20 @@ impl InferenceProvider for AWSSagemakerProvider {
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
 
-        // Apply dynamic endpoint URL if configured
-        if let Some(AWSEndpoint::Dynamic(key_name)) = &self.endpoint {
-            let url = AWSEndpoint::Dynamic(key_name.clone()).resolve(dynamic_api_keys)?;
+        // Apply dynamic region and/or endpoint URL if configured
+        if let Some(region) = &self.region
+            && region.is_dynamic()
+        {
+            let resolved_region = region.resolve(dynamic_api_keys)?;
+            new_config = new_config.region(resolved_region);
+        }
+        if let Some(endpoint_url) = &self.endpoint_url
+            && matches!(
+                endpoint_url,
+                AWSEndpointUrl::Dynamic(_) | AWSEndpointUrl::DynamicWithFallback { .. }
+            )
+        {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
             new_config = new_config.endpoint_url(url.as_str());
         }
 

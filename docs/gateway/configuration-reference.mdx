@@ -685,9 +685,18 @@ beta_structured_outputs = true
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-Defines whether to automatically detect the AWS region to use with the SageMaker API.
+<Warning>
+  **Deprecated:** Use `region = "sdk"` instead to enable auto-detection.
+</Warning>
+
+Defines whether to automatically detect the AWS region to use with the Bedrock API.
 Under the hood, the gateway will use the AWS SDK to try to detect the region.
 Alternatively, you can specify the region manually with the `region` field (recommended).
+
+<Warning>
+  Enabling this setting makes SDK initialization slow in non-AWS environments.
+  We recommend specifying the `region` field explicitly instead.
+</Warning>
 
 ##### `model_id`
 
@@ -715,27 +724,52 @@ See the [AWS documentation on inference profiles](https://docs.aws.amazon.com/be
 
 ##### `region`
 
-- **Type:** string
-- **Required:** no (default: based on credentials if set, otherwise `us-east-1`)
+- **Type:** string or object
+- **Required:** yes
 
 Defines the AWS region to use with the AWS Bedrock API.
+
+This field can be either a string for a single location, or an object with `default` and `fallback` fields for fallback support.
+
+The supported locations are:
+
+- Static values (e.g., `"us-east-1"`)
+- `env::VAR_NAME` - read from environment variable at startup
+- `path::/path/to/file` - read from file at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `sdk` - use AWS SDK auto-detection
+- `none` - treat as unspecified (useful in fallback configurations)
 
 ```toml title="tensorzero.toml"
 [models.claude-3-haiku.providers.aws_bedrock]
 # ...
 type = "aws_bedrock"
 region = "us-east-2"
+# or: region = "env::AWS_BEDROCK_REGION"
+# or: region = "path::/etc/secrets/aws-region"
+# or: region = "dynamic::bedrock-region"
+# or: region = "sdk"  # auto-detect using AWS SDK
+# or with fallback:
+# region = { default = "dynamic::bedrock-region", fallback = "env::AWS_REGION" }
 # ...
 ```
 
 ##### `endpoint_url`
 
-- **Type:** string
+- **Type:** string or object
 - **Required:** no
 
 Custom endpoint URL for the AWS Bedrock API. Useful for AWS PrivateLink, FIPS endpoints, or local testing (e.g., LocalStack).
 
-Supports static values, environment variables (`env::VAR_NAME`), or dynamic values (`dynamic::key_name`).
+This field can be either a string for a single location, or an object with `default` and `fallback` fields for fallback support.
+
+The supported locations are:
+
+- Static URLs (e.g., `"https://bedrock-runtime.us-east-1.amazonaws.com"`)
+- `env::VAR_NAME` - read from environment variable at startup
+- `path::/path/to/file` - read from file at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `none` - treat as unspecified
 
 See the [AWS Bedrock service endpoints documentation](https://docs.aws.amazon.com/general/latest/gr/bedrock.html) for available endpoints.
 
@@ -746,7 +780,10 @@ model_id = "anthropic.claude-3-haiku-20240307-v1:0"
 region = "us-east-1"
 endpoint_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
 # or: endpoint_url = "env::BEDROCK_ENDPOINT_URL"
+# or: endpoint_url = "path::/etc/secrets/bedrock-endpoint"
 # or: endpoint_url = "dynamic::bedrock-endpoint-url"
+# or with fallback:
+# endpoint_url = { default = "dynamic::bedrock-endpoint", fallback = "env::BEDROCK_ENDPOINT_URL" }
 ```
 
 <Warning>
@@ -764,9 +801,18 @@ endpoint_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
+<Warning>
+  **Deprecated:** Use `region = "sdk"` instead to enable auto-detection.
+</Warning>
+
 Defines whether to automatically detect the AWS region to use with the SageMaker API.
 Under the hood, the gateway will use the AWS SDK to try to detect the region.
 Alternatively, you can specify the region manually with the `region` field (recommended).
+
+<Warning>
+  Enabling this setting makes SDK initialization slow in non-AWS environments.
+  We recommend specifying the `region` field explicitly instead.
+</Warning>
 
 ##### `endpoint_name`
 
@@ -815,27 +861,52 @@ model_name = "gemma3:1b"
 
 ##### `region`
 
-- **Type:** string
-- **Required:** no (default: based on credentials if set, otherwise `us-east-1`)
+- **Type:** string or object
+- **Required:** yes
 
 Defines the AWS region to use with the AWS SageMaker API.
+
+This field can be either a string for a single location, or an object with `default` and `fallback` fields for fallback support.
+
+The supported locations are:
+
+- Static values (e.g., `"us-east-1"`)
+- `env::VAR_NAME` - read from environment variable at startup
+- `path::/path/to/file` - read from file at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `sdk` - use AWS SDK auto-detection
+- `none` - treat as unspecified (useful in fallback configurations)
 
 ```toml title="tensorzero.toml"
 [models.claude-3-haiku.providers.aws_sagemaker]
 # ...
 type = "aws_sagemaker"
 region = "us-east-2"
+# or: region = "env::AWS_SAGEMAKER_REGION"
+# or: region = "path::/etc/secrets/aws-region"
+# or: region = "dynamic::sagemaker-region"
+# or: region = "sdk"  # auto-detect using AWS SDK
+# or with fallback:
+# region = { default = "dynamic::sagemaker-region", fallback = "env::AWS_REGION" }
 # ...
 ```
 
 ##### `endpoint_url`
 
-- **Type:** string
+- **Type:** string or object
 - **Required:** no
 
 Custom endpoint URL for the AWS SageMaker API. Useful for AWS PrivateLink, FIPS endpoints, or local testing (e.g., LocalStack).
 
-Supports static values, environment variables (`env::VAR_NAME`), or dynamic values (`dynamic::key_name`).
+This field can be either a string for a single location, or an object with `default` and `fallback` fields for fallback support.
+
+The supported locations are:
+
+- Static URLs (e.g., `"https://runtime.sagemaker.us-east-1.amazonaws.com"`)
+- `env::VAR_NAME` - read from environment variable at startup
+- `path::/path/to/file` - read from file at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `none` - treat as unspecified
 
 See the [AWS SageMaker service endpoints documentation](https://docs.aws.amazon.com/general/latest/gr/sagemaker.html) for available endpoints.
 
@@ -848,7 +919,10 @@ hosted_provider = "openai"
 region = "us-east-1"
 endpoint_url = "https://runtime.sagemaker.us-east-1.amazonaws.com"
 # or: endpoint_url = "env::SAGEMAKER_ENDPOINT_URL"
+# or: endpoint_url = "path::/etc/secrets/sagemaker-endpoint"
 # or: endpoint_url = "dynamic::sagemaker-endpoint-url"
+# or with fallback:
+# endpoint_url = { default = "dynamic::sagemaker-endpoint", fallback = "env::SAGEMAKER_ENDPOINT_URL" }
 ```
 
 <Warning>
