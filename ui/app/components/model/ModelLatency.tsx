@@ -24,12 +24,51 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { Skeleton } from "~/components/ui/skeleton";
 import {
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
 } from "~/components/ui/chart";
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
+
+function LineChartSkeleton() {
+  return (
+    <div className="flex h-80 w-full flex-col gap-4">
+      <div className="relative flex-1 px-8 pb-8">
+        <div className="absolute top-0 left-0 flex h-full flex-col justify-between py-4">
+          <Skeleton className="h-3 w-10" />
+          <Skeleton className="h-3 w-8" />
+          <Skeleton className="h-3 w-10" />
+          <Skeleton className="h-3 w-8" />
+        </div>
+        <div className="ml-12 flex h-full flex-col justify-between">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="border-muted h-px w-full border-t border-dashed"
+            />
+          ))}
+        </div>
+        <div className="absolute inset-x-16 top-1/2 -translate-y-1/2">
+          <Skeleton className="h-1 w-full rounded-full" />
+        </div>
+      </div>
+      <div className="flex justify-between px-16">
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+      </div>
+      <div className="flex justify-center gap-4">
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-16" />
+      </div>
+    </div>
+  );
+}
 
 type LatencyMetric = "response_time_ms" | "ttft_ms";
 
@@ -279,7 +318,7 @@ export function ModelLatency({
         </div>
       </CardHeader>
       <CardContent>
-        <React.Suspense fallback={<div>Loading latency data...</div>}>
+        <React.Suspense fallback={<LineChartSkeleton />}>
           <Await resolve={modelLatencyDataPromise}>
             {(latencyData) => (
               <LatencyQuantileChart
