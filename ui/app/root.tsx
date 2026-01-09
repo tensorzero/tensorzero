@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -9,7 +8,7 @@ import {
   ScrollRestoration,
 } from "react-router";
 
-import { ConfigProvider } from "./context/config";
+import { ConfigProvider, EMPTY_CONFIG } from "./context/config";
 import { ReadOnlyProvider } from "./context/read-only";
 import { AutopilotAvailableProvider } from "./context/autopilot-available";
 import type { Route } from "./+types/root";
@@ -32,6 +31,7 @@ import {
   isGatewayConnectionError,
   classifyError,
   getErrorLabel,
+  type ClassifiedError,
 } from "./utils/tensorzero/errors";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
@@ -68,20 +68,33 @@ export async function loader() {
       getConfig(),
       checkAutopilotAvailable(),
     ]);
-    return { config, isReadOnly, autopilotAvailable };
+    return {
+      config,
+      isReadOnly,
+      autopilotAvailable,
+      infraError: null as ClassifiedError | null,
+    };
   } catch (e) {
-    // Throw typed errors that ErrorBoundary can handle
+    // Graceful degradation: return error info so UI renders with overlay
     if (isGatewayConnectionError(e)) {
-      throw data(
-        { errorType: InfraErrorType.GatewayUnavailable },
-        { status: 503 },
-      );
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: InfraErrorType.GatewayUnavailable,
+        } as ClassifiedError,
+      };
     }
     if (isAuthenticationError(e)) {
-      throw data(
-        { errorType: InfraErrorType.GatewayAuthFailed },
-        { status: 401 },
-      );
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: InfraErrorType.GatewayAuthFailed,
+        } as ClassifiedError,
+      };
     }
     throw e;
   }
@@ -107,7 +120,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
-  const { config, isReadOnly, autopilotAvailable } = loaderData;
+  const { config, isReadOnly, autopilotAvailable, infraError } = loaderData;
+  const [dialogOpen, setDialogOpen] = React.useState(true);
 
   return (
     <AppProviders>
@@ -120,6 +134,16 @@ export default function App({ loaderData }: Route.ComponentProps) {
                 <Outlet />
               </ContentLayout>
             </div>
+            {infraError && (
+              <ErrorDialog
+                open={dialogOpen}
+                onDismiss={() => setDialogOpen(false)}
+                onReopen={() => setDialogOpen(true)}
+                label={getErrorLabel(infraError.type)}
+              >
+                <ErrorContent error={infraError} />
+              </ErrorDialog>
+            )}
           </ConfigProvider>
         </AutopilotAvailableProvider>
       </ReadOnlyProvider>
