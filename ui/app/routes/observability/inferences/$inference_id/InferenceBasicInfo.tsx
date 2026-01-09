@@ -1,6 +1,8 @@
+import { Suspense } from "react";
+import { Await } from "react-router";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { useFunctionConfig } from "~/context/config";
-import type { InferenceUsage } from "~/utils/clickhouse/helpers";
+import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -34,17 +36,110 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
   );
 };
 
-interface BasicInfoProps {
+// Support both server-side streaming (promise) and client-side resolved data
+type BasicInfoProps = {
   inference: StoredInference;
-  inferenceUsage?: InferenceUsage;
-  modelInferences?: ParsedModelInferenceRow[];
+} & (
+  | {
+      modelInferencesPromise: Promise<ParsedModelInferenceRow[]>;
+      modelInferences?: never;
+    }
+  | {
+      modelInferences: ParsedModelInferenceRow[];
+      modelInferencesPromise?: never;
+    }
+  | { modelInferences?: never; modelInferencesPromise?: never }
+);
+
+// Convert bigint processing_time_ms to number for display
+function getProcessingTimeMs(inference: StoredInference): number | null {
+  if (inference.processing_time_ms === undefined) return null;
+  return typeof inference.processing_time_ms === "bigint"
+    ? Number(inference.processing_time_ms)
+    : inference.processing_time_ms;
 }
 
-export default function BasicInfo({
-  inference,
-  inferenceUsage,
-  modelInferences = [],
-}: BasicInfoProps) {
+// Inner component for usage chips (rendered inside Suspense)
+function UsageChips({
+  modelInferences,
+  processingTimeMs,
+}: {
+  modelInferences: ParsedModelInferenceRow[];
+  processingTimeMs: number | null;
+}) {
+  const inferenceUsage = getTotalInferenceUsage(modelInferences);
+
+  // Determine cache status from model inferences
+  const hasCachedInferences = modelInferences.some((mi) => mi.cached);
+  const allCached =
+    modelInferences.length > 0 && modelInferences.every((mi) => mi.cached);
+  const cacheStatus = allCached
+    ? "FULL"
+    : hasCachedInferences
+      ? "PARTIAL"
+      : "NONE";
+
+  return (
+    <>
+      <Chip
+        icon={<InputIcon className="text-fg-tertiary" />}
+        label={`${inferenceUsage.input_tokens ?? "—"} tok`}
+        tooltip="Input Tokens"
+      />
+      <Chip
+        icon={<Output className="text-fg-tertiary" />}
+        label={`${inferenceUsage.output_tokens ?? "—"} tok`}
+        tooltip="Output Tokens"
+      />
+      <Chip
+        icon={<Timer className="text-fg-tertiary" />}
+        label={`${processingTimeMs ?? "—"} ms`}
+        tooltip="Processing Time"
+      />
+      {(cacheStatus === "FULL" || cacheStatus === "PARTIAL") && (
+        <Chip
+          icon={<Cached className="text-fg-tertiary" />}
+          label={cacheStatus === "FULL" ? "Cached" : "Partially Cached"}
+          tooltip={
+            cacheStatus === "FULL"
+              ? "All model inferences were cached by TensorZero"
+              : "Some model inferences were cached by TensorZero"
+          }
+        />
+      )}
+    </>
+  );
+}
+
+// Loading state for usage chips
+function UsageChipsLoading({
+  processingTimeMs,
+}: {
+  processingTimeMs: number | null;
+}) {
+  return (
+    <>
+      <Chip
+        icon={<InputIcon className="text-fg-tertiary" />}
+        label="— tok"
+        tooltip="Input Tokens"
+      />
+      <Chip
+        icon={<Output className="text-fg-tertiary" />}
+        label="— tok"
+        tooltip="Output Tokens"
+      />
+      <Chip
+        icon={<Timer className="text-fg-tertiary" />}
+        label={`${processingTimeMs ?? "—"} ms`}
+        tooltip="Processing Time"
+      />
+    </>
+  );
+}
+
+export default function BasicInfo(props: BasicInfoProps) {
+  const { inference } = props;
   const functionConfig = useFunctionConfig(inference.function_name);
   const variantType =
     functionConfig?.variants[inference.variant_name]?.inner.type ??
@@ -58,15 +153,42 @@ export default function BasicInfo({
   // Get function icon and background
   const functionIconConfig = getFunctionTypeIcon(inference.type);
 
-  // Determine cache status from model inferences
-  const hasCachedInferences = modelInferences.some((mi) => mi.cached);
-  const allCached =
-    modelInferences.length > 0 && modelInferences.every((mi) => mi.cached);
-  const cacheStatus = allCached
-    ? "FULL"
-    : hasCachedInferences
-      ? "PARTIAL"
-      : "NONE";
+  // Get processing time as number
+  const processingTimeMs = getProcessingTimeMs(inference);
+
+  // Determine which usage display to render
+  const renderUsageContent = () => {
+    // Case 1: Server-side streaming with promise
+    if ("modelInferencesPromise" in props && props.modelInferencesPromise) {
+      return (
+        <Suspense
+          fallback={<UsageChipsLoading processingTimeMs={processingTimeMs} />}
+        >
+          <Await resolve={props.modelInferencesPromise}>
+            {(modelInferences) => (
+              <UsageChips
+                modelInferences={modelInferences}
+                processingTimeMs={processingTimeMs}
+              />
+            )}
+          </Await>
+        </Suspense>
+      );
+    }
+
+    // Case 2: Client-side with resolved data
+    if ("modelInferences" in props && props.modelInferences) {
+      return (
+        <UsageChips
+          modelInferences={props.modelInferences}
+          processingTimeMs={processingTimeMs}
+        />
+      );
+    }
+
+    // Case 3: No data available yet
+    return <UsageChipsLoading processingTimeMs={processingTimeMs} />;
+  };
 
   return (
     <BasicInfoLayout>
@@ -109,34 +231,7 @@ export default function BasicInfo({
 
       <BasicInfoItem>
         <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <Chip
-            icon={<InputIcon className="text-fg-tertiary" />}
-            label={`${inferenceUsage?.input_tokens ?? ""} tok`}
-            tooltip="Input Tokens"
-          />
-          <Chip
-            icon={<Output className="text-fg-tertiary" />}
-            label={`${inferenceUsage?.output_tokens ?? ""} tok`}
-            tooltip="Output Tokens"
-          />
-          <Chip
-            icon={<Timer className="text-fg-tertiary" />}
-            label={`${inference.processing_time_ms} ms`}
-            tooltip="Processing Time"
-          />
-          {(cacheStatus === "FULL" || cacheStatus === "PARTIAL") && (
-            <Chip
-              icon={<Cached className="text-fg-tertiary" />}
-              label={cacheStatus === "FULL" ? "Cached" : "Partially Cached"}
-              tooltip={
-                cacheStatus === "FULL"
-                  ? "All model inferences were cached by TensorZero"
-                  : "Some model inferences were cached by TensorZero"
-              }
-            />
-          )}
-        </BasicInfoItemContent>
+        <BasicInfoItemContent>{renderUsageContent()}</BasicInfoItemContent>
       </BasicInfoItem>
 
       <BasicInfoItem>

@@ -266,15 +266,9 @@ export function InferenceDetailContent({
   const options = isDefault ? models : variants;
   const onSelect = isDefault ? onModelSelect : onVariantSelect;
 
-  const inferenceUsage = getTotalInferenceUsage(model_inferences);
-
   // Build the header components
   const basicInfoElement = (
-    <BasicInfo
-      inference={inference}
-      inferenceUsage={inferenceUsage}
-      modelInferences={model_inferences}
-    />
+    <BasicInfo inference={inference} modelInferences={model_inferences} />
   );
 
   const actionBarElement = (
@@ -425,7 +419,7 @@ export function InferenceDetailContent({
             setLastRequestArgs(null);
           }}
           item={inference}
-          inferenceUsage={inferenceUsage}
+          inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
           source={variantSource}
           onRefresh={lastRequestArgs ? handleRefresh : null}
