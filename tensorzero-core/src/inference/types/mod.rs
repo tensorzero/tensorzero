@@ -739,6 +739,65 @@ impl RateLimitedInputContent for Thought {
     }
 }
 
+impl RateLimitedInputContent for Template {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let Template { name, arguments } = self;
+        let args = &arguments.0;
+        let args_tokens: u64 = args
+            .iter()
+            .map(|(key, value)| {
+                get_estimated_tokens(key) + get_estimated_tokens(&value.to_string())
+            })
+            .sum();
+        get_estimated_tokens(name) + args_tokens
+    }
+}
+
+impl RateLimitedInputContent for ToolCallWrapper {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            ToolCallWrapper::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            ToolCallWrapper::InferenceResponseToolCall(tool_call) => {
+                get_estimated_tokens(&tool_call.raw_name)
+                    + get_estimated_tokens(&tool_call.raw_arguments)
+            }
+        }
+    }
+}
+
+impl RateLimitedInputContent for File {
+    fn estimated_input_token_usage(&self) -> u64 {
+        // TODO: improve this estimate
+        10_000
+    }
+}
+
+impl RateLimitedInputContent for InputMessageContent {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            InputMessageContent::Text(text) => text.estimated_input_token_usage(),
+            InputMessageContent::Template(template) => template.estimated_input_token_usage(),
+            InputMessageContent::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            InputMessageContent::ToolResult(tool_result) => {
+                tool_result.estimated_input_token_usage()
+            }
+            InputMessageContent::RawText(raw_text) => raw_text.estimated_input_token_usage(),
+            InputMessageContent::Thought(thought) => thought.estimated_input_token_usage(),
+            InputMessageContent::File(file) => file.estimated_input_token_usage(),
+            InputMessageContent::Unknown(_) => 0,
+        }
+    }
+}
+
+impl RateLimitedInputContent for InputMessage {
+    fn estimated_input_token_usage(&self) -> u64 {
+        self.content
+            .iter()
+            .map(RateLimitedInputContent::estimated_input_token_usage)
+            .sum()
+    }
+}
+
 /// Core representation of the types of content that could go into a model provider
 /// The `PartialEq` impl will panic if we try to compare a `LazyFile`, so we make it
 /// test-only to prevent production code from panicking.
