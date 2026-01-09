@@ -8,7 +8,7 @@ use durable_tools::{NonControlToolError, TaskTool, ToolContext, ToolMetadata, To
 
 use crate::error::AutopilotToolError;
 
-use autopilot_client::OptimizationWorkflowSideInfo;
+use autopilot_client::AutopilotSideInfo;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::inferences::InferenceOutputSource;
@@ -65,7 +65,7 @@ pub struct LaunchOptimizationWorkflowToolOutput {
 pub struct LaunchOptimizationWorkflowTool;
 
 impl ToolMetadata for LaunchOptimizationWorkflowTool {
-    type SideInfo = OptimizationWorkflowSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = LaunchOptimizationWorkflowToolOutput;
     type LlmParams = LaunchOptimizationWorkflowToolParams;
 
@@ -184,8 +184,8 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
             .await?;
 
         // Step 2: Poll until completion
-        let poll_interval = Duration::from_secs(side_info.poll_interval_secs);
-        let max_wait_secs = side_info.max_wait_secs as i64;
+        let poll_interval = Duration::from_secs(side_info.optimization.poll_interval_secs);
+        let max_wait_secs = side_info.optimization.max_wait_secs as i64;
         let start = ctx.now().await?;
         let mut iteration = 0u32;
 
