@@ -55,26 +55,67 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
                     "description": "The name of the dataset to create datapoints in."
                 },
                 "params": {
-                    "type": "object",
-                    "description": "Parameters specifying which inferences to use.",
-                    "properties": {
-                        "inference_ids": {
-                            "type": "array",
-                            "items": { "type": "string", "format": "uuid" },
-                            "description": "Specific inference IDs to create datapoints from (use this OR query parameters)."
+                    "description": "Parameters specifying which inferences to use. Use 'inference_ids' mode to specify exact IDs, or 'inference_query' mode to query by function name.",
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "description": "Create datapoints from specific inference IDs.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["inference_ids"],
+                                    "description": "Mode selector - must be 'inference_ids' for this variant."
+                                },
+                                "inference_ids": {
+                                    "type": "array",
+                                    "items": { "type": "string", "format": "uuid" },
+                                    "description": "The inference IDs to create datapoints from."
+                                },
+                                "output_source": {
+                                    "type": "string",
+                                    "enum": ["none", "inference", "demonstration"],
+                                    "description": "Source for datapoint output: 'none' (input-only), 'inference' (original output, default), or 'demonstration' (use demonstration feedback)."
+                                }
+                            },
+                            "required": ["type", "inference_ids"],
+                            "additionalProperties": false
                         },
-                        "function_name": {
-                            "type": "string",
-                            "description": "Filter inferences by function name (for query mode)."
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of inferences to use (for query mode)."
+                        {
+                            "type": "object",
+                            "description": "Create datapoints from inferences matching a query.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["inference_query"],
+                                    "description": "Mode selector - must be 'inference_query' for this variant."
+                                },
+                                "function_name": {
+                                    "type": "string",
+                                    "description": "Filter inferences by function name."
+                                },
+                                "variant_name": {
+                                    "type": "string",
+                                    "description": "Filter inferences by variant name."
+                                },
+                                "limit": {
+                                    "type": "integer",
+                                    "description": "Maximum number of inferences to use.",
+                                    "minimum": 1
+                                },
+                                "output_source": {
+                                    "type": "string",
+                                    "enum": ["none", "inference", "demonstration"],
+                                    "description": "Source for datapoint output: 'none' (input-only), 'inference' (original output, default), or 'demonstration' (use demonstration feedback)."
+                                }
+                            },
+                            "required": ["type"],
+                            "additionalProperties": false
                         }
-                    }
+                    ]
                 }
             },
-            "required": ["dataset_name", "params"]
+            "required": ["dataset_name", "params"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
