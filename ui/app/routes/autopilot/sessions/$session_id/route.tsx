@@ -1,7 +1,6 @@
 import type { Route } from "./+types/route";
 import {
   Suspense,
-  use,
   useCallback,
   useEffect,
   useMemo,
@@ -9,9 +8,10 @@ import {
   useState,
 } from "react";
 import {
+  Await,
   data,
-  isRouteErrorResponse,
   Link,
+  useAsyncError,
   useNavigate,
   type RouteHandle,
 } from "react-router";
@@ -122,7 +122,24 @@ function EventStreamSkeleton() {
   );
 }
 
-// Main content component that resolves the promise and renders the event stream with SSE
+// Error component for when events fail to load
+function EventStreamError() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load session events";
+
+  return (
+    <div className="border-border mt-8 flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto rounded-lg border p-4">
+      <div className="text-center">
+        <p className="font-medium text-red-600">Error loading events</p>
+        <p className="text-muted-foreground mt-1 text-sm">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+// Main content component that renders the event stream with SSE
+// Receives already-resolved data (either from Await or directly for new sessions)
 function EventStreamContent({
   sessionId,
   eventsData,
@@ -133,21 +150,20 @@ function EventStreamContent({
   onLoaded,
 }: {
   sessionId: string;
-  eventsData: EventsData | Promise<EventsData>;
+  eventsData: EventsData;
   isNewSession: boolean;
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   onLoaded: () => void;
 }) {
-  // Resolve promise (or use direct data for new session)
   const {
     events: initialEvents,
     hasMoreEvents: initialHasMore,
     pendingToolCalls: initialPendingToolCalls,
-  } = eventsData instanceof Promise ? use(eventsData) : eventsData;
+  } = eventsData;
 
-  // Signal that loading is complete (this runs after promise resolves)
+  // Signal that loading is complete
   useEffect(() => {
     onLoaded();
   }, [onLoaded]);
@@ -620,7 +636,7 @@ export default function AutopilotSessionEventsPage({
   );
 }
 
-// Wrapper that passes the scroll container ref back to parent
+// Wrapper that handles promise resolution with Await or direct data for new sessions
 function EventStreamContentWrapper({
   sessionId,
   eventsData,
@@ -638,45 +654,39 @@ function EventStreamContentWrapper({
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   onLoaded: () => void;
 }) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <EventStreamContent
-        sessionId={sessionId}
-        eventsData={eventsData}
-        isNewSession={isNewSession}
-        optimisticMessages={optimisticMessages}
-        onOptimisticMessagesChange={onOptimisticMessagesChange}
-        scrollContainerRef={scrollContainerRef}
-        onLoaded={onLoaded}
-      />
-    </div>
-  );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
+  // New sessions have direct data (not a promise)
+  if (!(eventsData instanceof Promise)) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <EventStreamContent
+          sessionId={sessionId}
+          eventsData={eventsData}
+          isNewSession={isNewSession}
+          optimisticMessages={optimisticMessages}
+          onOptimisticMessagesChange={onOptimisticMessagesChange}
+          scrollContainerRef={scrollContainerRef}
+          onLoaded={onLoaded}
+        />
       </div>
     );
   }
+
+  // Existing sessions use Await to resolve the promise with error handling
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Await resolve={eventsData} errorElement={<EventStreamError />}>
+        {(resolvedData) => (
+          <EventStreamContent
+            sessionId={sessionId}
+            eventsData={resolvedData}
+            isNewSession={isNewSession}
+            optimisticMessages={optimisticMessages}
+            onOptimisticMessagesChange={onOptimisticMessagesChange}
+            scrollContainerRef={scrollContainerRef}
+            onLoaded={onLoaded}
+          />
+        )}
+      </Await>
+    </div>
+  );
 }
