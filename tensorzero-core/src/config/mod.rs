@@ -979,6 +979,12 @@ async fn process_config_input(
 
             // Use the overlay object store info directly instead of creating a new one
             let gateway_config = overlay_gateway.load(overlay_object_store_info.as_ref())?;
+            // Initialize templates from ALL functions (including built-in)
+            let all_template_paths = Config::get_templates(&all_functions)?;
+            // We don't use these since the extra templates come directly from the snapshot
+            // We pass in None for the base path to disable searching the file system
+            // for snapshotted configs.
+            let _unused_extra_templates = templates.initialize(all_template_paths, None).await?;
 
             Ok(ProcessedConfigInput {
                 tools,
