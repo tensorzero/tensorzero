@@ -263,7 +263,7 @@ impl OpenAIResponsesResponse<'_> {
                 raw_response: raw_response.clone(),
                 raw_usage,
                 usage,
-                latency,
+                provider_latency: latency,
                 finish_reason,
                 id: model_inference_id,
             },

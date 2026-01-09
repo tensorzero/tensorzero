@@ -28,6 +28,7 @@ use crate::config::{
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -44,7 +45,6 @@ use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
-    current_timestamp,
 };
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
@@ -184,15 +184,13 @@ impl StreamResponse {
                         raw_response: c.raw_response,
                         // We intentionally don't cache and re-use these values from the original
                         // request:
-                        // The new result was 'created' now
-                        created: current_timestamp(),
                         // Use the real usage (so that the `ModelInference` row we write is accurate)
                         // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
                         usage: c.usage,
                         // raw_usage is not cached
                         raw_usage: None,
                         // We didn't make any network calls to the model provider, so the latency is 0
-                        latency: Duration::from_secs(0),
+                        provider_latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {
@@ -739,22 +737,20 @@ fn wrap_provider_stream(
     let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
     let span_clone = span.clone();
+
+    // Collect usage objects for later use (e.g. rate limiting)
+    let mut usages: Vec<Usage> = vec![];
+
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
-        // `total_usage` is `None` until we receive a chunk with usage information
-        let mut total_usage: Option<Usage> = None;
+
+        // IMPORTANT: We should NOT modify chunks here, as they'll be re-processed downstream (e.g. `create_stream`).
         while let Some(chunk) = stream.next().await {
-            if let Ok(chunk) = chunk.as_ref()
-                && let Some(chunk_usage) = chunk.usage.as_ref() {
-                // `total_usage` will be `None` if this is the first chunk with usage information....
-                if total_usage.is_none() {
-                    // ... so initialize it to zero ...
-                    total_usage = Some(Usage::zero());
-                }
-                // ...and then add the chunk usage to it (handling `None` fields)
-                    if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
-                }
+            if let Ok(chunk) = chunk.as_ref() && let Some(chunk_usage) = chunk.usage.as_ref() {
+                usages.push(*chunk_usage);
+            }
+
             // We can skip cloning the chunk if we know we're not going to write to the cache
             if write_to_cache && !errored {
                 match chunk.as_ref() {
@@ -777,13 +773,12 @@ fn wrap_provider_stream(
             yield chunk;
         }
 
-        // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
-        let total_usage = total_usage.unwrap_or_default();
+        let aggregated_usage = aggregate_usage_from_single_streaming_model_inference(usages);
 
-        otlp_config.apply_usage_to_model_provider_span(&span_clone, &total_usage);
+        otlp_config.apply_usage_to_model_provider_span(&span_clone, &aggregated_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            let usage = match (total_usage.total_tokens(), errored) {
+            let usage = match (aggregated_usage.total_tokens(), errored) {
                 (Some(tokens), false) => {
                     RateLimitResourceUsage::Exact {
                         model_inferences: 1,
@@ -793,7 +788,7 @@ fn wrap_provider_stream(
                 _ => {
                     RateLimitResourceUsage::UnderEstimate {
                         model_inferences: 1,
-                        tokens: total_usage.total_tokens().unwrap_or(0) as u64,
+                        tokens: aggregated_usage.total_tokens().unwrap_or(0) as u64,
                     }
                 }
             };
@@ -806,14 +801,13 @@ fn wrap_provider_stream(
             }
         }.instrument(span_clone.clone()));
 
-
         if write_to_cache && !errored {
             let _ = start_cache_write_streaming(
                 &clickhouse_info,
                 cache_key,
                 buffer,
                 &raw_request,
-                &total_usage,
+                &aggregated_usage,
                 tool_config
             );
         }

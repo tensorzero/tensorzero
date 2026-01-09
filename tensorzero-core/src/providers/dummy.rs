@@ -127,23 +127,20 @@ impl DummyProvider {
             })
         });
         let num_chunks = thinking_chunks.len() + response_chunks.len();
-        let created = current_timestamp();
         let chained = thinking_chunks.into_iter().chain(response_chunks);
         let total_tokens = num_chunks as u32;
         let stream = tokio_stream::iter(chained.enumerate())
             .map(move |(i, chunk)| {
                 Ok(ProviderInferenceResponseChunk {
-                    created,
                     content: vec![chunk],
                     usage: None,
                     raw_usage: None,
                     raw_response: String::new(),
-                    latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
+                    provider_latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     finish_reason: None,
                 })
             })
             .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
-                created,
                 content: vec![],
                 usage: Some(self.get_model_usage(total_tokens)),
                 raw_usage: Some(vec![RawUsageEntry {
@@ -154,7 +151,7 @@ impl DummyProvider {
                 }]),
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: String::new(),
-                latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
+                provider_latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
             })))
             .throttle(std::time::Duration::from_millis(10));
 
@@ -390,7 +387,6 @@ impl InferenceProvider for DummyProvider {
             .into());
         }
         let id = Uuid::now_v7();
-        let created = current_timestamp();
         let content = match self.model_name.as_str() {
             "null" => vec![],
             "tool" => vec![ContentBlockOutput::ToolCall(ToolCall {
@@ -639,12 +635,11 @@ impl InferenceProvider for DummyProvider {
         };
         Ok(ProviderInferenceResponse {
             id,
-            created,
             output: content,
             raw_request,
             raw_response,
             usage,
-            latency,
+            provider_latency: latency,
             system,
             input_messages,
             finish_reason,
@@ -738,8 +733,6 @@ impl InferenceProvider for DummyProvider {
         let err_in_stream = self.model_name == "err_in_stream";
         let fatal_stream_error = self.model_name == "fatal_stream_error";
 
-        let created = current_timestamp();
-
         let (content_chunks, is_tool_call) = match self.model_name.as_str() {
             "tool" | "tool_split_name" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
             "good_tool" => (DUMMY_STREAMING_GOOD_TOOL_RESPONSE.to_vec(), true),
@@ -795,7 +788,6 @@ impl InferenceProvider for DummyProvider {
                     None
                 };
                 yield Ok(ProviderInferenceResponseChunk {
-                    created,
                     content: vec![if is_tool_call {
                         ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: "0".to_string(),
@@ -812,13 +804,12 @@ impl InferenceProvider for DummyProvider {
                     raw_usage: None,
                     finish_reason: None,
                     raw_response: chunk.to_string(),
-                    latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
+                    provider_latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                 });
             }
         };
 
         let base_stream = stream.chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
-            created,
             content: vec![],
             usage: Some(self.get_model_usage(content_chunk_len as u32)),
             raw_usage: Some(vec![RawUsageEntry {
@@ -829,7 +820,7 @@ impl InferenceProvider for DummyProvider {
             }]),
             finish_reason,
             raw_response: String::new(),
-            latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
+            provider_latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
         })));
 
         // We don't use the tokio `throttled` combinator, since we want to use `sleep_excluding_latency`

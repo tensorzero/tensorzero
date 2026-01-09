@@ -36,7 +36,7 @@ use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason,
     InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, current_timestamp,
+    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage,
 };
 use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -1017,7 +1017,6 @@ pub async fn write_completed_batch_inference<'a>(
         };
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: current_timestamp(),
             output: output.clone(),
             system: system.map(Cow::into_owned),
             input_messages: RequestMessagesOrBatch::BatchInput(input_messages),

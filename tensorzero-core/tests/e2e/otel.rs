@@ -470,15 +470,31 @@ async fn test_stream_fatal_error_usage() {
                     "Unexpected error: {e:#?}"
                 );
                 let start = Instant::now();
+                // After the error, we receive a final chunk with usage/finish_reason
                 let next_chunk = stream.next().await;
                 let elapsed = start.elapsed();
                 assert!(
                     elapsed < Duration::from_secs(1),
                     "Stream should end within 1 second of fatal error, but took {elapsed:?}"
                 );
+                // Verify the final chunk only has usage/finish_reason, no content
+                match next_chunk {
+                    Some(Ok(InferenceResponseChunk::Chat(response))) => {
+                        assert!(
+                            response.content.is_empty(),
+                            "Final chunk should have no content, got: {:?}",
+                            response.content
+                        );
+                    }
+                    other => {
+                        panic!("Expected final chunk with usage/finish_reason, got: {other:#?}")
+                    }
+                }
+                // Now the stream should end
+                let final_chunk = stream.next().await;
                 assert!(
-                    next_chunk.is_none(),
-                    "Expected stream to end after fatal error, got: {next_chunk:#?}"
+                    final_chunk.is_none(),
+                    "Expected stream to end after final chunk, got: {final_chunk:#?}"
                 );
                 check_spans(
                     &exporter,

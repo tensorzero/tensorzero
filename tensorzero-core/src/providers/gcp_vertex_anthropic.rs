@@ -794,7 +794,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 raw_response,
                 usage,
                 raw_usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
                 id: model_inference_id,
             },
@@ -1366,7 +1366,7 @@ mod tests {
         assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(50));
-        assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.provider_latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.system, Some("system".to_string()));
         assert_eq!(
@@ -1451,7 +1451,7 @@ mod tests {
         assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(50));
-        assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.provider_latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.system, None);
         assert_eq!(
@@ -1543,7 +1543,7 @@ mod tests {
 
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(50));
-        assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.provider_latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.system, None);
         assert_eq!(
