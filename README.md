@@ -223,8 +223,6 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 
 </details>
 
-<br>
-
 ### 🔍 LLM Observability
 
 > **Zoom in to debug individual API calls, or zoom out to monitor metrics across models and prompts over time &mdash; all using the open-source TensorZero UI.**
@@ -264,8 +262,6 @@ t0.experimental_list_inferences(
 </tr>
 </table>
 
-<br>
-
 ### 📈 LLM Optimization
 
 > **Send production metrics and human feedback to easily optimize your prompts, models, and inference strategies &mdash; using the UI or programmatically.**
@@ -275,8 +271,6 @@ t0.experimental_list_inferences(
 - [x] Optimize your **[inference strategy](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)** with dynamic in-context learning, best/mixture-of-N sampling, etc.
 - [x] Enable a feedback loop for your LLMs: a data & learning flywheel turning production data into smarter, faster, and cheaper models
 - [ ] Soon: synthetic data generation
-
-<br>
 
 ### 📊 LLM Evaluation
 
