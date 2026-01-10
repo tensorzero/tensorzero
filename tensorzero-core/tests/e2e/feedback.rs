@@ -1546,6 +1546,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
     config
         .metrics
@@ -1885,6 +1886,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
     config
         .metrics

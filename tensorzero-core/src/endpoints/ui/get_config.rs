@@ -98,6 +98,7 @@ mod tests {
             r#type: MetricConfigType::Boolean,
             optimize: MetricConfigOptimize::Max,
             level: MetricConfigLevel::Inference,
+            description: None,
         };
 
         // Build config with the function and metric
@@ -164,6 +165,7 @@ mod tests {
             r#type: MetricConfigType::Float,
             optimize: MetricConfigOptimize::Min,
             level: MetricConfigLevel::Episode,
+            description: None,
         };
 
         let mut config = Config::default();
