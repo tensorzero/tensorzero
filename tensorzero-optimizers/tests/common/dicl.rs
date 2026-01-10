@@ -83,7 +83,7 @@ pub async fn test_dicl_optimization_chat() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
@@ -367,7 +367,7 @@ pub async fn test_dicl_optimization_json() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
