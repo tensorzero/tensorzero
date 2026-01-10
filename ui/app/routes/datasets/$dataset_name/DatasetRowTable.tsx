@@ -113,8 +113,7 @@ function TableBodyContent({
             )}
           </TableCell>
           <TableCell>
-            {/* TODO: switch to using undefined instead of null */}
-            <TableItemText text={row.name ?? null} />
+            <TableItemText text={row.name} />
           </TableCell>
           <TableCell>
             <TableItemFunction

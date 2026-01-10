@@ -92,6 +92,13 @@ impl FunctionConfigType {
             FunctionConfigType::Json => "JsonInference",
         }
     }
+
+    pub fn datapoint_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "ChatInferenceDatapoint",
+            FunctionConfigType::Json => "JsonInferenceDatapoint",
+        }
+    }
 }
 
 impl FunctionConfig {
