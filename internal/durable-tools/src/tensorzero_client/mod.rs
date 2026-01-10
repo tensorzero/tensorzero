@@ -133,6 +133,75 @@ pub struct RunEvaluationResponse {
     pub stats: HashMap<String, EvaluatorStatsResponse>,
 }
 
+// Re-export topk types from evaluations crate
+pub use evaluations::betting_confidence_sequences::{
+    MeanBettingConfidenceSequence, WealthProcessGridPoints, WealthProcesses,
+};
+pub use evaluations::topk::{
+    GlobalStoppingReason, ScoringFunctionType, TopKTaskOutput, TopKTaskParams, VariantStatus,
+};
+
+/// Parameters for running a top-k evaluation.
+///
+/// This wraps [`TopKTaskParams`] but uses names for evaluation and function configs,
+/// which are resolved at runtime from the gateway config.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunTopKEvaluationParams {
+    /// Name of the evaluation to run.
+    pub evaluation_name: String,
+    /// Name of the dataset to run on.
+    pub dataset_name: String,
+    /// List of variant names to compare.
+    pub variant_names: Vec<String>,
+    /// Minimum k for top-k identification.
+    pub k_min: u32,
+    /// Maximum k for top-k identification.
+    pub k_max: u32,
+    /// Tolerance for performance equivalence (epsilon).
+    #[serde(default)]
+    pub epsilon: Option<f64>,
+    /// Maximum number of datapoints to process.
+    #[serde(default)]
+    pub max_datapoints: Option<usize>,
+    /// Batch size for processing.
+    #[serde(default)]
+    pub batch_size: Option<usize>,
+    /// Failure rate threshold for variants.
+    /// Variants exceeding this threshold are marked as Failed.
+    #[serde(default = "default_failure_threshold")]
+    pub variant_failure_threshold: f64,
+    /// Failure rate threshold for evaluators.
+    /// The run terminates if any evaluator exceeds this threshold.
+    #[serde(default = "default_failure_threshold")]
+    pub evaluator_failure_threshold: f64,
+    /// Number of concurrent requests.
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
+    /// Cache mode for inference.
+    #[serde(default)]
+    pub inference_cache: CacheEnabledMode,
+    /// Scoring function type for ranking variants.
+    pub scoring_function: ScoringFunctionType,
+}
+
+fn default_failure_threshold() -> f64 {
+    0.05
+}
+
+fn default_concurrency() -> usize {
+    5
+}
+
+/// Response from a top-k evaluation.
+///
+/// This is a wrapper around [`TopKTaskOutput`] for API consistency.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunTopKEvaluationResponse {
+    /// The full output from the top-k evaluation task.
+    #[serde(flatten)]
+    pub output: TopKTaskOutput,
+}
+
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
 ///
 /// This trait abstracts over the TensorZero client, allowing tools to
@@ -314,6 +383,22 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         params: RunEvaluationParams,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError>;
+
+    /// Run a top-k evaluation to identify the best-performing variants.
+    ///
+    /// This runs an adaptive evaluation algorithm that evaluates multiple variants
+    /// against a dataset, stopping when it can confidently identify the top-k variants
+    /// (for some k in [k_min, k_max]).
+    ///
+    /// The evaluation uses betting confidence sequences for anytime-valid inference,
+    /// allowing early stopping when sufficient confidence is reached.
+    ///
+    /// Note: This operation is only supported in embedded gateway mode.
+    /// HTTP gateway mode will return a `NotSupported` error.
+    async fn run_topk_evaluation(
+        &self,
+        params: RunTopKEvaluationParams,
+    ) -> Result<RunTopKEvaluationResponse, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.
@@ -400,4 +485,79 @@ pub async fn embedded_gateway_client(
     .build()
     .await?;
     Ok(Arc::new(client))
+}
+
+/// Poll for top-k task completion.
+///
+/// This is a shared helper used by both embedded and HTTP client implementations.
+pub(super) async fn poll_topk_task(
+    pool: &sqlx::PgPool,
+    queue_name: &str,
+    task_id: Uuid,
+) -> Result<evaluations::topk::TopKTaskOutput, TensorZeroClientError> {
+    use sqlx::{AssertSqlSafe, query_as};
+    use std::time::Duration;
+
+    let timeout = Duration::from_secs(3600); // 1 hour timeout
+    let start = std::time::Instant::now();
+
+    loop {
+        if start.elapsed() > timeout {
+            return Err(TensorZeroClientError::Evaluation(
+                "Top-k evaluation timed out".to_string(),
+            ));
+        }
+
+        // Check task state
+        let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
+        let state: Option<(String,)> = query_as(AssertSqlSafe(query))
+            .bind(task_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::Evaluation(format!("Failed to query task state: {e}"))
+            })?;
+
+        if let Some((state,)) = state {
+            if state == "completed" {
+                break;
+            } else if state == "failed" {
+                // Get error message
+                let query =
+                    format!("SELECT failed_error FROM durable.t_{queue_name} WHERE task_id = $1");
+                let error: Option<(Option<String>,)> = query_as(AssertSqlSafe(query))
+                    .bind(task_id)
+                    .fetch_optional(pool)
+                    .await
+                    .ok()
+                    .flatten();
+                let error_msg = error
+                    .and_then(|(e,)| e)
+                    .unwrap_or_else(|| "Unknown error".to_string());
+                return Err(TensorZeroClientError::Evaluation(format!(
+                    "Top-k task failed: {error_msg}"
+                )));
+            }
+        }
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+
+    // Get the task result
+    let query = format!("SELECT completed_payload FROM durable.t_{queue_name} WHERE task_id = $1");
+    let result: Option<(Option<serde_json::Value>,)> = query_as(AssertSqlSafe(query))
+        .bind(task_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| {
+            TensorZeroClientError::Evaluation(format!("Failed to query task result: {e}"))
+        })?;
+
+    let output = result
+        .and_then(|(payload,)| payload)
+        .ok_or_else(|| TensorZeroClientError::Evaluation("No task output found".to_string()))?;
+
+    serde_json::from_value(output).map_err(|e| {
+        TensorZeroClientError::Evaluation(format!("Failed to deserialize output: {e}"))
+    })
 }

@@ -511,6 +511,11 @@ mod tests {
                 &self,
                 params: durable_tools::RunEvaluationParams,
             ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
+
+            async fn run_topk_evaluation(
+                &self,
+                params: durable_tools::RunTopKEvaluationParams,
+            ) -> Result<durable_tools::RunTopKEvaluationResponse, TensorZeroClientError>;
         }
     }
 

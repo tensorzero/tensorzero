@@ -224,7 +224,9 @@ pub use tensorzero_client::SnapshotHash;
 
 // Re-export evaluation types
 pub use tensorzero_client::{
-    CacheEnabledMode, EvaluatorStatsResponse, RunEvaluationParams, RunEvaluationResponse,
+    CacheEnabledMode, EvaluatorStatsResponse, GlobalStoppingReason, MeanBettingConfidenceSequence,
+    RunEvaluationParams, RunEvaluationResponse, RunTopKEvaluationParams, RunTopKEvaluationResponse,
+    ScoringFunctionType, TopKTaskOutput, VariantStatus, WealthProcessGridPoints, WealthProcesses,
 };
 
 // Re-export TensorZero inference types for convenience

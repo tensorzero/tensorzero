@@ -216,6 +216,15 @@ impl TensorZeroClient for MockTensorZeroClient {
             "run_evaluation not supported in mock client".to_string(),
         ))
     }
+
+    async fn run_topk_evaluation(
+        &self,
+        _params: durable_tools::RunTopKEvaluationParams,
+    ) -> Result<durable_tools::RunTopKEvaluationResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "run_topk_evaluation not supported in mock client".to_string(),
+        ))
+    }
 }
 
 /// Create a mock chat inference response with the given text content.
