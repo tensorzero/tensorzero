@@ -1687,7 +1687,7 @@ async fn test_bedrock_err_no_auto_detect_region() {
         .expect_err("Failed to load bedrock");
     let err_msg = err.to_string();
     assert!(
-        err_msg.contains("requires a region to be provided, or `allow_auto_detect_region = true`"),
+        err_msg.contains("aws_bedrock provider requires a region"),
         "Unexpected error message: {err_msg}"
     );
 }
@@ -1709,16 +1709,16 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
         model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-        allow_auto_detect_region = true
+        region = "sdk"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
-        .expect_err("Failed to load bedrock");
+        .expect_err("Expected error when SDK cannot determine region");
     let err_msg = err.to_string();
     assert!(
-        err_msg.contains("Failed to determine AWS region."),
+        err_msg.contains("Failed to determine AWS region"),
         "Unexpected error message: {err_msg}"
     );
 }
@@ -1743,15 +1743,217 @@ async fn test_bedrock_region_and_allow_auto() {
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
         model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-        allow_auto_detect_region = true
         region = "us-east-2"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
-        .expect("Failed to construct config with valid AWS bedrock provider");
+        .expect("Failed to construct config with valid AWS Bedrock provider");
 }
+// ===== AWS Dynamic Credentials Config Parsing Tests =====
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_dynamic_region_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        region = "dynamic::aws_region"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - dynamic region is valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Dynamic region should be valid config");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_env_region_missing_var_errors() {
+    // Use a unique env var name that won't exist
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        region = "env::TENSORZERO_TEST_NONEXISTENT_REGION_VAR"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Should error when env var doesn't exist");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("TENSORZERO_TEST_NONEXISTENT_REGION_VAR"),
+        "Error should mention the missing env var: {err_msg}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_dynamic_credentials_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        secret_access_key = "dynamic::aws_secret_key"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - dynamic credentials are valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Dynamic credentials should be valid config");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_dynamic_credentials_with_session_token_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        secret_access_key = "dynamic::aws_secret_key"
+        session_token = "dynamic::aws_session_token"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - dynamic credentials with session token are valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Dynamic credentials with session token should be valid config");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_mixed_credential_sources_errors() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        secret_access_key = "env::AWS_SECRET_ACCESS_KEY"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Mixed credential sources should error");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("same source type"),
+        "Error should mention same source type requirement: {err_msg}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_access_key_without_secret_errors() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("access_key without secret should error");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("secret_access_key"),
+        "Error should mention secret_access_key: {err_msg}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_session_token_mismatch_errors() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        secret_access_key = "dynamic::aws_secret_key"
+        session_token = "env::AWS_SESSION_TOKEN"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Session token source mismatch should error");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("session_token"),
+        "Error should mention session_token: {err_msg}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_dynamic_endpoint_url_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        region = "us-east-1"
+        endpoint_url = "dynamic::aws_endpoint"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - dynamic endpoint is valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Dynamic endpoint_url should be valid config");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_static_endpoint_url_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        region = "us-east-1"
+        endpoint_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - static endpoint is valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Static endpoint_url should be valid config");
+}
+
 #[tokio::test]
 async fn test_config_load_no_config_file() {
     let err = &ConfigFileGlob::new_from_path(Path::new("nonexistent.toml"))

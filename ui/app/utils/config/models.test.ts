@@ -51,7 +51,6 @@ describe("dump_optimizer_output", () => {
           "gpt-4o": {
             type: "openai",
             model_name: "gpt-4o",
-            api_base: null,
             api_key_location: null,
             discard_unknown_chunks: false,
             include_encrypted_reasoning: false,

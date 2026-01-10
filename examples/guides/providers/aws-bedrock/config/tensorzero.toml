@@ -4,7 +4,7 @@ routing = ["aws_bedrock"]
 [models.claude_3_haiku_20240307.providers.aws_bedrock]
 type = "aws_bedrock"
 model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-allow_auto_detect_region = true
+region = "sdk"
 
 [functions.my_function_name]
 type = "chat"
