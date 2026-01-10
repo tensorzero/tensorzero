@@ -90,6 +90,9 @@ pub async fn tensorzero_auth_middleware(
                     AuthResult::Disabled(disabled_at) => Err(TensorZeroAuthError::Middleware {
                         message: format!("API key was disabled at: {disabled_at}"),
                     }),
+                    AuthResult::Expired(expired_at) => Err(TensorZeroAuthError::Middleware {
+                        message: format!("API key expired at: {expired_at}"),
+                    }),
                     AuthResult::MissingKey => Err(TensorZeroAuthError::Middleware {
                         message: "Provided API key does not exist in the database".to_string(),
                     }),
@@ -110,6 +113,9 @@ pub async fn tensorzero_auth_middleware(
             AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
             AuthResult::Disabled(disabled_at) => Err(TensorZeroAuthError::Middleware {
                 message: format!("API key was disabled at: {disabled_at}"),
+            }),
+            AuthResult::Expired(expired_at) => Err(TensorZeroAuthError::Middleware {
+                message: format!("API key expired at: {expired_at}"),
             }),
             AuthResult::MissingKey => Err(TensorZeroAuthError::Middleware {
                 message: "Provided API key does not exist in the database".to_string(),
