@@ -19,6 +19,7 @@ use crate::{
     providers::{
         anthropic::AnthropicCredentials,
         azure::AzureCredentials,
+        azure_anthropic::AzureAnthropicCredentials,
         deepseek::DeepSeekCredentials,
         fireworks::FireworksCredentials,
         gcp_vertex_anthropic::make_gcp_sdk_credentials,
@@ -87,6 +88,7 @@ pub trait ProviderKind {
 pub enum ProviderType {
     Anthropic,
     Azure,
+    AzureAnthropic,
     Deepseek,
     Fireworks,
     AWSBedrock,
@@ -110,6 +112,7 @@ impl Display for ProviderType {
         match self {
             ProviderType::Anthropic => write!(f, "Anthropic"),
             ProviderType::Azure => write!(f, "Azure"),
+            ProviderType::AzureAnthropic => write!(f, "AzureAnthropic"),
             ProviderType::Deepseek => write!(f, "Deepseek"),
             ProviderType::Fireworks => write!(f, "Fireworks"),
             ProviderType::AWSBedrock => write!(f, "AWSBedrock"),
@@ -367,6 +370,7 @@ pub struct ProviderTypeDefaultCredentials {
     // aws_bedrock:
     // aws_sagemaker:
     azure: LazyCredential<AzureCredentials>,
+    azure_anthropic: LazyCredential<AzureAnthropicCredentials>,
     deepseek: LazyCredential<DeepSeekCredentials>,
     fireworks: LazyCredential<FireworksCredentials>,
     gcp_vertex_anthropic: LazyAsyncCredential<GCPVertexCredentials>,
@@ -393,6 +397,11 @@ impl ProviderTypeDefaultCredentials {
             .clone();
         let azure_location = provider_types_config
             .azure
+            .defaults
+            .api_key_location
+            .clone();
+        let azure_anthropic_location = provider_types_config
+            .azure_anthropic
             .defaults
             .api_key_location
             .clone();
@@ -463,6 +472,10 @@ impl ProviderTypeDefaultCredentials {
             }),
             azure: LazyCredential::new(move || {
                 load_azure_credential_with_legacy_fallback(&azure_location)?.try_into()
+            }),
+            azure_anthropic: LazyCredential::new(move || {
+                load_credential_with_fallback(&azure_anthropic_location, ProviderType::AzureAnthropic)?
+                    .try_into()
             }),
             deepseek: LazyCredential::new(move || {
                 load_credential_with_fallback(&deepseek_location, ProviderType::Deepseek)?
@@ -765,6 +778,22 @@ impl ProviderKind for AzureKind {
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self::Credential, Error> {
         default_credentials.azure.get_cloned()
+    }
+}
+
+pub struct AzureAnthropicKind;
+
+impl ProviderKind for AzureAnthropicKind {
+    type Credential = AzureAnthropicCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::AzureAnthropic
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.azure_anthropic.get_cloned()
     }
 }
 
