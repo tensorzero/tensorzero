@@ -51,6 +51,8 @@ export * from "./CreateDatapointsResponse";
 export * from "./CreateEventGatewayRequest";
 export * from "./CreateEventResponse";
 export * from "./CreateJsonDatapointRequest";
+export * from "./CredentialLocation";
+export * from "./CredentialLocationOrHardcoded";
 export * from "./CumulativeFeedbackTimeSeriesPoint";
 export * from "./Datapoint";
 export * from "./DatapointFilter";
