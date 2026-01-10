@@ -60,12 +60,20 @@ pub struct StreamUpdate {
     pub status: AutopilotStatus,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+pub struct EventMessage {
+    #[serde(flatten)]
+    pub message: InputMessage,
+    #[serde(default)]
+    pub turn_completed: bool,
+}
+
 /// The payload of an event.
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
-    Message(InputMessage),
+    Message(EventMessage),
     Error {
         message: String,
     },
@@ -86,7 +94,7 @@ impl EventPayload {
     /// Returns true if this payload type can be written by API clients.
     /// System-generated types (StatusUpdate, ToolCall) return false.
     pub fn is_client_writable(&self) -> bool {
-        matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
+        matches!(self, EventPayload::Message(msg) if msg.message.role == Role::User)
             || matches!(
                 self,
                 EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult { .. }
