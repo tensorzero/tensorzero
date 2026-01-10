@@ -564,8 +564,8 @@ pub async fn check_test_streaming_cache_with_err(
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
-    let mut input_tokens = 0;
-    let mut output_tokens = 0;
+    let mut api_input_tokens = 0;
+    let mut api_output_tokens = 0;
     for chunk in chunks.clone() {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
@@ -594,8 +594,8 @@ pub async fn check_test_streaming_cache_with_err(
         }
 
         if let Some(usage) = chunk_json.get("usage") {
-            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
-            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+            api_input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+            api_output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
     }
 
@@ -611,14 +611,6 @@ pub async fn check_test_streaming_cache_with_err(
             full_content,
             "Wally, the golden retriever, wagged his tail excitedly as he devoured a slice of cheese pizza."
         );
-    }
-
-    if expect_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert_eq!(input_tokens, 10);
-        assert_eq!(output_tokens, 16);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -757,6 +749,15 @@ pub async fn check_test_streaming_cache_with_err(
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
+
+    // Check that the very end, so that we'll have already printed the ClickHouse rows if this check fails
+    if expect_cached {
+        assert_eq!(api_input_tokens, 0);
+        assert_eq!(api_output_tokens, 0);
+    } else {
+        assert_eq!(api_input_tokens, 10);
+        assert_eq!(api_output_tokens, 16);
+    }
 
     full_content
 }
