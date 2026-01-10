@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::error::Error;
 use crate::function::FunctionConfigType;
+use crate::serde_util::deserialize_json_string;
 
 /// Database struct for deserializing evaluation run info from ClickHouse.
 #[derive(Debug, Deserialize)]
@@ -48,6 +49,20 @@ pub struct EvaluationStatisticsRow {
     pub mean_metric: f64,
     pub ci_lower: Option<f64>,
     pub ci_upper: Option<f64>,
+}
+
+/// Result of checking for existing human feedback for an inference evaluation.
+/// This is used to determine if a human has already provided feedback for a
+/// (metric_name, datapoint_id, output) combination, allowing the evaluation
+/// system to use human feedback instead of running automated evaluators.
+#[derive(Debug, Clone, Deserialize, serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct InferenceEvaluationHumanFeedbackRow {
+    /// The human-provided evaluation value (JSON).
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub value: serde_json::Value,
+    /// The inference ID associated with this feedback.
+    pub evaluator_inference_id: Uuid,
 }
 
 /// Database struct for deserializing paginated evaluation results from ClickHouse.
@@ -167,4 +182,24 @@ pub trait EvaluationQueries {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<EvaluationResultRow>, Error>;
+
+    /// Gets existing human feedback for a given inference evaluation if it exists.
+    ///
+    /// This function queries the StaticEvaluationHumanFeedback table to find existing
+    /// human feedback for a specific combination of metric name, datapoint ID, and output.
+    ///
+    /// # Arguments
+    /// * `metric_name` - The name of the metric being evaluated
+    /// * `datapoint_id` - The UUID of the datapoint being evaluated
+    /// * `output` - The serialized inference output to match against
+    ///
+    /// # Returns
+    /// * `Some(InferenceEvaluationHumanFeedbackRow)` - If human feedback exists
+    /// * `None` - If no human feedback exists for this combination
+    async fn get_inference_evaluation_human_feedback(
+        &self,
+        metric_name: &str,
+        datapoint_id: &Uuid,
+        output: &str,
+    ) -> Result<Option<InferenceEvaluationHumanFeedbackRow>, Error>;
 }

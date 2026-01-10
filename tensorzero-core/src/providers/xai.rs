@@ -17,8 +17,9 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    ApiType, ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
 };
@@ -27,6 +28,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::OpenAIMessagesConfig;
+use uuid::Uuid;
 
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, StreamOptions, SystemOrDeveloper,
@@ -140,6 +142,7 @@ impl InferenceProvider for XAIProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -209,6 +212,7 @@ impl InferenceProvider for XAIProvider {
                 latency,
                 raw_request,
                 generic_request: request,
+                model_inference_id,
             }
             .try_into()?)
         } else {
@@ -242,6 +246,7 @@ impl InferenceProvider for XAIProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -280,6 +285,7 @@ impl InferenceProvider for XAIProvider {
 
         let stream = stream_openai(
             PROVIDER_TYPE.to_string(),
+            model_inference_id,
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
             None,
@@ -493,6 +499,7 @@ struct XAIResponseWithMetadata<'a> {
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -504,6 +511,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             raw_request,
             generic_request,
             raw_response,
+            model_inference_id,
         } = value;
 
         if response.choices.len() != 1 {
@@ -519,7 +527,6 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .into());
         }
 
-        let usage = response.usage.into();
         let OpenAIResponseChoice {
             message,
             finish_reason,
@@ -543,6 +550,15 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
         }
 
+        let raw_usage = xai_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -553,11 +569,19 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response: raw_response.clone(),
                 usage,
-                latency,
+                raw_usage,
+                provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
+                id: model_inference_id,
             },
         ))
     }
+}
+
+fn xai_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 #[cfg(test)]
@@ -769,6 +793,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response: ProviderInferenceResponse =
             xai_response_with_metadata.try_into().unwrap();
@@ -783,7 +808,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(10));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_secs(0)
             }

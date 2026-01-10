@@ -148,6 +148,14 @@
                         }
                     }
                 },
+                "securityContext": {
+                    "type": "object",
+                    "properties": {
+                        "fsGroup": {
+                            "type": "integer"
+                        }
+                    }
+                },
                 "service": {
                     "type": "object",
                     "properties": {
@@ -336,6 +344,14 @@
                                     "type": "string"
                                 }
                             }
+                        }
+                    }
+                },
+                "securityContext": {
+                    "type": "object",
+                    "properties": {
+                        "fsGroup": {
+                            "type": "integer"
                         }
                     }
                 },

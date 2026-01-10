@@ -14,7 +14,6 @@ docker run --add-host=host.docker.internal:host-gateway clickhouse/clickhouse-se
 export TENSORZERO_PLAYWRIGHT_RETRIES=0
 export TENSORZERO_PLAYWRIGHT_NO_WEBSERVER=1
 export TENSORZERO_GATEWAY_URL=http://localhost:3000
-export TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
 pnpm test-e2e -j 1 --grep-invert "@credentials" --max-failures 1
 # Remove the existing file if it exists (it may have restricted permissions from R2 download)
 rm -f ./fixtures/model_inference_cache_e2e.jsonl

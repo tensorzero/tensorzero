@@ -1,11 +1,11 @@
-# Guide: How to use Azure OpenAI Service embedding models with TensorZero
+# Guide: How to use Azure embedding models with TensorZero
 
 ## Running the Example
 
-1. Set the `AZURE_OPENAI_API_KEY` environment variable:
+1. Set the `AZURE_API_KEY` environment variable:
 
 ```bash
-export AZURE_OPENAI_API_KEY="..." # Replace with your Azure OpenAI API key
+export AZURE_API_KEY="..." # Replace with your Azure OpenAI API key
 ```
 
 2. Set your Azure `endpoint` in `config/tensorzero.toml`.

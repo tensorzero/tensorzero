@@ -2,6 +2,7 @@
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -30,7 +31,7 @@ fn default_weight_decay() -> f64 {
     0.0
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(rename_all = "lowercase")]
@@ -38,7 +39,7 @@ pub enum TogetherBatchSizeDescription {
     Max,
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(untagged)]
@@ -106,7 +107,7 @@ impl std::fmt::Display for TogetherSFTJobHandle {
 /// Uninitialized Together SFT Config (per-job settings only).
 /// Provider-level settings (credentials, wandb, hf_api_token) come from
 /// `provider_types.together` in the gateway config.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "TogetherSFTConfig"))]
 pub struct UninitializedTogetherSFTConfig {
@@ -333,7 +334,7 @@ impl UninitializedTogetherSFTConfig {
 }
 
 // Nested configuration structs that match Together's API format
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "lr_scheduler_type", rename_all = "snake_case")]
@@ -356,7 +357,7 @@ impl Default for TogetherLRScheduler {
     }
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "type")]
@@ -385,7 +386,7 @@ impl Default for TogetherTrainingType {
     }
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "method", rename_all = "snake_case")]

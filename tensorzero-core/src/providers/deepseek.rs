@@ -21,8 +21,9 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
@@ -39,6 +40,8 @@ use crate::providers::openai::{
     prepare_system_or_developer_message, tensorzero_to_openai_messages,
 };
 use crate::tool::ToolCallChunk;
+use serde_json::Value;
+use uuid::Uuid;
 
 lazy_static! {
     static ref DEEPSEEK_DEFAULT_BASE_URL: Url = {
@@ -148,6 +151,7 @@ impl InferenceProvider for DeepSeekProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -220,6 +224,7 @@ impl InferenceProvider for DeepSeekProvider {
                 latency,
                 raw_request,
                 generic_request: request,
+                model_inference_id,
             }
             .try_into()?)
         } else {
@@ -253,6 +258,7 @@ impl InferenceProvider for DeepSeekProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -290,7 +296,8 @@ impl InferenceProvider for DeepSeekProvider {
         )
         .await?;
 
-        let stream = stream_deepseek(event_source, start_time, &raw_request).peekable();
+        let stream =
+            stream_deepseek(event_source, start_time, &raw_request, model_inference_id).peekable();
         Ok((stream, raw_request))
     }
 
@@ -474,6 +481,7 @@ fn stream_deepseek(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     raw_request: &str,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
     let mut tool_call_ids = Vec::new();
@@ -501,7 +509,13 @@ fn stream_deepseek(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            deepseek_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
+                            deepseek_to_tensorzero_chunk(
+                                message.data,
+                                d,
+                                latency,
+                                &mut tool_call_ids,
+                                model_inference_id,
+                            )
                         });
                         yield stream_message;
                     }
@@ -560,6 +574,7 @@ fn deepseek_to_tensorzero_chunk(
     mut chunk: DeepSeekChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
+    model_inference_id: Uuid,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -570,6 +585,14 @@ fn deepseek_to_tensorzero_chunk(
         }
         .into());
     }
+    let raw_usage = deepseek_usage_from_raw_response(&raw_message).map(|usage| {
+        raw_usage_entries_from_value(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            usage,
+        )
+    });
     let usage = chunk.usage.map(OpenAIUsage::into);
     let mut content = vec![];
     let mut finish_reason = None;
@@ -623,12 +646,13 @@ fn deepseek_to_tensorzero_chunk(
         }
     }
 
-    Ok(ProviderInferenceResponseChunk::new(
+    Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
         content,
         usage,
         raw_message,
         latency,
         finish_reason,
+        raw_usage,
     ))
 }
 
@@ -698,6 +722,7 @@ struct DeepSeekResponseWithMetadata<'a> {
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -709,6 +734,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
             latency,
             raw_request,
             generic_request,
+            model_inference_id,
         } = value;
 
         if response.choices.len() != 1 {
@@ -724,7 +750,6 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
             .into());
         }
 
-        let usage = response.usage.into();
         let DeepSeekResponseChoice {
             message,
             finish_reason,
@@ -755,6 +780,15 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
+        let raw_usage = deepseek_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -765,11 +799,19 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request,
                 raw_response,
                 usage,
-                latency,
+                raw_usage,
+                provider_latency: latency,
                 finish_reason: finish_reason.map(OpenAIFinishReason::into),
+                id: model_inference_id,
             },
         ))
     }
+}
+
+fn deepseek_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 /// If a message is a system, user, or assistant message and the next message is the same type, coalesce them into a single message
@@ -1054,6 +1096,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
         };
         let inference_response: ProviderInferenceResponse =
             deepseek_response_with_metadata.try_into().unwrap();
@@ -1077,7 +1120,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(10));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_secs(0)
             }

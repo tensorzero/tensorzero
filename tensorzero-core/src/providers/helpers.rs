@@ -1031,10 +1031,10 @@ mod tests {
                 id: "0".to_string(),
                 text: "Hello, world!".to_string(),
             })],
-            created: 0,
             usage: None,
+            raw_usage: None,
             raw_response: "My raw response".to_string(),
-            latency: Duration::from_secs(0),
+            provider_latency: Duration::from_secs(0),
             finish_reason: None,
         };
         let mut stream = Box::pin(stream::iter([

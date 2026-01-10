@@ -12,7 +12,7 @@ The TensorZero Gateway integrates with the major LLM providers.
 | [Anthropic](/integrations/model-providers/anthropic/)                                                                                                                      |       ✅       |       ✅       |    ✅     |    ✅    |     ✅     |     ❌     |  ❌   |
 | [AWS Bedrock](/integrations/model-providers/aws-bedrock/)                                                                                                                  |       ✅       |       ✅       |    ✅     |    ✅    |     ✅     |     ❌     |  ❌   |
 | [AWS SageMaker](/integrations/model-providers/aws-sagemaker/)                                                                                                              |       ✅       |       ✅       |    ✅     |    ✅    |     ❌     |     ❌     |  ❌   |
-| [Azure OpenAI Service](/integrations/model-providers/azure/)                                                                                                               |       ✅       |       ✅       |    ✅     |    ✅    |     ❌     |     ✅     |  ❌   |
+| [Azure](/integrations/model-providers/azure/)                                                                                                                              |       ✅       |       ✅       |    ✅     |    ✅    |     ❌     |     ✅     |  ❌   |
 | [DeepSeek](/integrations/model-providers/deepseek/)                                                                                                                        |       ✅       |       ✅       |    ⚠️     |    ❌    |     ❌     |     ❌     |  ❌   |
 | [Fireworks AI](/integrations/model-providers/fireworks/)                                                                                                                   |       ✅       |       ✅       |    ✅     |    ✅    |     ❌     |     ❌     |  ❌   |
 | [GCP Vertex AI Anthropic](/integrations/model-providers/gcp-vertex-ai-anthropic/)                                                                                          |       ✅       |       ✅       |    ✅     |    ✅    |     ✅     |     ❌     |  ❌   |
@@ -51,9 +51,9 @@ Below are the known limitations for each supported model provider.
   - The TensorZero Gateway uses a non-standard structure for storing `ModelInference.raw_response` for AWS Bedrock inference requests.
   - The AWS Bedrock API doesn't support `tool_choice: none`.
   - The AWS Bedrock API doesn't support `seed`.
-- **Azure OpenAI Service**
-  - The Azure OpenAI Service API doesn't provide usage information when streaming.
-  - The Azure OpenAI Service API doesn't support `tool_choice: required`.
+- **Azure**
+  - The Azure API doesn't provide usage information when streaming.
+  - The Azure API doesn't support `tool_choice: required`.
 - **DeepSeek**
   - The `deepseek-chat` model doesn't support tool use for production use cases.
   - The `deepseek-reasoner` model doesn't support JSON mode or tool use.

@@ -18,8 +18,9 @@ use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    ApiType, FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs,
 };
@@ -48,6 +49,7 @@ use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{
     ChatCompletionTool, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
 };
+use uuid::Uuid;
 
 lazy_static! {
     pub static ref TOGETHER_API_BASE: Url = {
@@ -166,6 +168,7 @@ impl InferenceProvider for TogetherProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -236,6 +239,7 @@ impl InferenceProvider for TogetherProvider {
                 raw_request: raw_request.clone(),
                 generic_request: request,
                 parse_think_blocks: self.parse_think_blocks,
+                model_inference_id,
             }
             .try_into()?)
         } else {
@@ -268,6 +272,7 @@ impl InferenceProvider for TogetherProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -303,7 +308,13 @@ impl InferenceProvider for TogetherProvider {
             request_builder,
         )
         .await?;
-        let stream = stream_together(event_source, start_time, self.parse_think_blocks).peekable();
+        let stream = stream_together(
+            event_source,
+            start_time,
+            self.parse_think_blocks,
+            model_inference_id,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -590,6 +601,7 @@ struct TogetherResponseWithMetadata<'a> {
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     parse_think_blocks: bool,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -602,6 +614,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             raw_request,
             generic_request,
             parse_think_blocks,
+            model_inference_id,
         } = value;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -615,7 +628,6 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             }
             .into());
         }
-        let usage = response.usage.into();
         let TogetherResponseChoice {
             message,
             finish_reason,
@@ -650,6 +662,15 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
+        let raw_usage = together_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -659,9 +680,11 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 input_messages,
                 raw_request,
                 raw_response: raw_response.clone(),
+                raw_usage,
                 usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: finish_reason.map(Into::into),
+                id: model_inference_id,
             },
         ))
     }
@@ -673,6 +696,7 @@ fn stream_together(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     parse_think_blocks: bool,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
     let mut thinking_state = ThinkingState::Normal;
@@ -708,7 +732,16 @@ fn stream_together(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            together_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut thinking_state, parse_think_blocks)
+                            together_to_tensorzero_chunk(
+                                message.data,
+                                d,
+                                latency,
+                                &mut tool_call_ids,
+                                &mut thinking_state,
+                                parse_think_blocks,
+                                model_inference_id,
+                                PROVIDER_TYPE,
+                            )
                         });
                         yield stream_message;
                     }
@@ -723,6 +756,7 @@ fn stream_together(
 /// This function handles the conversion of Together chat chunks into TensorZero chunks.
 /// It processes the content and tool calls from the Together response, updating the tool call IDs and names.
 /// If parsing think blocks is enabled, it also processes the thinking state and extracts reasoning.
+#[expect(clippy::too_many_arguments)]
 fn together_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: TogetherChatChunk,
@@ -730,6 +764,8 @@ fn together_to_tensorzero_chunk(
     tool_call_ids: &mut Vec<String>,
     thinking_state: &mut ThinkingState,
     parse_think_blocks: bool,
+    model_inference_id: Uuid,
+    provider_type: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -740,6 +776,14 @@ fn together_to_tensorzero_chunk(
         }
         .into());
     }
+    let raw_usage = together_usage_from_raw_response(&raw_message).map(|usage| {
+        raw_usage_entries_from_value(
+            model_inference_id,
+            provider_type,
+            ApiType::ChatCompletions,
+            usage,
+        )
+    });
     let usage = chunk.usage.map(Into::into);
     let mut finish_reason = None;
     let mut content = vec![];
@@ -807,13 +851,25 @@ fn together_to_tensorzero_chunk(
         }
     }
 
-    Ok(ProviderInferenceResponseChunk::new(
-        content,
-        usage,
-        raw_message,
-        latency,
-        finish_reason,
-    ))
+    Ok(match raw_usage {
+        Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
+            content,
+            usage,
+            raw_message,
+            latency,
+            finish_reason,
+            Some(entries),
+        ),
+        None => {
+            ProviderInferenceResponseChunk::new(content, usage, raw_message, latency, finish_reason)
+        }
+    })
+}
+
+fn together_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1011,6 +1067,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
             parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
@@ -1025,7 +1082,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(10));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_secs(0)
             }
@@ -1059,6 +1116,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
             parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
@@ -1107,6 +1165,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
             parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
@@ -1182,6 +1241,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
             parse_think_blocks: true,
         };
 
@@ -1226,6 +1286,7 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
             parse_think_blocks: false,
         };
 
@@ -1265,11 +1326,13 @@ mod tests {
         // With parsing enabled
         let result = together_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
-            chunk.clone(),
+            chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1297,6 +1360,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1329,6 +1394,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1356,6 +1423,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -1391,6 +1460,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -1426,6 +1497,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -1462,6 +1535,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap_err();
         let details = error.get_details();
@@ -1499,6 +1574,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -1513,29 +1590,68 @@ mod tests {
         assert_eq!(tool_call_ids, vec!["id1".to_string(), "id2".to_string()]);
 
         // Check a chunk with no choices and only usage
+        let usage = OpenAIUsage {
+            prompt_tokens: Some(10),
+            completion_tokens: Some(20),
+        };
         let chunk = TogetherChatChunk {
             choices: vec![],
-            usage: Some(OpenAIUsage {
-                prompt_tokens: Some(10),
-                completion_tokens: Some(20),
-            }),
+            usage: Some(usage.clone()),
         };
+        let model_inference_id = Uuid::now_v7();
+        let raw_message = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+                "prompt_tokens_details": {
+                    "cached_tokens": 2
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1
+                }
+            }
+        })
+        .to_string();
         let message = together_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
+            raw_message,
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            model_inference_id,
+            PROVIDER_TYPE,
         )
         .unwrap();
+        let expected_raw_usage = Some(raw_usage_entries_from_value(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            serde_json::json!({
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+                "prompt_tokens_details": {
+                    "cached_tokens": 2
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1
+                }
+            }),
+        ));
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-            })
+            }),
+            "expected usage to include provider raw_usage entries"
+        );
+        assert_eq!(
+            message.raw_usage, expected_raw_usage,
+            "expected raw_usage to include provider raw_usage entries"
         );
 
         // Test a thinking chunk
@@ -1556,6 +1672,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert!(message.content.is_empty());
@@ -1579,6 +1697,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -1607,11 +1727,13 @@ mod tests {
         };
         let message = together_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
-            chunk.clone(),
+            chunk,
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
             true,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert!(message.content.is_empty());
@@ -1639,6 +1761,8 @@ mod tests {
             &mut tool_call_ids,
             &mut thinking_state,
             false,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(

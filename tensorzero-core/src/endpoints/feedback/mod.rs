@@ -167,12 +167,6 @@ pub async fn feedback(
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
         counter!(
-            "request_count",
-            "endpoint" => "feedback",
-            "metric_name" => params.metric_name.to_string()
-        )
-        .increment(1);
-        counter!(
             "tensorzero_requests_total",
             "endpoint" => "feedback",
             "metric_name" => params.metric_name.to_string()

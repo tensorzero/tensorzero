@@ -98,6 +98,7 @@ use crate::inference::types::resolved_input::{
 };
 use crate::inference::types::storage::{StorageKind, StorageKindExt};
 use crate::inference::types::stored_input::StoredFile;
+use crate::inference::types::usage::aggregate_usage_across_model_inferences;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
     RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
@@ -137,7 +138,7 @@ pub use streams::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
     UnknownChunk, collect_chunks,
 };
-pub use usage::Usage;
+pub use usage::{ApiType, RawUsageEntry, Usage};
 
 /*
  * Data flow in TensorZero
@@ -739,6 +740,65 @@ impl RateLimitedInputContent for Thought {
     }
 }
 
+impl RateLimitedInputContent for Template {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let Template { name, arguments } = self;
+        let args = &arguments.0;
+        let args_tokens: u64 = args
+            .iter()
+            .map(|(key, value)| {
+                get_estimated_tokens(key) + get_estimated_tokens(&value.to_string())
+            })
+            .sum();
+        get_estimated_tokens(name) + args_tokens
+    }
+}
+
+impl RateLimitedInputContent for ToolCallWrapper {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            ToolCallWrapper::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            ToolCallWrapper::InferenceResponseToolCall(tool_call) => {
+                get_estimated_tokens(&tool_call.raw_name)
+                    + get_estimated_tokens(&tool_call.raw_arguments)
+            }
+        }
+    }
+}
+
+impl RateLimitedInputContent for File {
+    fn estimated_input_token_usage(&self) -> u64 {
+        // TODO: improve this estimate
+        10_000
+    }
+}
+
+impl RateLimitedInputContent for InputMessageContent {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            InputMessageContent::Text(text) => text.estimated_input_token_usage(),
+            InputMessageContent::Template(template) => template.estimated_input_token_usage(),
+            InputMessageContent::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            InputMessageContent::ToolResult(tool_result) => {
+                tool_result.estimated_input_token_usage()
+            }
+            InputMessageContent::RawText(raw_text) => raw_text.estimated_input_token_usage(),
+            InputMessageContent::Thought(thought) => thought.estimated_input_token_usage(),
+            InputMessageContent::File(file) => file.estimated_input_token_usage(),
+            InputMessageContent::Unknown(_) => 0,
+        }
+    }
+}
+
+impl RateLimitedInputContent for InputMessage {
+    fn estimated_input_token_usage(&self) -> u64 {
+        self.content
+            .iter()
+            .map(RateLimitedInputContent::estimated_input_token_usage)
+            .sum()
+    }
+}
+
 /// Core representation of the types of content that could go into a model provider
 /// The `PartialEq` impl will panic if we try to compare a `LazyFile`, so we make it
 /// test-only to prevent production code from panicking.
@@ -1168,15 +1228,19 @@ pub enum FinishReason {
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ProviderInferenceResponse {
     pub id: Uuid,
-    pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
-    pub latency: Latency,
+    /// Time elapsed between making the request to the model provider and receiving the response.
+    /// Important: this is NOT latency from the start of the TensorZero request.
+    pub provider_latency: Latency,
     pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    /// Constructed from provider raw usage entries or passed through from relay.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl ProviderInferenceResponse {
@@ -1217,17 +1281,18 @@ pub enum Latency {
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ModelInferenceResponse {
     pub id: Uuid,
-    pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
-    pub latency: Latency,
+    pub provider_latency: Latency,
     pub model_provider_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1241,7 +1306,6 @@ pub struct ModelInferenceResponse {
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ModelInferenceResponseWithMetadata {
     pub id: Uuid,
-    pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
     pub input_messages: RequestMessagesOrBatch,
@@ -1253,6 +1317,8 @@ pub struct ModelInferenceResponseWithMetadata {
     pub model_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1537,17 +1603,17 @@ impl ModelInferenceResponse {
     ) -> Self {
         Self {
             id: provider_inference_response.id,
-            created: provider_inference_response.created,
             output: provider_inference_response.output,
             system: provider_inference_response.system,
             input_messages: provider_inference_response.input_messages,
             raw_request: provider_inference_response.raw_request,
             raw_response: provider_inference_response.raw_response,
             usage: provider_inference_response.usage,
-            latency: provider_inference_response.latency,
+            provider_latency: provider_inference_response.provider_latency,
             finish_reason: provider_inference_response.finish_reason,
             model_provider_name,
             cached,
+            raw_usage: provider_inference_response.raw_usage,
         }
     }
 
@@ -1558,7 +1624,6 @@ impl ModelInferenceResponse {
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
-            created: current_timestamp(),
             output: cache_lookup.output.blocks,
             system: request.system.clone(),
             input_messages: request.messages.clone(),
@@ -1568,12 +1633,14 @@ impl ModelInferenceResponse {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
             },
-            latency: Latency::NonStreaming {
+            provider_latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
             finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
             cached: true,
+            // TensorZero cache hits are excluded from raw_usage list
+            raw_usage: None,
         }
     }
 }
@@ -1582,7 +1649,6 @@ impl ModelInferenceResponseWithMetadata {
     pub fn new(model_inference_response: ModelInferenceResponse, model_name: Arc<str>) -> Self {
         Self {
             id: model_inference_response.id,
-            created: model_inference_response.created,
             output: model_inference_response.output,
             system: model_inference_response.system,
             input_messages: RequestMessagesOrBatch::Message(
@@ -1591,11 +1657,12 @@ impl ModelInferenceResponseWithMetadata {
             raw_request: model_inference_response.raw_request,
             raw_response: model_inference_response.raw_response,
             usage: model_inference_response.usage,
-            latency: model_inference_response.latency,
+            latency: model_inference_response.provider_latency,
             finish_reason: model_inference_response.finish_reason,
             model_provider_name: model_inference_response.model_provider_name,
             model_name,
             cached: model_inference_response.cached,
+            raw_usage: model_inference_response.raw_usage,
         }
     }
 }
@@ -1679,24 +1746,29 @@ pub struct ProviderInferenceResponseArgs {
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
-    pub latency: Latency,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Time elapsed between making the request to the model provider and receiving the response.
+    /// Important: this is NOT latency from the start of the TensorZero request.
+    pub provider_latency: Latency,
     pub finish_reason: Option<FinishReason>,
+    pub id: Uuid,
 }
 
 impl ProviderInferenceResponse {
     pub fn new(args: ProviderInferenceResponseArgs) -> Self {
         let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
+
         Self {
-            id: Uuid::now_v7(),
-            created: current_timestamp(),
+            id: args.id,
             output: args.output,
             system: args.system,
             input_messages: args.input_messages,
             raw_request: sanitized_raw_request,
             raw_response: args.raw_response,
             usage: args.usage,
-            latency: args.latency,
+            provider_latency: args.provider_latency,
             finish_reason: args.finish_reason,
+            raw_usage: args.raw_usage,
         }
     }
 }
@@ -1751,7 +1823,7 @@ impl InferenceResult {
     /// Aggregates the usage of all model inference results, considering cached results.
     /// If any of the values are None, the total usage is considered as None (via `sum_usage_strict`).
     pub fn usage_considering_cached(&self) -> Usage {
-        Usage::sum_iter_strict(
+        aggregate_usage_across_model_inferences(
             self.model_inference_results()
                 .iter()
                 .map(ModelInferenceResponseWithMetadata::usage_considering_cached),
@@ -1838,13 +1910,14 @@ impl ChatInferenceResult {
     }
 }
 
-/// Get the finish reason from the last model inference result sorted by created time (or None if it is not present)
+/// Get the finish reason from the last model inference result sorted by ID (or None if it is not present)
 fn get_finish_reason(
     model_inference_results: &[ModelInferenceResponseWithMetadata],
 ) -> Option<FinishReason> {
+    // Sort by id (UUIDv7 encodes timestamp) to get the latest result
     model_inference_results
         .iter()
-        .sorted_by_key(|r| r.created)
+        .sorted_by_key(|r| r.id)
         .next_back()
         .and_then(|r| r.finish_reason)
 }
@@ -1981,10 +2054,29 @@ impl ProviderInferenceResponseChunk {
     ) -> Self {
         Self {
             content,
-            created: current_timestamp(),
             usage,
+            raw_usage: None,
             raw_response,
-            latency,
+            provider_latency: latency,
+            finish_reason,
+        }
+    }
+
+    /// Creates a new chunk with raw_usage passthrough (relay or synthesized streams)
+    pub fn new_with_raw_usage(
+        content: Vec<ContentBlockChunk>,
+        usage: Option<Usage>,
+        raw_response: String,
+        latency: Duration,
+        finish_reason: Option<FinishReason>,
+        raw_usage: Option<Vec<RawUsageEntry>>,
+    ) -> Self {
+        Self {
+            content,
+            usage,
+            raw_usage,
+            raw_response,
+            provider_latency: latency,
             finish_reason,
         }
     }
@@ -2113,7 +2205,76 @@ mod tests {
     use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolChoice};
     use serde_json::json;
-    use tokio::time::Instant;
+
+    #[test]
+    fn test_rate_limited_input_message_content_estimation() {
+        let args_value = json!({"foo": "bar", "n": 1});
+        let args_map = args_value
+            .as_object()
+            .expect("template arguments should be object")
+            .clone();
+        let template = Template {
+            name: "tmpl".to_string(),
+            arguments: Arguments(args_map.clone()),
+        };
+
+        let tool_call = InferenceResponseToolCall {
+            id: "tool-1".to_string(),
+            raw_name: "raw_name".to_string(),
+            raw_arguments: "{\"x\":1}".to_string(),
+            name: Some("parsed".to_string()),
+            arguments: Some(json!({"x": 1})),
+        };
+
+        let foo_value = args_map
+            .get("foo")
+            .expect("expected foo argument")
+            .to_string();
+        let n_value = args_map.get("n").expect("expected n argument").to_string();
+        let template_expected = get_estimated_tokens("tmpl")
+            + get_estimated_tokens("foo")
+            + get_estimated_tokens(&foo_value)
+            + get_estimated_tokens("n")
+            + get_estimated_tokens(&n_value);
+        let tool_call_expected = get_estimated_tokens(&tool_call.raw_name)
+            + get_estimated_tokens(&tool_call.raw_arguments);
+
+        assert_eq!(
+            InputMessageContent::Template(template.clone()).estimated_input_token_usage(),
+            template_expected,
+            "Template token estimation mismatch: expected {}, got {}",
+            template_expected,
+            InputMessageContent::Template(template.clone()).estimated_input_token_usage()
+        );
+        assert_eq!(
+            InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                tool_call.clone()
+            ))
+            .estimated_input_token_usage(),
+            tool_call_expected,
+            "ToolCall token estimation mismatch: expected {}, got {}",
+            tool_call_expected,
+            InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                tool_call.clone()
+            ))
+            .estimated_input_token_usage()
+        );
+
+        let message = InputMessage {
+            role: Role::User,
+            content: vec![
+                InputMessageContent::Template(template),
+                InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                    tool_call,
+                )),
+                InputMessageContent::Text(Text {
+                    text: "hi".to_string(),
+                }),
+            ],
+        };
+        let message_expected = template_expected + tool_call_expected + get_estimated_tokens("hi");
+        assert_eq!(message.estimated_input_token_usage(), message_expected);
+    }
 
     #[tokio::test]
     async fn test_create_chat_inference_response() {
@@ -2127,7 +2288,6 @@ mod tests {
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2141,6 +2301,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2176,7 +2337,6 @@ mod tests {
         })];
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2190,6 +2350,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2228,7 +2389,6 @@ mod tests {
         })];
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2242,6 +2402,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2276,7 +2437,6 @@ mod tests {
         })];
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2290,6 +2450,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2344,7 +2505,6 @@ mod tests {
         ];
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2358,6 +2518,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2430,7 +2591,6 @@ mod tests {
         ];
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2444,6 +2604,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2525,7 +2686,6 @@ mod tests {
         })];
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2539,6 +2699,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2576,7 +2737,6 @@ mod tests {
         })];
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2590,6 +2750,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2651,7 +2812,6 @@ mod tests {
         })];
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2665,6 +2825,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2708,7 +2869,6 @@ mod tests {
         })];
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
@@ -2722,6 +2882,7 @@ mod tests {
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
             cached: false,
+            raw_usage: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2905,7 +3066,6 @@ mod tests {
         let create_model_response =
             |usage: Usage, cached: bool| ModelInferenceResponseWithMetadata {
                 id: Uuid::now_v7(),
-                created: Instant::now().elapsed().as_secs(),
                 system: None,
                 input_messages: RequestMessagesOrBatch::Message(vec![]),
                 output: vec!["test".to_string().into()],
@@ -2919,6 +3079,7 @@ mod tests {
                 model_provider_name: "test_provider".into(),
                 model_name: "test_model".into(),
                 cached,
+                raw_usage: None,
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly
@@ -3119,5 +3280,127 @@ mod tests {
 
         // Conflict: both old and new fields
         assert!(serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p", "model_name": "x"})).is_err());
+    }
+
+    #[test]
+    fn test_get_finish_reason_sorts_by_id() {
+        // Create UUIDs sequentially - UUIDv7 encodes timestamp so later UUIDs are greater
+        let id_oldest = Uuid::now_v7();
+        let id_middle = Uuid::now_v7();
+        let id_newest = Uuid::now_v7();
+
+        // Verify our assumption that sequential UUIDv7s are ordered
+        assert!(
+            id_oldest < id_middle && id_middle < id_newest,
+            "UUIDv7s created sequentially should be monotonically increasing"
+        );
+
+        let usage = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(20),
+        };
+
+        // Create responses with different finish reasons and IDs
+        let response_oldest = ModelInferenceResponseWithMetadata {
+            id: id_oldest,
+            output: vec![],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: String::new(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test".into(),
+            model_name: "test".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::Stop),
+            raw_usage: None,
+        };
+
+        let response_middle = ModelInferenceResponseWithMetadata {
+            id: id_middle,
+            output: vec![],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: String::new(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test".into(),
+            model_name: "test".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::ToolCall),
+            raw_usage: None,
+        };
+
+        let response_newest = ModelInferenceResponseWithMetadata {
+            id: id_newest,
+            output: vec![],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: String::new(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test".into(),
+            model_name: "test".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::Length),
+            raw_usage: None,
+        };
+
+        // Test: passing results in order newest-first should still return newest's finish_reason
+        let results_newest_first = vec![
+            response_newest.clone(),
+            response_middle.clone(),
+            response_oldest.clone(),
+        ];
+        assert_eq!(
+            get_finish_reason(&results_newest_first),
+            Some(FinishReason::Length),
+            "Should return finish_reason from the entry with the largest ID (newest)"
+        );
+
+        // Test: passing results in order oldest-first should still return newest's finish_reason
+        let results_oldest_first = vec![
+            response_oldest.clone(),
+            response_middle.clone(),
+            response_newest.clone(),
+        ];
+        assert_eq!(
+            get_finish_reason(&results_oldest_first),
+            Some(FinishReason::Length),
+            "Should return finish_reason from the entry with the largest ID regardless of input order"
+        );
+
+        // Test: passing results in mixed order should still return newest's finish_reason
+        let results_mixed = vec![response_middle, response_newest.clone(), response_oldest];
+        assert_eq!(
+            get_finish_reason(&results_mixed),
+            Some(FinishReason::Length),
+            "Should return finish_reason from the entry with the largest ID regardless of input order"
+        );
+
+        // Test: single element
+        let results_single = vec![response_newest];
+        assert_eq!(
+            get_finish_reason(&results_single),
+            Some(FinishReason::Length),
+            "Single element should return its finish_reason"
+        );
+
+        // Test: empty slice
+        let results_empty: Vec<ModelInferenceResponseWithMetadata> = vec![];
+        assert_eq!(
+            get_finish_reason(&results_empty),
+            None,
+            "Empty slice should return None"
+        );
     }
 }

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use durable::{Durable, TaskContext, TaskHandle};
-use serde::{Serialize, de::DeserializeOwned};
+use durable::{Durable, SpawnOptions, TaskContext, TaskHandle};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -8,11 +8,24 @@ use std::time::Duration;
 use tensorzero::{ClientInferenceParams, InferenceResponse};
 use uuid::Uuid;
 
-use crate::error::{ToolError, ToolResult};
+use crate::error::{NonControlToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
 use tokio::sync::RwLockReadGuard;
+
+/// Handle returned by `spawn_tool`, can be joined later with `join_tool`.
+///
+/// This enum allows a uniform API for both `TaskTool` and `SimpleTool`:
+/// - `TaskTool`: spawns as a background subtask, `join_tool` waits for completion
+/// - `SimpleTool`: executes immediately (still checkpointed), `join_tool` returns stored result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ToolHandle {
+    /// TaskTool - runs in background, join waits for completion
+    Async(TaskHandle<JsonValue>),
+    /// SimpleTool - already executed, result stored inline
+    Sync(JsonValue),
+}
 
 /// Type alias for the Durable client with `ToolAppState`.
 pub type DurableClient = Durable<ToolAppState>;
@@ -175,12 +188,19 @@ impl<'a> ToolContext<'a> {
             .map_err(Into::into)
     }
 
-    /// Call another tool by name with JSON params.
+    /// Call another tool by name and wait for its result.
     ///
-    /// Side info defaults to `null` (compatible with `SideInfo = ()`).
+    /// This is a convenience method that spawns and immediately joins.
+    /// For more control, use `spawn_tool` and `join_tool` separately.
     ///
     /// - For `TaskTool`: spawns as a subtask and joins to wait for completion
     /// - For `SimpleTool`: executes within a checkpointed step
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The registered name of the tool to call
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
     ///
     /// # Errors
     ///
@@ -189,69 +209,99 @@ impl<'a> ToolContext<'a> {
         &mut self,
         tool_name: &str,
         llm_params: JsonValue,
+        side_info: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<JsonValue> {
-        self.call_tool_with_side_info(tool_name, llm_params, serde_json::json!(null))
-            .await
+        let handle = self
+            .spawn_tool(tool_name, llm_params, side_info, options)
+            .await?;
+        self.join_tool(handle).await
     }
 
-    /// Call another tool by name with JSON params and explicit side info.
+    /// Spawn a tool without waiting for completion.
     ///
-    /// - For `TaskTool`: spawns as a subtask and joins to wait for completion
-    /// - For `SimpleTool`: executes within a checkpointed step
+    /// Returns a `ToolHandle` that can be joined later with `join_tool`.
+    ///
+    /// - For `TaskTool`: spawns as a background subtask
+    /// - For `SimpleTool`: executes immediately (still checkpointed), returns completed handle
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The registered name of the tool to spawn
+    /// * `llm_params` - Parameters visible to the LLM
+    /// * `side_info` - Hidden parameters (use `json!(null)` if not needed)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Spawn multiple tools
+    /// let h1 = ctx.spawn_tool("research", json!({"topic": "rust"}), json!(null)).await?;
+    /// let h2 = ctx.spawn_tool("search", json!({"query": "async"}), json!(null)).await?;
+    ///
+    /// // Do other work while TaskTools run in background...
+    ///
+    /// // Join to get results
+    /// let r1 = ctx.join_tool(h1).await?;
+    /// let r2 = ctx.join_tool(h2).await?;
+    /// ```
     ///
     /// # Errors
     ///
-    /// Returns an error if the tool is not found or execution fails.
-    pub async fn call_tool_with_side_info(
+    /// Returns an error if the tool is not found or spawning fails.
+    pub async fn spawn_tool(
         &mut self,
         tool_name: &str,
         llm_params: JsonValue,
         side_info: JsonValue,
-    ) -> ToolResult<JsonValue> {
+        options: SpawnOptions,
+    ) -> ToolResult<ToolHandle> {
         let is_durable = {
             let registry = self.app_state.tool_registry.read().await;
+            // Validate params before spawning
+            registry.validate_params(tool_name, &llm_params, &side_info)?;
             registry
                 .is_durable(tool_name)
-                .ok_or_else(|| ToolError::ToolNotFound(tool_name.to_string()))?
+                .ok_or_else(|| NonControlToolError::ToolNotFound {
+                    name: tool_name.to_string(),
+                })?
         };
 
         if is_durable {
-            self.call_task_tool(tool_name, llm_params, side_info).await
+            // TaskTool: spawn as subtask
+            let call_id = self.next_tool_call_id();
+            let wrapped_params = TaskToolParams {
+                llm_params,
+                side_info,
+                episode_id: self.episode_id,
+            };
+            let wrapped_params = serde_json::to_value(wrapped_params)?;
+            let spawn_name = format!("spawn:{tool_name}:{call_id}");
+            let handle: TaskHandle<JsonValue> = self
+                .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params, options)
+                .await?;
+            Ok(ToolHandle::Async(handle))
         } else {
-            self.call_simple_tool(tool_name, llm_params, side_info)
-                .await
+            // SimpleTool: execute immediately (still checkpointed via step)
+            let result = self
+                .call_simple_tool(tool_name, llm_params, side_info)
+                .await?;
+            Ok(ToolHandle::Sync(result))
         }
     }
 
-    /// Call a `TaskTool` (spawns as subtask and waits for completion).
-    async fn call_task_tool(
-        &mut self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        side_info: JsonValue,
-    ) -> ToolResult<JsonValue> {
-        // Get a unique ID for this tool call to ensure each invocation
-        // spawns a new subtask, even when calling the same tool multiple times.
-        let call_id = self.next_tool_call_id();
-
-        // Wrap params with side_info and episode_id for the TaskToolAdapter
-        let wrapped_params = TaskToolParams {
-            llm_params,
-            side_info,
-            episode_id: self.episode_id,
-        };
-        let wrapped_params = serde_json::to_value(wrapped_params)?;
-
-        // Spawn the tool as a subtask using spawn_subtask_by_name
-        let spawn_name = format!("spawn:{tool_name}:{call_id}");
-        let handle: TaskHandle<JsonValue> = self
-            .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params)
-            .await?;
-
-        // Join and wait for result
-        let result: JsonValue = self.task_ctx.join(handle).await?;
-
-        Ok(result)
+    /// Wait for a spawned tool to complete and return its result.
+    ///
+    /// - For `Async` handles (TaskTool): waits for the subtask to complete
+    /// - For `Sync` handles (SimpleTool): returns the stored result immediately
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if joining fails or the tool execution failed.
+    pub async fn join_tool(&mut self, handle: ToolHandle) -> ToolResult<JsonValue> {
+        match handle {
+            ToolHandle::Async(h) => self.task_ctx.join(h).await.map_err(Into::into),
+            ToolHandle::Sync(result) => Ok(result),
+        }
     }
 
     /// Spawn a subtask by task name (for dynamic tool invocation).
@@ -263,10 +313,11 @@ impl<'a> ToolContext<'a> {
         name: &str,
         task_name: &str,
         params: JsonValue,
+        options: SpawnOptions,
     ) -> ToolResult<TaskHandle<T>> {
         let handle: TaskHandle<T> = self
             .task_ctx
-            .spawn_by_name(name, task_name, params, durable::SpawnOptions::default())
+            .spawn_by_name(name, task_name, params, options)
             .await?;
         Ok(handle)
     }
@@ -305,7 +356,9 @@ impl<'a> ToolContext<'a> {
                         .read()
                         .await
                         .get_simple_tool(&tool_name)
-                        .ok_or_else(|| ToolError::ToolNotFound(tool_name.clone()))?
+                        .ok_or_else(|| NonControlToolError::ToolNotFound {
+                            name: tool_name.clone(),
+                        })?
                 };
 
                 simple_tool

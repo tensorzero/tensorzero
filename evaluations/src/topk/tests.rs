@@ -131,6 +131,7 @@ fn mock_success(
             input_tokens: Some(0),
             output_tokens: Some(0),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     });
@@ -193,6 +194,7 @@ fn test_compute_updates_empty_results() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -296,6 +298,7 @@ fn test_compute_updates_variant_failures() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -340,6 +343,7 @@ fn test_compute_updates_missing_variant_in_map() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -409,6 +413,7 @@ fn test_compute_updates_successful_evaluations() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -530,6 +535,7 @@ fn test_compute_updates_evaluator_failures() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -600,6 +606,7 @@ fn test_compute_updates_mixed_success_and_failure() {
         &mut variant_performance,
         &mut variant_failures,
         &mut evaluator_failures,
+        None, // No hedge weight rebalancing
     );
 
     assert!(result.is_ok());
@@ -1245,7 +1252,7 @@ fn test_check_topk_stopping_all_identical_variants() {
 
 /// Test that check_topk_stopping filters out failed variants.
 ///
-/// Without filtering, variant "a" (failed) would be included in top-1 since it has the
+/// Without filtering, variant "a" (failed) would be in top-1 since it has the
 /// highest confidence bounds. With filtering, only "b" (the best non-failed variant)
 /// should be returned.
 #[test]
@@ -1290,8 +1297,7 @@ fn test_check_topk_stopping_filters_failed_variants() {
 fn test_update_variant_statuses_skips_non_active() {
     let mut variant_status: HashMap<String, VariantStatus> = [
         ("active".to_string(), VariantStatus::Active),
-        ("included".to_string(), VariantStatus::Include),
-        ("excluded".to_string(), VariantStatus::Exclude),
+        ("stopped".to_string(), VariantStatus::Stopped),
         ("failed".to_string(), VariantStatus::Failed),
     ]
     .into_iter()
@@ -1299,8 +1305,7 @@ fn test_update_variant_statuses_skips_non_active() {
 
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
         mock_cs_with_bounds("active", 0.5, 0.7),
-        mock_cs_with_bounds("included", 0.5, 0.7),
-        mock_cs_with_bounds("excluded", 0.5, 0.7),
+        mock_cs_with_bounds("stopped", 0.5, 0.7),
         mock_cs_with_bounds("failed", 0.5, 0.7),
     ]
     .into_iter()
@@ -1322,10 +1327,9 @@ fn test_update_variant_statuses_skips_non_active() {
     );
 
     // Non-active variants should remain unchanged
-    assert_eq!(variant_status["included"], VariantStatus::Include);
-    assert_eq!(variant_status["excluded"], VariantStatus::Exclude);
+    assert_eq!(variant_status["stopped"], VariantStatus::Stopped);
     assert_eq!(variant_status["failed"], VariantStatus::Failed);
-    // Active variant should still be active (no early exclusion with single variant logic)
+    // Active variant should still be active (no early stopping with single variant logic)
     assert_eq!(variant_status["active"], VariantStatus::Active);
 }
 
@@ -1346,11 +1350,11 @@ fn test_update_variant_statuses_marks_failed() {
     .into_iter()
     .collect();
 
-    // high_failure has cs_lower = 0.3 (above 0.2 threshold)
-    // low_failure has cs_lower = 0.1 (below 0.2 threshold)
+    // high_failure has cs_lower = 0.1 (above 0.05 threshold)
+    // low_failure has cs_lower = 0.02 (below 0.05 threshold)
     let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_bounds("high_failure", 0.3, 0.5), // cs_lower = 0.3 > 0.2
-        mock_cs_with_bounds("low_failure", 0.1, 0.3),  // cs_lower = 0.1 < 0.2
+        mock_cs_with_bounds("high_failure", 0.1, 0.2), // cs_lower = 0.1 > 0.05
+        mock_cs_with_bounds("low_failure", 0.02, 0.04), // cs_lower = 0.02 < 0.05
     ]
     .into_iter()
     .collect();
@@ -1359,7 +1363,7 @@ fn test_update_variant_statuses_marks_failed() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: 0.2,
+        variant_failure_threshold: 0.05,
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1369,14 +1373,16 @@ fn test_update_variant_statuses_marks_failed() {
     );
 
     assert_eq!(variant_status["high_failure"], VariantStatus::Failed);
-    // "low_failure" is the only non-failed variant, so it gets early inclusion
-    // (beats 0 others, needs >= (1 - 1) = 0 for k_min=1)
-    assert_eq!(variant_status["low_failure"], VariantStatus::Include);
+    // "low_failure" is the only non-failed variant, so it gets early stopping
+    assert_eq!(variant_status["low_failure"], VariantStatus::Stopped);
 }
 
-/// Test early exclusion when variant's upper bound is below k_max others' lower bounds.
+/// Test early stopping when variant is confidently excluded from top-k.
+///
+/// A variant gets stopped when its upper bound is below k_max others' lower bounds,
+/// meaning it cannot be in the top k_max.
 #[test]
-fn test_update_variant_statuses_early_exclusion() {
+fn test_update_variant_statuses_early_stopping_exclusion() {
     let mut variant_status: HashMap<String, VariantStatus> = [
         ("good_a".to_string(), VariantStatus::Active),
         ("good_b".to_string(), VariantStatus::Active),
@@ -1387,7 +1393,7 @@ fn test_update_variant_statuses_early_exclusion() {
 
     // "bad" has upper bound 0.4, while "good_a" and "good_b" have lower bounds 0.5 and 0.6
     // So 2 variants are definitely better than "bad"
-    // With k_max=2, "bad" cannot be in top-2 and should be excluded
+    // With k_max=2, "bad" cannot be in top-2 and should be stopped (excluded from top-k)
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
         mock_cs_with_bounds("good_a", 0.5, 0.7), // cs_lower = 0.5 > bad's cs_upper
         mock_cs_with_bounds("good_b", 0.6, 0.8), // cs_lower = 0.6 > bad's cs_upper
@@ -1411,17 +1417,17 @@ fn test_update_variant_statuses_early_exclusion() {
         &params,
     );
 
-    // "bad" should be excluded because 2 variants are definitely better
+    // "bad" should be stopped because 2 variants are definitely better
     // and k_max = 2, so "bad" cannot be in top-2
-    assert_eq!(variant_status["bad"], VariantStatus::Exclude);
-    // good_a and good_b should still be active (neither meets early inclusion criteria)
+    assert_eq!(variant_status["bad"], VariantStatus::Stopped);
+    // good_a and good_b should still be active (neither meets early stopping criteria)
     assert_eq!(variant_status["good_a"], VariantStatus::Active);
     assert_eq!(variant_status["good_b"], VariantStatus::Active);
 }
 
-/// Test that early exclusion does NOT happen when fewer than k_max variants are better.
+/// Test that early stopping does NOT happen when fewer than k_max variants are definitely better.
 #[test]
-fn test_update_variant_statuses_no_early_exclusion_when_uncertain() {
+fn test_update_variant_statuses_no_early_stopping_when_uncertain() {
     let mut variant_status: HashMap<String, VariantStatus> = [
         ("good".to_string(), VariantStatus::Active),
         ("uncertain".to_string(), VariantStatus::Active),
@@ -1433,7 +1439,7 @@ fn test_update_variant_statuses_no_early_exclusion_when_uncertain() {
     // "bad" has upper bound 0.4
     // Only "good" (cs_lower = 0.5) is definitely better
     // "uncertain" overlaps with "bad"
-    // With k_max=2, we need 2 variants definitely better to exclude "bad"
+    // With k_max=2, we need 2 variants definitely better to stop "bad" (exclude from top-k)
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
         mock_cs_with_bounds("good", 0.5, 0.7), // definitely better than bad
         mock_cs_with_bounds("uncertain", 0.3, 0.6), // overlaps with bad
@@ -1462,10 +1468,10 @@ fn test_update_variant_statuses_no_early_exclusion_when_uncertain() {
     assert_eq!(variant_status["uncertain"], VariantStatus::Active);
 }
 
-/// Test that failure check takes priority over early inclusion/exclusion.
+/// Test that failure check takes priority over early stopping.
 ///
 /// Even if a variant has great performance, if its failure rate exceeds the threshold,
-/// it should be marked as Failed (not Include).
+/// it should be marked as Failed (not Stopped).
 #[test]
 fn test_update_variant_statuses_failure_takes_priority() {
     let mut variant_status: HashMap<String, VariantStatus> = [
@@ -1485,8 +1491,8 @@ fn test_update_variant_statuses_failure_takes_priority() {
 
     // "best_but_failing" has high failure rate
     let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_bounds("best_but_failing", 0.3, 0.5), // cs_lower = 0.3 > 0.2 threshold
-        mock_cs_with_bounds("healthy", 0.05, 0.15),        // cs_lower = 0.05 < 0.2 threshold
+        mock_cs_with_bounds("best_but_failing", 0.1, 0.2), // cs_lower = 0.1 > 0.05 threshold
+        mock_cs_with_bounds("healthy", 0.02, 0.04),        // cs_lower = 0.02 < 0.05 threshold
     ]
     .into_iter()
     .collect();
@@ -1495,7 +1501,7 @@ fn test_update_variant_statuses_failure_takes_priority() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: 0.2,
+        variant_failure_threshold: 0.05,
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1506,12 +1512,11 @@ fn test_update_variant_statuses_failure_takes_priority() {
 
     // "best_but_failing" should be Failed despite having best performance
     assert_eq!(variant_status["best_but_failing"], VariantStatus::Failed);
-    // "healthy" is the only non-failed variant, so it gets early inclusion
-    assert_eq!(variant_status["healthy"], VariantStatus::Include);
+    // "healthy" is the only non-failed variant, so it gets early stopping
+    assert_eq!(variant_status["healthy"], VariantStatus::Stopped);
 }
 
-/// Test that update_variant_statuses filters out failed variants when computing
-/// early exclusion and early inclusion.
+/// Test that update_variant_statuses filters out failed variants when computing early stopping.
 ///
 /// Scenario: 4 variants with k_min=1, k_max=2
 /// - "good_a" and "good_b" are clearly better than "bad_a" and "bad_b"
@@ -1520,10 +1525,11 @@ fn test_update_variant_statuses_failure_takes_priority() {
 ///
 /// Without any failures:
 /// - "good_a" and "good_b" stay Active (neither can prove it beats the other)
-/// - "bad_a" and "bad_b" get Excluded (2 variants are definitely better, k_max=2)
+/// - "bad_a" and "bad_b" get Stopped (excluded from top-k: 2 variants are definitely better, k_max=2)
 ///
 /// Then "good_a" fails:
-/// - "good_b" gets Included, "bad_a" and "bad_b" stay Active
+/// - "good_b" gets Stopped (included in top-k: beats 2 others, needs >= 2 for k_min=1)
+/// - "bad_a" and "bad_b" stay Active (only 1 non-failed variant is better, need 2 for exclusion)
 #[test]
 fn test_update_variant_statuses_filters_failed_variants() {
     // Setup: 4 variants, 2 good (distinguishable from bad), 2 bad (indistinguishable from each other)
@@ -1545,7 +1551,7 @@ fn test_update_variant_statuses_filters_failed_variants() {
         variant_failure_threshold: 1.0, // Disabled
     };
 
-    // Test 1: No failures - good variants stay Active, bad variants get Excluded
+    // Test 1: No failures - good variants stay Active, bad variants get Stopped (excluded from top-k)
     let mut variant_status: HashMap<String, VariantStatus> = [
         ("good_a".to_string(), VariantStatus::Active),
         ("good_b".to_string(), VariantStatus::Active),
@@ -1562,14 +1568,14 @@ fn test_update_variant_statuses_filters_failed_variants() {
         &params,
     );
 
-    // Good variants stay Active (neither beats the other for early inclusion)
+    // Good variants stay Active (neither beats the other for early stopping)
     assert_eq!(variant_status["good_a"], VariantStatus::Active);
     assert_eq!(variant_status["good_b"], VariantStatus::Active);
-    // Bad variants get Excluded (2 variants are definitely better, k_max=2)
-    assert_eq!(variant_status["bad_a"], VariantStatus::Exclude);
-    assert_eq!(variant_status["bad_b"], VariantStatus::Exclude);
+    // Bad variants get Stopped (2 variants are definitely better, k_max=2)
+    assert_eq!(variant_status["bad_a"], VariantStatus::Stopped);
+    assert_eq!(variant_status["bad_b"], VariantStatus::Stopped);
 
-    // Test 2: good_a fails - good_b gets Included, bad variants stay Active
+    // Test 2: good_a fails - good_b gets Stopped, bad variants stay Active
     let mut variant_status: HashMap<String, VariantStatus> = [
         ("good_a".to_string(), VariantStatus::Failed),
         ("good_b".to_string(), VariantStatus::Active),
@@ -1588,48 +1594,88 @@ fn test_update_variant_statuses_filters_failed_variants() {
 
     // good_a stays Failed
     assert_eq!(variant_status["good_a"], VariantStatus::Failed);
-    // good_b gets Included: beats 2 others (bad_a, bad_b), needs >= (3 - 1) = 2
-    assert_eq!(variant_status["good_b"], VariantStatus::Include);
-    // Bad variants stay Active: only 1 non-failed variant (good_b) is better, need 2 for exclusion
+    // good_b gets Stopped: beats 2 others (bad_a, bad_b), needs >= (3 - 1) = 2
+    assert_eq!(variant_status["good_b"], VariantStatus::Stopped);
+    // Bad variants stay Active: only 1 non-failed variant (good_b) is better, need 2 for early stopping
     assert_eq!(variant_status["bad_a"], VariantStatus::Active);
     assert_eq!(variant_status["bad_b"], VariantStatus::Active);
 }
 
-/// Test with failure threshold disabled (set to 1.0) - failure check never triggers.
+/// Test that failure check doesn't trigger when disabled or when failure CS is missing.
+///
+/// Two sub-cases:
+/// 1. Failure threshold disabled (set to 1.0) - failure check never triggers
+/// 2. Missing failure CS - failure check doesn't apply
 #[test]
-fn test_update_variant_statuses_failure_threshold_disabled() {
-    let mut variant_status: HashMap<String, VariantStatus> =
-        [("high_failure".to_string(), VariantStatus::Active)]
-            .into_iter()
-            .collect();
+fn test_update_variant_statuses_failure_check_skipped() {
+    // === Sub-case 1: Failure threshold disabled ===
+    {
+        let mut variant_status: HashMap<String, VariantStatus> =
+            [("high_failure".to_string(), VariantStatus::Active)]
+                .into_iter()
+                .collect();
 
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
-        [mock_cs_with_bounds("high_failure", 0.5, 0.7)]
-            .into_iter()
-            .collect();
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [mock_cs_with_bounds("high_failure", 0.5, 0.7)]
+                .into_iter()
+                .collect();
 
-    // High failure rate (cs_lower = 0.5), but threshold is disabled
-    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
-        [mock_cs_with_bounds("high_failure", 0.5, 0.7)] // cs_lower = 0.5
-            .into_iter()
-            .collect();
+        // High failure rate (cs_lower = 0.5), but threshold is disabled
+        let variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [mock_cs_with_bounds("high_failure", 0.5, 0.7)] // cs_lower = 0.5
+                .into_iter()
+                .collect();
 
-    let params = VariantStatusParams {
-        k_min: 1,
-        k_max: 1,
-        epsilon: 0.0,
-        variant_failure_threshold: 1.0, // Disabled - failure rate can never exceed 1.0
-    };
-    update_variant_statuses(
-        &mut variant_status,
-        &variant_performance,
-        &variant_failures,
-        &params,
-    );
+        let params = VariantStatusParams {
+            k_min: 1,
+            k_max: 1,
+            epsilon: 0.0,
+            variant_failure_threshold: 1.0, // Disabled - failure rate can never exceed 1.0
+        };
+        update_variant_statuses(
+            &mut variant_status,
+            &variant_performance,
+            &variant_failures,
+            &params,
+        );
 
-    // With threshold disabled (1.0), failure check never triggers.
-    // Single variant with k_min=1 triggers early inclusion (beats >= 0 others).
-    assert_eq!(variant_status["high_failure"], VariantStatus::Include);
+        // With threshold disabled (1.0), failure check never triggers.
+        // Single variant with k_min=1 triggers early stopping (beats >= 0 others).
+        assert_eq!(variant_status["high_failure"], VariantStatus::Stopped);
+    }
+
+    // === Sub-case 2: Missing failure CS ===
+    {
+        let mut variant_status: HashMap<String, VariantStatus> =
+            [("variant".to_string(), VariantStatus::Active)]
+                .into_iter()
+                .collect();
+
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [mock_cs_with_bounds("variant", 0.5, 0.7)]
+                .into_iter()
+                .collect();
+
+        // No failure CS for "variant"
+        let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+        let params = VariantStatusParams {
+            k_min: 1,
+            k_max: 1,
+            epsilon: 0.0,
+            variant_failure_threshold: 0.05,
+        };
+        update_variant_statuses(
+            &mut variant_status,
+            &variant_performance,
+            &variant_failures,
+            &params,
+        );
+
+        // Without failure CS, failure check doesn't apply.
+        // Single variant with k_min=1 triggers early stopping
+        assert_eq!(variant_status["variant"], VariantStatus::Stopped);
+    }
 }
 
 /// Test that variants not in variant_failures map are not marked as failed.
@@ -1652,7 +1698,7 @@ fn test_update_variant_statuses_missing_failure_cs() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: 0.2,
+        variant_failure_threshold: 0.05,
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1663,10 +1709,10 @@ fn test_update_variant_statuses_missing_failure_cs() {
 
     // Without failure CS, failure check doesn't apply.
     // Single variant with k_min=1 triggers inclusion
-    assert_eq!(variant_status["variant"], VariantStatus::Include);
+    assert_eq!(variant_status["variant"], VariantStatus::Stopped);
 }
 
-/// Test that variants not in variant_performance map don't cause errors in early exclusion.
+/// Test that variants not in variant_performance map don't cause errors in early stopping.
 #[test]
 fn test_update_variant_statuses_missing_performance_cs() {
     let mut variant_status: HashMap<String, VariantStatus> =
@@ -1691,179 +1737,139 @@ fn test_update_variant_statuses_missing_performance_cs() {
         &params,
     );
 
-    // Without performance CS, early exclusion check doesn't apply
+    // Without performance CS, early stopping check doesn't apply
     assert_eq!(variant_status["variant"], VariantStatus::Active);
 }
 
-/// Test early exclusion with k_max = 1 (most restrictive).
+/// Test that epsilon tolerance enables early stopping for nearly-separated intervals.
+///
+/// Two sub-cases:
+/// 1. Epsilon enables stopping for poor performance (variant's upper bound nearly below others' lower bounds)
+/// 2. Epsilon enables stopping for good performance (variant's lower bound nearly above others' upper bounds)
 #[test]
-fn test_update_variant_statuses_early_exclusion_k_max_1() {
-    let mut variant_status: HashMap<String, VariantStatus> = [
-        ("best".to_string(), VariantStatus::Active),
-        ("worst".to_string(), VariantStatus::Active),
-    ]
-    .into_iter()
-    .collect();
+fn test_update_variant_statuses_epsilon_enables_stopping() {
+    // === Sub-case 1: Epsilon enables stopping for poor performance ===
+    // "worst" has upper bound 0.505, "best" has lower bound 0.595, "mid" has lower bound 0.5
+    // Without epsilon: 0.505 < 0.5 is false, so "worst" doesn't get stopped
+    // With epsilon = 0.01: 0.505 < 0.5 + 0.01 = 0.51 is true, so stopping triggers
+    {
+        let mut variant_status: HashMap<String, VariantStatus> = [
+            ("best".to_string(), VariantStatus::Active),
+            ("mid".to_string(), VariantStatus::Active),
+            ("worst".to_string(), VariantStatus::Active),
+        ]
+        .into_iter()
+        .collect();
 
-    // "worst" has upper bound 0.4, "best" has lower bound 0.5
-    // 1 variant is definitely better, and k_max = 1
-    // So "worst" cannot be in top-1 and should be excluded
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_bounds("best", 0.5, 0.7),
-        mock_cs_with_bounds("worst", 0.2, 0.4),
-    ]
-    .into_iter()
-    .collect();
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs_with_bounds("best", 0.595, 0.7),
+            mock_cs_with_bounds("mid", 0.5, 0.6),
+            mock_cs_with_bounds("worst", 0.3, 0.505),
+        ]
+        .into_iter()
+        .collect();
 
-    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+        let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
 
-    let params = VariantStatusParams {
-        k_min: 1,
-        k_max: 1,
-        epsilon: 0.05, // Non-zero epsilon; intervals are well-separated so doesn't affect outcome
-        variant_failure_threshold: 1.0, // Disabled
-    };
-    update_variant_statuses(
-        &mut variant_status,
-        &variant_performance,
-        &variant_failures,
-        &params,
-    );
+        // Without epsilon, "worst" and "mid" both stay Active, "best" gets early stopping
+        let params_no_epsilon = VariantStatusParams {
+            k_min: 2,
+            k_max: 2,
+            epsilon: 0.0,
+            variant_failure_threshold: 1.0, // Disabled
+        };
+        update_variant_statuses(
+            &mut variant_status,
+            &variant_performance,
+            &variant_failures,
+            &params_no_epsilon,
+        );
 
-    // "worst" should be excluded (1 variant definitely better, k_max = 1)
-    assert_eq!(variant_status["worst"], VariantStatus::Exclude);
-    // "best" beats 1 other, needs >= (2 - 1) = 1, so gets early inclusion
-    assert_eq!(variant_status["best"], VariantStatus::Include);
-}
+        assert_eq!(variant_status["worst"], VariantStatus::Active);
+        assert_eq!(variant_status["mid"], VariantStatus::Active);
+        assert_eq!(variant_status["best"], VariantStatus::Stopped);
 
-/// Test that epsilon tolerance enables early exclusion for nearly-separated intervals.
-#[test]
-fn test_update_variant_statuses_epsilon_enables_exclusion() {
-    let mut variant_status: HashMap<String, VariantStatus> = [
-        ("best".to_string(), VariantStatus::Active),
-        ("mid".to_string(), VariantStatus::Active),
-        ("worst".to_string(), VariantStatus::Active),
-    ]
-    .into_iter()
-    .collect();
+        // Reset for epsilon test
+        *variant_status.get_mut("best").unwrap() = VariantStatus::Active;
 
-    // "worst" has upper bound 0.505, "best" has lower bound 0.5
-    // Without epsilon: 0.505 < 0.5 is false (need strict <), so no exclusion with k = 1
-    // With epsilon = 0.01: 0.505 - 0.01 = 0.495 < 0.5 is true, so exclusion triggers
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_bounds("best", 0.595, 0.7),
-        mock_cs_with_bounds("mid", 0.5, 0.6),
-        mock_cs_with_bounds("worst", 0.3, 0.505),
-    ]
-    .into_iter()
-    .collect();
+        // With epsilon = 0.01, "worst" should be stopped
+        let params_with_epsilon = VariantStatusParams {
+            k_min: 2,
+            k_max: 2,
+            epsilon: 0.01,
+            variant_failure_threshold: 1.0, // Disabled
+        };
+        update_variant_statuses(
+            &mut variant_status,
+            &variant_performance,
+            &variant_failures,
+            &params_with_epsilon,
+        );
 
-    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+        assert_eq!(variant_status["worst"], VariantStatus::Stopped);
+        assert_eq!(variant_status["mid"], VariantStatus::Stopped);
+        assert_eq!(variant_status["best"], VariantStatus::Stopped);
+    }
 
-    // Without epsilon, "worst" and "mid" both stay Active, "best gets early inclusion"
-    let params_no_epsilon = VariantStatusParams {
-        k_min: 2,
-        k_max: 2,
-        epsilon: 0.0,
-        variant_failure_threshold: 1.0, // Disabled
-    };
-    update_variant_statuses(
-        &mut variant_status,
-        &variant_performance,
-        &variant_failures,
-        &params_no_epsilon,
-    );
-
-    assert_eq!(variant_status["worst"], VariantStatus::Active);
-    assert_eq!(variant_status["mid"], VariantStatus::Active);
-    assert_eq!(variant_status["best"], VariantStatus::Include);
-
-    // Reset for second test
-    // *variant_status.get_mut("worst").unwrap() = VariantStatus::Active;
-    *variant_status.get_mut("best").unwrap() = VariantStatus::Active;
-
-    // Second test: with epsilon = 0.01, "worst" should be excluded
-    let params_with_epsilon = VariantStatusParams {
-        k_min: 2,
-        k_max: 2,
-        epsilon: 0.01,
-        variant_failure_threshold: 1.0, // Disabled
-    };
-    update_variant_statuses(
-        &mut variant_status,
-        &variant_performance,
-        &variant_failures,
-        &params_with_epsilon,
-    );
-
-    // Now "worst" should be excluded, and mid and best should be included
-    assert_eq!(variant_status["worst"], VariantStatus::Exclude);
-    assert_eq!(variant_status["mid"], VariantStatus::Include);
-    assert_eq!(variant_status["best"], VariantStatus::Include);
-}
-
-/// Test that epsilon tolerance enables early inclusion for nearly-separated intervals.
-#[test]
-fn test_update_variant_statuses_epsilon_enables_inclusion() {
-    let mut variant_status: HashMap<String, VariantStatus> = [
-        ("best".to_string(), VariantStatus::Active),
-        ("worst".to_string(), VariantStatus::Active),
-    ]
-    .into_iter()
-    .collect();
-
+    // === Sub-case 2: Epsilon enables stopping for good performance ===
     // "best" has lower bound 0.499, "worst" has upper bound 0.5
     // Without epsilon: 0.499 > 0.5 is false, so "best" doesn't beat "worst"
     // With epsilon = 0.01: 0.499 > 0.5 - 0.01 = 0.49 is true, so "best" beats "worst"
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_bounds("best", 0.499, 0.7),
-        mock_cs_with_bounds("worst", 0.3, 0.5),
-    ]
-    .into_iter()
-    .collect();
+    {
+        let mut variant_status: HashMap<String, VariantStatus> = [
+            ("best".to_string(), VariantStatus::Active),
+            ("worst".to_string(), VariantStatus::Active),
+        ]
+        .into_iter()
+        .collect();
 
-    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs_with_bounds("best", 0.499, 0.7),
+            mock_cs_with_bounds("worst", 0.3, 0.5),
+        ]
+        .into_iter()
+        .collect();
 
-    // Without epsilon, "best" stays Active (0.499 is not > 0.5)
-    let params_no_epsilon = VariantStatusParams {
-        k_min: 1,
-        k_max: 1,
-        epsilon: 0.0,
-        variant_failure_threshold: 1.0, // Disabled
-    };
-    update_variant_statuses(
-        &mut variant_status,
-        &variant_performance,
-        &variant_failures,
-        &params_no_epsilon,
-    );
+        let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
 
-    // "best" doesn't beat "worst" (0.499 is not > 0.5), so stays Active
-    assert_eq!(variant_status["best"], VariantStatus::Active);
-    assert_eq!(variant_status["worst"], VariantStatus::Active);
+        // Without epsilon, "best" stays Active (0.499 is not > 0.5)
+        let params_no_epsilon = VariantStatusParams {
+            k_min: 1,
+            k_max: 1,
+            epsilon: 0.0,
+            variant_failure_threshold: 1.0, // Disabled
+        };
+        update_variant_statuses(
+            &mut variant_status,
+            &variant_performance,
+            &variant_failures,
+            &params_no_epsilon,
+        );
 
-    // Reset for second test
-    *variant_status.get_mut("best").unwrap() = VariantStatus::Active;
-    *variant_status.get_mut("worst").unwrap() = VariantStatus::Active;
+        assert_eq!(variant_status["best"], VariantStatus::Active);
+        assert_eq!(variant_status["worst"], VariantStatus::Active);
 
-    // With epsilon = 0.01, "best" should get early inclusion
-    let params_with_epsilon = VariantStatusParams {
-        k_min: 1,
-        k_max: 1,
-        epsilon: 0.01,
-        variant_failure_threshold: 1.0, // Disabled
-    };
-    update_variant_statuses(
-        &mut variant_status,
-        &variant_performance,
-        &variant_failures,
-        &params_with_epsilon,
-    );
+        // Reset for epsilon test
+        *variant_status.get_mut("best").unwrap() = VariantStatus::Active;
+        *variant_status.get_mut("worst").unwrap() = VariantStatus::Active;
 
-    // Now "best" beats "worst" (0.499 > 0.5 - 0.01 = 0.49), so gets early inclusion
-    assert_eq!(variant_status["best"], VariantStatus::Include);
-    // "worst" should be excluded (best beats it, and k_max = 1)
-    assert_eq!(variant_status["worst"], VariantStatus::Exclude);
+        // With epsilon = 0.01, both should get stopped
+        let params_with_epsilon = VariantStatusParams {
+            k_min: 1,
+            k_max: 1,
+            epsilon: 0.01,
+            variant_failure_threshold: 1.0, // Disabled
+        };
+        update_variant_statuses(
+            &mut variant_status,
+            &variant_performance,
+            &variant_failures,
+            &params_with_epsilon,
+        );
+
+        assert_eq!(variant_status["best"], VariantStatus::Stopped);
+        assert_eq!(variant_status["worst"], VariantStatus::Stopped);
+    }
 }
 
 // ============================================================================
@@ -1967,8 +1973,8 @@ fn test_check_global_stopping_filters_failed_variants() {
 // Check that the evaluator failure condition triggers and takes precedence over variant failures
 fn test_check_global_stopping_evaluators_failed() {
     let variant_names = vec!["a", "b", "c", "d"];
-    let mut params = default_params_with_variants(variant_names.clone());
-    params.evaluator_failure_threshold = 0.2;
+    let params = default_params_with_variants(variant_names.clone());
+    // params uses default evaluator_failure_threshold = 0.05
     let mut progress = empty_progress(&variant_names);
     progress.variant_status = [
         ("a".to_string(), VariantStatus::Failed),
@@ -1981,11 +1987,11 @@ fn test_check_global_stopping_evaluators_failed() {
     progress.evaluator_failures = [
         (
             "eval_one".to_string(),
-            mock_cs_with_bounds("eval_one", 0.25, 0.3),
+            mock_cs_with_bounds("eval_one", 0.1, 0.15), // cs_lower = 0.1 > 0.05
         ),
         (
             "eval_two".to_string(),
-            mock_cs_with_bounds("eval_two", 0.4, 0.5),
+            mock_cs_with_bounds("eval_two", 0.2, 0.3), // cs_lower = 0.2 > 0.05
         ),
     ]
     .into_iter()
@@ -1999,7 +2005,7 @@ fn test_check_global_stopping_evaluators_failed() {
         })
         .collect();
 
-    // Both evaluator failure rates exceed 0.2, so EvaluatorsFailed should win even though too many
+    // Both evaluator failure rates exceed 0.05, so EvaluatorsFailed should win even though too many
     // variants have also failed.
     let reason = check_global_stopping(&progress, &params);
     match reason {
@@ -2044,4 +2050,344 @@ fn test_check_global_stopping_too_many_variant_failures() {
         }
         other => panic!("expected TooManyVariantsFailed, got {other:?}"),
     }
+}
+
+// ============================================================================
+// Tests for hedge weight functions
+// ============================================================================
+
+/// Helper to create a confidence sequence with specified count and mean_est.
+fn mock_cs_with_count_and_mean(
+    name: &str,
+    count: u64,
+    mean_est: f64,
+) -> (String, MeanBettingConfidenceSequence) {
+    (
+        name.to_string(),
+        MeanBettingConfidenceSequence {
+            name: name.to_string(),
+            mean_regularized: mean_est,
+            variance_regularized: 0.1,
+            count,
+            mean_est,
+            cs_lower: mean_est - 0.1,
+            cs_upper: mean_est + 0.1,
+            alpha: 0.05,
+            wealth: WealthProcesses {
+                grid: WealthProcessGridPoints::Resolution(101),
+                wealth_upper: vec![1.0; 101],
+                wealth_lower: vec![1.0; 101],
+            },
+        },
+    )
+}
+
+/// Test get_rank_based_hedge_weight assigns correct weights based on rank relative to k_min/k_max.
+#[test]
+fn test_get_rank_based_hedge_weight() {
+    // k_min = 2, k_max = 4: rank < 2 gets 0.8, rank >= 4 gets 0.2, else 0.5
+    assert_eq!(get_rank_based_hedge_weight(0, 2, 4), 0.8);
+    assert_eq!(get_rank_based_hedge_weight(1, 2, 4), 0.8);
+    assert_eq!(get_rank_based_hedge_weight(2, 2, 4), 0.5);
+    assert_eq!(get_rank_based_hedge_weight(3, 2, 4), 0.5);
+    assert_eq!(get_rank_based_hedge_weight(4, 2, 4), 0.2);
+    assert_eq!(get_rank_based_hedge_weight(5, 2, 4), 0.2);
+    assert_eq!(get_rank_based_hedge_weight(10, 2, 4), 0.2);
+
+    // k_min = k_max = 2: rank < 2 gets 0.8, rank >= 2 gets 0.2, no middle
+    assert_eq!(get_rank_based_hedge_weight(1, 2, 2), 0.8);
+    assert_eq!(get_rank_based_hedge_weight(2, 2, 2), 0.2);
+}
+
+/// Test that compute_hedge_weights returns None when any variant is below MIN_SAMPLES_FOR_REBALANCING.
+#[test]
+fn test_compute_hedge_weights_threshold() {
+    // Below threshold: returns None
+    let below_threshold: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 19, 0.8),
+        mock_cs_with_count_and_mean("b", 19, 0.6),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(compute_hedge_weights(&below_threshold, 1, 2), None);
+
+    // At threshold: returns weights (k_min=1, k_max=2: rank < 1 gets 0.8, rank >= 2 gets 0.2)
+    let at_threshold: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 20, 0.8), // Rank 0 (< k_min)
+        mock_cs_with_count_and_mean("b", 20, 0.6), // Rank 1 (middle)
+    ]
+    .into_iter()
+    .collect();
+    let weights = compute_hedge_weights(&at_threshold, 1, 2).unwrap();
+    assert_eq!(weights["a"], 0.8);
+    assert_eq!(weights["b"], 0.5);
+
+    // Mixed counts with one below threshold: returns None
+    let mixed: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 100, 0.8),
+        mock_cs_with_count_and_mean("b", 19, 0.6), // Below threshold
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(compute_hedge_weights(&mixed, 1, 2), None);
+}
+
+/// Test that compute_hedge_weights ranks variants by mean and assigns correct weights.
+#[test]
+fn test_compute_hedge_weights_ranking_and_weights() {
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("v1", 30, 0.9), // Rank 0
+        mock_cs_with_count_and_mean("v2", 30, 0.8), // Rank 1
+        mock_cs_with_count_and_mean("v3", 30, 0.7), // Rank 2
+        mock_cs_with_count_and_mean("v4", 30, 0.6), // Rank 3
+        mock_cs_with_count_and_mean("v5", 30, 0.5), // Rank 4
+    ]
+    .into_iter()
+    .collect();
+
+    // k_min = 2, k_max = 3: rank < 2 gets 0.8, rank >= 3 gets 0.2, else 0.5
+    let weights = compute_hedge_weights(&variant_performance, 2, 3).unwrap();
+    assert_eq!(weights["v1"], 0.8); // rank 0
+    assert_eq!(weights["v2"], 0.8); // rank 1
+    assert_eq!(weights["v3"], 0.5); // rank 2
+    assert_eq!(weights["v4"], 0.2); // rank 3
+    assert_eq!(weights["v5"], 0.2); // rank 4
+
+    // Test tied means: tied variants get adjacent ranks
+    let tied: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_count_and_mean("a", 25, 0.7),
+        mock_cs_with_count_and_mean("b", 25, 0.7), // Tied with a
+        mock_cs_with_count_and_mean("c", 25, 0.5),
+    ]
+    .into_iter()
+    .collect();
+    // k_min=1, k_max=2: rank < 1 gets 0.8, rank >= 2 gets 0.2, else 0.5
+    let weights = compute_hedge_weights(&tied, 1, 2).unwrap();
+    assert_eq!(weights["c"], 0.2); // rank 2 (>= k_max)
+    // a and b are tied at ranks 0 and 1: rank 0 gets 0.8, rank 1 gets 0.5
+    let ab_weights: Vec<f64> = vec![weights["a"], weights["b"]];
+    assert!(ab_weights.contains(&0.8) && ab_weights.contains(&0.5));
+}
+
+// ----------------------------------------------------------------------------
+// compute_updates with hedge_weights tests
+// ----------------------------------------------------------------------------
+
+/// Test that passing hedge_weights to compute_updates affects the CS differently than None.
+#[test]
+fn test_compute_updates_with_hedge_weights_affects_cs() {
+    // Create identical fresh CSes (not mock ones with preset values)
+    let mut variant_performance_no_hedge: HashMap<String, MeanBettingConfidenceSequence> = [(
+        "variant".to_string(),
+        MeanBettingConfidenceSequence::new("variant".to_string(), 101, 0.05),
+    )]
+    .into_iter()
+    .collect();
+
+    let mut variant_performance_with_hedge: HashMap<String, MeanBettingConfidenceSequence> = [(
+        "variant".to_string(),
+        MeanBettingConfidenceSequence::new("variant".to_string(), 101, 0.05),
+    )]
+    .into_iter()
+    .collect();
+
+    let mut variant_failures_no_hedge: HashMap<String, MeanBettingConfidenceSequence> = [(
+        "variant".to_string(),
+        MeanBettingConfidenceSequence::new("variant".to_string(), 101, 0.05),
+    )]
+    .into_iter()
+    .collect();
+
+    let mut variant_failures_with_hedge: HashMap<String, MeanBettingConfidenceSequence> = [(
+        "variant".to_string(),
+        MeanBettingConfidenceSequence::new("variant".to_string(), 101, 0.05),
+    )]
+    .into_iter()
+    .collect();
+
+    let mut evaluator_failures_no_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        HashMap::new();
+    let mut evaluator_failures_with_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        HashMap::new();
+
+    let scoring_fn = AverageEvaluatorScore;
+
+    // Create multiple batches with consistent high scores (0.8)
+    // We need enough observations for the hedge weight to make a visible difference
+    for _ in 0..20 {
+        let datapoint_id = uuid::Uuid::now_v7();
+        let results_by_datapoint: BatchResultsByDatapoint = [(
+            datapoint_id,
+            [(
+                "variant".to_string(),
+                mock_success(
+                    datapoint_id,
+                    "variant",
+                    [("eval1".to_string(), Ok(Some(json!(0.8))))]
+                        .into_iter()
+                        .collect(),
+                ),
+            )]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
+        // Apply update without hedge weights
+        compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance_no_hedge,
+            &mut variant_failures_no_hedge,
+            &mut evaluator_failures_no_hedge,
+            None,
+        )
+        .unwrap();
+
+        // Apply update with hedge weight 0.8 (spend more inferential power on lower bound)
+        let hedge_weights: HashMap<String, f64> =
+            [("variant".to_string(), 0.8)].into_iter().collect();
+        compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance_with_hedge,
+            &mut variant_failures_with_hedge,
+            &mut evaluator_failures_with_hedge,
+            Some(&hedge_weights),
+        )
+        .unwrap();
+    }
+
+    // Both should have been updated with 20 observations
+    assert_eq!(variant_performance_no_hedge["variant"].count, 20);
+    assert_eq!(variant_performance_with_hedge["variant"].count, 20);
+
+    // The underlying wealth processes should be identical (hedge weight doesn't affect them)
+    let cs_no_hedge = &variant_performance_no_hedge["variant"];
+    let cs_with_hedge = &variant_performance_with_hedge["variant"];
+
+    assert_eq!(
+        cs_no_hedge.wealth.wealth_upper, cs_with_hedge.wealth.wealth_upper,
+        "wealth_upper should be identical regardless of hedge weight"
+    );
+    assert_eq!(
+        cs_no_hedge.wealth.wealth_lower, cs_with_hedge.wealth.wealth_lower,
+        "wealth_lower should be identical regardless of hedge weight"
+    );
+
+    // With weight 0.8 emphasizing the positive wealth process, lower bound should be
+    // higher (tighter), and upper bound should also be higher (looser)
+    assert!(
+        cs_with_hedge.cs_lower > cs_no_hedge.cs_lower,
+        "With hedge weight 0.8, lower bound ({}) should be > the lower bound with hedge weight 0.5 ({})",
+        cs_with_hedge.cs_lower,
+        cs_no_hedge.cs_lower
+    );
+    assert!(
+        cs_with_hedge.cs_upper > cs_no_hedge.cs_upper,
+        "With hedge weight 0.8, upper bound ({}) should be > the upper bound with hedge weight 0.5 ({})",
+        cs_with_hedge.cs_lower,
+        cs_no_hedge.cs_lower
+    );
+}
+
+/// Test that hedge_weights only affects variant_performance, not failures.
+#[test]
+fn test_compute_updates_hedge_weights_only_applied_to_performance() {
+    // Create initial states
+    let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("variant", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let mut variant_failures_with_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("variant", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let mut variant_failures_no_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("variant", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let mut evaluator_failures_with_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("eval1", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let mut evaluator_failures_no_hedge: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_count_and_mean("eval1", 0, 0.5)]
+            .into_iter()
+            .collect();
+
+    let scoring_fn = AverageEvaluatorScore;
+
+    // Create a batch with successful evaluation
+    let datapoint_id = uuid::Uuid::now_v7();
+    let results_by_datapoint: BatchResultsByDatapoint = [(
+        datapoint_id,
+        [(
+            "variant".to_string(),
+            mock_success(
+                datapoint_id,
+                "variant",
+                [("eval1".to_string(), Ok(Some(json!(0.8))))]
+                    .into_iter()
+                    .collect(),
+            ),
+        )]
+        .into_iter()
+        .collect(),
+    )]
+    .into_iter()
+    .collect();
+
+    // Apply with extreme hedge weight
+    let hedge_weights: HashMap<String, f64> = [("variant".to_string(), 0.2)].into_iter().collect();
+
+    compute_updates(
+        &results_by_datapoint,
+        &scoring_fn,
+        &mut variant_performance.clone(),
+        &mut variant_failures_with_hedge,
+        &mut evaluator_failures_with_hedge,
+        Some(&hedge_weights),
+    )
+    .unwrap();
+
+    compute_updates(
+        &results_by_datapoint,
+        &scoring_fn,
+        &mut variant_performance,
+        &mut variant_failures_no_hedge,
+        &mut evaluator_failures_no_hedge,
+        None,
+    )
+    .unwrap();
+
+    // variant_failures should be identical regardless of hedge_weights
+    // (hedge_weights is only applied to performance, not failures)
+    assert_eq!(
+        variant_failures_with_hedge["variant"].cs_lower,
+        variant_failures_no_hedge["variant"].cs_lower,
+        "variant_failures cs_lower should be the same regardless of hedge_weights"
+    );
+    assert_eq!(
+        variant_failures_with_hedge["variant"].cs_upper,
+        variant_failures_no_hedge["variant"].cs_upper,
+        "variant_failures cs_upper should be the same regardless of hedge_weights"
+    );
+
+    // evaluator_failures should be identical regardless of hedge_weights
+    assert_eq!(
+        evaluator_failures_with_hedge["eval1"].cs_lower,
+        evaluator_failures_no_hedge["eval1"].cs_lower,
+        "evaluator_failures cs_lower should be the same regardless of hedge_weights"
+    );
+    assert_eq!(
+        evaluator_failures_with_hedge["eval1"].cs_upper,
+        evaluator_failures_no_hedge["eval1"].cs_upper,
+        "evaluator_failures cs_upper should be the same regardless of hedge_weights"
+    );
 }

@@ -11,13 +11,15 @@ use url::Url;
 
 use crate::config::BatchWritesConfig;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::clickhouse_client::DisabledClickHouseClient;
 use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
 use crate::db::{ConfigQueries, HealthCheckable};
 use crate::error::DelayedError;
 use crate::error::{Error, ErrorDetails};
+
+// Export this so evaluations crate can wait for it.
+pub use crate::db::clickhouse::batching::BatchWriterHandle;
 
 pub use clickhouse_client::ClickHouseClient;
 pub use table_name::TableName;

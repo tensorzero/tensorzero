@@ -43,7 +43,6 @@ node_modules/
 **/.eslintcache
 
 # Claude Code (see AGENTS.md)
-CLAUDE.md
 **/.claude/*
 !./claude/commands/
 !./claude/commands/**

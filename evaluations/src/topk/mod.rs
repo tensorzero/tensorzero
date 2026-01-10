@@ -1,20 +1,25 @@
 //! Durable Top-K Variant Evaluation Task
 //!
 //! This module implements an adaptive evaluation algorithm that evaluates multiple variants
-//! against a dataset using durable execution for fault tolerance. The algorithm supports:
+//! against a dataset using durable execution for fault tolerance. It aims to stop when it can
+//! confidently identify the top-k variants for some k in a user-chosen range of k values.
+//! Rankings are determined by a function which compares variants across multiple evaluators
+//! to produce a single scalar score per variant. The algorithm supports:
 //!
 //! - Multi-variant evaluation with per-variant stopping conditions
 //! - Batch processing for efficiency
 //! - Checkpointed execution for crash recovery
-//! - Configurable minimum/maximum datapoints and precision targets
-//!
-//! NOTE: This module is work in progress.
+
+mod updates;
+pub use updates::*;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
+use durable::{Durable, Task, TaskContext, TaskResult, async_trait};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::endpoints::datasets::v1::get_datapoints;
 use tensorzero_core::endpoints::datasets::v1::list_datapoints;
@@ -22,7 +27,7 @@ use tensorzero_core::endpoints::datasets::v1::types::{
     GetDatapointsRequest, ListDatapointsRequest,
 };
 use tensorzero_core::evaluations::EvaluationConfig;
-use tracing::info;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::betting_confidence_sequences::{MeanBettingConfidenceSequence, update_betting_cs};
@@ -38,6 +43,18 @@ use crate::{
 // Constants
 // ============================================================================
 
+/// Default batch size for top-k evaluation
+const DEFAULT_BATCH_SIZE: usize = 20;
+
+/// Default confidence sequence resolution (grid points for mean estimation)
+const DEFAULT_CS_RESOLUTION: usize = 1001;
+
+/// Default alpha (significance level) for confidence sequences
+const DEFAULT_ALPHA: f32 = 0.05;
+
+/// Queue name for top-k evaluation tasks
+const QUEUE_NAME: &str = "evaluations_topk";
+
 /// Default failure rate threshold for both variants and evaluators.
 /// A 5% failure rate is the default threshold for marking a variant as failed
 /// or terminating due to evaluator failures.
@@ -47,24 +64,107 @@ fn default_failure_threshold() -> f64 {
     DEFAULT_FAILURE_THRESHOLD
 }
 
+/// Minimum samples before applying hedge weight rebalancing.
+///
+/// Before this threshold, rankings are too noisy to reliably guess which variants
+/// might be in the top-k vs. outside it. Using symmetric hedges (0.5) is safer
+/// until we have enough data.
+const MIN_SAMPLES_FOR_REBALANCING: u64 = 20;
+
+/// Choose hedge weight based on a variant's provisional rank.
+///
+/// Variants believed to be in the top set emphasize the lower tail so their lower
+/// confidence bound rises quickly (easier to certify inclusion). Variants believed
+/// to be outside the top set emphasize the upper tail to shrink their upper bounds
+/// (easier to certify exclusion). Middle variants keep a symmetric hedge.
+///
+/// # Arguments
+/// * `rank` - 0-indexed rank of the variant by sample mean (0 = best)
+/// * `k_min` - Minimum k for top-k identification
+/// * `k_max` - Maximum k for top-k identification
+///
+/// # Returns
+/// Hedge weight for the upper wealth process (in [0, 1]).
+fn get_rank_based_hedge_weight(rank: usize, k_min: u32, k_max: u32) -> f64 {
+    if rank < k_min as usize {
+        0.8 // Boost lower bounds to certify inclusion sooner
+    } else if rank >= k_max as usize {
+        0.2 // Shrink upper bounds to certify exclusion sooner
+    } else {
+        0.5 // Middle variants keep symmetric hedge
+    }
+}
+
+/// Compute per-variant hedge weights based on provisional ranking.
+///
+/// Ranks variants by their current sample mean (from confidence sequences),
+/// then assigns hedge weights using `get_rank_based_hedge_weight()`.
+///
+/// Only applies rebalancing if all variants have at least `MIN_SAMPLES_FOR_REBALANCING`
+/// observations. Otherwise returns `None` (use default symmetric hedge).
+///
+/// # Arguments
+/// * `variant_performance` - Current performance confidence sequences for each variant
+/// * `k_min` - Minimum k for top-k identification
+/// * `k_max` - Maximum k for top-k identification
+///
+/// # Returns
+/// `Some(HashMap)` with per-variant hedge weights if rebalancing applies, `None` otherwise.
+fn compute_hedge_weights(
+    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    k_min: u32,
+    k_max: u32,
+) -> Option<HashMap<String, f64>> {
+    // Check minimum sample requirement
+    let min_samples = variant_performance
+        .values()
+        .map(|cs| cs.count)
+        .min()
+        .unwrap_or(0);
+
+    if min_samples < MIN_SAMPLES_FOR_REBALANCING {
+        return None;
+    }
+
+    // Sort variants by sample mean (descending) to get ranks
+    let mut variants_by_mean: Vec<(&String, f64)> = variant_performance
+        .iter()
+        .map(|(name, cs)| (name, cs.mean_est))
+        .collect();
+    variants_by_mean.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Assign hedge weights based on rank
+    let hedge_weights: HashMap<String, f64> = variants_by_mean
+        .iter()
+        .enumerate()
+        .map(|(rank, (name, _))| {
+            (
+                (*name).clone(),
+                get_rank_based_hedge_weight(rank, k_min, k_max),
+            )
+        })
+        .collect();
+
+    Some(hedge_weights)
+}
+
 // ============================================================================
 // Core Types
 // ============================================================================
 
 /// Status of a variant in the top-k evaluation process.
 ///
-/// The Include/Exclude/Failed states are terminal, and decisions to transition to
-/// one of these states are based on the current set of non-Failed variants. That
-/// means variant failures can prevent a top-k set from being identified, because
-/// a variant may fail after other variants have already been excluded.
+/// The Stopped/Failed states are terminal, and decisions to transition to one of these
+/// states are based on the current set of non-Failed variants. That means variant
+/// failures can prevent a top-k set from being identified, because a variant may fail
+/// after other variants have already been stopped and there may be insufficient data
+/// to distinguish the remaining non-Failed variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VariantStatus {
     /// Still running evals on this variant
     Active,
-    /// Not running evals; variant is confidently within top k_min
-    Include,
-    /// Not running evals; variant is confidently outside the top k_max
-    Exclude,
+    /// Not running evals; variant is confidently resolved (either in or out of top-k)
+    Stopped,
     /// Not running evals; variant failure rate is confidently >= failure threshold
     Failed,
 }
@@ -308,6 +408,9 @@ impl ScoringFunction for AverageEvaluatorScore {
 /// * `variant_performance` - Map to update with performance statistics
 /// * `variant_failures` - Map to update with variant failure rates
 /// * `evaluator_failures` - Map to update with evaluator failure rates
+/// * `hedge_weights` - Optional per-variant hedge weights for performance CS updates.
+///   If `Some`, applies rank-based rebalancing to accelerate top-k identification.
+///   Only applied to `variant_performance`, not to failure rate tracking.
 ///
 /// # Returns
 /// `Ok(())` on success, or an error if confidence sequence updates fail.
@@ -317,6 +420,7 @@ pub fn compute_updates(
     variant_performance: &mut HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
     evaluator_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
+    hedge_weights: Option<&HashMap<String, f64>>,
 ) -> Result<()> {
     // Collect observations per variant for performance scores
     let mut performance_observations: HashMap<String, Vec<f64>> = HashMap::new();
@@ -400,7 +504,8 @@ pub fn compute_updates(
             continue;
         }
         if let Some(cs) = variant_performance.remove(&variant_name) {
-            let updated = update_betting_cs(cs, observations, None)?;
+            let hedge_weight = hedge_weights.and_then(|hw| hw.get(&variant_name)).copied();
+            let updated = update_betting_cs(cs, observations, hedge_weight)?;
             variant_performance.insert(variant_name, updated);
         }
     }
@@ -455,11 +560,6 @@ fn non_failed_variants<'a>(
 /// If a variant's failure rate CS lower bound exceeds `variant_failure_threshold`,
 /// the variant is marked as Failed. Failed variants are not candidates for the
 /// returned top-k set.
-#[allow(dead_code, reason = "used in tests and by process_batch_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
 struct VariantStatusParams {
     k_min: u32,
     k_max: u32,
@@ -472,38 +572,31 @@ struct VariantStatusParams {
 ///
 /// This function may transition variants from `Active` to one of the terminal states:
 /// - `Failed`: Variant's failure rate confidence interval lower bound exceeds the threshold
-/// - `Include`: Variant is confidently in the top k_min among non-failed variants (early inclusion)
-/// - `Exclude`: Variant is confidently outside the top k_max among non-failed variants (early exclusion)
+/// - `Stopped`: Variant is confidently resolved (either in top k_min or outside top k_max)
 ///
-/// Note: This function handles failure detection and early inclusion/exclusion only.
+/// Note: This function handles failure detection and early stopping only.
 /// Global top-k stopping (when we can identify the full top-k set) should be checked
 /// separately via `check_topk_stopping()` after calling this function. This ensures
-/// that `Failed` status always takes precedence over `Include`.
+/// that `Failed` status always takes precedence over `Stopped`.
 ///
 /// # Status Transition Logic
 ///
 /// The function uses a two-pass approach to ensure failure detection happens before
-/// early inclusion/exclusion checks:
+/// early stopping checks:
 ///
 /// **Pass 1 - Failure detection:**
 /// - Skip variants already in a terminal state
 /// - If the variant's failure rate CS lower bound exceeds `variant_failure_threshold`,
 ///   mark as `Failed`
 ///
-/// **Pass 2 - Early exclusion/inclusion (among non-failed variants):**
+/// **Pass 2 - Early stopping (among non-failed variants):**
 /// - Skip variants already in a terminal state (including those just marked as `Failed`)
-/// - **Early exclusion**: If at least `k_max` other non-failed variants have lower bounds above
-///   this variant's upper bound (adjusted by epsilon), this variant cannot be in the top k_max,
-///   so mark as `Exclude`. (Note that other variants may fail later, causing excluded variants
-///   to return to the top-k_max among non-failed variants.)
-/// - **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
-///   `(num_non_failed - k_min)` other non-failed variants (adjusted by epsilon), it's
-///   confidently in the top k_min, so mark as `Include`
-#[allow(dead_code, reason = "used in tests and by process_batch_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
+/// - **Early stopping for poor performance**: If at least `k_max` other non-failed variants
+///   have lower bounds above this variant's upper bound (adjusted by epsilon), this variant
+///   cannot be in the top k_max, so mark as `Stopped`.
+/// - **Early stopping for good performance**: If this variant's lower bound exceeds the upper
+///   bounds of at least `(num_non_failed - k_min)` other non-failed variants (adjusted by
+///   epsilon), it's confidently in the top k_min, so mark as `Stopped`.
 fn update_variant_statuses(
     variant_status: &mut HashMap<String, VariantStatus>,
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
@@ -565,12 +658,12 @@ fn update_variant_statuses(
             // If at least k_max variants are definitely better,
             // this variant cannot be in the top k_max
             if num_definitely_worse_than >= params.k_max as usize {
-                variant_status.insert(name, VariantStatus::Exclude);
+                variant_status.insert(name, VariantStatus::Stopped);
                 continue;
             }
         }
 
-        // Check if variant can be included early because it's confidently within the top k_min
+        // Check if variant can be stopped early because it's confidently within the top k_min
         // (its lower bound is above (upper_bound_j - epsilon) for all but k_min other non-failed variants j)
         if let Some(perf_cs) = variant_performance.get(&name) {
             // Count non-failed variants for the threshold calculation
@@ -587,7 +680,7 @@ fn update_variant_statuses(
             // If this variant beats at least (num_non_failed - k_min) others,
             // it's confidently in the top k_min among non-failed variants
             if num_definitely_better_than >= num_non_failed.saturating_sub(params.k_min as usize) {
-                variant_status.insert(name, VariantStatus::Include);
+                variant_status.insert(name, VariantStatus::Stopped);
             }
         }
     }
@@ -838,11 +931,6 @@ pub fn check_topk(
 /// The fourth available reason, DatasetExhausted, is checked elsewhere, because
 /// check_global_stopping() doesn't have access to the number of batches processed
 /// and remaining.
-#[allow(dead_code, reason = "used in tests")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
 fn check_global_stopping(
     progress: &TopKProgress,
     params: &TopKTaskParams,
@@ -894,42 +982,42 @@ fn check_global_stopping(
 }
 
 // ============================================================================
-// Durable Task (skeleton - implementation in separate PR)
+// Durable Task
 // ============================================================================
 
-// The durable task implementation will use the types and functions defined above:
-//
-// - `TopKTaskState`: Passed to `Durable::build_with_state()` to provide clients
-// - `TopKTaskParams`: Serialized as task input, contains all config for reproducible runs
-// - `TopKProgress`: Checkpointed between batches via `ProcessBatchStepParams`
-// - `TopKTaskOutput`: Returned when task completes
-//
-// Key functions used in the task loop:
-// - `compute_updates()`: Called after each batch to update confidence sequences
-// - `update_variant_statuses()`: Called to transition variants between states
-//                                and check variant-specific stopping conditions
-// - `check_global_stopping()`: Called after each batch to check if we should stop
-// - `check_topk_stopping()`: Called within `check_global_stopping()` for TopKFound check
-//
-// The task will:
-// 1. Fetch and shuffle datapoint IDs (checkpointed step)
-// 2. For each batch:
-//    a. Fetch datapoints and run inference+evaluation on active variants
-//    b. Call `compute_updates()` to update confidence sequences
-//    c. Call `update_variant_statuses()` to transition variant states
-//    d. Call `check_global_stopping()` to determine if we should stop
-//    e. Checkpoint progress via `ProcessBatchStepParams`
-// 3. Return `TopKTaskOutput` with final state and stopping reason
+/// Creates a Durable client configured for top-k evaluation tasks.
+///
+/// The client is configured to use the `evaluations_topk` queue by default,
+/// which must have been created by running the database migrations.
+///
+/// # Arguments
+/// * `pool` - A PostgreSQL connection pool
+/// * `state` - Application state containing clients for inference and database access
+/// * `queue_name` - Optional custom queue name. If None, uses the default "evaluations_topk" queue.
+///
+/// # Returns
+/// A configured `Durable` client for spawning and processing `TopKTask` tasks.
+pub async fn create_client(
+    pool: PgPool,
+    state: TopKTaskState,
+    queue_name: Option<&str>,
+) -> Result<Durable<TopKTaskState>> {
+    let queue_name = queue_name.unwrap_or(QUEUE_NAME);
+    let client = Durable::builder()
+        .pool(pool)
+        .queue_name(queue_name)
+        .build_with_state(state)
+        .await?;
+
+    client.register::<TopKTask>().await?;
+
+    Ok(client)
+}
 
 /// Parameters for the `fetch_datapoint_ids` durable step.
 ///
 /// This step paginates through the dataset to collect all datapoint IDs,
 /// then shuffles them for randomized evaluation order.
-#[allow(dead_code, reason = "used by fetch_datapoint_ids_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct FetchDatapointIdsParams {
     /// Name of the function to filter datapoints by
@@ -944,7 +1032,6 @@ struct FetchDatapointIdsParams {
 ///
 /// Paginates through the entire dataset to fetch all datapoint IDs, respecting
 /// `max_datapoints` if set. The IDs are shuffled for randomized evaluation order.
-#[expect(dead_code)]
 async fn fetch_datapoint_ids_step(
     params: FetchDatapointIdsParams,
     state: TopKTaskState,
@@ -1008,12 +1095,7 @@ async fn fetch_datapoint_ids_step(
 /// Extracts the variant name from an `EvaluationVariant`.
 ///
 /// For named variants, returns the name directly. For dynamic variants (which don't
-/// have persistent names), returns a placeholder string "tensorzero::dynamic_variant".
-#[allow(dead_code, reason = "used by process_batch_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
+/// have persistent names), returns a placeholder string "dynamic_variant".
 fn get_variant_name(variant: &EvaluationVariant) -> String {
     match variant {
         EvaluationVariant::Name(name) => name.clone(),
@@ -1027,11 +1109,6 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
 /// This step processes a batch of datapoints: runs inference for each active variant,
 /// evaluates the results, updates confidence sequences, and checks stopping conditions.
 /// All necessary context is included to enable durable execution with checkpointing.
-#[allow(dead_code, reason = "used by process_batch_step skeleton")]
-#[allow(
-    clippy::allow_attributes,
-    reason = "expect(dead_code) warns because item is used"
-)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProcessBatchStepParams {
     /// IDs of the datapoints to process in this batch
@@ -1071,7 +1148,6 @@ struct ProcessBatchStepParams {
 }
 
 /// Durable step function to process a batch and update progress state.
-#[expect(dead_code)]
 async fn process_batch_step(
     params: ProcessBatchStepParams,
     state: TopKTaskState,
@@ -1085,6 +1161,7 @@ async fn process_batch_step(
     let datapoints = get_datapoints(&state.clients.clickhouse_client, None, request)
         .await?
         .datapoints;
+    let num_datapoints_fetched = datapoints.len();
 
     // Process the batch if we have datapoints and active variants
     let results: BatchResultsByDatapoint = if datapoints.is_empty() {
@@ -1172,6 +1249,13 @@ async fn process_batch_step(
         }
     };
 
+    // Compute hedge weights for rank-based rebalancing (accelerates top-k identification)
+    let hedge_weights = compute_hedge_weights(
+        &current_state.variant_performance,
+        params.k_min,
+        params.k_max,
+    );
+
     // Update confidence sequences
     let scoring_fn = params.scoring_function.clone().into_scoring_fn();
     compute_updates(
@@ -1180,9 +1264,11 @@ async fn process_batch_step(
         &mut current_state.variant_performance,
         &mut current_state.variant_failures,
         &mut current_state.evaluator_failures,
+        hedge_weights.as_ref(),
     )?;
 
-    current_state.num_datapoints_processed += params.batch_ids.len();
+    // Update number of datapoints processed and batch index
+    current_state.num_datapoints_processed += num_datapoints_fetched;
     current_state.batch_index = params.batch_idx + 1;
 
     // Update variant statuses (failure detection + early inclusion/exclusion)
@@ -1219,38 +1305,289 @@ async fn process_batch_step(
 /// - **TopKFound**: A top-k set is confidently identified (for some k in [k_min, k_max])
 /// - **DatasetExhausted**: All datapoints have been processed
 /// - **EvaluatorsFailed**: An evaluator's failure rate exceeds the threshold
-/// - **TooManyVariantsFailed**: Too many variants failed to identify top-k
+/// - **TooManyVariantsFailed**: Too many variants failed to identify a top-k
 ///
 /// # Usage
 ///
 /// Use [`create_client`] to create a durable client, then spawn tasks with
 /// [`TopKTaskParams`] specifying the evaluation configuration.
-#[expect(dead_code)]
-struct TopKTask;
+pub struct TopKTask;
 
-// #[async_trait]
-// impl Task<TopKTaskState> for TopKTask {
-//     const NAME: &'static str = "topk-evaluation";
-//     type Params = TopKTaskParams;
-//     type Output = TopKTaskOutput;
+#[async_trait]
+impl Task<TopKTaskState> for TopKTask {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("topk-evaluation")
+    }
+    type Params = TopKTaskParams;
+    type Output = TopKTaskOutput;
 
-//     async fn run(
-//         params: Self::Params,
-//         mut ctx: TaskContext<TopKTaskState>,
-//         _state: TopKTaskState,
-//     ) -> TaskResult<Self::Output> {
-//         The implementation will:
-//           1. Validate input parameters (k_min > 0, k_max >= k_min, etc.)
-//           2. Generate a durable evaluation_run_id via ctx.uuid7()
-//           3. Checkpoint 1: Fetch and shuffle datapoint IDs via fetch_datapoint_ids_step
-//           4. Initialize TopKProgress with all variants Active
-//           5. For each batch:
-//             - Checkpoint 2: Process batch via process_batch_step
-//             - Check global stopping conditions via check_global_stopping()
-//             - Break if stopping condition met
-//           6. Return TopKTaskOutput with final state and stopping reason
-//     }
-// }
+    async fn run(
+        params: Self::Params,
+        mut ctx: TaskContext<TopKTaskState>,
+        _state: TopKTaskState,
+    ) -> TaskResult<Self::Output> {
+        // Validate arguments
+        if params.variant_names.is_empty() {
+            return Err(durable::TaskError::Validation {
+                message: "At least one variant must be provided".to_string(),
+            });
+        }
+        if params.k_min == 0 {
+            return Err(durable::TaskError::Validation {
+                message: "k_min must be > 0".to_string(),
+            });
+        }
+        if params.k_max < params.k_min {
+            return Err(durable::TaskError::Validation {
+                message: format!(
+                    "k_max ({}) must be >= k_min ({})",
+                    params.k_max, params.k_min
+                ),
+            });
+        }
+        if params.k_max as usize > params.variant_names.len() {
+            return Err(durable::TaskError::Validation {
+                message: format!(
+                    "k_max ({}) must be <= number of variants ({})",
+                    params.k_max,
+                    params.variant_names.len()
+                ),
+            });
+        }
+        if params.batch_size == Some(0) {
+            return Err(durable::TaskError::Validation {
+                message: "batch_size must be > 0".to_string(),
+            });
+        }
+        if params.concurrency == 0 {
+            return Err(durable::TaskError::Validation {
+                message: "concurrency must be > 0".to_string(),
+            });
+        }
+
+        let batch_size = params.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
+
+        // Get evaluator names from the evaluation config
+        let EvaluationConfig::Inference(inference_config) = &params.evaluation_config;
+        let evaluator_names: Vec<String> = inference_config.evaluators.keys().cloned().collect();
+
+        // Generate evaluation run ID durably
+        let evaluation_run_id = ctx.uuid7().await?;
+
+        info!(
+            evaluation_run_id = %evaluation_run_id,
+            num_variants = params.variant_names.len(),
+            k_min = params.k_min,
+            k_max = params.k_max,
+            batch_size = batch_size,
+            "Starting top-k evaluation"
+        );
+
+        // CHECKPOINT 1: Fetch and shuffle datapoint IDs
+        let fetch_params = FetchDatapointIdsParams {
+            function_name: inference_config.function_name.clone(),
+            dataset_name: params.dataset_name.clone(),
+            max_datapoints: params.max_datapoints,
+        };
+        let datapoint_ids: Vec<Uuid> = ctx
+            .step(
+                "fetch_datapoint_ids",
+                fetch_params,
+                fetch_datapoint_ids_step,
+            )
+            .await?;
+
+        let total_datapoints = datapoint_ids.len();
+        info!(
+            total_datapoints = total_datapoints,
+            "Loaded and shuffled datapoint IDs"
+        );
+
+        // Log if fewer datapoints are available than the configured max
+        if let Some(max) = params.max_datapoints
+            && total_datapoints < max
+        {
+            info!(
+                "Dataset contains {total_datapoints} datapoints, fewer than max_datapoints ({max})"
+            );
+        }
+
+        if total_datapoints == 0 {
+            return Err(durable::TaskError::Validation {
+                message: "Dataset is empty".to_string(),
+            });
+        }
+
+        // Initialize loop state
+        let mut progress = TopKProgress {
+            variant_status: params
+                .variant_names
+                .iter()
+                .map(|name| (name.clone(), VariantStatus::Active))
+                .collect(),
+            variant_performance: params
+                .variant_names
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        MeanBettingConfidenceSequence::new(
+                            name.clone(),
+                            DEFAULT_CS_RESOLUTION,
+                            DEFAULT_ALPHA,
+                        ),
+                    )
+                })
+                .collect(),
+            variant_failures: params
+                .variant_names
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        MeanBettingConfidenceSequence::new(
+                            name.clone(),
+                            DEFAULT_CS_RESOLUTION,
+                            DEFAULT_ALPHA,
+                        ),
+                    )
+                })
+                .collect(),
+            evaluator_failures: evaluator_names
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        MeanBettingConfidenceSequence::new(
+                            name.clone(),
+                            DEFAULT_CS_RESOLUTION,
+                            DEFAULT_ALPHA,
+                        ),
+                    )
+                })
+                .collect(),
+            num_datapoints_processed: 0,
+            batch_index: 0,
+        };
+
+        // Process batches
+        let total_datapoints = datapoint_ids.len();
+        let batches: Vec<Vec<Uuid>> = datapoint_ids
+            .chunks(batch_size)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+
+        let mut stopping_reason: Option<GlobalStoppingReason> = None;
+
+        for (batch_idx, batch_ids) in batches.into_iter().enumerate() {
+            let current_batch_size = batch_ids.len();
+            // CHECKPOINT 2: Process batch and update state
+            let batch_step_params = ProcessBatchStepParams {
+                batch_ids,
+                progress: progress.clone(),
+                k_min: params.k_min,
+                k_max: params.k_max,
+                epsilon: params.epsilon,
+                variant_failure_threshold: params.variant_failure_threshold,
+                evaluator_failure_threshold: params.evaluator_failure_threshold,
+                batch_idx,
+                evaluation_name: params.evaluation_name.clone(),
+                evaluation_run_id,
+                dataset_name: params.dataset_name.clone(),
+                inference_cache: params.inference_cache,
+                concurrency: params.concurrency,
+                // Config fields (passed from params for durable execution)
+                evaluation_config: params.evaluation_config.clone(),
+                function_configs: params.function_configs.clone(),
+                scoring_function: params.scoring_function.clone(),
+            };
+            progress = ctx
+                .step(
+                    &format!("batch_{batch_idx}"),
+                    batch_step_params,
+                    process_batch_step,
+                )
+                .await?;
+
+            debug!(
+                batch_number = batch_idx + 1,
+                batch_size = current_batch_size,
+                "Processing batch"
+            );
+
+            // Emit progress update for streaming consumers
+            let batch_update = BatchProgressUpdate {
+                evaluation_run_id,
+                batch_index: batch_idx,
+                num_datapoints_processed: progress.num_datapoints_processed,
+                total_datapoints,
+                variant_summaries: progress
+                    .variant_performance
+                    .iter()
+                    .map(|(k, v)| (k.clone(), VariantSummary::from(v)))
+                    .collect(),
+                variant_statuses: progress.variant_status.clone(),
+                num_active_variants: progress
+                    .variant_status
+                    .values()
+                    .filter(|s| **s == VariantStatus::Active)
+                    .count(),
+            };
+            // Use per-batch event name since emit_event is first-writer-wins
+            ctx.emit_event(
+                &format!("topk_progress:{}:{batch_idx}", ctx.task_id),
+                &TopKUpdate::BatchProgress(batch_update),
+            )
+            .await?;
+
+            if let Some(reason) = check_global_stopping(&progress, &params) {
+                stopping_reason = Some(reason);
+                break;
+            }
+        }
+
+        // If we processed all batches without satisfying one of the other stopping conditions,
+        // then assign reason DatasetExhausted.
+        let stopping_reason = stopping_reason.unwrap_or(GlobalStoppingReason::DatasetExhausted);
+
+        info!(
+            stopping_reason = ?stopping_reason,
+            num_datapoints_processed = progress.num_datapoints_processed,
+            "Top-k evaluation complete"
+        );
+
+        // Emit completion event for streaming consumers.
+        let completed_update = CompletedUpdate {
+            evaluation_run_id,
+            stopping_reason: stopping_reason.clone(),
+            num_datapoints_processed: progress.num_datapoints_processed,
+            final_variant_statuses: progress.variant_status.clone(),
+        };
+        ctx.emit_event(
+            &format!("topk_completed:{}", ctx.task_id),
+            &TopKUpdate::Completed(completed_update.clone()),
+        )
+        .await?;
+
+        // Also emit with batch-style name so clients awaiting sequential batch
+        // events will receive it. progress.batch_index is `N` when there are N batches.
+        ctx.emit_event(
+            &format!("topk_progress:{}:{}", ctx.task_id, progress.batch_index),
+            &TopKUpdate::Completed(completed_update),
+        )
+        .await?;
+
+        Ok(TopKTaskOutput {
+            evaluation_run_id,
+            variant_status: progress.variant_status,
+            variant_performance: progress.variant_performance,
+            variant_failures: progress.variant_failures,
+            evaluator_failures: progress.evaluator_failures,
+            stopping_reason,
+            num_datapoints_processed: progress.num_datapoints_processed,
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests;

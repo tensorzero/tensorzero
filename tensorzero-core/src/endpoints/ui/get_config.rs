@@ -59,6 +59,7 @@ impl UiConfig {
 /// Handler for GET /internal/ui_config
 ///
 /// Returns a UI-safe subset of the Config.
+#[expect(clippy::unused_async)]
 pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
     Json(UiConfig::from_config(&app_state.config))
 }

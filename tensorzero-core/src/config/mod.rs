@@ -11,7 +11,7 @@ use chrono::Duration;
 use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
-use object_store::{ObjectStore, PutPayload};
+use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
 use provider_types::ProviderTypesConfig;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
@@ -813,8 +813,6 @@ struct ProcessedConfigInput {
     postgres: PostgresConfig,
     rate_limiting: UninitializedRateLimitingConfig,
 
-    // Results from branch-specific processing
-    extra_templates: HashMap<String, String>,
     snapshot: ConfigSnapshot,
     /// All functions (user-defined + built-in), loaded and ready to use
     functions: HashMap<String, Arc<FunctionConfig>>,
@@ -912,7 +910,6 @@ async fn process_config_input(
                 optimizers,
                 postgres,
                 rate_limiting,
-                extra_templates,
                 snapshot,
                 functions: all_functions,
                 gateway_config,
@@ -982,6 +979,13 @@ async fn process_config_input(
 
             // Use the overlay object store info directly instead of creating a new one
             let gateway_config = overlay_gateway.load(overlay_object_store_info.as_ref())?;
+            // Initialize templates from ALL functions (including built-in)
+            let all_template_paths = Config::get_templates(&all_functions)?;
+            // We don't use these since the extra templates come directly from the snapshot
+            // We pass in None for the base path to disable searching the file system
+            // for snapshotted configs.
+            let _unused_extra_templates = templates.initialize(all_template_paths, None).await?;
+            templates.add_templates(extra_templates)?;
 
             Ok(ProcessedConfigInput {
                 tools,
@@ -993,7 +997,7 @@ async fn process_config_input(
                 optimizers,
                 postgres: overlay_postgres,
                 rate_limiting: overlay_rate_limiting,
-                extra_templates,
+                // unused
                 snapshot,
                 functions: all_functions,
                 gateway_config,
@@ -1175,7 +1179,6 @@ impl Config {
             optimizers: uninitialized_optimizers,
             postgres,
             rate_limiting,
-            extra_templates: _extra_templates,
             snapshot,
             functions,
             gateway_config,

@@ -4,14 +4,18 @@
 )]
 mod common;
 use clap::Parser;
-use evaluations::Clients;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
 use evaluations::stopping::MIN_DATAPOINTS;
+use evaluations::{ClientInferenceExecutor, Clients};
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{Input, InputMessage, InputMessageContent};
+use tensorzero_core::db::clickhouse::TableName;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
+};
+use tensorzero_core::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
 };
 use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
@@ -22,14 +26,14 @@ use tensorzero_core::inference::types::Text;
 use tokio::time::sleep;
 use url::Url;
 
-use crate::common::write_json_fixture_to_dataset;
-use common::{get_config, get_tensorzero_client, write_chat_fixture_to_dataset};
+use common::{get_config, get_tensorzero_client, init_tracing_for_tests};
 use evaluations::{
     Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
     EvaluationVariant, OutputFormat, run_evaluation, run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
 };
 use std::collections::HashMap;
+use std::path::Path;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 use tensorzero_core::client::{
@@ -52,8 +56,55 @@ use tensorzero_core::{
 };
 use uuid::Uuid;
 
-pub fn init_tracing_for_tests() {
-    tracing_subscriber::fmt().init();
+/// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
+/// To avoid trampling between tests, we use a mapping from the fixture dataset names to the actual dataset names
+/// that are inserted. This way, we can have multiple tests reading the same fixtures, using the same database,
+/// but run independently.
+async fn write_chat_fixture_to_dataset(
+    fixture_path: &Path,
+    dataset_name_mapping: &HashMap<String, String>,
+) {
+    let fixture = std::fs::read_to_string(fixture_path).unwrap();
+    let fixture = fixture.trim();
+    let mut datapoints: Vec<StoredChatInferenceDatapoint> = Vec::new();
+    // Iterate over the lines in the string
+    for line in fixture.lines() {
+        let mut datapoint: StoredChatInferenceDatapoint = serde_json::from_str(line).unwrap();
+        datapoint.id = Uuid::now_v7();
+        if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
+            datapoint.dataset_name = dataset_name.to_string();
+        }
+        datapoints.push(datapoint);
+    }
+    let clickhouse = get_clickhouse().await;
+    clickhouse
+        .write_batched(&datapoints, TableName::ChatInferenceDatapoint)
+        .await
+        .unwrap();
+}
+
+/// Takes a JSON fixture as a path to a JSONL file and writes the fixture to the dataset.
+async fn write_json_fixture_to_dataset(
+    fixture_path: &Path,
+    dataset_name_mapping: &HashMap<String, String>,
+) {
+    let fixture = std::fs::read_to_string(fixture_path).unwrap();
+    let fixture = fixture.trim();
+    let mut datapoints: Vec<StoredJsonInferenceDatapoint> = Vec::new();
+    // Iterate over the lines in the string
+    for line in fixture.lines() {
+        let mut datapoint: StoredJsonInferenceDatapoint = serde_json::from_str(line).unwrap();
+        datapoint.id = Uuid::now_v7();
+        if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
+            datapoint.dataset_name = dataset_name.to_string();
+        }
+        datapoints.push(datapoint);
+    }
+    let clickhouse = get_clickhouse().await;
+    clickhouse
+        .write_batched(&datapoints, TableName::JsonInferenceDatapoint)
+        .await
+        .unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -470,9 +521,12 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
     // Test: Both datapoint_ids and max_datapoints provided should fail
     let core_args = EvaluationCoreArgs {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse,
         evaluation_config,
         function_configs,
@@ -1636,7 +1690,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: None,
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -1644,8 +1698,9 @@ async fn test_run_llm_judge_evaluator_chat() {
     .build()
     .await
     .unwrap();
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: get_clickhouse().await,
     });
     let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
@@ -1660,6 +1715,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             input_tokens: Some(0),
             output_tokens: Some(0),
         },
+        raw_usage: None,
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
@@ -1820,8 +1876,9 @@ async fn test_run_llm_judge_evaluator_chat() {
 async fn test_run_llm_judge_evaluator_json() {
     init_tracing_for_tests();
     let tensorzero_client = get_tensorzero_client().await;
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: get_clickhouse().await,
     });
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
@@ -1837,6 +1894,7 @@ async fn test_run_llm_judge_evaluator_json() {
             input_tokens: Some(0),
             output_tokens: Some(0),
         },
+        raw_usage: None,
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Json(JsonInferenceDatapoint {
@@ -2633,7 +2691,7 @@ async fn test_evaluation_with_dynamic_variant() {
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path.clone()),
         clickhouse_url: None,
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -2691,8 +2749,11 @@ async fn test_evaluation_with_dynamic_variant() {
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
     let core_args = EvaluationCoreArgs {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse,
         evaluation_config,
         function_configs,
@@ -2752,9 +2813,12 @@ async fn test_max_datapoints_parameter() {
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
+
     // Test with max_datapoints = 3 (should only process 3 datapoints)
     let core_args = EvaluationCoreArgs {
-        tensorzero_client: tensorzero_client.clone(),
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
         evaluation_config,
         function_configs,
@@ -2831,6 +2895,9 @@ async fn test_precision_targets_parameter() {
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
+
     // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10
     // topic_starts_with_f: CI half-width <= 0.13
@@ -2839,7 +2906,7 @@ async fn test_precision_targets_parameter() {
     precision_targets.insert("topic_starts_with_f".to_string(), 0.13);
 
     let core_args = EvaluationCoreArgs {
-        tensorzero_client: tensorzero_client.clone(),
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
         evaluation_config,
         function_configs,
