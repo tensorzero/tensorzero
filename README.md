@@ -41,6 +41,13 @@ Take what you need, adopt incrementally, and complement with other tools.
 
 ---
 
+> [!NOTE]
+>
+> ### **Coming Soon: TensorZero Autopilot**
+>
+> TensorZero Autopilot is an **automated AI engineer** (powered by the TensorZero Stack) that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests.
+> **[Learn more](https://www.tensorzero.com/)** **[Join the waitlist](https://tensorzerodotcom.notion.site/2d87520bbad380c9ad0dd19566b3bc91)**
+
 ## Features
 
 ### 🌐 LLM Gateway
@@ -51,7 +58,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 - [x] Infer with **[streaming](https://www.tensorzero.com/docs/gateway/guides/streaming-inference)**, **[tool use](https://www.tensorzero.com/docs/gateway/guides/tool-use)**, **[structured outputs (JSON)](https://www.tensorzero.com/docs/gateway/generate-structured-outputs)**, **[batch](https://www.tensorzero.com/docs/gateway/guides/batch-inference)**, **[embeddings](https://www.tensorzero.com/docs/gateway/generate-embeddings)**, **[multimodal (images, files)](https://www.tensorzero.com/docs/gateway/guides/multimodal-inference)**, **[caching](https://www.tensorzero.com/docs/gateway/guides/inference-caching)**, etc.
 - [x] **[Create prompt templates and schemas](https://www.tensorzero.com/docs/gateway/create-a-prompt-template)** to enforce a consistent, typed interface between your application and the LLMs
 - [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: **[<1ms p99 latency overhead at 10k+ QPS](https://www.tensorzero.com/docs/gateway/benchmarks)**
-- [x] Use any programming language: **[integrate via our Python client, any OpenAI SDK, or our HTTP API](https://www.tensorzero.com/docs/gateway/clients)**
+- [x] Use any programming language: **[integrate via our Python SDK, any OpenAI SDK, or our HTTP API](https://www.tensorzero.com/docs/gateway/clients)**
 - [x] **[Ensure high availability](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks)** with routing, retries, fallbacks, load balancing, granular timeouts, etc.
 - [x] **[Enforce custom rate limits](https://www.tensorzero.com/docs/operations/enforce-custom-rate-limits)** with granular scopes (e.g. user-defined tags) to keep usage under control
 - [x] **[Set up auth for TensorZero](https://www.tensorzero.com/docs/operations/set-up-auth-for-tensorzero)** to allow clients to access models without sharing provider API keys
@@ -84,9 +91,9 @@ Need something else? TensorZero also supports **[any OpenAI-compatible API (e.g.
 <br>
 
 <details open>
-<summary><b>Usage: Python &mdash; TensorZero Client (Recommended)</b></summary>
+<summary><b>Usage: Python &mdash; TensorZero SDK</b></summary>
 
-You can access any provider using the TensorZero Python client.
+You can access any provider using the TensorZero Python SDK.
 
 1. `pip install tensorzero`
 2. Optional: Set up the TensorZero configuration.
@@ -96,8 +103,8 @@ You can access any provider using the TensorZero Python client.
 from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 
 
-with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
-    response = client.inference(
+with TensorZeroGateway.build_embedded(...) as t0:
+    response = t0.inference(
         model_name="openai::gpt-4o-mini",
         # Try other providers easily: "anthropic::claude-sonnet-4-5-20250929"
         input={
@@ -130,12 +137,7 @@ from tensorzero import patch_openai_client
 
 client = OpenAI()
 
-patch_openai_client(
-    client,
-    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
-    config_file="config/tensorzero.toml",
-    async_setup=False,
-)
+patch_openai_client(client, ...)
 
 response = client.chat.completions.create(
     model="tensorzero::model_name::openai::gpt-4o-mini",
@@ -216,8 +218,6 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 
 </details>
 
-<br>
-
 ### 🔍 LLM Observability
 
 > **Zoom in to debug individual API calls, or zoom out to monitor metrics across models and prompts over time &mdash; all using the open-source TensorZero UI.**
@@ -242,13 +242,13 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 ```python
 t0.experimental_list_inferences(
   function_name="sales_agent",
-  variant_name="qwen3-promptv2",
   filters=BooleanMetricFilter(
       metric_name="converted_sale",
       value=True,
   ),
-  order_by=[OrderBy(by="timestamp", direction="descending")],
-  limit=100_000,
+  # + compound filters
+  # + search
+  # + pagination
   # ... and more ...
 )
 ```
@@ -257,82 +257,15 @@ t0.experimental_list_inferences(
 </tr>
 </table>
 
-<br>
-
 ### 📈 LLM Optimization
 
 > **Send production metrics and human feedback to easily optimize your prompts, models, and inference strategies &mdash; using the UI or programmatically.**
 
 - [x] Optimize your models with supervised fine-tuning, RLHF, and other techniques
-- [x] Optimize your prompts with automated prompt engineering algorithms like MIPROv2
-- [x] Optimize your inference strategy with dynamic in-context learning, chain of thought, best/mixture-of-N sampling, etc.
+- [x] Optimize your prompts with automated prompt engineering algorithms like **[GEPA](https://www.tensorzero.com/docs/optimization/gepa)** and MIPROv2
+- [x] Optimize your **[inference strategy](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)** with dynamic in-context learning, best/mixture-of-N sampling, etc.
 - [x] Enable a feedback loop for your LLMs: a data & learning flywheel turning production data into smarter, faster, and cheaper models
 - [ ] Soon: synthetic data generation
-
-#### Model Optimization
-
-Optimize closed-source and open-source models using supervised fine-tuning (SFT) and preference fine-tuning (DPO).
-
-<table>
-  <tr></tr> <!-- flip highlight order -->
-  <tr>
-    <td width="50%" align="center" valign="middle"><b>Supervised Fine-tuning &mdash; UI</b></td>
-    <td width="50%" align="center" valign="middle"><b>Preference Fine-tuning (DPO) &mdash; Jupyter Notebook</b></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/82f76be7-5e02-4ada-b503-69dfa209a442"></video></td>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/a67a0634-04a7-42b0-b934-9130cb7cdf51"></td>
-  </tr>
-</table>
-
-#### Inference-Time Optimization
-
-Boost performance by dynamically updating your prompts with relevant examples, combining responses from multiple inferences, and more.
-
-<table>
-  <tr></tr> <!-- flip highlight order -->
-  <tr>
-    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#best-of-n-sampling">Best-of-N Sampling</a></b></td>
-    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#mixture-of-n-sampling">Mixture-of-N Sampling</a></b></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/c0edfa4c-713c-4996-9964-50c0d26e6970"></td>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/75b5bf05-4c1f-43c4-b158-d69d1b8d05be"></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl">Dynamic In-Context Learning (DICL)</a></b></td>
-    <td width="50%" align="center" valign="middle"></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d8489e92-ce93-46ac-9aab-289ce19bb67d"></td>
-    <td width="50%" align="center" valign="middle"></td>
-  </tr>
-</table>
-
-<br>
-
-#### Prompt Optimization
-
-Optimize your prompts programmatically using research-driven optimization techniques.
-
-<table>
-  <tr></tr> <!-- flip highlight order -->
-  <tr>
-    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#best-of-n-sampling">MIPROv2</a></b></td>
-    <td width="50%" align="center" valign="middle"><b><a href="https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy">DSPy Integration</a></b></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d81a7c37-382f-4c46-840f-e6c2593301db" alt="MIPROv2 diagram"></td>
-    <td width="50%" align="center" valign="middle">
-      TensorZero comes with several optimization recipes, but you can also easily create your own.
-      This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
-    </td>
-  </tr>
-</table>
-
-_More coming soon..._
-
-<br>
 
 ### 📊 LLM Evaluation
 
@@ -385,10 +318,6 @@ item_count: 7.15 ± 0.39 (n=100)</code></pre>
 
 ## Frequently Asked Questions
 
-**What is TensorZero?**
-
-TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluation, and experimentation.
-
 **How is TensorZero different from other LLM frameworks?**
 
 1. TensorZero enables you to optimize complex LLM applications based on production metrics and human feedback.
@@ -397,15 +326,22 @@ TensorZero is an open-source stack for industrial-grade LLM applications. It uni
 
 **Can I use TensorZero with \_\_\_?**
 
-Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API.
+Yes.
+Every major programming language is supported.
+It plays nicely with the **[OpenAI SDK](https://www.tensorzero.com/docs/gateway/clients/)**, **[OpenTelemetry](https://www.tensorzero.com/docs/operations/export-opentelemetry-traces/)**, and **[every major LLM](https://www.tensorzero.com/docs/integrations/model-providers/)**.
 
 **Is TensorZero production-ready?**
 
-Yes. Here's a case study: **[Automating Code Changelogs at a Large Bank with LLMs](https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms)**
+Yes.
+TensorZero is used by companies ranging from frontier AI startups to the Fortune 50.
+
+Here's a case study: **[Automating Code Changelogs at a Large Bank with LLMs](https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms)**
 
 **How much does TensorZero cost?**
 
-Nothing. TensorZero is 100% self-hosted and open-source. There are no paid features.
+TensorZero Stack (LLMOps platform) is 100% self-hosted and open-source.
+
+TensorZero Autopilot (automated AI engineer) is a complementary paid product powered by the TensorZero Stack.
 
 **Who is building TensorZero?**
 
@@ -464,14 +400,6 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > **[Improving LLM Chess Ability with Best-of-N Sampling](https://github.com/tensorzero/tensorzero/tree/main/examples/chess-puzzles/)**
 >
 > This example showcases how best-of-N sampling can significantly enhance an LLM's chess-playing abilities by selecting the most promising moves from multiple generated options.
-
-> **[Improving Math Reasoning with a Custom Recipe for Automated Prompt Engineering (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
->
-> TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows.
-> But you can also easily create your own recipes and workflows!
-> This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy.
-
-_& many more on the way!_
 
 ## Blog Posts
 
