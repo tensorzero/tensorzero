@@ -38,7 +38,7 @@ model = "dummy"
     let result = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None, // No Postgres URL
+        postgres_config: None, // No Postgres URL
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -90,7 +90,7 @@ model = "dummy"
     let result = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None, // No Postgres URL
+        postgres_config: None, // No Postgres URL
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -137,7 +137,7 @@ model = "dummy"
     let result = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None, // No Postgres URL
+        postgres_config: None, // No Postgres URL
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

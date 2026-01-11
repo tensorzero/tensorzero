@@ -3,14 +3,16 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{FeedbackParams, FeedbackResponse};
 use uuid::Uuid;
 
-use crate::AutopilotToolSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the feedback tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -44,7 +46,7 @@ pub struct FeedbackToolParams {
 pub struct FeedbackTool;
 
 impl ToolMetadata for FeedbackTool {
-    type SideInfo = AutopilotToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = FeedbackResponse;
     type LlmParams = FeedbackToolParams;
 
@@ -58,6 +60,44 @@ impl ToolMetadata for FeedbackTool {
              Use metric_name='comment' for free-text comments, 'demonstration' for demonstrations, \
              or a configured metric name for float/boolean feedback values.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Submit feedback for an inference or episode.",
+            "properties": {
+                "episode_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "The episode ID to provide feedback for. Use either episode_id or inference_id."
+                },
+                "inference_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "The inference ID to provide feedback for. Use either episode_id or inference_id."
+                },
+                "metric_name": {
+                    "type": "string",
+                    "description": "The metric name: 'comment' for free-text, 'demonstration' for demonstrations, or a configured metric name for float/boolean values."
+                },
+                "value": {
+                    "description": "The feedback value. Type depends on metric_name: string for 'comment', string/array for 'demonstration', number for float metrics, boolean for boolean metrics."
+                },
+                "dryrun": {
+                    "type": "boolean",
+                    "description": "If true, feedback will not be stored (useful for testing)."
+                }
+            },
+            "required": ["metric_name", "value"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -82,6 +122,6 @@ impl SimpleTool for FeedbackTool {
         ctx.client()
             .feedback(params)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("feedback", e).into())
     }
 }

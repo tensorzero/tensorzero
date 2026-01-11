@@ -2066,7 +2066,7 @@ model = "dummy::flaky_model"
         DUMMY_INFER_RESPONSE_RAW,
     );
 
-    check_good_mixture_response(exporter, good_response).await;
+    check_good_mixture_response(exporter, good_response);
 
     // Second request to the flaky judge should fail
     let bad_response = gateway.inference(params).await.unwrap();
@@ -2082,10 +2082,7 @@ model = "dummy::flaky_model"
     // Don't check ClickHouse, as we do that in lots of other tests.
 }
 
-async fn check_good_mixture_response(
-    exporter: CapturingOtelExporter,
-    output: ChatInferenceResponse,
-) {
+fn check_good_mixture_response(exporter: CapturingOtelExporter, output: ChatInferenceResponse) {
     let all_spans = exporter.take_spans();
     let num_spans = all_spans.len();
     let spans = build_span_map(all_spans);

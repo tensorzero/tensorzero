@@ -20,7 +20,7 @@ test.describe("Clone Datapoint", () => {
     await page.getByText("Clone").click();
 
     // Wait for the CommandInput to be visible
-    const commandInput = page.getByPlaceholder("Create or find a dataset");
+    const commandInput = page.getByPlaceholder("Create or find dataset");
     await commandInput.waitFor({ state: "visible" });
     await commandInput.fill(targetDatasetName);
 
@@ -43,7 +43,7 @@ test.describe("Clone Datapoint", () => {
     await page.waitForLoadState("networkidle");
 
     // Verify the dataset page loads and has at least one datapoint
-    await expect(page.getByRole("heading", { name: "Dataset" })).toBeVisible({
+    await expect(page.getByText("Dataset", { exact: true })).toBeVisible({
       timeout: 10000,
     });
 
@@ -67,7 +67,7 @@ test.describe("Clone Datapoint", () => {
     // Step 2: Clone to the existing target dataset
     await page.getByText("Clone").click();
 
-    const commandInput = page.getByPlaceholder("Create or find a dataset");
+    const commandInput = page.getByPlaceholder("Create or find dataset");
     await commandInput.waitFor({ state: "visible" });
     await commandInput.fill(targetDatasetName);
 
@@ -112,7 +112,7 @@ test.describe("Clone Datapoint", () => {
     const targetDatasetName = `clone_source_test_${uuidv7()}`;
     await page.getByText("Clone").click();
 
-    const commandInput = page.getByPlaceholder("Create or find a dataset");
+    const commandInput = page.getByPlaceholder("Create or find dataset");
     await commandInput.waitFor({ state: "visible" });
     await commandInput.fill(targetDatasetName);
 

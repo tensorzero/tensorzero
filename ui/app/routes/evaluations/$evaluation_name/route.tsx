@@ -32,7 +32,7 @@ import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
 import { ActionBar } from "~/components/layout/ActionBar";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { DatasetSelect } from "~/components/dataset/DatasetSelect";
 import { useFetcher } from "react-router";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
@@ -355,19 +355,17 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
       <PageHeader label="Evaluation" name={evaluation_name}>
         <BasicInfo evaluation_config={evaluation_config} />
         <ActionBar>
-          <DatasetSelector
+          <DatasetSelect
             selected={selectedDataset}
             onSelect={handleDatasetSelect}
             functionName={function_name}
+            allowCreation
             disabled={isReadOnly || selectedRows.size === 0}
-            label={
+            placeholder={
               selectedRows.size > 0
                 ? `Add ${selectedRows.size} selected ${selectedRows.size === 1 ? "inference" : "inferences"} to dataset`
                 : "Add selected inferences to dataset"
             }
-            buttonProps={{
-              size: "sm",
-            }}
           />
         </ActionBar>
       </PageHeader>

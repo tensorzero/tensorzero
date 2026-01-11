@@ -17,9 +17,10 @@ use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
+    JsonInferenceResultChunk, Latency, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
 };
 use crate::inference::types::{
     ModelInferenceRequest, RequestMessage, Role, System,
@@ -345,6 +346,8 @@ pub fn stream_inference_from_non_stream(
     // We set the 'cached' flag on the 'ModelUsedInfo, which will adjust the usage as needed when producing
     // the HTTP response stream.
     let usage = model_inference_result.usage;
+    // Preserve raw_usage entries from the selected candidate for fake streaming.
+    let raw_usage_entries = model_inference_result.raw_usage.clone();
     let model_used_info = ModelUsedInfo {
         model_name: model_inference_result.model_name.clone(),
         model_provider_name: model_inference_result.model_provider_name.clone(),
@@ -367,15 +370,28 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
+        model_inference_id: model_inference_result.id,
     };
-    let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
+    let stream = make_stream_from_non_stream(inference_result, Some(usage), raw_usage_entries)?;
     Ok((stream, model_used_info))
 }
 
 fn make_stream_from_non_stream(
     inference_result: InferenceResult,
     usage: Option<Usage>,
+    raw_usage_entries: Option<Vec<RawUsageEntry>>,
 ) -> Result<InferenceResultStream, Error> {
+    // Extract provider-level response_time from the original model inference.
+    // For non-streaming, we use response_time as the provider_latency for the fake chunk.
+    let provider_latency = inference_result
+        .model_inference_results()
+        .last()
+        .and_then(|mir| match &mir.latency {
+            Latency::NonStreaming { response_time } => Some(*response_time),
+            Latency::Streaming { response_time, .. } => Some(*response_time),
+            Latency::Batch => None,
+        });
+
     let mut id = 0;
     let chunk = match inference_result {
         InferenceResult::Chat(chat) => {
@@ -421,19 +437,19 @@ fn make_stream_from_non_stream(
         }).collect::<Result<Vec<_>, Error>>()?;
             Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: content_blocks,
-                created: chat.created,
-                usage,
-                latency: tokio::time::Duration::from_secs(0),
+                provider_latency,
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
+                usage,
+                raw_usage: raw_usage_entries.clone(),
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: json.output.raw,
             thought: None,
-            created: json.created,
             usage,
-            latency: tokio::time::Duration::from_secs(0),
+            raw_usage: raw_usage_entries,
+            provider_latency,
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
         })),
@@ -1142,7 +1158,6 @@ mod tests {
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1159,6 +1174,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1176,7 +1192,6 @@ mod tests {
 
         let model_inference_response2 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1193,6 +1208,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1229,7 +1245,6 @@ mod tests {
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1246,6 +1261,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1262,7 +1278,6 @@ mod tests {
 
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec![
                 "{\"response\": \"Malformed JSON response\""
                     .to_string()
@@ -1283,6 +1298,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1344,7 +1360,6 @@ mod tests {
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 0".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1361,6 +1376,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1378,7 +1394,6 @@ mod tests {
 
         let model_inference_response1 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1395,6 +1410,7 @@ mod tests {
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1459,6 +1475,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1763,6 +1780,7 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
             }),
+            None, // raw_usage_entries
         )
         .unwrap();
 
@@ -1806,12 +1824,12 @@ mod tests {
                         text: "Second text message".to_string(),
                     }),
                 ],
-                created: 123456,
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
                 }),
-                latency: std::time::Duration::from_secs(0),
+                raw_usage: None,
+                provider_latency: None,
                 raw_response: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),
             })),]

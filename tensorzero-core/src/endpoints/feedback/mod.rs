@@ -167,12 +167,6 @@ pub async fn feedback(
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
         counter!(
-            "request_count",
-            "endpoint" => "feedback",
-            "metric_name" => params.metric_name.to_string()
-        )
-        .increment(1);
-        counter!(
             "tensorzero_requests_total",
             "endpoint" => "feedback",
             "metric_name" => params.metric_name.to_string()
@@ -961,6 +955,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 level: MetricConfigLevel::Inference,
                 optimize: MetricConfigOptimize::Max,
+                description: None,
             },
         );
         let config = Config {
@@ -1077,6 +1072,7 @@ mod tests {
             r#type: MetricConfigType::Boolean,
             level: MetricConfigLevel::Episode,
             optimize: MetricConfigOptimize::Max,
+            description: None,
         };
         let mut metrics = HashMap::new();
         metrics.insert("test_metric".to_string(), metric_config);
@@ -1229,6 +1225,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 level: MetricConfigLevel::Episode,
                 optimize: MetricConfigOptimize::Max,
+                description: None,
             },
         );
         let config = Arc::new(Config {
@@ -1301,6 +1298,7 @@ mod tests {
                 r#type: MetricConfigType::Boolean,
                 level: MetricConfigLevel::Inference,
                 optimize: MetricConfigOptimize::Max,
+                description: None,
             },
         );
         let config = Arc::new(Config {

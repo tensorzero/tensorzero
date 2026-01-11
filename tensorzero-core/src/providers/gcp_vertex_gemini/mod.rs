@@ -13,7 +13,7 @@ use http::{HeaderMap, HeaderValue};
 use itertools::Itertools;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
-use object_store::{ObjectStore, StaticCredentialProvider};
+use object_store::{ObjectStore, ObjectStoreExt, StaticCredentialProvider};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
@@ -49,9 +49,10 @@ use crate::inference::types::batch::{
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
-    ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
+    ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
+    Latency, ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown,
     UnknownChunk,
 };
@@ -1145,6 +1146,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 raw_response,
                 model_name: provider_request.model_name,
                 provider_name: provider_request.provider_name,
+                model_inference_id: provider_request.model_inference_id,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -1184,6 +1186,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             provider_name,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -1227,6 +1230,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             model_name,
             provider_name,
             &raw_request,
+            model_inference_id,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -1564,6 +1568,7 @@ fn stream_gcp_vertex_gemini(
     model_name: &str,
     provider_name: &str,
     raw_request: &str,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
@@ -1609,6 +1614,7 @@ fn stream_gcp_vertex_gemini(
                             discard_unknown_chunks,
                             &model_name,
                             &provider_name,
+                            model_inference_id,
                         )
                     }
                 }
@@ -2897,6 +2903,7 @@ struct GCPVertexGeminiResponseWithMetadata<'a> {
     generic_request: &'a ModelInferenceRequest<'a>,
     model_name: &'a str,
     provider_name: &'a str,
+    model_inference_id: Uuid,
 }
 
 fn get_response_content(
@@ -2945,6 +2952,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             generic_request,
             model_name,
             provider_name,
+            model_inference_id,
         } = response;
 
         let usage_metadata = response.usage_metadata.clone().ok_or_else(|| {
@@ -2957,6 +2965,14 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             })
         })?;
 
+        let raw_usage = gcp_vertex_gemini_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = Usage {
             input_tokens: usage_metadata.prompt_token_count,
             output_tokens: usage_metadata.candidates_token_count,
@@ -2981,8 +2997,10 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 raw_request,
                 raw_response,
                 usage,
-                latency,
+                raw_usage,
+                provider_latency: latency,
                 finish_reason,
+                id: model_inference_id,
             },
         ))
     }
@@ -2999,6 +3017,7 @@ fn convert_stream_response_with_metadata_to_chunk(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    model_inference_id: Uuid,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -3040,24 +3059,48 @@ fn convert_stream_response_with_metadata_to_chunk(
 
     // GCP will occasionally return usage metadata objects without token information (it has other GCP-specific metadata).
     // We should filter those out.
-    let usage = response.usage_metadata.and_then(|metadata| {
-        if metadata.prompt_token_count.is_some() || metadata.candidates_token_count.is_some() {
-            Some(Usage {
-                input_tokens: metadata.prompt_token_count,
-                output_tokens: metadata.candidates_token_count,
-            })
-        } else {
-            None
+    let (usage, raw_usage) = match response.usage_metadata {
+        Some(metadata) => {
+            let usage = if metadata.prompt_token_count.is_some()
+                || metadata.candidates_token_count.is_some()
+            {
+                Some(Usage {
+                    input_tokens: metadata.prompt_token_count,
+                    output_tokens: metadata.candidates_token_count,
+                })
+            } else {
+                None
+            };
+            let raw_usage_value = gcp_vertex_gemini_usage_from_raw_response(&raw_response);
+            let raw_usage = usage.as_ref().and_then(|_| {
+                raw_usage_value.map(|usage| {
+                    raw_usage_entries_from_value(
+                        model_inference_id,
+                        PROVIDER_TYPE,
+                        ApiType::ChatCompletions,
+                        usage,
+                    )
+                })
+            });
+            (usage, raw_usage)
         }
-    });
+        None => (None, None),
+    };
 
-    Ok(ProviderInferenceResponseChunk::new(
+    Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
         content,
         usage,
         raw_response,
         latency,
         first_candidate.finish_reason.map(Into::into),
+        raw_usage,
     ))
+}
+
+fn gcp_vertex_gemini_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usageMetadata").cloned())
 }
 
 fn handle_gcp_vertex_gemini_error(
@@ -3685,6 +3728,7 @@ mod tests {
             raw_response: raw_response.clone(),
             model_name: "gemini-pro",
             provider_name: "gcp_vertex_gemini",
+            model_inference_id: Uuid::now_v7(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -3699,7 +3743,7 @@ mod tests {
                 output_tokens: None,
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(
@@ -3786,6 +3830,7 @@ mod tests {
             raw_response: raw_response.clone(),
             model_name: "gemini-pro",
             provider_name: "gcp_vertex_gemini",
+            model_inference_id: Uuid::now_v7(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -3812,7 +3857,7 @@ mod tests {
                 output_tokens: Some(20),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(
             model_inference_response.finish_reason,
             Some(FinishReason::Stop)
@@ -3901,6 +3946,7 @@ mod tests {
             raw_response: raw_response.clone(),
             model_name: "gemini-pro",
             provider_name: "gcp_vertex_gemini",
+            model_inference_id: Uuid::now_v7(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -3939,7 +3985,7 @@ mod tests {
                 output_tokens: Some(40),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(model_inference_response.system, None);
@@ -4605,6 +4651,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            Uuid::now_v7(),
         )
         .unwrap();
 
@@ -4666,6 +4713,7 @@ mod tests {
             true,
             "test_model",
             "test_provider",
+            Uuid::now_v7(),
         )
         .unwrap();
         assert_eq!(res.content, []);
@@ -4715,6 +4763,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            Uuid::now_v7(),
         );
 
         assert!(result.is_ok());
@@ -4727,7 +4776,7 @@ mod tests {
             }
             _ => panic!("Expected text chunk"),
         }
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
         assert_eq!(chunk.raw_response, "raw_response");
         // Verify tool call tracking state - should remain None for text chunks
         assert_eq!(last_tool_idx, None);
@@ -4768,6 +4817,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            Uuid::now_v7(),
         );
 
         assert!(result.is_ok());
@@ -4818,6 +4868,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            Uuid::now_v7(),
         );
 
         assert!(result.is_ok());
@@ -4879,6 +4930,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            Uuid::now_v7(),
         );
 
         assert!(result.is_ok());
@@ -4943,6 +4995,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            Uuid::now_v7(),
         );
 
         assert!(result.is_ok());
@@ -4976,6 +5029,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            Uuid::now_v7(),
         );
 
         assert!(result.is_err());
@@ -5012,6 +5066,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            Uuid::now_v7(),
         );
 
         assert!(result.is_ok());

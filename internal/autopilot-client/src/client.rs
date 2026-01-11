@@ -3,22 +3,22 @@
 use std::fmt;
 use std::time::Duration;
 
-use durable_tools_spawn::SpawnClient;
+use durable_tools_spawn::{SpawnClient, SpawnOptions};
 use futures::stream::{Stream, StreamExt};
 use moka::sync::Cache;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest_eventsource::{Event as SseEvent, EventSource};
 use secrecy::{ExposeSecret, SecretString};
-use serde_json::Value as JsonValue;
 use sqlx::PgPool;
 use url::Url;
 use uuid::Uuid;
 
+use crate::StreamUpdate;
 use crate::error::AutopilotError;
 use crate::types::{
-    CreateEventRequest, CreateEventResponse, ErrorResponse, Event, EventPayload, ListEventsParams,
-    ListEventsResponse, ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCall,
-    ToolCallAuthorizationStatus,
+    AutopilotToolCall, CreateEventRequest, CreateEventResponse, ErrorResponse, Event, EventPayload,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
@@ -212,7 +212,7 @@ pub struct AutopilotClient {
     base_url: Url,
     api_key: SecretString,
     spawn_client: SpawnClient,
-    tool_call_cache: Cache<Uuid, ToolCall>,
+    tool_call_cache: Cache<Uuid, AutopilotToolCall>,
 }
 
 impl fmt::Debug for AutopilotClient {
@@ -259,12 +259,9 @@ impl AutopilotClient {
     ///
     /// # Side Info
     ///
-    /// The spawned task receives side info containing:
-    /// - `tool_call_event_id`: The event ID of the original tool call
-    /// - `tool_call_id`: The tool call ID from the LLM response
-    /// - `session_id`: The session this tool call belongs to
-    /// - `deployment_id`: The deployment that generated this tool call
-    /// - `inner`: Reserved for user-provided side info (currently `null`)
+    /// The spawned task receives the side info that was stored in the ToolCall event.
+    /// This allows callers (e.g., autopilot sessions) to propagate tool-specific
+    /// configuration to the tool executor.
     ///
     /// # Errors
     ///
@@ -276,11 +273,10 @@ impl AutopilotClient {
     async fn handle_tool_call_authorization(
         &self,
         session_id: Uuid,
-        deployment_id: Uuid,
         tool_call_event_id: Uuid,
     ) -> Result<(), AutopilotError> {
         // Check cache first, otherwise fetch the tool call event directly
-        let tool_call = match self.tool_call_cache.get(&tool_call_event_id) {
+        let autopilot_tool_call = match self.tool_call_cache.get(&tool_call_event_id) {
             Some(tc) => tc,
             None => {
                 let event = self.get_event(session_id, tool_call_event_id).await?;
@@ -291,23 +287,20 @@ impl AutopilotClient {
             }
         };
 
-        let tool_call_id = tool_call.id.clone();
-        let tool_name = tool_call.name.clone();
-        let tool_arguments = tool_call.arguments.clone();
+        let tool_name = autopilot_tool_call.name.clone();
+        let llm_params = autopilot_tool_call.arguments.clone();
 
-        let llm_params = serde_json::from_str::<JsonValue>(&tool_arguments)?;
-
-        let side_info = serde_json::json!({
-            "tool_call_event_id": tool_call_event_id,
-            "tool_call_id": tool_call_id,
-            "session_id": session_id,
-            "deployment_id": deployment_id,
-            "inner": null,
-        });
+        // Use the side_info from the ToolCall event (propagated from caller)
 
         let episode_id = Uuid::now_v7();
         self.spawn_client
-            .spawn_tool_by_name(&tool_name, llm_params, side_info, episode_id)
+            .spawn_tool_by_name(
+                &tool_name,
+                llm_params,
+                serde_json::to_value(autopilot_tool_call.side_info)?,
+                episode_id,
+                SpawnOptions::default(),
+            )
             .await?;
 
         Ok(())
@@ -424,7 +417,21 @@ impl AutopilotClient {
             },
             _ => None,
         };
-        let deployment_id = request.deployment_id;
+        if session_id == Uuid::nil() && request.config_snapshot_hash.is_none() {
+            return Err(AutopilotError::Http {
+                status_code: 400,
+                message: "Config snapshot hash must be set if a new session is being started"
+                    .to_string(),
+            });
+        }
+        if session_id != Uuid::nil() && request.config_snapshot_hash.is_some() {
+            return Err(AutopilotError::Http {
+                status_code: 400,
+                message:
+                    "Config snapshot hash must not be set if an existing session is being used"
+                        .to_string(),
+            });
+        }
 
         let url = self
             .base_url
@@ -440,7 +447,7 @@ impl AutopilotClient {
         let body: CreateEventResponse = response.json().await?;
 
         if let Some(tool_call_event_id) = tool_call_event_id {
-            self.handle_tool_call_authorization(session_id, deployment_id, tool_call_event_id)
+            self.handle_tool_call_authorization(session_id, tool_call_event_id)
                 .await?;
         }
 
@@ -465,7 +472,8 @@ impl AutopilotClient {
         &self,
         session_id: Uuid,
         params: StreamEventsParams,
-    ) -> Result<impl Stream<Item = Result<Event, AutopilotError>> + use<>, AutopilotError> {
+    ) -> Result<impl Stream<Item = Result<StreamUpdate, AutopilotError>> + use<>, AutopilotError>
+    {
         let mut url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events/stream"))?;
@@ -510,12 +518,13 @@ impl AutopilotClient {
                     Ok(SseEvent::Open) => None,
                     Ok(SseEvent::Message(message)) => {
                         if message.event == "event" {
-                            match serde_json::from_str::<Event>(&message.data) {
-                                Ok(event) => {
-                                    if let EventPayload::ToolCall(tool_call) = &event.payload {
-                                        cache.insert(event.id, tool_call.clone());
+                            match serde_json::from_str::<StreamUpdate>(&message.data) {
+                                Ok(update) => {
+                                    if let EventPayload::ToolCall(tool_call) = &update.event.payload
+                                    {
+                                        cache.insert(update.event.id, tool_call.clone());
                                     }
-                                    Some(Ok(event))
+                                    Some(Ok(update))
                                 }
                                 Err(e) => Some(Err(AutopilotError::Json(e))),
                             }

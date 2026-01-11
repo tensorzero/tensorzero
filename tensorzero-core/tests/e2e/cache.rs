@@ -90,6 +90,7 @@ async fn test_cache_write_and_read() {
         model_name: "test_model",
         provider_name: "test_provider",
         otlp_config: &Default::default(),
+        model_inference_id: Uuid::now_v7(),
     };
 
     // Read (should be None)
@@ -167,7 +168,7 @@ async fn test_cache_write_and_read() {
         }
     );
     assert_eq!(
-        result.latency,
+        result.provider_latency,
         Latency::NonStreaming {
             response_time: Duration::from_secs(0)
         }
@@ -220,6 +221,7 @@ async fn test_cache_stream_write_and_read() {
         model_name: "test_model",
         provider_name: "test_provider",
         otlp_config: &Default::default(),
+        model_inference_id: Uuid::now_v7(),
     };
 
     // Read (should be None)
@@ -238,13 +240,13 @@ async fn test_cache_stream_write_and_read() {
                 id: "0".to_string(),
                 text: "test content".to_string(),
             })],
-            created: 1234,
             usage: Some(Usage {
                 input_tokens: Some(20),
                 output_tokens: Some(40),
             }),
+            raw_usage: None,
             raw_response: "raw response".to_string(),
-            latency: Duration::from_secs(999),
+            provider_latency: Duration::from_secs(999),
             finish_reason: None,
         },
         ProviderInferenceResponseChunk {
@@ -252,13 +254,13 @@ async fn test_cache_stream_write_and_read() {
                 id: "1".to_string(),
                 text: "test content 2".to_string(),
             })],
-            created: 5678,
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
             }),
+            raw_usage: None,
             raw_response: "raw response 2".to_string(),
-            latency: Duration::from_secs(999),
+            provider_latency: Duration::from_secs(999),
             finish_reason: Some(FinishReason::Stop),
         },
     ];
@@ -293,15 +295,13 @@ async fn test_cache_stream_write_and_read() {
     for (i, chunk) in chunks.into_iter().enumerate() {
         let ProviderInferenceResponseChunk {
             content,
-            created,
             usage,
             raw_response,
-            latency,
+            provider_latency,
             finish_reason,
+            ..
         } = &chunk;
         assert_eq!(content, &initial_chunks[i].content);
-        // 'created' should be different (current timestamp is different)
-        assert_ne!(created, &initial_chunks[i].created);
         if i == 0 {
             assert_eq!(
                 usage,
@@ -320,7 +320,7 @@ async fn test_cache_stream_write_and_read() {
             );
         };
         assert_eq!(raw_response, &initial_chunks[i].raw_response);
-        assert_eq!(latency, &Duration::from_secs(0));
+        assert_eq!(provider_latency, &Duration::from_secs(0));
         if i == 0 {
             assert_eq!(finish_reason, &None);
         } else {

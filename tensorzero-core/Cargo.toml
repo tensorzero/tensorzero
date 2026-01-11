@@ -49,7 +49,7 @@ futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
-jsonschema = "0.37.4"
+jsonschema = "0.38.1"
 jsonwebtoken = { version = "10.2", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.3"
@@ -99,7 +99,8 @@ opentelemetry-otlp = { version = "0.31.0", features = [
     "tls-roots",
 ] }
 opentelemetry-semantic-conventions = "0.31.0"
-init-tracing-opentelemetry = "0.34.0"
+# TODO - switch back to a released version once https://github.com/davidB/tracing-opentelemetry-instrumentation-sdk/pull/309 is merged
+init-tracing-opentelemetry = { git = "https://github.com/Aaron1011/tracing-opentelemetry-instrumentation-sdk", rev = "c240499e464c2c787dedda2b870ae50747a95e6f", features = ["xray"] }
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
     "http",
@@ -108,7 +109,7 @@ pyo3 = { workspace = true, optional = true }
 google-cloud-auth = { workspace = true }
 mime = { workspace = true }
 mime_guess = "2.0.5"
-indexmap = { version = "2.12.1", features = ["serde"] }
+indexmap = { version = "2.13.0", features = ["serde"] }
 base64 = "0.22.1"
 thiserror = { workspace = true }
 globset = "0.4.18"
@@ -133,6 +134,7 @@ schemars = { workspace = true, features = ["uuid1"] }
 opentelemetry-http = "0.31.0"
 # durable.workspace = true
 regex = { workspace = true }
+dashmap = "6.1.0"
 
 [dev-dependencies]
 tempfile = "3.21.0"

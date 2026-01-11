@@ -102,7 +102,7 @@ export default function WorkflowEvaluationProjectPage({
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
-        <PageHeader heading="Workflow Evaluation Project" name={projectName} />
+        <PageHeader label="Workflow Evaluation Project" name={projectName} />
         <SectionLayout>
           <WorkflowEvalRunSelector
             projectName={projectName}

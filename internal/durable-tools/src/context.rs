@@ -8,7 +8,7 @@ use std::time::Duration;
 use tensorzero::{ClientInferenceParams, InferenceResponse};
 use uuid::Uuid;
 
-use crate::error::{ToolError, ToolResult};
+use crate::error::{NonControlToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
@@ -257,9 +257,13 @@ impl<'a> ToolContext<'a> {
     ) -> ToolResult<ToolHandle> {
         let is_durable = {
             let registry = self.app_state.tool_registry.read().await;
+            // Validate params before spawning
+            registry.validate_params(tool_name, &llm_params, &side_info)?;
             registry
                 .is_durable(tool_name)
-                .ok_or_else(|| ToolError::ToolNotFound(tool_name.to_string()))?
+                .ok_or_else(|| NonControlToolError::ToolNotFound {
+                    name: tool_name.to_string(),
+                })?
         };
 
         if is_durable {
@@ -352,7 +356,9 @@ impl<'a> ToolContext<'a> {
                         .read()
                         .await
                         .get_simple_tool(&tool_name)
-                        .ok_or_else(|| ToolError::ToolNotFound(tool_name.clone()))?
+                        .ok_or_else(|| NonControlToolError::ToolNotFound {
+                            name: tool_name.clone(),
+                        })?
                 };
 
                 simple_tool

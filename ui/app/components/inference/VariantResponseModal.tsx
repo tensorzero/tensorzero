@@ -12,7 +12,6 @@ import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
-import type { InferenceResponse } from "~/utils/tensorzero";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
@@ -22,7 +21,7 @@ import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
 import { Link } from "react-router";
 import { toInferenceUrl } from "~/utils/urls";
-import type { Datapoint } from "~/types/tensorzero";
+import type { Datapoint, InferenceResponse } from "~/types/tensorzero";
 
 interface ResponseColumnProps {
   title: string;

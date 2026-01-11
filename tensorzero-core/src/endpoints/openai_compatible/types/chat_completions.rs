@@ -6,6 +6,7 @@
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
@@ -29,6 +30,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::types::chat_completion_inference_params::ServiceTier;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{
     Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage, InputMessageContent,
     RawText, Role, System, Template, Text, current_timestamp,
@@ -80,7 +82,7 @@ pub enum OpenAICompatibleResponseFormat {
     JsonObject,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonSchemaInfo {
@@ -97,7 +99,7 @@ impl std::fmt::Display for JsonSchemaInfo {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
 pub struct OpenAICompatibleStreamOptions {
     #[serde(default)]
     pub include_usage: bool,
@@ -149,6 +151,8 @@ pub struct OpenAICompatibleParams {
     pub tensorzero_provider_tools: Vec<ProviderTool>,
     #[serde(default, rename = "tensorzero::params")]
     pub tensorzero_params: Option<InferenceParams>,
+    #[serde(default, rename = "tensorzero::include_raw_usage")]
+    pub tensorzero_include_raw_usage: bool,
     #[serde(flatten)]
     pub unknown_fields: HashMap<String, Value>,
 }
@@ -205,6 +209,8 @@ pub struct OpenAICompatibleResponse {
     pub service_tier: Option<String>,
     pub object: String,
     pub usage: OpenAICompatibleUsage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 // ============================================================================
@@ -435,6 +441,7 @@ impl Params {
             tags: openai_compatible_params.tensorzero_tags,
             // OpenAI compatible endpoint does not support 'include_original_response'
             include_original_response: false,
+            include_raw_usage: openai_compatible_params.tensorzero_include_raw_usage,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
             internal_dynamic_variant_config: openai_compatible_params
@@ -681,6 +688,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     system_fingerprint: String::new(),
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
+                    tensorzero_raw_usage: response.raw_usage,
                     episode_id: response.episode_id.to_string(),
                 }
             }
@@ -700,11 +708,8 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 system_fingerprint: String::new(),
                 service_tier: None,
                 object: "chat.completion".to_string(),
-                usage: OpenAICompatibleUsage {
-                    prompt_tokens: response.usage.input_tokens,
-                    completion_tokens: response.usage.output_tokens,
-                    total_tokens: response.usage.total_tokens(),
-                },
+                usage: response.usage.into(),
+                tensorzero_raw_usage: response.raw_usage,
                 episode_id: response.episode_id.to_string(),
             },
         }

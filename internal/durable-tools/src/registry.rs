@@ -9,7 +9,7 @@ use tensorzero::{FunctionTool, Tool};
 
 use crate::ToolResult;
 use crate::context::SimpleToolContext;
-use crate::error::ToolError;
+use crate::error::{NonControlToolError, ToolError};
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
 use crate::tool_metadata::ToolMetadata;
@@ -46,6 +46,11 @@ pub trait ErasedTool: Send + Sync {
 
     /// Check if this is a durable tool (`TaskTool`) or lightweight (`SimpleTool`).
     fn is_durable(&self) -> bool;
+
+    /// Validate that the provided JSON can be deserialized into the tool's parameter types.
+    ///
+    /// This allows validating parameters before spawning a job, catching errors early.
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()>;
 }
 
 /// Type-erased `SimpleTool` trait for dynamic execution.
@@ -106,6 +111,19 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
     fn is_durable(&self) -> bool {
         true
     }
+
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
+            .map_err(|e| NonControlToolError::InvalidParams {
+                message: format!("llm_params: {e}"),
+            })?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("side_info: {e}"),
+            }
+        })?;
+        Ok(())
+    }
 }
 
 /// Blanket implementation of [`ErasedTool`] for all `SimpleTool` types.
@@ -128,6 +146,19 @@ impl<T: SimpleTool> ErasedTool for T {
 
     fn is_durable(&self) -> bool {
         false
+    }
+
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
+            .map_err(|e| NonControlToolError::InvalidParams {
+                message: format!("llm_params: {e}"),
+            })?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("side_info: {e}"),
+            }
+        })?;
+        Ok(())
     }
 }
 
@@ -179,11 +210,14 @@ impl ToolRegistry {
     ///
     /// # Errors
     ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
     pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
-            return Err(ToolError::DuplicateToolName(name.into_owned()));
+            return Err(NonControlToolError::DuplicateToolName {
+                name: name.into_owned(),
+            }
+            .into());
         }
 
         let wrapper = Arc::new(ErasedTaskToolWrapper::<T>::new());
@@ -195,13 +229,16 @@ impl ToolRegistry {
     ///
     /// # Errors
     ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
     pub fn register_simple_tool<T: SimpleTool + Default>(
         &mut self,
     ) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
-            return Err(ToolError::DuplicateToolName(name.into_owned()));
+            return Err(NonControlToolError::DuplicateToolName {
+                name: name.into_owned(),
+            }
+            .into());
         }
 
         let tool = Arc::new(T::default());
@@ -226,6 +263,24 @@ impl ToolRegistry {
     /// Returns `None` if the tool is not found.
     pub fn is_durable(&self, name: &str) -> Option<bool> {
         self.tools.get(name).map(|t| t.is_durable())
+    }
+
+    /// Validate parameters for a tool by name.
+    ///
+    /// Returns `NonControlToolError::ToolNotFound` if the tool doesn't exist.
+    /// Returns `NonControlToolError::InvalidParams` if validation fails.
+    pub fn validate_params(
+        &self,
+        tool_name: &str,
+        llm_params: &JsonValue,
+        side_info: &JsonValue,
+    ) -> ToolResult<()> {
+        let tool = self
+            .get(tool_name)
+            .ok_or_else(|| NonControlToolError::ToolNotFound {
+                name: tool_name.to_string(),
+            })?;
+        tool.validate_params(llm_params, side_info)
     }
 
     /// List all registered tool names.

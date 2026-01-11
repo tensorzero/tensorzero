@@ -817,7 +817,6 @@ mod tests {
     use serde_json::json;
     use std::io::Write;
     use std::time::Duration;
-    use std::time::Instant;
     use tempfile::NamedTempFile;
 
     fn create_test_schema() -> StaticJSONSchema {
@@ -1874,7 +1873,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -1886,6 +1884,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -1941,7 +1940,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -1953,6 +1951,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -1994,7 +1993,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2006,6 +2004,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2047,7 +2046,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2061,6 +2059,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2100,7 +2099,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2114,6 +2112,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2153,7 +2152,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2167,6 +2165,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2227,7 +2226,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2239,6 +2237,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2274,7 +2273,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2286,6 +2284,7 @@ mod tests {
             finish_reason: None,
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2326,7 +2325,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2340,6 +2338,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2378,7 +2377,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2392,6 +2390,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(
@@ -2439,7 +2438,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2451,6 +2449,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
+            raw_usage: None,
         };
         let response = function_config
             .prepare_response(

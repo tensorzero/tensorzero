@@ -199,6 +199,8 @@ pub struct ListInferencesRequest {
 
     /// Source of the inference output. Determines whether to return the original
     /// inference output or demonstration feedback (manually-curated output) if available.
+    /// Defaults to `Inference` if not specified.
+    #[serde(default)]
     pub output_source: InferenceOutputSource,
 
     /// The maximum number of inferences to return.
@@ -322,6 +324,8 @@ pub struct GetInferencesRequest {
     /// Source of the inference output.
     /// Determines whether to return the original inference output or demonstration feedback
     /// (manually-curated output) if available.
+    /// Defaults to `Inference` if not specified.
+    #[serde(default)]
     pub output_source: InferenceOutputSource,
 }
 

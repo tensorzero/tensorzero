@@ -3,7 +3,9 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -42,8 +44,6 @@ impl TaskTool for FailingTool {
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,
     ) -> ToolResult<Self::Output> {
-        Err(ToolError::Validation {
-            message: llm_params.error_message,
-        })
+        Err(AutopilotToolError::test_error(llm_params.error_message).into())
     }
 }

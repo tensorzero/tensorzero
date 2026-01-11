@@ -3,8 +3,10 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SideInfo, SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{
@@ -13,7 +15,7 @@ use tensorzero::{
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 
-use crate::types::AutopilotToolSideInfo;
+use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the inference tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -40,19 +42,6 @@ pub struct InferenceToolParams {
     pub output_schema: Option<Value>,
 }
 
-/// Side information for the inference tool (hidden from LLM).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InferenceToolSideInfo {
-    /// Base autopilot side info (episode_id, session_id, tool_call_id, tool_call_event_id).
-    #[serde(flatten)]
-    pub base: AutopilotToolSideInfo,
-    /// Optional config snapshot hash - if provided, uses action endpoint with historical config.
-    #[serde(default)]
-    pub config_snapshot_hash: Option<String>,
-}
-
-impl SideInfo for InferenceToolSideInfo {}
-
 /// Tool for calling TensorZero inference endpoint.
 ///
 /// This tool allows autopilot to make inference calls, optionally using
@@ -61,7 +50,7 @@ impl SideInfo for InferenceToolSideInfo {}
 pub struct InferenceTool;
 
 impl ToolMetadata for InferenceTool {
-    type SideInfo = InferenceToolSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = InferenceResponse;
     type LlmParams = InferenceToolParams;
 
@@ -73,6 +62,85 @@ impl ToolMetadata for InferenceTool {
         Cow::Borrowed(
             "Call TensorZero inference endpoint. Optionally use a config snapshot hash to use historical configuration.",
         )
+    }
+
+    fn parameters_schema() -> ToolResult<Schema> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "description": "Call TensorZero inference endpoint to get an LLM response.",
+            "properties": {
+                "function_name": {
+                    "type": "string",
+                    "description": "The function name to call (e.g., 'my_chat_function'). Either function_name or model_name is required."
+                },
+                "model_name": {
+                    "type": "string",
+                    "description": "Model shorthand as alternative to function_name (e.g., 'openai::gpt-4o', 'anthropic::claude-sonnet-4-20250514')"
+                },
+                "input": {
+                    "type": "object",
+                    "description": "The input for inference",
+                    "properties": {
+                        "system": {
+                            "description": "System prompt (string or array of content blocks)",
+                            "oneOf": [
+                                { "type": "string" },
+                                { "type": "array", "items": { "type": "object" } }
+                            ]
+                        },
+                        "messages": {
+                            "type": "array",
+                            "description": "Conversation messages",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "role": { "type": "string", "enum": ["user", "assistant"] },
+                                    "content": {
+                                        "description": "Message content (string or array of content blocks)",
+                                        "oneOf": [
+                                            { "type": "string" },
+                                            { "type": "array", "items": { "type": "object" } }
+                                        ]
+                                    }
+                                },
+                                "required": ["role", "content"]
+                            }
+                        }
+                    },
+                    "required": ["messages"]
+                },
+                "params": {
+                    "type": "object",
+                    "description": "Inference parameters",
+                    "properties": {
+                        "chat_completion": {
+                            "type": "object",
+                            "properties": {
+                                "temperature": { "type": "number", "description": "Sampling temperature (0.0-2.0)" },
+                                "max_tokens": { "type": "integer", "description": "Maximum tokens to generate" },
+                                "seed": { "type": "integer", "description": "Random seed for reproducibility" }
+                            }
+                        }
+                    }
+                },
+                "variant_name": {
+                    "type": "string",
+                    "description": "Pin a specific variant (optional, normally let API select)"
+                },
+                "output_schema": {
+                    "type": "object",
+                    "description": "Output schema override for JSON functions (optional)"
+                }
+            },
+            "required": ["input"]
+        });
+
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -88,11 +156,11 @@ impl SimpleTool for InferenceTool {
             function_name: llm_params.function_name,
             model_name: llm_params.model_name,
             input: llm_params.input,
-            episode_id: Some(side_info.base.episode_id),
+            episode_id: None,
             params: llm_params.params,
             variant_name: llm_params.variant_name,
             dryrun: Some(false), // Always store
-            tags: side_info.base.to_tags(),
+            tags: side_info.to_tags(),
             dynamic_tool_params: llm_params.dynamic_tool_params,
             output_schema: llm_params.output_schema,
             stream: Some(false), // Never stream
@@ -100,25 +168,21 @@ impl SimpleTool for InferenceTool {
             ..Default::default()
         };
 
-        let response = if let Some(hash) = side_info.config_snapshot_hash {
-            let snapshot_hash: SnapshotHash =
-                hash.parse()
-                    .map_err(|_: std::convert::Infallible| ToolError::Validation {
-                        message: "Invalid snapshot hash".to_string(),
-                    })?;
-            ctx.client()
-                .action(
-                    snapshot_hash,
-                    ActionInput::Inference(Box::new(client_params)),
-                )
-                .await
-                .map_err(|e| ToolError::ExecutionFailed(e.into()))?
-        } else {
-            ctx.client()
-                .inference(client_params)
-                .await
-                .map_err(|e| ToolError::ExecutionFailed(e.into()))?
-        };
+        let snapshot_hash: SnapshotHash =
+            side_info
+                .config_snapshot_hash
+                .parse()
+                .map_err(|_: std::convert::Infallible| {
+                    AutopilotToolError::validation("Invalid snapshot hash")
+                })?;
+        let response = ctx
+            .client()
+            .action(
+                snapshot_hash,
+                ActionInput::Inference(Box::new(client_params)),
+            )
+            .await
+            .map_err(|e| AutopilotToolError::client_error("inference", e))?;
 
         Ok(response)
     }

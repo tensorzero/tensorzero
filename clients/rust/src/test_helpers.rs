@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::{Client, ClientBuilder, ClientBuilderMode};
+use crate::{Client, ClientBuilder, ClientBuilderMode, PostgresConfig};
 use tempfile::NamedTempFile;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
 use url::Url;
@@ -24,7 +24,7 @@ pub async fn make_embedded_gateway() -> Client {
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -38,7 +38,7 @@ pub async fn make_embedded_gateway_no_config() -> Client {
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -54,7 +54,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -73,7 +73,7 @@ pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Cli
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: Some(postgres_url),
+        postgres_config: Some(PostgresConfig::Url(postgres_url)),
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

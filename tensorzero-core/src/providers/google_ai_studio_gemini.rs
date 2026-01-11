@@ -26,10 +26,12 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
-    Thought, ThoughtChunk, Unknown, UnknownChunk,
+    ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency,
+    ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
+    ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown,
+    UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::types::{
@@ -172,6 +174,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             provider_name,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -240,6 +243,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 generic_request: request,
                 model_name,
                 provider_name,
+                model_inference_id,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -267,6 +271,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             provider_name,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -307,6 +312,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             model_name,
             provider_name,
             &raw_request,
+            model_inference_id,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -344,6 +350,7 @@ fn stream_google_ai_studio_gemini(
     model_name: &str,
     provider_name: &str,
     raw_request: &str,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
@@ -392,6 +399,7 @@ fn stream_google_ai_studio_gemini(
                                 discard_unknown_chunks,
                                 model_name: &model_name,
                                 provider_name: &provider_name,
+                                model_inference_id,
                             },
                         )
                     }
@@ -1278,6 +1286,7 @@ struct GeminiResponseWithMetadata<'a> {
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -1289,6 +1298,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             latency,
             raw_request,
             generic_request,
+            model_inference_id,
             model_name,
             provider_name,
         } = response;
@@ -1316,18 +1326,24 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             None => vec![],
         };
 
-        let usage = response
-            .usage_metadata
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Google AI Studio Gemini non-streaming response has no usage metadata"
-                        .to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .into();
+        let usage_metadata = response.usage_metadata.ok_or_else(|| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: "Google AI Studio Gemini non-streaming response has no usage metadata"
+                    .to_string(),
+                raw_request: Some(raw_request.clone()),
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+        let raw_usage = google_ai_studio_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
+        let usage = usage_metadata.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -1338,8 +1354,10 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response: raw_response.clone(),
                 usage,
-                latency,
+                raw_usage,
+                provider_latency: latency,
                 finish_reason: first_candidate.finish_reason.map(Into::into),
+                id: model_inference_id,
             },
         ))
     }
@@ -1356,6 +1374,7 @@ struct ConvertStreamResponseArgs<'a> {
     discard_unknown_chunks: bool,
     model_name: &'a str,
     provider_name: &'a str,
+    model_inference_id: Uuid,
 }
 
 fn convert_stream_response_with_metadata_to_chunk(
@@ -1372,6 +1391,7 @@ fn convert_stream_response_with_metadata_to_chunk(
         discard_unknown_chunks,
         model_name,
         provider_name,
+        model_inference_id,
     } = args;
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -1412,18 +1432,39 @@ fn convert_stream_response_with_metadata_to_chunk(
     // Google AI Studio returns the running usage metadata in each chunk.
     // We only want to return the final usage metadata once the stream has ended.
     // So, we clear the usage metadata if the finish reason is not set.
+    let usage_metadata = response.usage_metadata;
+    let raw_usage_value = google_ai_studio_usage_from_raw_response(&raw_response);
+    let raw_usage = if first_candidate.finish_reason.as_ref().is_none() {
+        None
+    } else {
+        raw_usage_value.map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        })
+    };
     let usage = if first_candidate.finish_reason.as_ref().is_none() {
         None
     } else {
-        response.usage_metadata.map(Into::into)
+        usage_metadata.map(Into::into)
     };
-    Ok(ProviderInferenceResponseChunk::new(
+    Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
         content,
         usage,
         raw_response,
         latency,
         first_candidate.finish_reason.map(Into::into),
+        raw_usage,
     ))
+}
+
+fn google_ai_studio_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usageMetadata").cloned())
 }
 
 fn handle_google_ai_studio_error(
@@ -1516,6 +1557,7 @@ mod tests {
             discard_unknown_chunks: true,
             model_name: "test_model",
             provider_name: "test_provider",
+            model_inference_id: Uuid::now_v7(),
         })
         .unwrap();
         assert_eq!(res.content, []);
@@ -2054,6 +2096,7 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -2068,7 +2111,7 @@ mod tests {
                 output_tokens: Some(10),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(
@@ -2155,6 +2198,7 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -2181,7 +2225,7 @@ mod tests {
                 output_tokens: Some(20),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(
             model_inference_response.finish_reason,
             Some(FinishReason::Stop)
@@ -2268,6 +2312,7 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -2307,7 +2352,7 @@ mod tests {
                 output_tokens: Some(40),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(
             model_inference_response.system,
             Some("test_system".to_string())
@@ -2575,6 +2620,7 @@ mod tests {
                 discard_unknown_chunks: false,
                 model_name: "test_model",
                 provider_name: "test_provider",
+                model_inference_id: Uuid::now_v7(),
             })
             .unwrap();
 
@@ -2640,6 +2686,7 @@ mod tests {
                 discard_unknown_chunks: false,
                 model_name: "test_model",
                 provider_name: "test_provider",
+                model_inference_id: Uuid::now_v7(),
             })
             .unwrap();
 
@@ -2709,6 +2756,7 @@ mod tests {
                 discard_unknown_chunks: false,
                 model_name: "test_model",
                 provider_name: "test_provider",
+                model_inference_id: Uuid::now_v7(),
             })
             .unwrap();
 
@@ -2768,6 +2816,7 @@ mod tests {
                 discard_unknown_chunks: false,
                 model_name: "test_model",
                 provider_name: "test_provider",
+                model_inference_id: Uuid::now_v7(),
             })
             .unwrap();
 
@@ -2824,6 +2873,7 @@ mod tests {
                 discard_unknown_chunks: false,
                 model_name: "test_model",
                 provider_name: "test_provider",
+                model_inference_id: Uuid::now_v7(),
             })
             .unwrap();
 
@@ -2870,6 +2920,7 @@ mod tests {
             discard_unknown_chunks: false,
             model_name: "test_model",
             provider_name: "test_provider",
+            model_inference_id: Uuid::now_v7(),
         });
 
         // Should remain None when there's an error
@@ -2950,6 +3001,7 @@ mod tests {
                         discard_unknown_chunks: false,
                         model_name: "test_model",
                         provider_name: "test_provider",
+                        model_inference_id: Uuid::now_v7(),
                     });
                 // Verify tool call tracking state
                 assert_eq!(last_tool_idx, None);

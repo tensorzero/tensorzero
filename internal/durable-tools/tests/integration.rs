@@ -14,21 +14,23 @@ use durable::MIGRATOR;
 use durable::SpawnOptions;
 use durable::WorkerOptions;
 use durable_tools::{
-    ErasedSimpleTool, SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient,
-    TensorZeroClientError, ToolContext, ToolExecutor, ToolMetadata, ToolResult,
+    ErasedSimpleTool, NonControlToolError, SimpleTool, SimpleToolContext, TaskTool,
+    TensorZeroClient, TensorZeroClientError, ToolContext, ToolExecutor, ToolMetadata, ToolResult,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tensorzero::ActionInput;
 use tensorzero::{
-    ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
-    Usage,
+    ActionInput, ClientInferenceParams, GetConfigResponse, InferenceResponse, Input, InputMessage,
+    InputMessageContent, Role, Tool, Usage, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -76,7 +78,7 @@ impl TensorZeroClient for MockTensorZeroClient {
     async fn create_autopilot_event(
         &self,
         _session_id: Uuid,
-        _request: durable_tools::CreateEventRequest,
+        _request: durable_tools::CreateEventGatewayRequest,
     ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
@@ -105,6 +107,20 @@ impl TensorZeroClient for MockTensorZeroClient {
         self.response
             .clone()
             .ok_or(TensorZeroClientError::StreamingNotSupported)
+    }
+
+    async fn get_config_snapshot(
+        &self,
+        _hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn write_config(
+        &self,
+        _request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn create_datapoints(
@@ -155,11 +171,50 @@ impl TensorZeroClient for MockTensorZeroClient {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
+    async fn list_inferences(
+        &self,
+        _request: tensorzero::ListInferencesRequest,
+    ) -> Result<tensorzero::GetInferencesResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn launch_optimization_workflow(
+        &self,
+        _params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn poll_optimization(
+        &self,
+        _job_handle: &OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
     async fn get_latest_feedback_id_by_metric(
         &self,
         _target_id: Uuid,
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn get_feedback_by_variant(
+        &self,
+        _metric_name: String,
+        _function_name: String,
+        _variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn run_evaluation(
+        &self,
+        _params: durable_tools::RunEvaluationParams,
+    ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "run_evaluation not supported in mock client".to_string(),
+        ))
     }
 }
 
@@ -176,6 +231,7 @@ fn create_mock_chat_response(text: &str) -> InferenceResponse {
             input_tokens: Some(10),
             output_tokens: Some(5),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     })
@@ -339,10 +395,12 @@ impl SimpleTool for InferenceSimpleTool {
             ..Default::default()
         };
 
-        let response = ctx
-            .inference(inference_params)
-            .await
-            .map_err(|e| anyhow::anyhow!("Inference failed: {e}"))?;
+        let response = ctx.inference(inference_params).await.map_err(|e| {
+            NonControlToolError::User {
+                message: format!("Inference failed: {e}"),
+                error_data: serde_json::json!({"kind": "InferenceError", "message": e.to_string()}),
+            }
+        })?;
         let text = extract_text_from_response(&response);
 
         Ok(InferenceToolOutput { response: text })

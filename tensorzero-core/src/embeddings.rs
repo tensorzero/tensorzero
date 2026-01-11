@@ -28,7 +28,8 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     inference::types::{
-        Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage, current_timestamp,
+        Latency, ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, Role, Usage,
+        current_timestamp,
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
@@ -182,6 +183,7 @@ impl EmbeddingModelConfig {
                     model_name,
                     provider_name,
                     otlp_config: &clients.otlp_config,
+                    model_inference_id: Uuid::now_v7(),
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -375,6 +377,7 @@ pub struct EmbeddingProviderResponse {
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
@@ -405,6 +408,7 @@ pub struct EmbeddingModelResponse {
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
     pub cached: bool,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl EmbeddingModelResponse {
@@ -428,6 +432,7 @@ impl EmbeddingModelResponse {
             },
             embedding_provider_name: Arc::from(request.provider_name),
             cached: true,
+            raw_usage: None,
         }
     }
 
@@ -458,6 +463,7 @@ pub struct EmbeddingResponseWithMetadata {
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
     pub embedding_model_name: Arc<str>,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl EmbeddingModelResponse {
@@ -476,6 +482,7 @@ impl EmbeddingModelResponse {
             latency: embedding_provider_response.latency,
             embedding_provider_name,
             cached: false,
+            raw_usage: embedding_provider_response.raw_usage,
         }
     }
 }
@@ -493,6 +500,7 @@ impl EmbeddingResponseWithMetadata {
             latency: embedding_response.latency,
             embedding_provider_name: embedding_response.embedding_provider_name,
             embedding_model_name,
+            raw_usage: embedding_response.raw_usage,
         }
     }
 }
@@ -510,7 +518,6 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
         Ok(Self {
             id: response.id,
             output: vec![],
-            created: response.created,
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::User,
@@ -519,13 +526,14 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
                 })],
             }]), // TODO (#399): Store this information in a more appropriate way for this kind of request
             raw_request: response.raw_request,
-            raw_response: response.raw_response,
+            raw_response: response.raw_response.clone(),
             usage: response.usage,
             latency: response.latency,
-            model_provider_name: response.embedding_provider_name,
+            model_provider_name: response.embedding_provider_name.clone(),
             model_name: response.embedding_model_name,
             cached: false,
             finish_reason: None,
+            raw_usage: response.raw_usage,
         })
     }
 }
@@ -746,6 +754,7 @@ impl EmbeddingProviderResponse {
         raw_response: String,
         usage: Usage,
         latency: Latency,
+        raw_usage: Option<Vec<RawUsageEntry>>,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -756,6 +765,7 @@ impl EmbeddingProviderResponse {
             raw_response,
             usage,
             latency,
+            raw_usage,
         }
     }
 }
@@ -850,6 +860,7 @@ mod tests {
                         api_key_public_id: None,
                     },
                     relay: None,
+                    include_raw_usage: false,
                 },
             )
             .await;

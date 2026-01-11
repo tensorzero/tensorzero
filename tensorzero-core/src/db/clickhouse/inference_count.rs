@@ -694,6 +694,7 @@ mod tests {
             r#type: MetricConfigType::Boolean,
             optimize: MetricConfigOptimize::Max,
             level: MetricConfigLevel::Inference,
+            description: None,
         };
         let params = CountInferencesWithFeedbackParams {
             function_name: "test_function",
@@ -740,6 +741,7 @@ mod tests {
             r#type: MetricConfigType::Float,
             optimize: MetricConfigOptimize::Min,
             level: MetricConfigLevel::Episode,
+            description: None,
         };
         let params = CountInferencesWithFeedbackParams {
             function_name: "test_function",
@@ -821,6 +823,7 @@ mod tests {
             r#type: MetricConfigType::Boolean,
             optimize: MetricConfigOptimize::Max,
             level: MetricConfigLevel::Inference,
+            description: None,
         };
         let params = CountInferencesWithFeedbackParams {
             function_name: "test_function",
@@ -862,6 +865,7 @@ mod tests {
             r#type: MetricConfigType::Boolean,
             optimize: MetricConfigOptimize::Min,
             level: MetricConfigLevel::Inference,
+            description: None,
         };
         let params = CountInferencesWithFeedbackParams {
             function_name: "test_function",
@@ -904,6 +908,7 @@ mod tests {
             r#type: MetricConfigType::Float,
             optimize: MetricConfigOptimize::Max,
             level: MetricConfigLevel::Inference,
+            description: None,
         };
         let params = CountInferencesWithFeedbackParams {
             function_name: "test_function",
@@ -946,6 +951,7 @@ mod tests {
             r#type: MetricConfigType::Float,
             optimize: MetricConfigOptimize::Min,
             level: MetricConfigLevel::Inference,
+            description: None,
         };
         let params = CountInferencesWithFeedbackParams {
             function_name: "test_function",
