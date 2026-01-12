@@ -25,6 +25,10 @@
 - Business logic layer will generate all data that TensorZero is responsible for (e.g. UUIDs for new datapoints, `staled_at` timestamps).
 - Database layer (ClickHouse and/or Postgres) will insert data as-is into the backing database, with the only exception of `updated_at` timestamps which we insert by calling native functions in the database.
 
+## For Postgres
+
+- After changing any sqlx queries, run `cargo sqlx prepare --workspace -- --all-targets` from root to update sqlx cache.
+
 # Python Dependencies
 
 We use `uv` to manage Python dependencies.
