@@ -375,8 +375,8 @@ export function EvaluationTable({
     });
   };
 
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
+  const evaluation_config = config?.evaluations[evaluation_name];
+  if (!config || !evaluation_config) {
     throw new Error(
       `Evaluation config not found for evaluation ${evaluation_name}`,
     );
@@ -582,9 +582,9 @@ export function EvaluationTable({
                                 const metricValue =
                                   data.metrics.get(metric_name);
                                 const metricType =
-                                  config.metrics[metric_name]?.type;
+                                  config?.metrics[metric_name]?.type;
                                 const evaluatorConfig =
-                                  config.evaluations[evaluation_name]
+                                  config?.evaluations[evaluation_name]
                                     ?.evaluators[evaluator_name];
 
                                 return (
@@ -687,9 +687,9 @@ const EvaluatorHeader = ({
   summaryStats: EvaluationStatistics[];
 }) => {
   const config = useConfig();
-  const evaluationConfig = config.evaluations[evaluation_name];
+  const evaluationConfig = config?.evaluations[evaluation_name];
   const evaluatorConfig = evaluationConfig?.evaluators[evaluator_name];
-  if (!evaluatorConfig) {
+  if (!config || !evaluatorConfig) {
     logger.warn(
       `Evaluator config not found for evaluation ${evaluation_name} and evaluator ${evaluator_name}`,
     );

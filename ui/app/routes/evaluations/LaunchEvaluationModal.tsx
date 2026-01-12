@@ -41,7 +41,7 @@ function EvaluationForm({
 }) {
   const fetcher = useFetcher();
   const config = useConfig();
-  const evaluation_names = Object.keys(config.evaluations);
+  const evaluation_names = Object.keys(config?.evaluations ?? {});
   const [selectedEvaluationName, setSelectedEvaluationName] = useState<
     string | null
   >(initialFormState?.evaluation_name ?? null);
@@ -68,7 +68,7 @@ function EvaluationForm({
   let isLoading = false;
   let function_name = null;
   let evaluatorNames: string[] = [];
-  if (selectedEvaluationName) {
+  if (selectedEvaluationName && config) {
     function_name =
       config.evaluations[selectedEvaluationName]?.function_name ?? null;
     evaluatorNames = Object.keys(
@@ -129,7 +129,7 @@ function EvaluationForm({
 
   // Initialize precision targets with empty string for all evaluators when evaluation changes
   useEffect(() => {
-    if (selectedEvaluationName) {
+    if (selectedEvaluationName && config) {
       const currentEvaluatorNames = Object.keys(
         config.evaluations[selectedEvaluationName]?.evaluators ?? {},
       );
@@ -147,7 +147,7 @@ function EvaluationForm({
         setPrecisionTargets(newLimits);
       }
     }
-  }, [selectedEvaluationName, config.evaluations, precisionTargets]);
+  }, [selectedEvaluationName, config, precisionTargets]);
 
   // Validate max_datapoints: must be empty or a positive integer
   const isMaxDatapointsValid =

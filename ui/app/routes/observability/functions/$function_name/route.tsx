@@ -1,11 +1,6 @@
 import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
-import {
-  data,
-  isRouteErrorResponse,
-  useNavigate,
-  useSearchParams,
-} from "react-router";
+import { data, useNavigate, useSearchParams } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
@@ -26,7 +21,6 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { TimeWindow } from "~/types/tensorzero";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
@@ -336,31 +330,4 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       </SectionsGroup>
     </PageLayout>
   );
-}
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

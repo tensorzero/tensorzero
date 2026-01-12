@@ -13,7 +13,8 @@ import { TableItemTime } from "~/components/ui/TableItems";
 import { toDatasetUrl } from "~/utils/urls";
 import { Button } from "~/components/ui/button";
 import { Trash, ChevronUp, ChevronDown, Search } from "lucide-react";
-import { Suspense, use, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { Await, useAsyncError } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   useReactTable,
@@ -79,18 +80,54 @@ function SkeletonTable() {
   );
 }
 
-// Table content that resolves promise and renders
+// Error state for failed data load
+function TableErrorState() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load datasets";
+
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Dataset Name</TableHead>
+            <TableHead>Datapoint Count</TableHead>
+            <TableHead>Last Updated</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell colSpan={4} className="text-center">
+              <div className="flex flex-col items-center gap-2 py-8 text-red-600">
+                <span className="font-medium">Error loading data</span>
+                <span className="text-muted-foreground text-sm">{message}</span>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <PageButtons
+        onPreviousPage={() => {}}
+        onNextPage={() => {}}
+        disablePrevious
+        disableNext
+      />
+    </>
+  );
+}
+
+// Table content that renders resolved data
 function DatasetTableContent({
-  data,
+  datasets,
   globalFilter,
   onDeleteClick,
 }: {
-  data: Promise<DatasetMetadata[]>;
+  datasets: DatasetMetadata[];
   globalFilter: string;
   onDeleteClick: (datasetName: string) => void;
 }) {
-  const datasets = use(data);
-
   const [sorting, setSorting] = useState<SortingState>([]);
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -261,14 +298,18 @@ export default function DatasetTable({
         </div>
       </div>
       <Suspense key={location.key} fallback={<SkeletonTable />}>
-        <DatasetTableContent
-          data={data}
-          globalFilter={globalFilter}
-          onDeleteClick={(name) => {
-            setDatasetToDelete(name);
-            setDeleteDialogOpen(true);
-          }}
-        />
+        <Await resolve={data} errorElement={<TableErrorState />}>
+          {(datasets) => (
+            <DatasetTableContent
+              datasets={datasets}
+              globalFilter={globalFilter}
+              onDeleteClick={(name) => {
+                setDatasetToDelete(name);
+                setDeleteDialogOpen(true);
+              }}
+            />
+          )}
+        </Await>
       </Suspense>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

@@ -22,15 +22,16 @@ interface ToolDetailsProps {
 }
 
 export function ToolDetails({ toolName, onClose }: ToolDetailsProps) {
-  const { tools } = useConfig();
+  const config = useConfig();
+  const tools = config?.tools;
 
   const [tool, setTool] = useState<StaticToolConfig | undefined>(
-    Object.values(tools)[0],
+    tools ? Object.values(tools)[0] : undefined,
   );
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!toolName) return;
+    if (!toolName || !tools) return;
 
     const tool = tools[toolName];
     if (!tool) throw new Error(`"${toolName}" is not present in config.tools`);
