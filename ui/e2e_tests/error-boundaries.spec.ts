@@ -42,7 +42,7 @@ test.describe("Error Boundaries", () => {
 
       // Should show an error (caught by layout boundary)
       await expect(
-        page.getByRole("heading", { name: "404: Not Found" }),
+        page.getByRole("heading", { name: "Error 404" }),
       ).toBeVisible();
 
       // Sidebar should remain functional
@@ -81,7 +81,9 @@ test.describe("Error Boundaries", () => {
       await page.goto("/observability/functions/this_function_does_not_exist");
 
       // Should show an error (caught by layout boundary)
-      await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Error 404" }),
+      ).toBeVisible();
 
       // Sidebar should remain functional
       await expect(
