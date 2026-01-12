@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useAsyncError } from "react-router";
 
 import { cn } from "~/utils/common";
 
@@ -130,14 +131,51 @@ const TableEmptyState = React.forwardRef<
 ));
 TableEmptyState.displayName = "TableEmptyState";
 
+interface TableAsyncErrorStateProps {
+  colSpan: number;
+  defaultMessage?: string;
+}
+
+/**
+ * Error state for tables using React Router's <Await> component.
+ * Must be rendered inside an <Await errorElement={...}> to access the async error.
+ * @throws Error if used outside of an <Await errorElement={...}> context
+ */
+function TableAsyncErrorState({
+  colSpan,
+  defaultMessage = "Failed to load data",
+}: TableAsyncErrorStateProps) {
+  const error = useAsyncError();
+
+  if (error === undefined) {
+    throw new Error(
+      "TableAsyncErrorState must be used inside an <Await errorElement={...}>",
+    );
+  }
+
+  const message = error instanceof Error ? error.message : defaultMessage;
+
+  return (
+    <TableRow>
+      <TableCell colSpan={colSpan} className="text-center">
+        <div className="flex flex-col items-center gap-2 py-8 text-red-600">
+          <span className="font-medium">Error loading data</span>
+          <span className="text-muted-foreground text-sm">{message}</span>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export {
   Table,
-  TableHeader,
+  TableAsyncErrorState,
   TableBody,
+  TableCaption,
+  TableCell,
+  TableEmptyState,
   TableFooter,
   TableHead,
+  TableHeader,
   TableRow,
-  TableCell,
-  TableCaption,
-  TableEmptyState,
 };

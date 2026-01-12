@@ -2,6 +2,7 @@ import type { InferenceFilter, InferenceMetadata } from "~/types/tensorzero";
 import { uuidv7ToTimestamp } from "~/utils/clickhouse/helpers";
 import {
   Table,
+  TableAsyncErrorState,
   TableBody,
   TableCell,
   TableHead,
@@ -21,7 +22,7 @@ import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter } from "lucide-react";
 import { Suspense, useState, useEffect } from "react";
-import { useNavigate, useLocation, Await, useAsyncError } from "react-router";
+import { useNavigate, useLocation, Await } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
 import {
@@ -69,24 +70,6 @@ function SkeletonRows() {
         </TableRow>
       ))}
     </>
-  );
-}
-
-// Error display for failed data load
-function TableErrorState() {
-  const error = useAsyncError();
-  const message =
-    error instanceof Error ? error.message : "Failed to load inferences";
-
-  return (
-    <TableRow>
-      <TableCell colSpan={6} className="text-center">
-        <div className="flex flex-col items-center gap-2 py-8 text-red-600">
-          <span className="font-medium">Error loading data</span>
-          <span className="text-muted-foreground text-sm">{message}</span>
-        </div>
-      </TableCell>
-    </TableRow>
   );
 }
 
@@ -337,7 +320,15 @@ export default function InferencesTable({
         </TableHeader>
         <TableBody>
           <Suspense key={location.key} fallback={<SkeletonRows />}>
-            <Await resolve={data} errorElement={<TableErrorState />}>
+            <Await
+              resolve={data}
+              errorElement={
+                <TableAsyncErrorState
+                  colSpan={6}
+                  defaultMessage="Failed to load inferences"
+                />
+              }
+            >
               {(resolvedData) => <TableRows data={resolvedData} />}
             </Await>
           </Suspense>

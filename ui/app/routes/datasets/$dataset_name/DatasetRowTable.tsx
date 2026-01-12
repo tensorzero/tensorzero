@@ -1,6 +1,7 @@
 import type { Datapoint, DatapointFilter } from "~/types/tensorzero";
 import {
   Table,
+  TableAsyncErrorState,
   TableBody,
   TableCell,
   TableHead,
@@ -19,13 +20,7 @@ import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter, Trash } from "lucide-react";
 import { Suspense, useState, useEffect } from "react";
-import {
-  Await,
-  useAsyncError,
-  useFetcher,
-  useNavigate,
-  useLocation,
-} from "react-router";
+import { Await, useFetcher, useNavigate, useLocation } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -81,24 +76,6 @@ function SkeletonRows() {
         </TableRow>
       ))}
     </>
-  );
-}
-
-// Error state for failed data load
-function TableErrorState() {
-  const error = useAsyncError();
-  const message =
-    error instanceof Error ? error.message : "Failed to load datapoints";
-
-  return (
-    <TableRow>
-      <TableCell colSpan={6} className="text-center">
-        <div className="flex flex-col items-center gap-2 py-8 text-red-600">
-          <span className="font-medium">Error loading data</span>
-          <span className="text-muted-foreground text-sm">{message}</span>
-        </div>
-      </TableCell>
-    </TableRow>
   );
 }
 
@@ -334,7 +311,15 @@ export default function DatasetRowTable({
         </TableHeader>
         <TableBody>
           <Suspense key={location.key} fallback={<SkeletonRows />}>
-            <Await resolve={data} errorElement={<TableErrorState />}>
+            <Await
+              resolve={data}
+              errorElement={
+                <TableAsyncErrorState
+                  colSpan={6}
+                  defaultMessage="Failed to load datapoints"
+                />
+              }
+            >
               {(resolvedData) => (
                 <TableBodyContent
                   data={resolvedData}
