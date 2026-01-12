@@ -12,6 +12,11 @@
   "contextual": {
     "options": ["copy", "view", "chatgpt", "claude"]
   },
+  "integrations": {
+    "gtm": {
+      "tagId": "GTM-M57LVZ4N"
+    }
+  },
   "navigation": {
     "tabs": [
       {
