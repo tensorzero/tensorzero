@@ -9,6 +9,7 @@ import {
 } from "react-router";
 
 import { ConfigProvider, EMPTY_CONFIG } from "./context/config";
+import type { UiConfig } from "./types/tensorzero";
 import { ReadOnlyProvider } from "./context/read-only";
 import { AutopilotAvailableProvider } from "./context/autopilot-available";
 import type { Route } from "./+types/root";
@@ -58,7 +59,14 @@ export const links: Route.LinksFunction = () => [
 
 export const middleware: Route.MiddlewareFunction[] = [readOnlyMiddleware];
 
-export async function loader() {
+interface LoaderData {
+  config: UiConfig;
+  isReadOnly: boolean;
+  autopilotAvailable: boolean;
+  infraError: ClassifiedError | null;
+}
+
+export async function loader(): Promise<LoaderData> {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
   const isReadOnly = isReadOnlyMode();
@@ -68,12 +76,7 @@ export async function loader() {
       getConfig(),
       checkAutopilotAvailable(),
     ]);
-    return {
-      config,
-      isReadOnly,
-      autopilotAvailable,
-      infraError: null as ClassifiedError | null,
-    };
+    return { config, isReadOnly, autopilotAvailable, infraError: null };
   } catch (e) {
     // Graceful degradation: return error info so UI renders with overlay
     if (isGatewayConnectionError(e)) {
@@ -81,9 +84,7 @@ export async function loader() {
         config: EMPTY_CONFIG,
         isReadOnly,
         autopilotAvailable: false,
-        infraError: {
-          type: InfraErrorType.GatewayUnavailable,
-        } as ClassifiedError,
+        infraError: { type: InfraErrorType.GatewayUnavailable },
       };
     }
     if (isAuthenticationError(e)) {
@@ -91,9 +92,7 @@ export async function loader() {
         config: EMPTY_CONFIG,
         isReadOnly,
         autopilotAvailable: false,
-        infraError: {
-          type: InfraErrorType.GatewayAuthFailed,
-        } as ClassifiedError,
+        infraError: { type: InfraErrorType.GatewayAuthFailed },
       };
     }
     throw e;
