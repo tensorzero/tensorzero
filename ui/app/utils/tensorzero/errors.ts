@@ -1,6 +1,62 @@
 import { StatusCodes as HttpStatusCode } from "http-status-codes";
 import { isRouteErrorResponse } from "react-router";
+import { z } from "zod";
 import { isErrorLike } from "~/utils/common";
+
+// =============================================================================
+// EXPLORATION: Structured gateway errors via `unstable_error_json`
+// =============================================================================
+//
+// The gateway can return structured errors when `unstable_error_json = true`:
+//
+//   { "error": "Route not found: GET /health",
+//     "error_json": { "RouteNotFound": { "path": "/health", "method": "GET" } } }
+//
+// This would eliminate brittle string matching like:
+//   error.message.startsWith("Route not found:")
+//
+// Trade-offs:
+//   Pro: Type-safe, no string matching
+//   Con: "Unstable" API, requires gateway config
+//
+// See: tensorzero-core/src/error/mod.rs for ErrorDetails enum
+// =============================================================================
+
+/**
+ * EXPLORATION: Zod schema for structured gateway errors.
+ * Mirrors Rust ErrorDetails enum when `unstable_error_json` is enabled.
+ */
+export const GatewayErrorJsonSchema = z.union([
+  z.object({
+    RouteNotFound: z.object({ path: z.string(), method: z.string() }),
+  }),
+  z.object({ ClickHouseConnection: z.object({ message: z.string() }) }),
+  z.object({ ClickHouseQuery: z.object({ message: z.string() }) }),
+  z.object({ TensorZeroAuth: z.object({ message: z.string() }) }),
+  z.record(z.unknown()), // Catch-all for other error types
+]);
+
+export type GatewayErrorJson = z.infer<typeof GatewayErrorJsonSchema>;
+
+/**
+ * EXPLORATION: Type-safe error check using structured errors.
+ * Compare to isGatewayEndpointNotFoundError() which uses string matching.
+ */
+export function isRouteNotFoundFromErrorJson(
+  errorJson: GatewayErrorJson,
+): boolean {
+  return "RouteNotFound" in errorJson;
+}
+
+/**
+ * EXPLORATION: Type-safe error check using structured errors.
+ * Compare to isClickHouseError() which uses name.startsWith("ClickHouse").
+ */
+export function isClickHouseFromErrorJson(
+  errorJson: GatewayErrorJson,
+): boolean {
+  return "ClickHouseConnection" in errorJson || "ClickHouseQuery" in errorJson;
+}
 
 /**
  * Enum-like constants for categorizing infrastructure errors that survive
