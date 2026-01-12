@@ -16,30 +16,7 @@ type = "chat_completion"
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
-# Echo variant: returns input text (for exact_match testing with reference outputs)
-[functions.basic_test.variants.echo]
-type = "chat_completion"
-model = "echo"
-system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-
-# Empty variants: return empty string (for exact_match testing with reference outputs)
-
-[functions.basic_test.variants.empty]
-type = "chat_completion"
-model = "empty"
-system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-
-[functions.basic_test.variants.empty2]
-type = "chat_completion"
-model = "empty"
-system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-
 [functions.basic_test.variants.error]
-type = "chat_completion"
-model = "error"
-system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-
-[functions.basic_test.variants.error2]
 type = "chat_completion"
 model = "error"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
