@@ -26,20 +26,14 @@ export const EMPTY_CONFIG: UiConfig = {
 
 const ConfigContext = createContext<UiConfig>(EMPTY_CONFIG);
 
-/**
- * Hook to get the TensorZero configuration.
- * Always returns a UiConfig object (never undefined).
- * When config is unavailable, returns EMPTY_CONFIG with empty collections.
- */
 export function useConfig(): UiConfig {
   return useContext(ConfigContext);
 }
 
 /**
- * Hook to get a specific function configuration by name.
- * Returns null if function not found.
+ * Hook to get a specific function configuration by name
  * @param functionName - The name of the function to retrieve
- * @returns The function configuration object or null
+ * @returns The function configuration object or null if not found
  */
 export function useFunctionConfig(functionName: string | null) {
   const config = useConfig();
@@ -51,7 +45,8 @@ export function useFunctionConfig(functionName: string | null) {
 }
 
 /**
- * Hook to get all function configs.
+ * Hook to get all function configs
+ * @returns The function configuration object or null if not found
  */
 export function useAllFunctionConfigs() {
   const config = useConfig();
