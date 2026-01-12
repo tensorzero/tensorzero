@@ -296,6 +296,19 @@ describe("classifyError", () => {
     }
   });
 
+  it("should classify serialized ClickHouse errors and extract message", () => {
+    // Errors get serialized across React Router boundary, losing instanceof
+    const serializedError = {
+      name: "ClickHouseConnectionError",
+      message: "Database connection timeout",
+    };
+    const result = classifyError(serializedError);
+    expect(result.type).toBe(InfraErrorType.ClickHouseUnavailable);
+    if (result.type === InfraErrorType.ClickHouseUnavailable) {
+      expect(result.message).toBe("Database connection timeout");
+    }
+  });
+
   it("should classify generic Error as ServerError", () => {
     const error = new Error("Something went wrong");
     const result = classifyError(error);

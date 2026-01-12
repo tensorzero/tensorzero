@@ -285,21 +285,25 @@ export class TensorZeroServerError extends Error {
   static ClickHouseConnection = class ClickHouseConnection extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
+      this.name = "ClickHouseConnectionError";
     }
   };
   static ClickHouseDeserialization = class ClickHouseDeserialization extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
+      this.name = "ClickHouseDeserializationError";
     }
   };
   static ClickHouseMigration = class ClickHouseMigration extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
+      this.name = "ClickHouseMigrationError";
     }
   };
   static ClickHouseQuery = class ClickHouseQuery extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
+      this.name = "ClickHouseQueryError";
     }
   };
   static ObjectStoreUnconfigured = class ObjectStoreUnconfigured extends TensorZeroServerError {
@@ -799,7 +803,7 @@ export function classifyError(error: unknown): ClassifiedError {
   }
 
   if (isClickHouseError(error)) {
-    const message = error instanceof Error ? error.message : undefined;
+    const message = extractErrorMessage(error) || undefined;
     return { type: InfraErrorType.ClickHouseUnavailable, message };
   }
 
