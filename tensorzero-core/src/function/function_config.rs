@@ -817,7 +817,6 @@ mod tests {
     use serde_json::json;
     use std::io::Write;
     use std::time::Duration;
-    use std::time::Instant;
     use tempfile::NamedTempFile;
 
     fn create_test_schema() -> StaticJSONSchema {
@@ -1874,7 +1873,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -1942,7 +1940,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -1996,7 +1993,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2050,7 +2046,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2104,7 +2099,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2158,7 +2152,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2233,7 +2226,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2281,7 +2273,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2334,7 +2325,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2387,7 +2377,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
@@ -2449,7 +2438,6 @@ mod tests {
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: Instant::now().elapsed().as_secs(),
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),

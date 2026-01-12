@@ -3,7 +3,9 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -133,7 +135,12 @@ impl ToolMetadata for InferenceTool {
             "required": ["input"]
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -161,25 +168,21 @@ impl SimpleTool for InferenceTool {
             ..Default::default()
         };
 
-        let response = if let Some(hash) = side_info.config_snapshot_hash {
-            let snapshot_hash: SnapshotHash =
-                hash.parse()
-                    .map_err(|_: std::convert::Infallible| ToolError::Validation {
-                        message: "Invalid snapshot hash".to_string(),
-                    })?;
-            ctx.client()
-                .action(
-                    snapshot_hash,
-                    ActionInput::Inference(Box::new(client_params)),
-                )
-                .await
-                .map_err(|e| ToolError::ExecutionFailed(e.into()))?
-        } else {
-            ctx.client()
-                .inference(client_params)
-                .await
-                .map_err(|e| ToolError::ExecutionFailed(e.into()))?
-        };
+        let snapshot_hash: SnapshotHash =
+            side_info
+                .config_snapshot_hash
+                .parse()
+                .map_err(|_: std::convert::Infallible| {
+                    AutopilotToolError::validation("Invalid snapshot hash")
+                })?;
+        let response = ctx
+            .client()
+            .action(
+                snapshot_hash,
+                ActionInput::Inference(Box::new(client_params)),
+            )
+            .await
+            .map_err(|e| AutopilotToolError::client_error("inference", e))?;
 
         Ok(response)
     }

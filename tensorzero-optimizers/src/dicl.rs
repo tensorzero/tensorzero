@@ -109,6 +109,7 @@ impl Optimizer for DiclOptimizationConfig {
         );
 
         // Convert RenderedSample inputs to strings for embedding using stored_input
+        // IMPORTANT: we use `sample.stored_input` which has NOT templated the prompts
         let input_texts: Vec<String> = train_examples
             .iter()
             .map(|sample| {

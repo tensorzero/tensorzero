@@ -1,7 +1,7 @@
 # cargo-deny
 
 [sources]
-allow-git = ["https://github.com/hyperium/mime", "https://github.com/tensorzero/durable"]
+allow-git = ["https://github.com/hyperium/mime", "https://github.com/tensorzero/durable", "https://github.com/Aaron1011/tracing-opentelemetry-instrumentation-sdk"]
 unknown-git = "deny"
 
 [bans]
@@ -34,3 +34,7 @@ allow = [
     "OpenSSL",
     "BSD-2-Clause",
 ]
+
+# These are not released and only used for local testing, we don't care about security vulnerabilities in them
+[graph]
+exclude = ["rate-limit-load-test", "feedback-load-test"]

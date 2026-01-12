@@ -3,7 +3,9 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -43,8 +45,6 @@ impl SimpleTool for ErrorSimpleTool {
         _ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<Self::Output> {
-        Err(ToolError::Validation {
-            message: llm_params.error_message,
-        })
+        Err(AutopilotToolError::test_error(llm_params.error_message).into())
     }
 }

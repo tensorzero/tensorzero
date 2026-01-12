@@ -17,9 +17,8 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use autopilot_client::{
-    AutopilotClient, CreateEventRequest, CreateEventResponse, Event, EventPayload,
-    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
-    StreamEventsParams,
+    AutopilotClient, CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, StreamEventsParams, StreamUpdate,
 };
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -148,11 +147,18 @@ pub async fn create_event_handler(
         .ok_or_else(|| Error::new(ErrorDetails::AutopilotUnavailable))?;
 
     // Construct the full request with deployment_id
+    // If starting a new session (nil session_id), include the current config hash
+    let config_snapshot_hash = if session_id.is_nil() {
+        Some(app_state.config.hash.to_string())
+    } else {
+        None
+    };
     let request = CreateEventRequest {
         deployment_id,
         tensorzero_version: TENSORZERO_VERSION.to_string(),
         payload: http_request.payload,
         previous_user_message_event_id: http_request.previous_user_message_event_id,
+        config_snapshot_hash,
     };
 
     let response = create_event(&client, session_id, request).await?;
@@ -174,24 +180,23 @@ pub async fn stream_events_handler(
     let stream = client.stream_events(session_id, params).await?;
 
     // Convert the autopilot event stream to SSE events
-    let sse_stream =
-        stream.map(
-            |result: Result<Event, autopilot_client::AutopilotError>| match result {
-                Ok(event) => match serde_json::to_string(&event) {
-                    Ok(data) => Ok(SseEvent::default().event("event").data(data)),
-                    Err(e) => {
-                        tracing::error!("Failed to serialize autopilot event: {}", e);
-                        Err(Error::new(ErrorDetails::Serialization {
-                            message: e.to_string(),
-                        }))
-                    }
-                },
+    let sse_stream = stream.map(
+        |result: Result<StreamUpdate, autopilot_client::AutopilotError>| match result {
+            Ok(event) => match serde_json::to_string(&event) {
+                Ok(data) => Ok(SseEvent::default().event("event").data(data)),
                 Err(e) => {
-                    tracing::error!("Autopilot stream error: {}", e);
-                    Err(Error::from(e))
+                    tracing::error!("Failed to serialize autopilot event: {}", e);
+                    Err(Error::new(ErrorDetails::Serialization {
+                        message: e.to_string(),
+                    }))
                 }
             },
-        );
+            Err(e) => {
+                tracing::error!("Autopilot stream error: {}", e);
+                Err(Error::from(e))
+            }
+        },
+    );
 
     Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))
 }

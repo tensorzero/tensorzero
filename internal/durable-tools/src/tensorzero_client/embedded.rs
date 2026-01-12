@@ -4,19 +4,18 @@
 //! and wants to call inference and autopilot endpoints without HTTP overhead.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use evaluations::stats::EvaluationStats;
-use evaluations::types::{EvaluationCoreArgs, EvaluationVariant};
-use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_core_streaming};
+use evaluations::types::{EvaluationVariant, RunEvaluationWithAppStateParams};
+use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_with_app_state};
 use tensorzero::{
-    ActionResponse, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
-    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
-    DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetConfigResponse,
-    GetDatapointsResponse, GetInferencesResponse, InferenceOutput, InferenceResponse,
-    ListDatapointsRequest, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
-    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
+    ActionResponse, ClientInferenceParams, CreateDatapointRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
+    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
+    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;
@@ -120,11 +119,18 @@ impl TensorZeroClient for EmbeddedClient {
             .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
         // Construct the full request with deployment_id from app state
+        // If starting a new session (nil session_id), include the current config hash
+        let config_snapshot_hash = if session_id.is_nil() {
+            Some(self.app_state.config.hash.to_string())
+        } else {
+            None
+        };
         let full_request = autopilot_client::CreateEventRequest {
             deployment_id,
             tensorzero_version: tensorzero_core::endpoints::status::TENSORZERO_VERSION.to_string(),
             payload: request.payload,
             previous_user_message_event_id: request.previous_user_message_event_id,
+            config_snapshot_hash,
         };
 
         create_event(autopilot_client, session_id, full_request)
@@ -440,55 +446,43 @@ impl TensorZeroClient for EmbeddedClient {
             })?
             .clone();
 
-        // Build function configs table for the evaluation
-        let function_configs: HashMap<String, EvaluationFunctionConfig> = self
+        // Get the function config for this evaluation
+        let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
+        let function_config = self
             .app_state
             .config
             .functions
-            .iter()
-            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-            .collect();
-        let function_configs = Arc::new(function_configs);
+            .get(&inference_eval_config.function_name)
+            .map(|func| EvaluationFunctionConfig::from(func.as_ref()))
+            .ok_or_else(|| {
+                TensorZeroClientError::Evaluation(format!(
+                    "Function '{}' not found in config",
+                    inference_eval_config.function_name
+                ))
+            })?;
 
-        // Build a Client from our existing components
-        let tensorzero_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
-            config: self.app_state.config.clone(),
-            clickhouse_connection_info: self.app_state.clickhouse_connection_info.clone(),
-            postgres_connection_info: self.app_state.postgres_connection_info.clone(),
-            http_client: self.app_state.http_client.clone(),
-            timeout: None,
-        })
-        .build()
-        .await
-        .map_err(|e| TensorZeroClientError::Evaluation(format!("Failed to build client: {e}")))?;
-
-        let evaluation_run_id = Uuid::now_v7();
-
-        let core_args = EvaluationCoreArgs {
-            tensorzero_client,
-            clickhouse_client: self.app_state.clickhouse_connection_info.clone(),
-            evaluation_config,
-            function_configs,
+        // Build params for run_evaluation_with_app_state
+        let app_state_params = RunEvaluationWithAppStateParams {
+            evaluation_config: (*evaluation_config).clone(),
+            function_config,
+            evaluation_name: params.evaluation_name,
             dataset_name: params.dataset_name,
             datapoint_ids: params.datapoint_ids,
             variant: EvaluationVariant::Name(params.variant_name),
-            evaluation_name: params.evaluation_name,
-            evaluation_run_id,
-            inference_cache: params.inference_cache,
             concurrency: params.concurrency,
+            cache_mode: params.inference_cache,
+            max_datapoints: params.max_datapoints,
+            precision_targets: params.precision_targets,
         };
 
-        // Run the evaluation with optional adaptive stopping via precision_targets
-        let result = run_evaluation_core_streaming(
-            core_args,
-            params.max_datapoints,
-            params.precision_targets,
-        )
-        .await
-        .map_err(|e| TensorZeroClientError::Evaluation(format!("Evaluation failed: {e}")))?;
+        // Run the evaluation using app state directly
+        let result = run_evaluation_with_app_state(self.app_state.clone(), app_state_params)
+            .await
+            .map_err(|e| TensorZeroClientError::Evaluation(format!("Evaluation failed: {e}")))?;
 
         let mut receiver = result.receiver;
         let num_datapoints = result.run_info.num_datapoints;
+        let evaluation_run_id = result.run_info.evaluation_run_id;
 
         // Collect results - we use a dummy writer since we don't need CLI output
         let mut evaluation_stats = EvaluationStats::new(OutputFormat::Jsonl, num_datapoints);

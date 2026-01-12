@@ -42,17 +42,6 @@ We present a sample DPO recipe for OpenAI:
 
 - [DPO (Preference Fine-tuning) with OpenAI](https://github.com/tensorzero/tensorzero/blob/main/recipes/dpo/openai/)
 
-### Dynamic In-Context Learning
-
-Dynamic In-Context Learning (DICL) is a technique that leverages historical examples to enhance LLM performance at inference time.
-It involves selecting relevant examples from a database of past interactions and including them in the prompt, allowing the model to learn from similar contexts on-the-fly.
-This approach can significantly improve the model's ability to handle specific tasks or domains without the need for fine-tuning.
-
-We provide a sample recipe for DICL with OpenAI.
-The recipe supports selecting examples based on boolean metrics, float metrics, and demonstrations.
-
-- [Dynamic In-Context Learning with OpenAI](https://github.com/tensorzero/tensorzero/tree/main/recipes/dicl/)
-
 <Tip>
 
 Many more recipes are on the way. This will be our primary engineering focus in the coming months.
@@ -68,14 +57,16 @@ TensorZero offers prompt optimization recipes that automatically improve your pr
 
 ### GEPA
 
-[GEPA](/optimization/gepa) (Genetic-Pareto) is an automated prompt optimization method that evolves prompts through iterative evaluation, analysis, and mutation.
+GEPA is an automated prompt optimization method that evolves prompts through iterative evaluation, analysis, and mutation.
 It uses LLMs to analyze inference results and propose prompt improvements, then filters variants using Pareto frontier selection to balance multiple objectives.
+
+See the [GEPA Guide](/optimization/gepa) to learn more.
 
 ### MIPRO
 
 MIPRO (Multi-prompt Instruction PRoposal Optimizer) is a method for automatically improving system instructions and few-shot demonstrations in LLM applications — including ones with multiple LLM functions or calls.
 
-![MIPRO Diagram](/recipes/index-mipro-diagram.svg)
+![MIPRO Diagram](./index-mipro-diagram.svg)
 
 MIPRO can optimize prompts across an entire LLM pipeline without needing fine-grained labels or gradients. Instead, it uses a Bayesian optimizer to figure out which instructions and demonstrations actually improve end-to-end performance. By combining application-aware prompt proposals and stochastic mini-batch evaluations, MIPRO can improve downstream task performance compared to traditional prompt engineering approaches.
 
@@ -86,6 +77,15 @@ See [Automated Prompt Engineering with MIPRO](https://github.com/tensorzero/tens
 The TensorZero Gateway offers built-in inference-time optimizations like dynamic in-context learning and best/mixture-of-N sampling.
 
 See [Inference-Time Optimizations](/gateway/guides/inference-time-optimizations/) for more information.
+
+### Dynamic In-Context Learning
+
+![Inference-Time Optimization: Dynamic In-Context Learning](./inference-time-optimizations-dynamic-in-context-learning.png)
+
+Dynamic In-Context Learning (DICL) is an inference-time optimization that improves LLM performance by incorporating relevant historical examples into your prompt.
+Instead of incorporating static examples manually in your prompts, DICL selects the most relevant examples at inference time.
+
+See the [Dynamic In-Context Learning (DICL) Guide](/optimization/dynamic-in-context-learning-dicl) to learn more.
 
 ## Custom Recipes
 

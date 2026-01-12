@@ -34,7 +34,7 @@ async fn test_get_config_tool_with_hash(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: Some("test_hash".to_string()),
+        config_snapshot_hash: "test_hash".to_string(),
         tool_call_event_id: Uuid::now_v7(),
         optimization: OptimizationWorkflowSideInfo {
             poll_interval_secs: 10,
@@ -72,7 +72,7 @@ async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
 
     let side_info = AutopilotSideInfo {
         session_id,
-        config_snapshot_hash: Some("test_hash".to_string()),
+        config_snapshot_hash: "test_hash".to_string(),
         tool_call_event_id,
         optimization: OptimizationWorkflowSideInfo {
             poll_interval_secs: 10,

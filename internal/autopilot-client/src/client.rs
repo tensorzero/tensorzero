@@ -13,6 +13,7 @@ use sqlx::PgPool;
 use url::Url;
 use uuid::Uuid;
 
+use crate::StreamUpdate;
 use crate::error::AutopilotError;
 use crate::types::{
     AutopilotToolCall, CreateEventRequest, CreateEventResponse, ErrorResponse, Event, EventPayload,
@@ -416,6 +417,21 @@ impl AutopilotClient {
             },
             _ => None,
         };
+        if session_id == Uuid::nil() && request.config_snapshot_hash.is_none() {
+            return Err(AutopilotError::Http {
+                status_code: 400,
+                message: "Config snapshot hash must be set if a new session is being started"
+                    .to_string(),
+            });
+        }
+        if session_id != Uuid::nil() && request.config_snapshot_hash.is_some() {
+            return Err(AutopilotError::Http {
+                status_code: 400,
+                message:
+                    "Config snapshot hash must not be set if an existing session is being used"
+                        .to_string(),
+            });
+        }
 
         let url = self
             .base_url
@@ -456,7 +472,8 @@ impl AutopilotClient {
         &self,
         session_id: Uuid,
         params: StreamEventsParams,
-    ) -> Result<impl Stream<Item = Result<Event, AutopilotError>> + use<>, AutopilotError> {
+    ) -> Result<impl Stream<Item = Result<StreamUpdate, AutopilotError>> + use<>, AutopilotError>
+    {
         let mut url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events/stream"))?;
@@ -501,12 +518,13 @@ impl AutopilotClient {
                     Ok(SseEvent::Open) => None,
                     Ok(SseEvent::Message(message)) => {
                         if message.event == "event" {
-                            match serde_json::from_str::<Event>(&message.data) {
-                                Ok(event) => {
-                                    if let EventPayload::ToolCall(tool_call) = &event.payload {
-                                        cache.insert(event.id, tool_call.clone());
+                            match serde_json::from_str::<StreamUpdate>(&message.data) {
+                                Ok(update) => {
+                                    if let EventPayload::ToolCall(tool_call) = &update.event.payload
+                                    {
+                                        cache.insert(update.event.id, tool_call.clone());
                                     }
-                                    Some(Ok(event))
+                                    Some(Ok(update))
                                 }
                                 Err(e) => Some(Err(AutopilotError::Json(e))),
                             }

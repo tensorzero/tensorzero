@@ -957,7 +957,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_response,
                 usage,
                 raw_usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: finish_reason.map(FireworksFinishReason::into),
                 id: model_inference_id,
             },
@@ -1263,7 +1263,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(10));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_secs(0)
             }

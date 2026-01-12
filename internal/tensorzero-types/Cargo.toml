@@ -18,7 +18,7 @@ tensorzero-derive = { path = "../tensorzero-derive" }
 thiserror.workspace = true
 tracing.workspace = true
 ts-rs.workspace = true
-url.workspace = true
+url = { workspace = true, features = ["serde"] }
 uuid.workspace = true
 
 [features]

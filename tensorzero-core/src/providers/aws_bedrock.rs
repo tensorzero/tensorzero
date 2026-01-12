@@ -1100,7 +1100,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
                 raw_response,
                 usage,
                 raw_usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: aws_stop_reason_to_tensorzero_finish_reason(output.stop_reason),
                 id: model_inference_id,
             },

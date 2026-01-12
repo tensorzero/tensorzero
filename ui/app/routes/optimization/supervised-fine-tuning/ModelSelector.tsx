@@ -249,7 +249,7 @@ export function ModelSelector({
                   <PopoverAnchor asChild>
                     <div className="group relative">
                       <Input
-                        placeholder="Select model..."
+                        placeholder="Select model"
                         value={inputValue}
                         onChange={(e) => {
                           setSearchValue(e.target.value);
@@ -261,7 +261,7 @@ export function ModelSelector({
                         onKeyDown={(e) => handleKeyDown(e, field.onChange)}
                         style={{ paddingRight: rightPadding }}
                         className={clsx(
-                          "border-border placeholder:text-fg-secondary hover:border-border-accent hover:bg-bg-primary focus-visible:border-border-accent focus-visible:ring-0",
+                          "border-border placeholder:text-fg-secondary hover:border-border-accent hover:bg-bg-primary focus-visible:border-border-accent font-mono focus-visible:ring-0",
                           open && "border-border-accent",
                         )}
                       />

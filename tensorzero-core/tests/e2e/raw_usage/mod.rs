@@ -640,7 +640,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
         if let Some(raw_usage) = chunk_json.get("raw_usage") {
             found_raw_usage = true;
             if let Some(arr) = raw_usage.as_array() {
-                raw_usage_count = arr.len();
+                raw_usage_count += arr.len();
 
                 // Validate each entry has required fields
                 for entry in arr {
@@ -653,7 +653,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
 
     assert!(
         found_raw_usage,
-        "Streaming Best-of-N response should include raw_usage in final chunk"
+        "Streaming Best-of-N response should include raw_usage in at least one chunk"
     );
 
     // Best-of-N should have multiple entries:
@@ -796,7 +796,7 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
         if let Some(raw_usage) = chunk_json.get("raw_usage") {
             found_raw_usage = true;
             if let Some(arr) = raw_usage.as_array() {
-                raw_usage_count = arr.len();
+                raw_usage_count += arr.len();
 
                 // Validate each entry has required fields
                 for entry in arr {
@@ -808,7 +808,7 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
 
     assert!(
         found_raw_usage,
-        "Streaming Mixture-of-N response should include raw_usage in final chunk.\n\
+        "Streaming Mixture-of-N response should include raw_usage in at least one chunk.\n\
         Total chunks received: {}\n\
         Last few chunks:\n{:#?}",
         all_chunks.len(),

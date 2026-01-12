@@ -5,6 +5,6 @@
 /gateway/src/cli.rs @GabrielBianconi
 /gateway/src/routes/external.rs @GabrielBianconi
 
-/tensorzero-core/src/db/clickhouse/migration_manager @virajmehta
-/tensorzero-core/src/db/postgres/migrations @virajmehta
-/internal/tensorzero-auth/src/postgres/migrations @virajmehta
+/tensorzero-core/src/db/clickhouse/migration_manager @virajmehta @Aaron1011
+/tensorzero-core/src/db/postgres/migrations @virajmehta @Aaron1011
+/internal/tensorzero-auth/src/postgres/migrations @virajmehta @Aaron1011

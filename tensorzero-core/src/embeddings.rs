@@ -518,7 +518,6 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
         Ok(Self {
             id: response.id,
             output: vec![],
-            created: response.created,
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::User,
