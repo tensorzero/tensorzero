@@ -48,9 +48,9 @@ impl Optimizer for DiclOptimizationConfig {
         // Warn if using deprecated default model
         if self.model.as_ref() == DEPRECATED_DEFAULT_MODEL {
             tracing::warn!(
-                "DICL optimization is using the deprecated default model '{}'. \
+                "DICL optimization is using the deprecated default model `{}`. \
                  Please specify the `model` field explicitly. \
-                 This field will be required in a future release.",
+                 This field will be required in a future release. (#5616)",
                 DEPRECATED_DEFAULT_MODEL
             );
         }

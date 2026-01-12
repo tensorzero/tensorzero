@@ -156,9 +156,9 @@ impl UninitializedDiclOptimizationConfig {
             Some(m) => Arc::from(m),
             None => {
                 tracing::warn!(
-                    "The `model` field in DICLOptimizationConfig was not specified. \
-                     Using deprecated default '{}'. \
-                     This field will be required in a future release.",
+                    "The `model` field in `DICLOptimizationConfig` was not specified. \
+                     Using deprecated default `{}`. \
+                     This field will be required in a future release. (#5616)",
                     DEPRECATED_DEFAULT_MODEL
                 );
                 Arc::from(DEPRECATED_DEFAULT_MODEL)

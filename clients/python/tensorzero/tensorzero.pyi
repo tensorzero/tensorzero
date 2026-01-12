@@ -222,9 +222,6 @@ class OptimizationJobInfo:
 class DICLOptimizationConfig:
     """
     Configuration for DICL (Dynamic In-Context Learning) optimization.
-
-    Note: The `model` field will be required in a future release.
-    Please specify it explicitly to avoid deprecation warnings.
     """
 
     def __init__(
