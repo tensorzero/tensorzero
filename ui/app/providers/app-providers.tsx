@@ -10,7 +10,7 @@ interface AppProvidersProps {
 
 /**
  * Shared provider stack for the app shell.
- * Used by both the main App and RootErrorBoundaryLayout to ensure consistency.
+ * Used by both the main App and ErrorShell to ensure consistency.
  */
 export function AppProviders({ children }: AppProvidersProps) {
   return (
