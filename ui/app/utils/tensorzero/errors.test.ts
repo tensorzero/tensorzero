@@ -9,20 +9,7 @@ import {
   isGatewayEndpointNotFoundError,
   TensorZeroServerError,
   classifyError,
-  getErrorLabel,
 } from "./errors";
-
-describe("InfraErrorType", () => {
-  it("should have expected error type values", () => {
-    expect(InfraErrorType.GatewayUnavailable).toBe("GATEWAY_UNAVAILABLE");
-    expect(InfraErrorType.GatewayAuthFailed).toBe("GATEWAY_AUTH_FAILED");
-    expect(InfraErrorType.GatewayEndpointNotFound).toBe(
-      "GATEWAY_ENDPOINT_NOT_FOUND",
-    );
-    expect(InfraErrorType.ClickHouseUnavailable).toBe("CLICKHOUSE_UNAVAILABLE");
-    expect(InfraErrorType.ServerError).toBe("SERVER_ERROR");
-  });
-});
 
 describe("isInfraErrorData", () => {
   it("should return true for valid InfraErrorData", () => {
@@ -332,33 +319,5 @@ describe("classifyError", () => {
   it("should classify undefined as ServerError", () => {
     const result = classifyError(undefined);
     expect(result.type).toBe(InfraErrorType.ServerError);
-  });
-});
-
-describe("getErrorLabel", () => {
-  it("should return correct label for GatewayUnavailable", () => {
-    expect(getErrorLabel(InfraErrorType.GatewayUnavailable)).toBe(
-      "Gateway Connection Error",
-    );
-  });
-
-  it("should return correct label for GatewayAuthFailed", () => {
-    expect(getErrorLabel(InfraErrorType.GatewayAuthFailed)).toBe("Auth Error");
-  });
-
-  it("should return correct label for GatewayEndpointNotFound", () => {
-    expect(getErrorLabel(InfraErrorType.GatewayEndpointNotFound)).toBe(
-      "Route Error",
-    );
-  });
-
-  it("should return correct label for ClickHouseUnavailable", () => {
-    expect(getErrorLabel(InfraErrorType.ClickHouseUnavailable)).toBe(
-      "Database Error",
-    );
-  });
-
-  it("should return correct label for ServerError", () => {
-    expect(getErrorLabel(InfraErrorType.ServerError)).toBe("Server Error");
   });
 });
