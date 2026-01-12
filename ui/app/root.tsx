@@ -106,7 +106,7 @@ export async function loader(): Promise<LoaderData> {
         infraError: {
           type: InfraErrorType.ClickHouseUnavailable,
           message,
-        } as ClassifiedError,
+        },
       };
     }
     throw e;
