@@ -30,6 +30,7 @@ import {
   isInfraErrorData,
   isAuthenticationError,
   isGatewayConnectionError,
+  isClickHouseError,
   classifyError,
   getErrorLabel,
   type ClassifiedError,
@@ -78,7 +79,9 @@ export async function loader(): Promise<LoaderData> {
     ]);
     return { config, isReadOnly, autopilotAvailable, infraError: null };
   } catch (e) {
-    // Graceful degradation: return error info so UI renders with overlay
+    // Graceful degradation for infrastructure errors:
+    // Return fallback state so UI renders with dismissible error dialog.
+    // Child routes will handle their own errors via their error boundaries.
     if (isGatewayConnectionError(e)) {
       return {
         config: EMPTY_CONFIG,
@@ -93,6 +96,18 @@ export async function loader(): Promise<LoaderData> {
         isReadOnly,
         autopilotAvailable: false,
         infraError: { type: InfraErrorType.GatewayAuthFailed },
+      };
+    }
+    if (isClickHouseError(e)) {
+      const message = e instanceof Error ? e.message : undefined;
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: InfraErrorType.ClickHouseUnavailable,
+          message,
+        } as ClassifiedError,
       };
     }
     throw e;
