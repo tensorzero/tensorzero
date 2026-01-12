@@ -23,6 +23,22 @@ export type InfraErrorType =
   (typeof InfraErrorType)[keyof typeof InfraErrorType];
 
 /**
+ * Gateway error codes matching the Rust ErrorDetails enum variant names.
+ * These are returned in the gateway's error_json field when unstable_error_json is enabled.
+ * Used for type-safe error classification without brittle message string matching.
+ */
+export const GatewayErrorCode = {
+  RouteNotFound: "RouteNotFound",
+  ClickHouseConnection: "ClickHouseConnection",
+  ClickHouseQuery: "ClickHouseQuery",
+  ClickHouseDeserialization: "ClickHouseDeserialization",
+  ClickHouseMigration: "ClickHouseMigration",
+} as const;
+
+export type GatewayErrorCode =
+  (typeof GatewayErrorCode)[keyof typeof GatewayErrorCode];
+
+/**
  * Discriminated union for error data passed via React Router's `data()` helper.
  * Each variant only includes fields relevant to that error type, enforcing
  * valid combinations at compile time.
@@ -126,7 +142,17 @@ export function isGatewayEndpointNotFoundError(error: unknown): boolean {
     return true;
   }
 
-  // Check message pattern - this works even after serialization
+  // Check errorCode from gateway's error_json (preferred, no string matching on message)
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "errorCode" in error &&
+    error.errorCode === GatewayErrorCode.RouteNotFound
+  ) {
+    return true;
+  }
+
+  // Fallback: Check message pattern for gateways without unstable_error_json enabled
   // The message format is: "Route not found: METHOD /path"
   if (
     typeof error === "object" &&
@@ -148,6 +174,16 @@ export function isGatewayEndpointNotFoundError(error: unknown): boolean {
  * - Direct TensorZeroServerError.ClickHouse* instances (server-side)
  * - Name pattern matching (for serialized errors where instanceof fails)
  */
+/**
+ * ClickHouse error codes for type-safe checking.
+ */
+const CLICKHOUSE_ERROR_CODES: readonly string[] = [
+  GatewayErrorCode.ClickHouseConnection,
+  GatewayErrorCode.ClickHouseQuery,
+  GatewayErrorCode.ClickHouseDeserialization,
+  GatewayErrorCode.ClickHouseMigration,
+];
+
 export function isClickHouseError(error: unknown): boolean {
   // Direct instanceof checks for all ClickHouse error subclasses
   if (
@@ -159,7 +195,18 @@ export function isClickHouseError(error: unknown): boolean {
     return true;
   }
 
-  // Check serialized error name - all ClickHouse errors have names prefixed with "ClickHouse"
+  // Check errorCode from gateway's error_json (preferred, no string matching)
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "errorCode" in error &&
+    typeof error.errorCode === "string" &&
+    CLICKHOUSE_ERROR_CODES.includes(error.errorCode)
+  ) {
+    return true;
+  }
+
+  // Fallback: Check serialized error name - all ClickHouse errors have names prefixed with "ClickHouse"
   // This handles the serialization boundary where instanceof fails
   if (
     typeof error === "object" &&
@@ -210,6 +257,11 @@ export function isAutopilotUnavailableError(error: unknown): boolean {
 export class TensorZeroServerError extends Error {
   readonly status: number;
   readonly statusText: string | null;
+  /**
+   * The error code from the gateway's error_json discriminant (e.g., "RouteNotFound", "ClickHouseConnection").
+   * Only populated when gateway returns structured error data via unstable_error_json.
+   */
+  readonly errorCode: string | null;
   constructor(
     error: unknown,
     args?: {
@@ -218,6 +270,7 @@ export class TensorZeroServerError extends Error {
         | keyof typeof HttpStatusCode
         | (typeof HttpStatusCode)[keyof typeof HttpStatusCode];
       statusText?: string;
+      errorCode?: string;
     },
   ) {
     if (isErrorLike(error)) {
@@ -226,11 +279,15 @@ export class TensorZeroServerError extends Error {
       super(typeof error === "string" ? error : "Unknown server error");
     }
 
-    const { status = HttpStatusCode.INTERNAL_SERVER_ERROR, statusText = null } =
-      args ?? {};
+    const {
+      status = HttpStatusCode.INTERNAL_SERVER_ERROR,
+      statusText = null,
+      errorCode = null,
+    } = args ?? {};
     this.name = "TensorZeroServerError";
     this.status = typeof status === "string" ? HttpStatusCode[status] : status;
     this.statusText = statusText;
+    this.errorCode = errorCode;
   }
 
   // TODO: These are all copied from error.rs internal errors since we want to

@@ -1,6 +1,19 @@
 import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 
 /**
+ * Parsed error response from the gateway.
+ */
+interface GatewayErrorResponse {
+  /** Human-readable error message */
+  message: string;
+  /**
+   * Error code from error_json discriminant (e.g., "RouteNotFound").
+   * Only present when gateway has unstable_error_json enabled.
+   */
+  errorCode: string | null;
+}
+
+/**
  * Base client for TensorZero Gateway with shared infrastructure.
  * Provides common functionality for authentication, HTTP requests, and error handling.
  */
@@ -52,32 +65,66 @@ export class BaseTensorZeroClient {
     }
   }
 
-  protected async getErrorText(response: Response): Promise<string> {
+  /**
+   * Parse error response from gateway, extracting message and errorCode.
+   * The errorCode is extracted from error_json when the gateway has unstable_error_json enabled.
+   */
+  protected async parseErrorResponse(
+    response: Response,
+  ): Promise<GatewayErrorResponse> {
     if (response.bodyUsed) {
       response = response.clone();
     }
     const responseText = await response.text();
     try {
       const parsed = JSON.parse(responseText);
-      return typeof parsed?.error === "string" ? parsed.error : responseText;
+      const message =
+        typeof parsed?.error === "string" ? parsed.error : responseText;
+
+      // Extract errorCode from error_json if present (requires unstable_error_json in gateway config)
+      // The error_json structure is: { "ErrorVariantName": { ...details } }
+      let errorCode: string | null = null;
+      if (
+        parsed?.error_json &&
+        typeof parsed.error_json === "object" &&
+        !Array.isArray(parsed.error_json)
+      ) {
+        const keys = Object.keys(parsed.error_json);
+        if (keys.length === 1) {
+          errorCode = keys[0];
+        }
+      }
+
+      return { message, errorCode };
     } catch {
       // Invalid JSON; return plain text from response
-      return responseText;
+      return { message: responseText, errorCode: null };
     }
+  }
+
+  /**
+   * @deprecated Use parseErrorResponse instead for structured error handling.
+   */
+  protected async getErrorText(response: Response): Promise<string> {
+    const { message } = await this.parseErrorResponse(response);
+    return message;
   }
 
   protected handleHttpError({
     message,
     response,
+    errorCode,
   }: {
     message: string;
     response: Response;
+    errorCode?: string | null;
   }): never {
     throw new TensorZeroServerError(message, {
       // TODO: Ensure that server errors do not leak sensitive information to
       // the client before exposing the statusText
       // statusText: response.statusText,
       status: response.status,
+      errorCode: errorCode ?? undefined,
     });
   }
 }
