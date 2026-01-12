@@ -119,7 +119,7 @@ function ClickHouseContent({ message }: { message?: string }) {
       <TroubleshootingSection>
         <>Verify ClickHouse is running and accessible</>
         <>
-          Check the <ErrorInlineCode>CLICKHOUSE_URL</ErrorInlineCode>{" "}
+          Check the <ErrorInlineCode>TENSORZERO_CLICKHOUSE_URL</ErrorInlineCode>{" "}
           environment variable
         </>
         <>Review Gateway logs for connection details</>
