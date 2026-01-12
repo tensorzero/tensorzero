@@ -1,5 +1,6 @@
 import { StatusCodes as HttpStatusCode } from "http-status-codes";
 import { isRouteErrorResponse } from "react-router";
+import { z } from "zod";
 import { isErrorLike } from "~/utils/common";
 
 /**
@@ -23,22 +24,34 @@ export type InfraErrorType =
   (typeof InfraErrorType)[keyof typeof InfraErrorType];
 
 /**
+ * Zod schema for InfraErrorData - validates error data passed via React Router's `data()` helper.
+ * Uses discriminatedUnion for type-safe validation of each error variant.
+ */
+export const InfraErrorDataSchema = z.discriminatedUnion("errorType", [
+  z.object({ errorType: z.literal(InfraErrorType.GatewayUnavailable) }),
+  z.object({ errorType: z.literal(InfraErrorType.GatewayAuthFailed) }),
+  z.object({
+    errorType: z.literal(InfraErrorType.GatewayEndpointNotFound),
+    routeInfo: z.string(),
+  }),
+  z.object({
+    errorType: z.literal(InfraErrorType.ClickHouseUnavailable),
+    message: z.string().optional(),
+  }),
+  z.object({
+    errorType: z.literal(InfraErrorType.ServerError),
+    message: z.string().optional(),
+  }),
+]);
+
+/**
  * Discriminated union for error data passed via React Router's `data()` helper.
  * Each variant only includes fields relevant to that error type, enforcing
  * valid combinations at compile time.
+ *
+ * Inferred from InfraErrorDataSchema to ensure type and runtime validation stay in sync.
  */
-export type InfraErrorData =
-  | { errorType: typeof InfraErrorType.GatewayUnavailable }
-  | { errorType: typeof InfraErrorType.GatewayAuthFailed }
-  | {
-      errorType: typeof InfraErrorType.GatewayEndpointNotFound;
-      routeInfo: string;
-    }
-  | {
-      errorType: typeof InfraErrorType.ClickHouseUnavailable;
-      message?: string;
-    }
-  | { errorType: typeof InfraErrorType.ServerError; message?: string };
+export type InfraErrorData = z.infer<typeof InfraErrorDataSchema>;
 
 /**
  * Discriminated union for classified errors used in error rendering.
@@ -57,17 +70,8 @@ export type ClassifiedError =
       stack?: string;
     };
 
-/**
- * Type guard to check if a value is InfraErrorData.
- */
 export function isInfraErrorData(value: unknown): value is InfraErrorData {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "errorType" in value &&
-    typeof value.errorType === "string" &&
-    Object.values(InfraErrorType).includes(value.errorType as InfraErrorType)
-  );
+  return InfraErrorDataSchema.safeParse(value).success;
 }
 
 /**
