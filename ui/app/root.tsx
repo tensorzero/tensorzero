@@ -29,10 +29,9 @@ import {
   InfraErrorType,
   isInfraErrorData,
   isAuthenticationError,
+  isClickHouseError,
   isGatewayConnectionError,
-  isClickHouseError,
   classifyError,
-  isClickHouseError,
   getErrorLabel,
   type ClassifiedError,
 } from "./utils/tensorzero/errors";
