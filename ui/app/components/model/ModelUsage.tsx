@@ -9,6 +9,7 @@ import {
 } from "~/utils/chart";
 import { useState, Suspense } from "react";
 import { Await } from "react-router";
+import { ChartAsyncErrorState } from "./ModelLatency";
 
 import {
   Card,
@@ -147,7 +148,12 @@ export function ModelUsage({
       </CardHeader>
       <CardContent>
         <Suspense fallback={<ChartSkeleton />}>
-          <Await resolve={modelUsageDataPromise}>
+          <Await
+            resolve={modelUsageDataPromise}
+            errorElement={
+              <ChartAsyncErrorState defaultMessage="Failed to load usage data" />
+            }
+          >
             {(modelUsageData) => {
               const { data, modelNames } = transformModelUsageData(
                 modelUsageData,
