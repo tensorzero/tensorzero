@@ -6,6 +6,7 @@ use crate::{Client, ClientBuilder, ClientBuilderMode, PostgresConfig};
 use tempfile::NamedTempFile;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
 use url::Url;
+use uuid::Uuid;
 
 // Re-export e2e test helpers from tensorzero-core
 pub use tensorzero_core::test_helpers::{get_e2e_config, get_e2e_config_path};
@@ -129,4 +130,72 @@ pub async fn get_metrics(client: &reqwest::Client, url: &str) -> HashMap<String,
         .collect();
 
     metrics
+}
+
+/// Creates a ClickHouse URL with a unique database name.
+/// The migration manager will create the database on gateway startup.
+pub fn create_unique_clickhouse_url(prefix: &str) -> String {
+    let mut url = Url::parse(&CLICKHOUSE_URL).unwrap();
+    let db_name = format!("{}_{}", prefix, Uuid::now_v7().simple());
+    url.set_path(&db_name);
+    url.to_string()
+}
+
+/// Creates an embedded gateway with a unique ClickHouse database.
+/// This provides test isolation - each test gets its own database with fresh migrations.
+pub async fn make_embedded_gateway_with_unique_db(config: &str, db_prefix: &str) -> Client {
+    let clickhouse_url = create_unique_clickhouse_url(db_prefix);
+
+    let tmp_config = NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+    ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(tmp_config.path().to_owned()),
+        clickhouse_url: Some(clickhouse_url),
+        postgres_config: None,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+/// Creates an embedded gateway using the e2e config with a unique ClickHouse database.
+/// This provides test isolation while using the full e2e test configuration.
+pub async fn make_embedded_gateway_e2e_with_unique_db(db_prefix: &str) -> Client {
+    let clickhouse_url = create_unique_clickhouse_url(db_prefix);
+    let config_path = get_e2e_config_path();
+
+    ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path),
+        clickhouse_url: Some(clickhouse_url),
+        postgres_config: None,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+/// Starts an HTTP gateway with a unique ClickHouse database.
+/// Returns the base URL (e.g., "http://127.0.0.1:12345") and a shutdown handle.
+/// The gateway shuts down when the handle is dropped.
+pub async fn start_http_gateway_with_unique_db(
+    db_prefix: &str,
+) -> (String, tensorzero_core::utils::gateway::ShutdownHandle) {
+    let clickhouse_url = create_unique_clickhouse_url(db_prefix);
+    let config_path = get_e2e_config_path();
+
+    let (addr, shutdown_handle) = tensorzero_core::utils::gateway::start_openai_compatible_gateway(
+        Some(config_path.to_string_lossy().to_string()),
+        Some(clickhouse_url),
+        None,
+    )
+    .await
+    .unwrap();
+
+    (format!("http://{addr}"), shutdown_handle)
 }

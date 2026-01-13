@@ -903,6 +903,11 @@ fn create_previous_raw_usage_chunk(
     Some(chunk)
 }
 
+/// Transform the response(s) from the model providers for our inference APIs.
+///
+/// NB: After this function, the stream is then further processed by:
+/// - TensorZero Inference API: `prepare_serialized_events`
+/// - OpenAI-Compatible Inference API: `prepare_serialized_openai_compatible_events`
 fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config>,
