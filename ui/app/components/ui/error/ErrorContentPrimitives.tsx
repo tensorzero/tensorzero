@@ -183,7 +183,7 @@ export function ChartErrorContainer({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-80 w-full items-center justify-center">
+    <div className="flex h-72 w-full items-center justify-center">
       {children}
     </div>
   );

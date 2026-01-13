@@ -54,7 +54,7 @@ const ChartContainer = React.forwardRef<
         data-chart={chartId}
         ref={ref}
         className={cn(
-          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border flex aspect-video justify-center text-xs [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
+          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border flex aspect-video justify-center text-xs [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-orange-500/10 [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
           className,
         )}
         {...props}
@@ -366,11 +366,11 @@ const SKELETON_BAR_HEIGHTS = [45, 65, 35, 80, 55, 40, 70, 50, 60, 30];
  */
 function BarChartSkeleton({ className }: { className?: string }) {
   return (
-    <div className={cn("flex h-80 w-full flex-col", className)}>
+    <div className={cn("flex h-72 w-full flex-col", className)}>
       {/* Chart area with Y-axis and bars */}
       <div className="flex flex-1">
-        {/* Y-axis labels */}
-        <div className="flex w-12 flex-col justify-between py-2 pr-2">
+        {/* Y-axis labels - w-[60px] matches Recharts default YAxis width */}
+        <div className="flex w-[60px] flex-col justify-between py-2 pr-2">
           <Skeleton className="h-3 w-8" />
           <Skeleton className="h-3 w-10" />
           <Skeleton className="h-3 w-6" />
@@ -397,7 +397,7 @@ function BarChartSkeleton({ className }: { className?: string }) {
         </div>
       </div>
       {/* X-axis labels */}
-      <div className="ml-12 flex justify-between px-2 pt-2">
+      <div className="ml-[60px] flex justify-between px-2 pt-2">
         <Skeleton className="h-3 w-8" />
         <Skeleton className="h-3 w-8" />
         <Skeleton className="h-3 w-8" />
@@ -405,7 +405,7 @@ function BarChartSkeleton({ className }: { className?: string }) {
         <Skeleton className="h-3 w-8" />
       </div>
       {/* Legend */}
-      <div className="flex justify-center gap-4 pt-4">
+      <div className="flex justify-center gap-4 pt-6">
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-16" />
@@ -420,11 +420,11 @@ function BarChartSkeleton({ className }: { className?: string }) {
  */
 function LineChartSkeleton({ className }: { className?: string }) {
   return (
-    <div className={cn("flex h-80 w-full flex-col", className)}>
+    <div className={cn("flex h-72 w-full flex-col", className)}>
       {/* Chart area with Y-axis and line */}
       <div className="flex flex-1">
-        {/* Y-axis labels */}
-        <div className="flex w-12 flex-col justify-between py-2 pr-2">
+        {/* Y-axis labels - w-[60px] matches Recharts default YAxis width */}
+        <div className="flex w-[60px] flex-col justify-between py-2 pr-2">
           <Skeleton className="h-3 w-8" />
           <Skeleton className="h-3 w-10" />
           <Skeleton className="h-3 w-6" />
@@ -435,10 +435,7 @@ function LineChartSkeleton({ className }: { className?: string }) {
           {/* Horizontal grid lines */}
           <div className="absolute inset-0 flex flex-col justify-between py-2">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="border-border/40 w-full border-t border-dashed"
-              />
+              <div key={i} className="border-border/40 w-full border-t" />
             ))}
           </div>
           {/* Line placeholder - wavy skeleton line */}
@@ -454,7 +451,7 @@ function LineChartSkeleton({ className }: { className?: string }) {
         </div>
       </div>
       {/* X-axis labels */}
-      <div className="ml-12 flex justify-between px-2 pt-2">
+      <div className="ml-[60px] flex justify-between px-2 pt-2">
         <Skeleton className="h-3 w-8" />
         <Skeleton className="h-3 w-8" />
         <Skeleton className="h-3 w-8" />
@@ -462,7 +459,7 @@ function LineChartSkeleton({ className }: { className?: string }) {
         <Skeleton className="h-3 w-8" />
       </div>
       {/* Legend */}
-      <div className="flex justify-center gap-4 pt-4">
+      <div className="flex justify-center gap-4 pt-6">
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-16" />
