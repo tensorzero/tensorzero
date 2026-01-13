@@ -4,9 +4,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { Suspense, use, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "~/utils/common";
-import { Skeleton } from "~/components/ui/skeleton";
+import {
+  PageCount,
+  SectionCount,
+  type CountValue,
+} from "~/components/layout/CountDisplay";
 
 const PageLayout: React.FC<React.ComponentProps<"div">> = ({
   children,
@@ -24,8 +28,6 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
   </div>
 );
 
-type CountValue = number | bigint | Promise<number | bigint>;
-
 interface PageHeaderProps {
   label?: string;
   heading?: string;
@@ -35,15 +37,6 @@ interface PageHeaderProps {
   iconBg?: string;
   children?: ReactNode;
   tag?: ReactNode;
-}
-
-function CountDisplay({ count }: { count: CountValue }) {
-  const resolvedCount = count instanceof Promise ? use(count) : count;
-  return (
-    <h1 className="text-fg-muted text-2xl font-medium">
-      {resolvedCount.toLocaleString()}
-    </h1>
-  );
 }
 
 const PageHeader: React.FC<PageHeaderProps> = ({
@@ -81,11 +74,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
               {name}
             </span>
           )}
-          {count !== undefined && (
-            <Suspense fallback={<Skeleton className="h-8 w-24" />}>
-              <CountDisplay count={count} />
-            </Suspense>
-          )}
+          {count !== undefined && <PageCount count={count} />}
 
           {tag}
         </div>
@@ -126,15 +115,6 @@ interface SectionHeaderProps extends React.PropsWithChildren {
   };
 }
 
-function SectionCountDisplay({ count }: { count: CountValue }) {
-  const resolvedCount = count instanceof Promise ? use(count) : count;
-  return (
-    <span className="text-fg-muted text-xl font-medium">
-      {resolvedCount.toLocaleString()}
-    </span>
-  );
-}
-
 const SectionHeader: React.FC<SectionHeaderProps> = ({
   heading,
   count,
@@ -144,11 +124,7 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
   <h2 className="flex items-center gap-2 text-xl font-medium">
     {heading}
 
-    {count !== undefined && (
-      <Suspense fallback={<Skeleton className="h-6 w-12" />}>
-        <SectionCountDisplay count={count} />
-      </Suspense>
-    )}
+    {count !== undefined && <SectionCount count={count} />}
 
     {badge && (
       <Tooltip delayDuration={0}>
