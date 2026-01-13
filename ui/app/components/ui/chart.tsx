@@ -370,7 +370,7 @@ function BarChartSkeleton({ className }: { className?: string }) {
       {/* Chart area with Y-axis and bars */}
       <div className="flex flex-1">
         {/* Y-axis labels - w-[60px] matches Recharts default YAxis width */}
-        <div className="flex w-[60px] flex-col justify-between py-2 pr-2">
+        <div className="flex w-[60px] flex-col items-end justify-between py-2 pr-2">
           <Skeleton className="h-3 w-8" />
           <Skeleton className="h-3 w-10" />
           <Skeleton className="h-3 w-6" />
@@ -424,7 +424,7 @@ function LineChartSkeleton({ className }: { className?: string }) {
       {/* Chart area with Y-axis and line */}
       <div className="flex flex-1">
         {/* Y-axis labels - w-[60px] matches Recharts default YAxis width */}
-        <div className="flex w-[60px] flex-col justify-between py-2 pr-2">
+        <div className="flex w-[60px] flex-col items-end justify-between py-2 pr-2">
           <Skeleton className="h-3 w-8" />
           <Skeleton className="h-3 w-10" />
           <Skeleton className="h-3 w-6" />
@@ -438,16 +438,23 @@ function LineChartSkeleton({ className }: { className?: string }) {
               <div key={i} className="border-border/40 w-full border-t" />
             ))}
           </div>
-          {/* Line placeholder - wavy skeleton line */}
-          <div className="absolute inset-x-4 top-1/3">
-            <Skeleton className="h-1 w-full rounded-full" />
+          {/* Vertical grid lines - aligned with x-axis tick marks */}
+          <div className="absolute inset-0 flex flex-row justify-between px-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="border-border/40 h-full border-l" />
+            ))}
           </div>
-          <div className="absolute inset-x-4 top-1/2">
-            <Skeleton className="h-1 w-3/4 rounded-full" />
-          </div>
-          <div className="absolute inset-x-4 top-2/3">
-            <Skeleton className="h-1 w-5/6 rounded-full" />
-          </div>
+          {/* Distribution line placeholders - ascending curves (up and to the right) */}
+          {/* Line 1 - starts low-left, curves up-right */}
+          <Skeleton className="absolute bottom-[25%] left-4 h-1 w-[30%] rounded-full" />
+          <Skeleton className="absolute bottom-[35%] left-[35%] h-1 w-[25%] rounded-full" />
+          <Skeleton className="absolute bottom-[55%] left-[60%] h-1 w-[20%] rounded-full" />
+          <Skeleton className="absolute right-4 bottom-[75%] h-1 w-[12%] rounded-full" />
+          {/* Line 2 - similar pattern, different height */}
+          <Skeleton className="absolute bottom-[15%] left-4 h-1 w-[35%] rounded-full" />
+          <Skeleton className="absolute bottom-[22%] left-[40%] h-1 w-[25%] rounded-full" />
+          <Skeleton className="absolute bottom-[38%] left-[65%] h-1 w-[18%] rounded-full" />
+          <Skeleton className="absolute right-4 bottom-[55%] h-1 w-[10%] rounded-full" />
         </div>
       </div>
       {/* X-axis labels */}
