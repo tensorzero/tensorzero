@@ -6,14 +6,8 @@ test.describe("Observability Models Page", () => {
   }) => {
     await page.goto("/observability/models");
 
-    // Wait for the page to load - check for the main sections
-    await expect(page.getByText("Model Usage Over Time")).toBeVisible();
-    await expect(page.getByText("Model Latency Distribution")).toBeVisible();
-
-    // Check that Usage section is present
+    // Wait for the page to load - check for the main section headings
     await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
-
-    // Check that Latency section is present
     await expect(page.getByRole("heading", { name: "Latency" })).toBeVisible();
 
     // Verify that charts are rendered (look for chart containers)
@@ -29,7 +23,7 @@ test.describe("Observability Models Page", () => {
     await page.goto("/observability/models");
 
     // Wait for the usage section to load
-    await expect(page.getByText("Model Usage Over Time")).toBeVisible();
+    await expect(page.getByText("Usage")).toBeVisible();
 
     // Find the time granularity selector for usage (first one on page)
     const usageTimeSelector = page.locator('button[role="combobox"]').first();
@@ -43,7 +37,7 @@ test.describe("Observability Models Page", () => {
     await page.getByRole("option", { name: "Daily" }).click();
 
     // Verify the chart still displays after the change
-    await expect(page.getByText("Model Usage Over Time")).toBeVisible();
+    await expect(page.getByText("Usage")).toBeVisible();
     await expect(page.locator("[data-chart]").first()).toBeVisible();
 
     // Verify URL has been updated
@@ -54,7 +48,7 @@ test.describe("Observability Models Page", () => {
     await page.goto("/observability/models");
 
     // Wait for the usage section to load
-    await expect(page.getByText("Model Usage Over Time")).toBeVisible();
+    await expect(page.getByText("Usage")).toBeVisible();
 
     // Find the metric selector for usage (second dropdown in the usage section)
     const metricSelector = page.locator('button[role="combobox"]').nth(1);
@@ -68,7 +62,7 @@ test.describe("Observability Models Page", () => {
     await page.getByRole("option", { name: "Input Tokens" }).click();
 
     // Verify the chart still displays and description updates
-    await expect(page.getByText("Input token usage by model")).toBeVisible();
+    await expect(page.getByText("Input tokens per model")).toBeVisible();
     await expect(page.locator("[data-chart]").first()).toBeVisible();
   });
 
@@ -78,7 +72,7 @@ test.describe("Observability Models Page", () => {
     await page.goto("/observability/models");
 
     // Wait for the latency section to load
-    await expect(page.getByText("Model Latency Distribution")).toBeVisible();
+    await expect(page.getByText("Latency")).toBeVisible();
 
     // Find the time granularity selector for latency (third dropdown on page)
     const latencyTimeSelector = page.locator('button[role="combobox"]').nth(2);
@@ -92,7 +86,7 @@ test.describe("Observability Models Page", () => {
     await page.getByRole("option", { name: "Last Month" }).click();
 
     // Verify the chart still displays after the change
-    await expect(page.getByText("Model Latency Distribution")).toBeVisible();
+    await expect(page.getByText("Latency")).toBeVisible();
     await expect(page.locator("[data-chart]").nth(1)).toBeVisible();
 
     // Verify URL has been updated
@@ -103,7 +97,7 @@ test.describe("Observability Models Page", () => {
     await page.goto("/observability/models");
 
     // Wait for the latency section to load
-    await expect(page.getByText("Model Latency Distribution")).toBeVisible();
+    await expect(page.getByText("Latency")).toBeVisible();
 
     // Find the metric selector for latency (fourth dropdown on page)
     const latencyMetricSelector = page
@@ -119,7 +113,7 @@ test.describe("Observability Models Page", () => {
     await page.getByRole("option", { name: "Time to First Token" }).click();
 
     // Verify the chart still displays after the change
-    await expect(page.getByText("Model Latency Distribution")).toBeVisible();
+    await expect(page.getByText("Latency")).toBeVisible();
     await expect(page.locator("[data-chart]").nth(1)).toBeVisible();
   });
 
@@ -127,8 +121,8 @@ test.describe("Observability Models Page", () => {
     await page.goto("/observability/models");
 
     // Wait for both sections to load
-    await expect(page.getByText("Model Usage Over Time")).toBeVisible();
-    await expect(page.getByText("Model Latency Distribution")).toBeVisible();
+    await expect(page.getByText("Usage")).toBeVisible();
+    await expect(page.getByText("Latency")).toBeVisible();
 
     // Change usage time granularity
     const usageTimeSelector = page.locator('button[role="combobox"]').first();
@@ -158,9 +152,7 @@ test.describe("Observability Models Page", () => {
 
     // Verify both charts still display
     await expect(page.locator("[data-chart]")).toHaveCount(2);
-    await expect(
-      page.getByText("Total token usage (input + output) by model"),
-    ).toBeVisible();
+    await expect(page.getByText("Total tokens per model")).toBeVisible();
 
     // Verify URL contains both parameters
     await expect(page).toHaveURL(/usageTimeGranularity=hour/);

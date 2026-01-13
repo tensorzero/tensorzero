@@ -93,7 +93,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-// Local composable section header for charts - can be promoted to PageLayout later
+// Local composable section header for charts - may be merged with SectionHeader in the future
 function ChartSectionHeader({
   heading,
   description,
