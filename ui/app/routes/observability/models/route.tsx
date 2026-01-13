@@ -141,8 +141,8 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <PageHeader heading="Models" />
 
-      <SectionsGroup>
-        <SectionLayout>
+      <SectionsGroup className="gap-16">
+        <SectionLayout className="gap-6">
           <ChartSectionHeader
             heading="Usage"
             description={`${USAGE_METRIC_CONFIG[usageMetric].description} by model`}
@@ -177,7 +177,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
           </Suspense>
         </SectionLayout>
 
-        <SectionLayout>
+        <SectionLayout className="gap-6">
           <ChartSectionHeader
             heading="Latency"
             description={`${LATENCY_METRIC_CONFIG[latencyMetric].description} by model`}
