@@ -5,10 +5,12 @@
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::E2ETestProvider;
+use crate::providers::helpers::get_modal_extra_headers;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use uuid::Uuid;
 
 /// Helper to assert raw_usage entry structure is valid
@@ -40,6 +42,11 @@ fn assert_raw_usage_entry(entry: &Value, provider: &E2ETestProvider) {
 pub async fn test_raw_usage_inference_with_provider_non_streaming(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -55,7 +62,8 @@ pub async fn test_raw_usage_inference_with_provider_non_streaming(provider: E2ET
             ]
         },
         "stream": false,
-        "include_raw_usage": true
+        "include_raw_usage": true,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let response = Client::new()
@@ -121,8 +129,18 @@ pub async fn test_raw_usage_inference_with_provider_non_streaming(provider: E2ET
 
 /// Test that include_raw_usage works correctly for streaming inference
 pub async fn test_raw_usage_inference_with_provider_streaming(provider: E2ETestProvider) {
+    // We use a serverless Sagemaker endpoint, which doesn't support streaming
+    if provider.variant_name == "aws-sagemaker-tgi" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -138,7 +156,8 @@ pub async fn test_raw_usage_inference_with_provider_streaming(provider: E2ETestP
             ]
         },
         "stream": true,
-        "include_raw_usage": true
+        "include_raw_usage": true,
+        "extra_headers": extra_headers.extra_headers,
     });
 
     let mut chunks = Client::new()
