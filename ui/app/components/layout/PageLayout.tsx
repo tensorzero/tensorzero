@@ -54,13 +54,16 @@ function CountErrorTooltip({
     <Tooltip>
       <TooltipTrigger asChild>
         <Element
-          className={cn("text-fg-muted cursor-help font-medium", className)}
+          className={cn(
+            "cursor-help font-medium text-red-500 dark:text-red-400",
+            className,
+          )}
         >
           —
         </Element>
       </TooltipTrigger>
       <TooltipContent>
-        <p className="text-red-600">{message}</p>
+        <p>{message}</p>
       </TooltipContent>
     </Tooltip>
   );

@@ -1,9 +1,10 @@
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
 import { useAsyncError } from "react-router";
-import { AlertCircle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 
 import { cn } from "~/utils/common";
+import { ChartErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
@@ -364,12 +365,11 @@ function ChartAsyncErrorState({
   const message = error instanceof Error ? error.message : defaultMessage;
 
   return (
-    <div className="flex h-80 w-full items-center justify-center">
-      <div className="text-center">
-        <AlertCircle className="text-muted-foreground mx-auto h-8 w-8" />
-        <p className="text-muted-foreground mt-2 text-sm">{message}</p>
-      </div>
-    </div>
+    <ChartErrorNotice
+      icon={AlertTriangle}
+      title="Chart Error"
+      description={message}
+    />
   );
 }
 
