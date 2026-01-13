@@ -145,7 +145,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout className="gap-6">
           <ChartSectionHeader
             heading="Usage"
-            description={`${USAGE_METRIC_CONFIG[usageMetric].description} by model`}
+            description={`${USAGE_METRIC_CONFIG[usageMetric].description} per model`}
           >
             <UsageTimeWindowSelector
               value={usageTimeGranularity}
@@ -180,7 +180,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout className="gap-6">
           <ChartSectionHeader
             heading="Latency"
-            description={`${LATENCY_METRIC_CONFIG[latencyMetric].description} by model`}
+            description={`${LATENCY_METRIC_CONFIG[latencyMetric].description} per model`}
           >
             <LatencyTimeWindowSelector
               value={latencyTimeGranularity}
