@@ -85,7 +85,7 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
   );
 }
 
-const MARGIN = { top: 12, right: 12, bottom: 0, left: 0 };
+const MARGIN = { top: 12, right: 0, bottom: 0, left: 0 };
 
 export function LatencyTimeWindowSelector({
   value,

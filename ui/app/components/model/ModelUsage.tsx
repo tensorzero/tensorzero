@@ -119,7 +119,7 @@ export function ModelUsageChart({
         <BarChart
           accessibilityLayer
           data={data}
-          margin={{ top: 12, right: 12, bottom: 0, left: 0 }}
+          margin={{ top: 12, right: 0, bottom: 0, left: 0 }}
         >
           <CartesianGrid vertical={false} />
           {timeGranularity !== "cumulative" && (
