@@ -38,12 +38,17 @@ pub struct EmbeddingsParams {
 }
 
 #[instrument(name = "embeddings", skip_all, fields(model, num_inputs))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Function signature matches existing API pattern"
+)]
 pub async fn embeddings(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
+    token_pool_manager: std::sync::Arc<crate::rate_limiting::pool::TokenPoolManager>,
     params: EmbeddingsParams,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<EmbeddingResponse, Error> {
@@ -88,6 +93,7 @@ pub async fn embeddings(
         postgres_connection_info: postgres_connection_info.clone(),
         tags: tags.clone(),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        token_pool_manager,
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),

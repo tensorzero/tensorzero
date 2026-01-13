@@ -216,6 +216,27 @@ impl TokenPool {
         let used = self.used_from_pool.load(Ordering::Acquire);
         borrowed.saturating_sub(used)
     }
+
+    /// Adjust usage accounting based on actual vs estimated usage.
+    /// If actual > estimated, we need to account for more usage.
+    /// If actual < estimated, we can recover some usage.
+    fn adjust_usage(&self, estimated: u64, actual: u64) {
+        if actual > estimated {
+            // We used more than estimated - increase used_from_pool
+            let extra = actual - estimated;
+            self.used_from_pool.fetch_add(extra, Ordering::Release);
+        } else if actual < estimated {
+            // We used less than estimated - decrease used_from_pool
+            // (but don't go negative)
+            let refund = estimated - actual;
+            let _ =
+                self.used_from_pool
+                    .fetch_update(Ordering::Release, Ordering::Acquire, |current| {
+                        Some(current.saturating_sub(refund))
+                    });
+        }
+        // If equal, no adjustment needed
+    }
 }
 
 /// Manager for all token pools across rate limit keys.
@@ -251,7 +272,7 @@ impl TokenPoolManager {
 
     /// Try to consume tokens for a request from the in-memory pool.
     /// Returns Ok(()) if successful, Err if insufficient and replenishment is needed.
-    pub(crate) async fn try_consume(
+    pub(crate) fn try_consume(
         &self,
         active_limits: &[ActiveRateLimit],
         tokens: u64,
@@ -391,7 +412,7 @@ impl TokenPoolManager {
         let return_future = async {
             let mut return_requests: Vec<ReturnTicketsRequest> = Vec::new();
 
-            for entry in self.pools.iter() {
+            for entry in &self.pools {
                 let pool = entry.value();
                 let unused = pool.unused_tokens();
 
@@ -437,6 +458,16 @@ impl TokenPoolManager {
     pub fn config(&self) -> &RateLimitingConfig {
         &self.config
     }
+
+    /// Adjust usage accounting for a rate limit based on actual vs estimated usage.
+    /// This should be called from `return_tickets` to correct the pool's accounting.
+    pub(crate) fn adjust_usage(&self, active_limit: &ActiveRateLimit, estimated: u64, actual: u64) {
+        let key = active_limit.key.0.clone();
+        if let Some(pool) = self.pools.get(&key) {
+            pool.adjust_usage(estimated, actual);
+        }
+        // If pool doesn't exist, this is a no-op (shouldn't happen in normal flow)
+    }
 }
 
 #[cfg(test)]
@@ -461,9 +492,20 @@ mod tests {
         pool.add_tokens(50);
 
         // Consume should succeed
-        assert!(pool.try_consume(30), "Should be able to consume 30 tokens when 50 are available");
-        assert_eq!(pool.available.load(Ordering::Acquire), 20, "Should have 20 tokens remaining");
-        assert_eq!(pool.used_from_pool.load(Ordering::Acquire), 30, "Should have used 30 tokens");
+        assert!(
+            pool.try_consume(30),
+            "Should be able to consume 30 tokens when 50 are available"
+        );
+        assert_eq!(
+            pool.available.load(Ordering::Acquire),
+            20,
+            "Should have 20 tokens remaining"
+        );
+        assert_eq!(
+            pool.used_from_pool.load(Ordering::Acquire),
+            30,
+            "Should have used 30 tokens"
+        );
     }
 
     #[test]
@@ -475,9 +517,20 @@ mod tests {
         pool.add_tokens(20);
 
         // Consume should fail
-        assert!(!pool.try_consume(30), "Should not be able to consume 30 tokens when only 20 are available");
-        assert_eq!(pool.available.load(Ordering::Acquire), 20, "Should still have 20 tokens");
-        assert_eq!(pool.used_from_pool.load(Ordering::Acquire), 0, "Should not have used any tokens");
+        assert!(
+            !pool.try_consume(30),
+            "Should not be able to consume 30 tokens when only 20 are available"
+        );
+        assert_eq!(
+            pool.available.load(Ordering::Acquire),
+            20,
+            "Should still have 20 tokens"
+        );
+        assert_eq!(
+            pool.used_from_pool.load(Ordering::Acquire),
+            0,
+            "Should not have used any tokens"
+        );
     }
 
     #[test]
@@ -486,15 +539,24 @@ mod tests {
         let pool = TokenPool::new(limit);
 
         // Initially needs replenishment (never borrowed)
-        assert!(pool.needs_replenishment(), "Should need replenishment when never borrowed");
+        assert!(
+            pool.needs_replenishment(),
+            "Should need replenishment when never borrowed"
+        );
 
         // After borrowing, shouldn't need replenishment
         pool.add_tokens(50);
-        assert!(!pool.needs_replenishment(), "Should not need replenishment after adding tokens");
+        assert!(
+            !pool.needs_replenishment(),
+            "Should not need replenishment after adding tokens"
+        );
 
         // After consuming most tokens, should need replenishment
         assert!(pool.try_consume(45), "Should consume 45 tokens"); // Only 5 left, which is 10% of 50
-        assert!(pool.needs_replenishment(), "Should need replenishment when below threshold");
+        assert!(
+            pool.needs_replenishment(),
+            "Should need replenishment when below threshold"
+        );
     }
 
     #[test]
@@ -521,7 +583,11 @@ mod tests {
 
         // P99 should be around 99
         let borrow = pool.calculate_borrow_amount(1);
-        assert!(borrow >= 98 && borrow <= 100, "P99-based borrow should be around 99, got {}", borrow);
+        assert!(
+            borrow >= 98 && borrow <= 100,
+            "P99-based borrow should be around 99, got {}",
+            borrow
+        );
     }
 
     #[test]
@@ -536,7 +602,10 @@ mod tests {
 
         // Should be capped at MAX_BORROW_CAP * capacity = 0.25 * 100 = 25
         let borrow = pool.calculate_borrow_amount(1);
-        assert_eq!(borrow, 25, "Borrow amount should be capped at 25% of capacity");
+        assert_eq!(
+            borrow, 25,
+            "Borrow amount should be capped at 25% of capacity"
+        );
     }
 
     #[test]

@@ -356,6 +356,10 @@ async fn process_embedding_batch(
 
     // Create InferenceClients context for the embedding model
     let deferred_tasks = tokio_util::task::TaskTracker::new();
+    let rate_limiting_config = Arc::new(config.rate_limiting.clone());
+    let token_pool_manager = Arc::new(
+        tensorzero_core::rate_limiting::pool::TokenPoolManager::new(rate_limiting_config.clone()),
+    );
     let clients = InferenceClients {
         http_client: client.clone(),
         credentials: Arc::new(credentials.clone()),
@@ -363,7 +367,8 @@ async fn process_embedding_batch(
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         cache_options: CacheOptions::default(),
         tags: tags.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        rate_limiting_config,
+        token_pool_manager,
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: Default::default(),
         deferred_tasks: deferred_tasks.clone(),

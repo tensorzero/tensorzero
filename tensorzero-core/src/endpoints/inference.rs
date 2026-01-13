@@ -177,6 +177,7 @@ pub async fn inference_handler(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        token_pool_manager,
         ..
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
@@ -202,6 +203,7 @@ pub async fn inference_handler(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        token_pool_manager,
         params,
         api_key_ext,
     ))
@@ -273,12 +275,17 @@ pub struct InferenceOutputData {
         otel.name = "function_inference"
     )
 )]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Function signature matches existing API pattern"
+)]
 pub async fn inference(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
+    token_pool_manager: Arc<crate::rate_limiting::pool::TokenPoolManager>,
     mut params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<InferenceOutputData, Error> {
@@ -422,6 +429,7 @@ pub async fn inference(
         cache_options: (params.cache_options, dryrun).into(),
         tags: tags.clone(),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        token_pool_manager,
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
@@ -1604,6 +1612,7 @@ pub struct InferenceClients {
     pub cache_options: CacheOptions,
     pub tags: Arc<HashMap<String, String>>,
     pub rate_limiting_config: Arc<RateLimitingConfig>,
+    pub token_pool_manager: Arc<crate::rate_limiting::pool::TokenPoolManager>,
     pub otlp_config: OtlpConfig,
     pub deferred_tasks: TaskTracker,
     pub scope_info: ScopeInfo,

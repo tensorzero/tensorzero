@@ -603,6 +603,7 @@ impl EmbeddingProviderInfo {
             .rate_limiting_config
             .consume_tickets(
                 &clients.postgres_connection_info,
+                &clients.token_pool_manager,
                 &clients.scope_info,
                 request,
             )
@@ -627,15 +628,12 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
-        let postgres_connection_info = clients.postgres_connection_info.clone();
+        let token_pool_manager = clients.token_pool_manager.clone();
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
             async move {
-                if let Err(e) = ticket_borrow
-                    .return_tickets(&postgres_connection_info, resource_usage)
-                    .await
-                {
+                if let Err(e) = ticket_borrow.return_tickets(&token_pool_manager, resource_usage) {
                     tracing::error!("Failed to return rate limit tickets: {}", e);
                 }
             }

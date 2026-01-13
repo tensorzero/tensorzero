@@ -8,9 +8,7 @@ use sqlx::postgres::types::PgInterval;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::db::{
-    ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
-};
+use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
@@ -213,11 +211,12 @@ impl RateLimitingConfig {
     pub async fn consume_tickets<'a>(
         &'a self,
         client: &impl RateLimitQueries,
+        pool_manager: &pool::TokenPoolManager,
         scope_info: &'a ScopeInfo,
         rate_limited_request: &impl RateLimitedRequest,
     ) -> Result<TicketBorrows, Error> {
         let res = self
-            .consume_tickets_inner(client, scope_info, rate_limited_request)
+            .consume_tickets_inner(client, pool_manager, scope_info, rate_limited_request)
             .await;
         if let Err(e) = &res {
             // We want rate-limiting errors to show up as errors in OpenTelemetry,
@@ -232,6 +231,7 @@ impl RateLimitingConfig {
     async fn consume_tickets_inner<'a>(
         &'a self,
         client: &impl RateLimitQueries,
+        pool_manager: &pool::TokenPoolManager,
         scope_info: &'a ScopeInfo,
         rate_limited_request: &impl RateLimitedRequest,
     ) -> Result<TicketBorrows, Error> {
@@ -246,20 +246,100 @@ impl RateLimitingConfig {
         let rate_limit_resource_requests =
             rate_limited_request.estimated_resource_usage(&rate_limited_resources)?;
 
-        if let Some(tokens) = rate_limit_resource_requests.tokens {
-            span.record("estimated_usage.tokens", tokens as i64);
-        }
-        if let Some(model_inferences) = rate_limit_resource_requests.model_inferences {
-            span.record("estimated_usage.model_inferences", model_inferences as i64);
-        }
-        let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
-            .iter()
-            .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
-            .collect();
-        let ticket_requests = ticket_requests?;
-        let results = client.consume_tickets(&ticket_requests).await?;
+        let tokens = rate_limit_resource_requests.tokens.unwrap_or(0);
+        let model_inferences = rate_limit_resource_requests.model_inferences.unwrap_or(0);
 
-        TicketBorrows::new(results, limits, ticket_requests)
+        if let Some(t) = rate_limit_resource_requests.tokens {
+            span.record("estimated_usage.tokens", t as i64);
+        }
+        if let Some(mi) = rate_limit_resource_requests.model_inferences {
+            span.record("estimated_usage.model_inferences", mi as i64);
+        }
+
+        // Try consuming from in-memory pool first
+        match pool_manager.try_consume(&limits, tokens, model_inferences) {
+            Ok(()) => {
+                // Successfully consumed from pool - create synthetic receipts
+                let receipts = limits
+                    .iter()
+                    .map(|limit| {
+                        let amount = match limit.limit.resource {
+                            RateLimitResource::Token => tokens,
+                            RateLimitResource::ModelInference => model_inferences,
+                        };
+                        crate::db::ConsumeTicketsReceipt {
+                            key: limit.key.clone(),
+                            success: true,
+                            tickets_remaining: 0, // Not accurate but not used when success=true
+                            tickets_consumed: amount,
+                        }
+                    })
+                    .collect();
+
+                let ticket_requests: Vec<ConsumeTicketsRequest> = limits
+                    .iter()
+                    .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
+                    .collect();
+
+                TicketBorrows::new(receipts, limits, ticket_requests)
+            }
+            Err(needs_replenish) => {
+                // Pool needs replenishment - borrow from DB
+                pool_manager.replenish(client, &needs_replenish).await?;
+
+                // Try consuming again after replenishment
+                match pool_manager.try_consume(&limits, tokens, model_inferences) {
+                    Ok(()) => {
+                        let receipts = limits
+                            .iter()
+                            .map(|limit| {
+                                let amount = match limit.limit.resource {
+                                    RateLimitResource::Token => tokens,
+                                    RateLimitResource::ModelInference => model_inferences,
+                                };
+                                crate::db::ConsumeTicketsReceipt {
+                                    key: limit.key.clone(),
+                                    success: true,
+                                    tickets_remaining: 0,
+                                    tickets_consumed: amount,
+                                }
+                            })
+                            .collect();
+
+                        let ticket_requests: Vec<ConsumeTicketsRequest> = limits
+                            .iter()
+                            .map(|limit| {
+                                limit.get_consume_tickets_request(&rate_limit_resource_requests)
+                            })
+                            .collect();
+
+                        TicketBorrows::new(receipts, limits, ticket_requests)
+                    }
+                    Err(still_insufficient) => {
+                        // Even after replenishment, still not enough
+                        // This means the rate limit is truly exceeded
+                        let failed_rate_limits: Vec<FailedRateLimit> = still_insufficient
+                            .iter()
+                            .map(|limit| {
+                                let requested = match limit.limit.resource {
+                                    RateLimitResource::Token => tokens,
+                                    RateLimitResource::ModelInference => model_inferences,
+                                };
+                                FailedRateLimit {
+                                    key: limit.key.clone(),
+                                    requested,
+                                    available: 0, // Pool is empty or insufficient
+                                    resource: limit.limit.resource,
+                                    scope_key: limit.scope_key.clone(),
+                                }
+                            })
+                            .collect();
+
+                        Err(ErrorDetails::RateLimitExceeded { failed_rate_limits }.into())
+                    }
+                }
+            }
+        }
     }
 
     /// Given a particular scope, finds the RateLimits that are active for that scope.
@@ -390,43 +470,22 @@ impl ActiveRateLimit {
     pub fn get_consume_tickets_request(
         &self,
         requests: &EstimatedRateLimitResourceUsage,
-    ) -> Result<ConsumeTicketsRequest, Error> {
+    ) -> ConsumeTicketsRequest {
         // INVARIANT: All resources in active rate limits are validated in estimated_resource_usage().
-        // This check should never fail in normal operation.
-        let request_amount = requests.get_usage(self.limit.resource).ok_or_else(|| {
-            Error::new(ErrorDetails::Inference {
-                message: format!(
-                    "estimated_resource_usage did not provide {:?} resource. {IMPOSSIBLE_ERROR_MESSAGE}",
-                    self.limit.resource
-                ),
-            })
-        })?;
+        // This code path should only be reached when the resource exists.
+        let request_amount = requests.get_usage(self.limit.resource).unwrap_or(0);
         self.get_consume_tickets_request_for_return(request_amount)
     }
 
-    /// Use this one if the actual usage > the borrowed usage
-    pub fn get_consume_tickets_request_for_return(
-        &self,
-        requested: u64,
-    ) -> Result<ConsumeTicketsRequest, Error> {
-        Ok(ConsumeTicketsRequest {
+    /// Build a consume tickets request for a given amount
+    fn get_consume_tickets_request_for_return(&self, requested: u64) -> ConsumeTicketsRequest {
+        ConsumeTicketsRequest {
             key: self.get_key(),
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
             refill_interval: self.limit.interval.to_pg_interval(),
             requested,
-        })
-    }
-
-    /// Use this one if the borrowed usage < the actual usage
-    pub fn get_return_tickets_request(&self, returned: u64) -> Result<ReturnTicketsRequest, Error> {
-        Ok(ReturnTicketsRequest {
-            key: self.get_key(),
-            capacity: self.limit.capacity,
-            refill_amount: self.limit.refill_rate,
-            refill_interval: self.limit.interval.to_pg_interval(),
-            returned,
-        })
+        }
     }
 }
 
@@ -452,18 +511,30 @@ impl std::fmt::Display for ActiveRateLimitKey {
 }
 
 impl ActiveRateLimit {
-    /// Create a new ActiveRateLimit with a precomputed key
-    pub fn new(limit: Arc<RateLimit>, scope_key: Vec<RateLimitingScopeKey>) -> Result<Self, Error> {
+    /// Create a new ActiveRateLimit with a precomputed key.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if JSON serialization fails, which should never happen
+    /// for the simple types being serialized (RateLimitResource and RateLimitingScopeKey).
+    #[expect(
+        clippy::expect_used,
+        reason = "JSON serialization of simple enums should never fail"
+    )]
+    pub fn new(limit: Arc<RateLimit>, scope_key: Vec<RateLimitingScopeKey>) -> Self {
         let key_helper = ActiveRateLimitKeyHelper {
             resource: limit.resource,
             scope_key: &scope_key,
         };
-        let key = ActiveRateLimitKey(serde_json::to_string(&key_helper)?);
-        Ok(Self {
+        let key = ActiveRateLimitKey(
+            serde_json::to_string(&key_helper)
+                .expect("JSON serialization of rate limit key should never fail"),
+        );
+        Self {
             limit,
             scope_key,
             key,
-        })
+        }
     }
 
     /// Get the cached key for this active rate limit
@@ -495,10 +566,7 @@ impl RateLimitingConfigRule {
         Some(
             self.limits
                 .iter()
-                .map(|limit| {
-                    ActiveRateLimit::new(limit.clone(), key.clone())
-                        .expect("Failed to create ActiveRateLimit key - serialization should never fail for these types")
-                })
+                .map(|limit| ActiveRateLimit::new(limit.clone(), key.clone()))
                 .collect(),
         )
     }
@@ -881,26 +949,13 @@ impl TicketBorrows {
         Ok(Self { borrows })
     }
 
-    #[tracing::instrument(err, skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, underestimate))]
-    pub async fn return_tickets(
+    /// Return borrowed rate limit tokens after an inference completes.
+    /// This updates the in-memory pool accounting but does NOT hit the database.
+    /// Tokens are only returned to the database on shutdown.
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, underestimate))]
+    pub fn return_tickets(
         self,
-        client: &impl RateLimitQueries,
-        actual_usage: RateLimitResourceUsage,
-    ) -> Result<(), Error> {
-        let res = self.return_tickets_inner(client, actual_usage).await;
-        if let Err(e) = &res {
-            // We want rate-limiting errors to show up as errors in OpenTelemetry,
-            // even though they only get logged as warnings to the console.
-            e.ensure_otel_span_errored(&Span::current());
-        }
-        res
-    }
-
-    // The actual implementation of `return_tickets`. This is a separate function so that we can
-    // handle `Result::Err` inside `return_tickets`
-    async fn return_tickets_inner(
-        self,
-        client: &impl RateLimitQueries,
+        pool_manager: &pool::TokenPoolManager,
         actual_usage: RateLimitResourceUsage,
     ) -> Result<(), Error> {
         let span = Span::current();
@@ -923,15 +978,16 @@ impl TicketBorrows {
                 span.record("underestimate", true);
             }
         }
-        let mut requests = Vec::new();
-        let mut returns = Vec::new();
+
+        // Adjust pool accounting based on actual usage
+        // This does NOT hit the database - tokens are returned only on shutdown
         for borrow in &self.borrows {
             let TicketBorrow {
                 receipt,
                 active_limit,
             } = borrow;
 
-            // Extract the actual value - we'll check 'Exact/UnderEstimate' further on
+            // Extract the actual value
             let actual_usage_this_request = match active_limit.limit.resource {
                 RateLimitResource::ModelInference => match actual_usage {
                     RateLimitResourceUsage::Exact {
@@ -947,42 +1003,23 @@ impl TicketBorrows {
                 },
             };
 
-            match actual_usage_this_request.cmp(&receipt.tickets_consumed) {
-                std::cmp::Ordering::Greater => {
-                    // Actual usage exceeds borrowed, add the difference to requests and log a warning
-                    // We don't care about 'RateLimitResourceUsage::Exact' vs ' RateLimitResourceUsage::UnderEstimate' here.
-                    tracing::warn!(
-                        "Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used",
-                        active_limit.limit.resource,
-                        receipt.tickets_consumed
-                    );
-                    let difference = actual_usage_this_request - receipt.tickets_consumed;
-                    requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
-                }
-                std::cmp::Ordering::Less => {
-                    match actual_usage {
-                        RateLimitResourceUsage::Exact { .. } => {
-                            // Borrowed exceeds actual usage, add the difference to returns
-                            let difference = receipt.tickets_consumed - actual_usage_this_request;
-                            returns.push(active_limit.get_return_tickets_request(difference)?);
-                        }
-                        RateLimitResourceUsage::UnderEstimate { .. } => {
-                            // If our returned usage is only an estimate, then don't return any tickets,
-                            // even if it looks like we over-borrowed.
-                        }
-                    }
-                }
-                std::cmp::Ordering::Equal => (),
-            };
+            // Log warning if we underestimated significantly
+            if actual_usage_this_request > receipt.tickets_consumed {
+                tracing::warn!(
+                    "Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used",
+                    active_limit.limit.resource,
+                    receipt.tickets_consumed
+                );
+            }
+
+            // Adjust pool accounting for accurate shutdown return
+            // For UnderEstimate, we still adjust since the estimate is our best guess
+            pool_manager.adjust_usage(
+                active_limit,
+                receipt.tickets_consumed,
+                actual_usage_this_request,
+            );
         }
-
-        let (consume_result, return_result) = tokio::join!(
-            client.consume_tickets(&requests),
-            client.return_tickets(returns)
-        );
-
-        consume_result?;
-        return_result?;
 
         Ok(())
     }
@@ -1797,7 +1834,8 @@ mod tests {
             key: "app_id".to_string(),
         }];
 
-        let active_limit_token = ActiveRateLimit::new(token_limit.clone(), concrete_scope_key.clone()).unwrap();
+        let active_limit_token =
+            ActiveRateLimit::new(token_limit.clone(), concrete_scope_key.clone());
 
         let key = active_limit_token.get_key();
 
@@ -1809,19 +1847,21 @@ mod tests {
         assert!(key_str.contains("123"));
 
         // Test key stability - same inputs should produce same key
-        let active_limit_token2 = ActiveRateLimit::new(token_limit.clone(), concrete_scope_key.clone()).unwrap();
+        let active_limit_token2 =
+            ActiveRateLimit::new(token_limit.clone(), concrete_scope_key.clone());
 
         let key2 = active_limit_token2.get_key();
         assert_eq!(key.0, key2.0);
 
         // Test different resources produce different keys
-        let active_limit_inference = ActiveRateLimit::new(inference_limit, concrete_scope_key.clone()).unwrap();
+        let active_limit_inference =
+            ActiveRateLimit::new(inference_limit, concrete_scope_key.clone());
 
         let key_inference = active_limit_inference.get_key();
         assert_ne!(key.0, key_inference.0);
 
         // Test different scopes produce different keys
-        let active_limit_different_scope = ActiveRateLimit::new(token_limit, total_scope_key).unwrap();
+        let active_limit_different_scope = ActiveRateLimit::new(token_limit, total_scope_key);
 
         let key_different_scope = active_limit_different_scope.get_key();
         assert_ne!(key.0, key_different_scope.0);
@@ -1843,16 +1883,14 @@ mod tests {
                 key: "user_id".to_string(),
                 value: "123".to_string(),
             }],
-        ).unwrap();
+        );
 
         let usage = EstimatedRateLimitResourceUsage {
             model_inferences: Some(5),
             tokens: Some(50),
         };
 
-        let consume_request = token_active_limit
-            .get_consume_tickets_request(&usage)
-            .unwrap();
+        let consume_request = token_active_limit.get_consume_tickets_request(&usage);
         assert_eq!(consume_request.requested, 50); // tokens usage
         assert_eq!(consume_request.capacity, 100);
         assert_eq!(consume_request.refill_amount, 10);
@@ -1865,7 +1903,7 @@ mod tests {
             }
         );
 
-        // Test return tickets request for ModelInference resource
+        // Test consume tickets request for ModelInference resource
         let inference_limit = Arc::new(RateLimit {
             resource: RateLimitResource::ModelInference,
             interval: RateLimitInterval::Hour,
@@ -1878,27 +1916,9 @@ mod tests {
             vec![RateLimitingScopeKey::TagTotal {
                 key: "app_id".to_string(),
             }],
-        ).unwrap();
-
-        let return_request = inference_active_limit
-            .get_return_tickets_request(3)
-            .unwrap();
-        assert_eq!(return_request.returned, 3);
-        assert_eq!(return_request.capacity, 20);
-        assert_eq!(return_request.refill_amount, 5);
-        assert_eq!(
-            return_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 3_600_000_000
-            }
         );
 
-        // Test consume tickets request for ModelInference resource
-        let inference_consume_request = inference_active_limit
-            .get_consume_tickets_request(&usage)
-            .unwrap();
+        let inference_consume_request = inference_active_limit.get_consume_tickets_request(&usage);
         assert_eq!(inference_consume_request.requested, 5); // model_inferences usage
         assert_eq!(inference_consume_request.capacity, 20);
         assert_eq!(inference_consume_request.refill_amount, 5);
@@ -1938,7 +1958,7 @@ mod tests {
                 key: "user_id".to_string(),
                 value: "123".to_string(),
             }],
-        ).unwrap();
+        );
 
         let key = active_limit.get_key();
 
@@ -1992,7 +2012,7 @@ mod tests {
             vec![RateLimitingScopeKey::TagTotal {
                 key: "app_id".to_string(),
             }],
-        ).unwrap();
+        );
 
         let key2 = active_limit2.get_key();
 
@@ -2021,14 +2041,14 @@ mod tests {
 
         // Another mismatch test - more active limits than receipts
         let receipt3 = ConsumeTicketsReceipt {
-            key: active_limit2.get_key().unwrap(),
+            key: active_limit2.get_key(),
             success: true,
             tickets_remaining: 15,
             tickets_consumed: 15,
         };
 
         let request3 = ConsumeTicketsRequest {
-            key: active_limit2.get_key().unwrap(),
+            key: active_limit2.get_key(),
             capacity: 20,
             refill_amount: 5,
             refill_interval: PgInterval {
@@ -2136,7 +2156,7 @@ mod tests {
                 key: "user_id".to_string(),
                 value: "123".to_string(),
             }],
-        ).unwrap();
+        );
 
         let key = active_limit.get_key();
 
@@ -2179,7 +2199,7 @@ mod tests {
                 key: "user_id".to_string(),
                 value: "123".to_string(),
             }],
-        ).unwrap();
+        );
 
         let key2 = active_limit2.get_key();
 
@@ -2266,7 +2286,7 @@ mod tests {
                 key: "user_id".to_string(),
                 value: "user1".to_string(),
             }],
-        ).unwrap();
+        );
 
         let active_limit_inferences = ActiveRateLimit::new(
             inference_limit,
@@ -2274,7 +2294,7 @@ mod tests {
                 key: "user_id".to_string(),
                 value: "user1".to_string(),
             }],
-        ).unwrap();
+        );
 
         let active_limit_tokens_user2 = ActiveRateLimit::new(
             token_limit_user2,
@@ -2282,7 +2302,7 @@ mod tests {
                 key: "user_id".to_string(),
                 value: "user2".to_string(),
             }],
-        ).unwrap();
+        );
 
         let key_tokens = active_limit_tokens.get_key();
         let key_inferences = active_limit_inferences.get_key();

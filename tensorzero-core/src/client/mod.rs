@@ -1116,6 +1116,7 @@ impl Client {
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         gateway.handle.app_state.postgres_connection_info.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
+                        gateway.handle.app_state.token_pool_manager.clone(),
                         params.try_into().map_err(err_to_http)?,
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
