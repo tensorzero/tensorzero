@@ -31,22 +31,22 @@ export type ModelUsageMetric =
 export const USAGE_METRIC_CONFIG = {
   inferences: {
     label: "Inferences",
-    description: "Number of inference requests",
+    description: "Inference requests",
     formatter: (value: number) => `${formatDetailedNumber(value)} requests`,
   },
   input_tokens: {
     label: "Input Tokens",
-    description: "Input token usage",
+    description: "Input tokens",
     formatter: (value: number) => `${formatDetailedNumber(value)} tokens`,
   },
   output_tokens: {
     label: "Output Tokens",
-    description: "Output token usage",
+    description: "Output tokens",
     formatter: (value: number) => `${formatDetailedNumber(value)} tokens`,
   },
   total_tokens: {
     label: "Total Tokens",
-    description: "Total token usage (input + output)",
+    description: "Total tokens",
     formatter: (value: number) => `${formatDetailedNumber(value)} tokens`,
   },
 } as const;

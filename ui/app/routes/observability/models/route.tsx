@@ -144,7 +144,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <ChartSectionHeader
-            heading="Model Usage Over Time"
+            heading="Usage"
             description={`${USAGE_METRIC_CONFIG[usageMetric].description} by model`}
           >
             <UsageTimeWindowSelector
@@ -179,7 +179,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <ChartSectionHeader
-            heading="Model Latency Distribution"
+            heading="Latency"
             description={`${LATENCY_METRIC_CONFIG[latencyMetric].description} by model`}
           >
             <LatencyTimeWindowSelector
