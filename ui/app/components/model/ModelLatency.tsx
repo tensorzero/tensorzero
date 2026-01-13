@@ -8,8 +8,7 @@ import {
   Tooltip,
 } from "recharts";
 import React, { useState, useMemo } from "react";
-import { Await, useAsyncError } from "react-router";
-import { AlertCircle } from "lucide-react";
+import { Await } from "react-router";
 import { CHART_COLORS } from "~/utils/chart";
 import {
   Select,
@@ -27,6 +26,7 @@ import {
 } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
+  ChartAsyncErrorState,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
@@ -66,24 +66,6 @@ function LineChartSkeleton() {
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-16" />
-      </div>
-    </div>
-  );
-}
-
-export function ChartAsyncErrorState({
-  defaultMessage = "Failed to load chart data",
-}: {
-  defaultMessage?: string;
-}) {
-  const error = useAsyncError();
-  const message = error instanceof Error ? error.message : defaultMessage;
-
-  return (
-    <div className="flex h-80 w-full items-center justify-center">
-      <div className="text-center">
-        <AlertCircle className="text-muted-foreground mx-auto h-8 w-8" />
-        <p className="text-muted-foreground mt-2 text-sm">{message}</p>
       </div>
     </div>
   );

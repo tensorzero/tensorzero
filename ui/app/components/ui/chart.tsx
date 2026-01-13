@@ -1,5 +1,7 @@
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
+import { useAsyncError } from "react-router";
+import { AlertCircle } from "lucide-react";
 
 import { cn } from "~/utils/common";
 
@@ -353,7 +355,26 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config];
 }
 
+function ChartAsyncErrorState({
+  defaultMessage = "Failed to load chart data",
+}: {
+  defaultMessage?: string;
+}) {
+  const error = useAsyncError();
+  const message = error instanceof Error ? error.message : defaultMessage;
+
+  return (
+    <div className="flex h-80 w-full items-center justify-center">
+      <div className="text-center">
+        <AlertCircle className="text-muted-foreground mx-auto h-8 w-8" />
+        <p className="text-muted-foreground mt-2 text-sm">{message}</p>
+      </div>
+    </div>
+  );
+}
+
 export {
+  ChartAsyncErrorState,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,

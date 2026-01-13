@@ -9,7 +9,6 @@ import {
 } from "~/utils/chart";
 import { useState, Suspense } from "react";
 import { Await } from "react-router";
-import { ChartAsyncErrorState } from "./ModelLatency";
 
 import {
   Card,
@@ -20,6 +19,7 @@ import {
 } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
+  ChartAsyncErrorState,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
