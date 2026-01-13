@@ -47,19 +47,25 @@ import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 const columnHelper = createColumnHelper<DatasetMetadata>();
 
+function DatasetTableHeaders() {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead>Dataset Name</TableHead>
+        <TableHead>Datapoint Count</TableHead>
+        <TableHead>Last Updated</TableHead>
+        <TableHead />
+      </TableRow>
+    </TableHeader>
+  );
+}
+
 // Skeleton table for loading state
 function SkeletonTable() {
   return (
     <>
       <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Dataset Name</TableHead>
-            <TableHead>Datapoint Count</TableHead>
-            <TableHead>Last Updated</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
+        <DatasetTableHeaders />
         <TableBody>
           {Array.from({ length: 15 }).map((_, i) => (
             <TableRow key={i}>
@@ -91,14 +97,7 @@ function TableErrorState() {
   return (
     <>
       <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Dataset Name</TableHead>
-            <TableHead>Datapoint Count</TableHead>
-            <TableHead>Last Updated</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
+        <DatasetTableHeaders />
         <TableBody>
           <TableRow>
             <TableCell colSpan={4}>

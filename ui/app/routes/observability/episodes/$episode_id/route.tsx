@@ -206,6 +206,20 @@ function InferencePaginationContent({ data }: { data: InferencesData }) {
   );
 }
 
+function FeedbackTableHeaders() {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead>ID</TableHead>
+        <TableHead>Metric</TableHead>
+        <TableHead>Value</TableHead>
+        <TableHead>Tags</TableHead>
+        <TableHead>Time</TableHead>
+      </TableRow>
+    </TableHeader>
+  );
+}
+
 function FeedbackSectionError() {
   const error = useAsyncError();
   const message =
@@ -214,15 +228,7 @@ function FeedbackSectionError() {
   return (
     <>
       <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>ID</TableHead>
-            <TableHead>Metric</TableHead>
-            <TableHead>Value</TableHead>
-            <TableHead>Tags</TableHead>
-            <TableHead>Time</TableHead>
-          </TableRow>
-        </TableHeader>
+        <FeedbackTableHeaders />
         <TableBody>
           <TableRow>
             <TableCell colSpan={5}>
@@ -243,15 +249,7 @@ function FeedbackSectionError() {
 function FeedbackTableSkeleton() {
   return (
     <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>ID</TableHead>
-          <TableHead>Metric</TableHead>
-          <TableHead>Value</TableHead>
-          <TableHead>Tags</TableHead>
-          <TableHead>Time</TableHead>
-        </TableRow>
-      </TableHeader>
+      <FeedbackTableHeaders />
       <TableBody>
         {Array.from({ length: 5 }).map((_, i) => (
           <TableRow key={i}>
