@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { BarChartSkeleton } from "./chart";
+import { LineChartSkeleton } from "./chart";
 
 const meta = {
-  title: "Data Visualization/BarChartSkeleton",
-  component: BarChartSkeleton,
+  title: "Data Visualization/LineChartSkeleton",
+  component: LineChartSkeleton,
   parameters: {
     layout: "padded",
   },
@@ -14,7 +14,7 @@ const meta = {
       </div>
     ),
   ],
-} satisfies Meta<typeof BarChartSkeleton>;
+} satisfies Meta<typeof LineChartSkeleton>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

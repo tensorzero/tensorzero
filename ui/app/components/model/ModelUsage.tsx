@@ -8,7 +8,7 @@ import {
   CHART_COLORS,
 } from "~/utils/chart";
 import { useState, Suspense } from "react";
-import { Await } from "react-router";
+import { Await, useLocation } from "react-router";
 
 import {
   Card,
@@ -17,8 +17,8 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { Skeleton } from "~/components/ui/skeleton";
 import {
+  BarChartSkeleton,
   ChartAsyncErrorState,
   ChartContainer,
   ChartLegend,
@@ -35,30 +35,6 @@ import {
   SelectTrigger,
 } from "~/components/ui/select";
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
-
-const SKELETON_BAR_HEIGHTS = [45, 65, 35, 80, 55, 40, 70, 50, 60, 30];
-
-function ChartSkeleton() {
-  return (
-    <div className="flex h-80 w-full flex-col gap-4">
-      <div className="flex flex-1 items-end gap-2 px-8 pb-8">
-        {SKELETON_BAR_HEIGHTS.map((height, i) => (
-          <div key={i} className="flex flex-1 flex-col justify-end gap-1">
-            <Skeleton
-              className="w-full rounded"
-              style={{ height: `${height}%` }}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-center gap-4">
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-4 w-16" />
-      </div>
-    </div>
-  );
-}
 
 export type ModelUsageMetric =
   | "inferences"
@@ -114,11 +90,17 @@ function MetricSelector({
   );
 }
 
+interface ModelUsageProps {
+  modelUsageDataPromise: Promise<ModelUsageTimePoint[]>;
+  /** Custom error message shown when data fails to load */
+  errorMessage?: string;
+}
+
 export function ModelUsage({
   modelUsageDataPromise,
-}: {
-  modelUsageDataPromise: Promise<ModelUsageTimePoint[]>;
-}) {
+  errorMessage = "Failed to load usage data",
+}: ModelUsageProps) {
+  const location = useLocation();
   const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
     "usageTimeGranularity",
     "week",
@@ -147,11 +129,11 @@ export function ModelUsage({
         </div>
       </CardHeader>
       <CardContent>
-        <Suspense fallback={<ChartSkeleton />}>
+        <Suspense key={location.search} fallback={<BarChartSkeleton />}>
           <Await
             resolve={modelUsageDataPromise}
             errorElement={
-              <ChartAsyncErrorState defaultMessage="Failed to load usage data" />
+              <ChartAsyncErrorState defaultMessage={errorMessage} />
             }
           >
             {(modelUsageData) => {

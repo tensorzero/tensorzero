@@ -4,6 +4,7 @@ import { useAsyncError } from "react-router";
 import { AlertTriangle } from "lucide-react";
 
 import { cn } from "~/utils/common";
+import { Skeleton } from "~/components/ui/skeleton";
 import { ChartErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
@@ -356,6 +357,120 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config];
 }
 
+// Default bar heights for skeleton (percentage of container height)
+const SKELETON_BAR_HEIGHTS = [45, 65, 35, 80, 55, 40, 70, 50, 60, 30];
+
+/**
+ * Generic bar chart skeleton with Y-axis, grid lines, bars, X-axis, and legend.
+ * Matches the visual structure of Recharts BarChart.
+ */
+function BarChartSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex h-80 w-full flex-col", className)}>
+      {/* Chart area with Y-axis and bars */}
+      <div className="flex flex-1">
+        {/* Y-axis labels */}
+        <div className="flex w-12 flex-col justify-between py-2 pr-2">
+          <Skeleton className="h-3 w-8" />
+          <Skeleton className="h-3 w-10" />
+          <Skeleton className="h-3 w-6" />
+          <Skeleton className="h-3 w-9" />
+        </div>
+        {/* Chart content area */}
+        <div className="relative flex-1">
+          {/* Horizontal grid lines */}
+          <div className="absolute inset-0 flex flex-col justify-between py-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="border-border/40 w-full border-t" />
+            ))}
+          </div>
+          {/* Bars */}
+          <div className="absolute inset-x-0 top-2 bottom-2 flex items-end gap-2 px-2">
+            {SKELETON_BAR_HEIGHTS.map((height, i) => (
+              <Skeleton
+                key={i}
+                className="flex-1 rounded-t"
+                style={{ height: `${height}%` }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+      {/* X-axis labels */}
+      <div className="ml-12 flex justify-between px-2 pt-2">
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+      </div>
+      {/* Legend */}
+      <div className="flex justify-center gap-4 pt-4">
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-16" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Generic line chart skeleton with Y-axis, grid lines, line, X-axis, and legend.
+ * Matches the visual structure of Recharts LineChart.
+ */
+function LineChartSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex h-80 w-full flex-col", className)}>
+      {/* Chart area with Y-axis and line */}
+      <div className="flex flex-1">
+        {/* Y-axis labels */}
+        <div className="flex w-12 flex-col justify-between py-2 pr-2">
+          <Skeleton className="h-3 w-8" />
+          <Skeleton className="h-3 w-10" />
+          <Skeleton className="h-3 w-6" />
+          <Skeleton className="h-3 w-9" />
+        </div>
+        {/* Chart content area */}
+        <div className="relative flex-1">
+          {/* Horizontal grid lines */}
+          <div className="absolute inset-0 flex flex-col justify-between py-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="border-border/40 w-full border-t border-dashed"
+              />
+            ))}
+          </div>
+          {/* Line placeholder - wavy skeleton line */}
+          <div className="absolute inset-x-4 top-1/3">
+            <Skeleton className="h-1 w-full rounded-full" />
+          </div>
+          <div className="absolute inset-x-4 top-1/2">
+            <Skeleton className="h-1 w-3/4 rounded-full" />
+          </div>
+          <div className="absolute inset-x-4 top-2/3">
+            <Skeleton className="h-1 w-5/6 rounded-full" />
+          </div>
+        </div>
+      </div>
+      {/* X-axis labels */}
+      <div className="ml-12 flex justify-between px-2 pt-2">
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+        <Skeleton className="h-3 w-8" />
+      </div>
+      {/* Legend */}
+      <div className="flex justify-center gap-4 pt-4">
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-16" />
+      </div>
+    </div>
+  );
+}
+
 function ChartAsyncErrorState({
   defaultMessage = "Failed to load chart data",
 }: {
@@ -374,11 +489,13 @@ function ChartAsyncErrorState({
 }
 
 export {
+  BarChartSkeleton,
   ChartAsyncErrorState,
   ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
+  ChartTooltip,
+  ChartTooltipContent,
+  LineChartSkeleton,
 };
