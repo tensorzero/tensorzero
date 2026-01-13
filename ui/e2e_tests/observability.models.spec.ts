@@ -121,33 +121,42 @@ test.describe("Observability Models Page", () => {
     await page.goto("/observability/models");
 
     // Wait for both sections to load
-    await expect(page.getByText("Usage")).toBeVisible();
-    await expect(page.getByText("Latency")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Latency" })).toBeVisible();
+
+    // Wait for charts to load before interacting with dropdowns
+    await expect(page.locator("[data-chart]")).toHaveCount(2);
 
     // Change usage time granularity
     const usageTimeSelector = page.locator('button[role="combobox"]').first();
     await usageTimeSelector.click();
-    await page.waitForSelector('[role="option"]');
     await page.getByRole("option", { name: "Hourly" }).click();
+    // Wait for dropdown to close
+    await expect(
+      page.getByRole("option", { name: "Hourly" }),
+    ).not.toBeVisible();
 
     // Change usage metric
     const usageMetricSelector = page.locator('button[role="combobox"]').nth(1);
     await usageMetricSelector.click();
-    await page.waitForSelector('[role="option"]');
     await page.getByRole("option", { name: "Total Tokens" }).click();
+    await expect(
+      page.getByRole("option", { name: "Total Tokens" }),
+    ).not.toBeVisible();
 
     // Change latency time granularity
     const latencyTimeSelector = page.locator('button[role="combobox"]').nth(2);
     await latencyTimeSelector.click();
-    await page.waitForSelector('[role="option"]');
     await page.getByRole("option", { name: "All Time" }).click();
+    await expect(
+      page.getByRole("option", { name: "All Time" }),
+    ).not.toBeVisible();
 
     // Change latency metric
     const latencyMetricSelector = page
       .locator('button[role="combobox"]')
       .nth(3);
     await latencyMetricSelector.click();
-    await page.waitForSelector('[role="option"]');
     await page.getByRole("option", { name: "Time to First Token" }).click();
 
     // Verify both charts still display
