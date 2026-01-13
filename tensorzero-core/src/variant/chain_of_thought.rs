@@ -211,7 +211,7 @@ impl Variant for ChainOfThoughtConfig {
 /// Converts the output schema of the actual function being called into a schema that enforces chain
 /// of thought reasoning.
 fn prepare_thinking_output_schema(previous_output_schema: &Value) -> JSONSchema {
-    JSONSchema::new(json!({
+    JSONSchema::compile_async(json!({
         "type": "object",
         "properties": {
             "thinking": {

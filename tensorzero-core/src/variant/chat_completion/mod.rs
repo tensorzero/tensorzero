@@ -2068,7 +2068,7 @@ mod tests {
             },
         };
         // Will dynamically set "answer" instead of "response"
-        let output_schema = JSONSchema::new(serde_json::json!({
+        let output_schema = JSONSchema::compile_async(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {
@@ -2188,7 +2188,7 @@ mod tests {
         }));
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
-        let output_schema = JSONSchema::new(serde_json::json!({
+        let output_schema = JSONSchema::compile_async(serde_json::json!({
             "type": "object",
             "properties": {
                 "response": {
@@ -2821,7 +2821,7 @@ mod tests {
         assert_eq!(inference_params.chat_completion.max_tokens, None);
         assert_eq!(inference_params.chat_completion.seed, None);
 
-        let dynamic_output_schema = JSONSchema::new(serde_json::json!({
+        let dynamic_output_schema = JSONSchema::compile_async(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {

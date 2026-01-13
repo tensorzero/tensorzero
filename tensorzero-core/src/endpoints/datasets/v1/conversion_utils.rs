@@ -629,7 +629,7 @@ mod tests {
             raw: Some(r#"{"key": "value"}"#.to_string()),
         };
         let schema_value = json!({"type": "object", "properties": {"key": {"type": "string"}}, });
-        let schema = JSONSchema::new(schema_value);
+        let schema = JSONSchema::compile_async(schema_value);
         let output = update.into_json_inference_output(&schema).await;
 
         assert_eq!(
@@ -650,7 +650,7 @@ mod tests {
             raw: Some(r#"{"key": "nonconformant value"}"#.to_string()),
         };
         let schema_value = json!({"type": "object", "properties": {"key": {"type": "number"}}, });
-        let schema = JSONSchema::new(schema_value);
+        let schema = JSONSchema::compile_async(schema_value);
         let output = update.into_json_inference_output(&schema).await;
         assert_eq!(output.parsed, None);
 
@@ -672,7 +672,7 @@ mod tests {
         };
 
         let schema_value = json!({"type": "object", "properties": {"value": {"type": "string"}}, });
-        let schema = JSONSchema::new(schema_value);
+        let schema = JSONSchema::compile_async(schema_value);
         let output = update.into_json_inference_output(&schema).await;
         assert_eq!(output.parsed, None);
 

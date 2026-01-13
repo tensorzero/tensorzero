@@ -2542,7 +2542,7 @@ mod tests {
                 vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "custom_tool".to_string(),
                     description: "A custom tool".to_string(),
-                    parameters: JSONSchema::new(
+                    parameters: JSONSchema::compile_async(
                         serde_json::from_str(
                             r#"{
                         "type": "object",
@@ -2669,7 +2669,7 @@ mod tests {
                 vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "weather_tool".to_string(),
                     description: "Get weather information".to_string(),
-                    parameters: JSONSchema::new(
+                    parameters: JSONSchema::compile_async(
                         serde_json::from_str(
                             r#"{
                         "type": "object",

@@ -407,7 +407,7 @@ pub async fn inference(
     let mut variant_errors: IndexMap<String, Error> = IndexMap::new();
 
     // Set up inference config
-    let output_schema = params.output_schema.map(JSONSchema::new);
+    let output_schema = params.output_schema.map(JSONSchema::compile_async);
 
     let tags = Arc::new(params.tags.clone());
 

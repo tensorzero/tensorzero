@@ -12,11 +12,11 @@ use crate::utils::spawn_ignoring_shutdown;
 /// A JSON schema with a lazily-compiled validator.
 ///
 /// The validator is compiled asynchronously on first access (via `validate()` or `ensure_valid()`).
-/// Compilation is kicked off in the background when the schema is created via `new()`, so it
-/// should typically be ready by the time validation is needed.
+/// Compilation is kicked off in the background when the schema is created via `compile_async()`,
+/// so it should typically be ready by the time validation is needed.
 ///
-/// When created via `from_path()` or `from_value()`, the schema is validated eagerly to catch
-/// errors at config load time. When deserialized from JSON, validation is deferred.
+/// When created via `compile()`, `from_path()`, or `from_value()`, the schema is compiled
+/// synchronously and the compiled validator is stored immediately.
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct JSONSchema {
@@ -32,21 +32,59 @@ impl PartialEq for JSONSchema {
 }
 
 impl Default for JSONSchema {
+    #[expect(clippy::expect_used)]
     fn default() -> Self {
-        Self::new_lazy(serde_json::json!({}))
+        // Create an empty schema that accepts any object
+        let value = serde_json::json!({});
+        let validator = jsonschema::validator_for(&value)
+            .expect("Empty schema should always compile successfully");
+        Self::new_with_compiled(value, validator)
     }
 }
 
 impl JSONSchema {
-    /// Creates a new JSONSchema from a JSON value.
-    /// Kicks off compilation in the background asynchronously.
-    /// This should be called from async contexts (e.g., during inference).
-    pub fn new(schema: Value) -> Self {
+    /// Creates a new JSONSchema with a pre-compiled validator.
+    #[expect(clippy::expect_used)]
+    fn new_with_compiled(value: Value, validator: Validator) -> Self {
         let compiled = Arc::new(OnceCell::new());
-        let this = Self {
+        // This cannot fail since the OnceCell is empty
+        compiled
+            .set(validator)
+            .expect("OnceCell should be empty when created");
+        Self { value, compiled }
+    }
+
+    /// Creates a new JSONSchema with lazy compilation (no pre-compiled validator).
+    fn new_lazy(schema: Value) -> Self {
+        Self {
             value: schema,
-            compiled,
-        };
+            compiled: Arc::new(OnceCell::new()),
+        }
+    }
+
+    /// Compiles a JSON schema synchronously.
+    ///
+    /// This is the preferred method for config loading where no tokio runtime is available.
+    /// The schema is compiled immediately and the compiled validator is stored for reuse.
+    /// Returns an error if the schema fails to compile.
+    pub fn compile(schema: Value) -> Result<Self, Error> {
+        let validator = jsonschema::validator_for(&schema).map_err(|e| {
+            Error::new(ErrorDetails::JsonSchema {
+                message: format!("Failed to compile JSON Schema: {e}"),
+            })
+        })?;
+        Ok(Self::new_with_compiled(schema, validator))
+    }
+
+    /// Compiles a JSON schema asynchronously in the background.
+    ///
+    /// This is the preferred method for runtime-created schemas (e.g., during inference).
+    /// Kicks off compilation in a background task so it should typically be ready
+    /// by the time validation is needed.
+    ///
+    /// **Note**: This must be called from within a tokio runtime context.
+    pub fn compile_async(schema: Value) -> Self {
+        let this = Self::new_lazy(schema);
         let this_clone = this.clone();
         // Kick off the schema compilation in the background.
         // The first call to `validate` will either get the compiled schema (if the task finished),
@@ -58,19 +96,11 @@ impl JSONSchema {
         this
     }
 
-    /// Creates a JSONSchema without spawning a background compilation task.
-    /// This is used during config loading where no tokio runtime is available.
-    fn new_lazy(schema: Value) -> Self {
-        Self {
-            value: schema,
-            compiled: Arc::new(OnceCell::new()),
-        }
-    }
-
     /// Creates a JSONSchema from a file path.
-    /// Validates that the JSON is valid and the schema compiles at creation time.
+    ///
+    /// Parses the JSON and compiles the schema synchronously.
     /// Returns an error if the JSON is invalid or the schema fails to compile.
-    /// Does not spawn a background task (safe to call outside of tokio runtime).
+    /// Safe to call outside of a tokio runtime.
     pub fn from_path(path: ResolvedTomlPathData) -> Result<Self, Error> {
         let content = path.data();
 
@@ -83,8 +113,8 @@ impl JSONSchema {
                 ),
             })
         })?;
-        // Validate that the schema is valid by attempting to compile it
-        jsonschema::validator_for(&schema).map_err(|e| {
+
+        let validator = jsonschema::validator_for(&schema).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!(
                     "Failed to compile JSON Schema `{}`: {}",
@@ -93,27 +123,22 @@ impl JSONSchema {
                 ),
             })
         })?;
-        // Return the schema with lazy compilation (will recompile on first use)
-        Ok(Self::new_lazy(schema))
+
+        Ok(Self::new_with_compiled(schema, validator))
     }
 
     /// Creates a JSONSchema from a JSON value.
-    /// Validates that the schema compiles at creation time.
+    ///
+    /// Compiles the schema synchronously. This is an alias for `compile()`.
     /// Returns an error if the schema fails to compile.
-    /// Does not spawn a background task (safe to call outside of tokio runtime).
+    /// Safe to call outside of a tokio runtime.
     pub fn from_value(value: Value) -> Result<Self, Error> {
-        // Validate that the schema is valid by attempting to compile it
-        jsonschema::validator_for(&value).map_err(|e| {
-            Error::new(ErrorDetails::JsonSchema {
-                message: format!("Failed to compile JSON Schema: {e}"),
-            })
-        })?;
-        // Return the schema with lazy compilation (will recompile on first use)
-        Ok(Self::new_lazy(value))
+        Self::compile(value)
     }
 
     /// Validates an instance against this schema.
-    /// The schema is compiled asynchronously if it hasn't been compiled yet.
+    ///
+    /// If the schema hasn't been compiled yet, it will be compiled asynchronously first.
     pub async fn validate(&self, instance: &Value) -> Result<(), Error> {
         self.get_or_init_compiled()
             .await?
@@ -128,6 +153,7 @@ impl JSONSchema {
     }
 
     /// Ensures that the schema is valid by forcing compilation.
+    ///
     /// This is useful when you want to validate the schema itself without validating any instance.
     /// Returns an error if the schema is invalid.
     pub async fn ensure_valid(&self) -> Result<(), Error> {
@@ -166,7 +192,7 @@ impl JSONSchema {
                 message: e.to_string(),
             })
         })?;
-        Ok(Self::new(schema))
+        Ok(Self::compile_async(schema))
     }
 }
 
@@ -279,7 +305,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dynamic_schema() {
+    async fn test_compile_async() {
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -287,16 +313,41 @@ mod tests {
             }
         });
 
-        let dynamic_schema = JSONSchema::new(schema);
+        let dynamic_schema = JSONSchema::compile_async(schema);
         let instance = serde_json::json!({
             "name": "John Doe",
         });
         assert!(dynamic_schema.validate(&instance).await.is_ok());
     }
 
+    #[test]
+    fn test_compile_sync() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        // compile() should work without a tokio runtime
+        let compiled_schema = JSONSchema::compile(schema).expect("Failed to compile schema");
+        // The schema should be pre-compiled
+        assert!(compiled_schema.compiled.get().is_some());
+    }
+
+    #[test]
+    fn test_compile_invalid_schema() {
+        let invalid_schema = serde_json::json!({
+            "type": "invalid_type"
+        });
+
+        let result = JSONSchema::compile(invalid_schema);
+        assert!(result.is_err());
+    }
+
     #[tokio::test]
     async fn test_ensure_valid() {
-        let valid_schema = JSONSchema::new(serde_json::json!({
+        let valid_schema = JSONSchema::compile_async(serde_json::json!({
             "type": "object",
             "properties": {
                 "name": { "type": "string" }
@@ -304,7 +355,7 @@ mod tests {
         }));
         assert!(valid_schema.ensure_valid().await.is_ok());
 
-        let invalid_schema = JSONSchema::new(serde_json::json!({
+        let invalid_schema = JSONSchema::compile_async(serde_json::json!({
             "type": "invalid_type"
         }));
         assert!(invalid_schema.ensure_valid().await.is_err());
@@ -325,5 +376,44 @@ mod tests {
         // Default schema should accept any object
         let instance = serde_json::json!({"anything": "goes"});
         assert!(schema.validate(&instance).await.is_ok());
+        // The default schema should be pre-compiled
+        assert!(schema.compiled.get().is_some());
+    }
+
+    #[test]
+    fn test_from_value_reuses_compiled() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let compiled_schema = JSONSchema::from_value(schema).expect("Failed to compile schema");
+        // The schema should be pre-compiled (not lazy)
+        assert!(
+            compiled_schema.compiled.get().is_some(),
+            "from_value should store the compiled validator"
+        );
+    }
+
+    #[test]
+    fn test_from_path_reuses_compiled() {
+        let schema_json = r#"{"type": "object", "properties": {"name": {"type": "string"}}}"#;
+
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        write!(temp_file, "{schema_json}").expect("Failed to write schema to temporary file");
+
+        let compiled_schema = JSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
+            temp_file.path().to_owned(),
+            None,
+        ))
+        .expect("Failed to load schema");
+
+        // The schema should be pre-compiled (not lazy)
+        assert!(
+            compiled_schema.compiled.get().is_some(),
+            "from_path should store the compiled validator"
+        );
     }
 }

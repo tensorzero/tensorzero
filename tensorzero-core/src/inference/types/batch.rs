@@ -560,7 +560,7 @@ impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<JSONSchema>> {
             if schemas.len() == num_inferences {
                 Ok(schemas
                     .into_iter()
-                    .map(|schema| schema.map(JSONSchema::new))
+                    .map(|schema| schema.map(JSONSchema::compile_async))
                     .collect())
             } else {
                 Err(ErrorDetails::InvalidRequest {

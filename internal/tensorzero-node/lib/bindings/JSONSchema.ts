@@ -5,10 +5,10 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * A JSON schema with a lazily-compiled validator.
  *
  * The validator is compiled asynchronously on first access (via `validate()` or `ensure_valid()`).
- * Compilation is kicked off in the background when the schema is created via `new()`, so it
- * should typically be ready by the time validation is needed.
+ * Compilation is kicked off in the background when the schema is created via `compile_async()`,
+ * so it should typically be ready by the time validation is needed.
  *
- * When created via `from_path()` or `from_value()`, the schema is validated eagerly to catch
- * errors at config load time. When deserialized from JSON, validation is deferred.
+ * When created via `compile()`, `from_path()`, or `from_value()`, the schema is compiled
+ * synchronously and the compiled validator is stored immediately.
  */
 export type JSONSchema = { value: JsonValue };
