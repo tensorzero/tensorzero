@@ -1,13 +1,39 @@
-import { Suspense } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import { data, Await, useLocation } from "react-router";
 import type { Route } from "./+types/route";
 import type { RouteHandle } from "react-router";
+import type { TimeWindow } from "~/types/tensorzero";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import {
+  ModelUsageChart,
+  UsageTimeWindowSelector,
+  UsageMetricSelector,
+  USAGE_METRIC_CONFIG,
+  type ModelUsageMetric,
+} from "~/components/model/ModelUsage";
+import {
+  LatencyQuantileChart,
+  LatencyTimeWindowSelector,
+  LatencyMetricSelector,
+  LATENCY_METRIC_CONFIG,
+  type LatencyMetric,
+} from "~/components/model/ModelLatency";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+  SectionsGroup,
+} from "~/components/layout/PageLayout";
+import {
+  BarChartSkeleton,
+  LineChartSkeleton,
+  ChartAsyncErrorState,
+} from "~/components/ui/chart";
+import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 export const handle: RouteHandle = {
   crumb: () => ["Models"],
 };
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import type { TimeWindow } from "~/types/tensorzero";
 
 // Quantiles used for TDigest latency percentiles (from migration_0037)
 const QUANTILES: number[] = [
@@ -18,27 +44,6 @@ const QUANTILES: number[] = [
   0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 0.991, 0.992, 0.993,
   0.994, 0.995, 0.996, 0.997, 0.998, 0.999,
 ];
-import { ModelUsage } from "~/components/model/ModelUsage";
-import { ModelLatency } from "~/components/model/ModelLatency";
-import {
-  PageHeader,
-  PageLayout,
-  SectionLayout,
-  SectionsGroup,
-  SectionHeader,
-} from "~/components/layout/PageLayout";
-import {
-  BarChartSkeleton,
-  LineChartSkeleton,
-  ChartAsyncErrorState,
-} from "~/components/ui/chart";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "~/components/ui/card";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -47,7 +52,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const latencyTimeGranularityParam =
     url.searchParams.get("latencyTimeGranularity") || "week";
 
-  // Validate TimeWindow type
   const validTimeWindows: TimeWindow[] = [
     "hour",
     "day",
@@ -78,6 +82,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const modelLatencyQuantilesPromise = client
     .getModelLatencyQuantiles(latencyTimeGranularity)
     .then((response) => response.data);
+
   return {
     modelUsageTimeseriesPromise,
     usageTimeGranularity,
@@ -87,31 +92,28 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-function UsageCardSkeleton() {
+// Local composable section header for charts - can be promoted to PageLayout later
+function ChartSectionHeader({
+  heading,
+  description,
+  children,
+}: {
+  heading: string;
+  description: string;
+  children?: ReactNode;
+}) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Model Usage Over Time</CardTitle>
-        <CardDescription>Usage metrics by model</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <BarChartSkeleton />
-      </CardContent>
-    </Card>
-  );
-}
-
-function LatencyCardSkeleton() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Model Latency Distribution</CardTitle>
-        <CardDescription>Quantiles of latency metrics by model</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <LineChartSkeleton />
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h2 className="text-xl font-medium">{heading}</h2>
+        <p className="text-muted-foreground mt-1 text-sm">{description}</p>
+      </div>
+      {children && (
+        <div className="scrollbar-hide flex flex-row items-center gap-2 overflow-x-auto">
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -123,61 +125,88 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
     quantiles,
   } = loaderData;
 
+  // Usage chart state
+  const [usageTimeGranularity, onUsageTimeGranularityChange] =
+    useTimeGranularityParam("usageTimeGranularity", "week");
+  const [usageMetric, setUsageMetric] =
+    useState<ModelUsageMetric>("inferences");
+
+  // Latency chart state
+  const [latencyTimeGranularity, onLatencyTimeGranularityChange] =
+    useTimeGranularityParam("latencyTimeGranularity", "week");
+  const [latencyMetric, setLatencyMetric] =
+    useState<LatencyMetric>("response_time_ms");
+
   return (
     <PageLayout>
-      <PageHeader name="Models" />
+      <PageHeader heading="Models" />
 
       <SectionsGroup>
         <SectionLayout>
-          <SectionHeader heading="Usage" />
+          <ChartSectionHeader
+            heading="Model Usage Over Time"
+            description={`${USAGE_METRIC_CONFIG[usageMetric].description} by model`}
+          >
+            <UsageTimeWindowSelector
+              value={usageTimeGranularity}
+              onValueChange={onUsageTimeGranularityChange}
+            />
+            <UsageMetricSelector
+              value={usageMetric}
+              onValueChange={setUsageMetric}
+            />
+          </ChartSectionHeader>
           <Suspense
             key={`usage-${location.search}`}
-            fallback={<UsageCardSkeleton />}
+            fallback={<BarChartSkeleton />}
           >
             <Await
               resolve={modelUsageTimeseriesPromise}
               errorElement={
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Model Usage Over Time</CardTitle>
-                    <CardDescription>Usage metrics by model</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ChartAsyncErrorState defaultMessage="Failed to load usage data" />
-                  </CardContent>
-                </Card>
+                <ChartAsyncErrorState defaultMessage="Failed to load usage data" />
               }
             >
               {(modelUsageData) => (
-                <ModelUsage modelUsageData={modelUsageData} />
+                <ModelUsageChart
+                  modelUsageData={modelUsageData}
+                  selectedMetric={usageMetric}
+                  timeGranularity={usageTimeGranularity}
+                />
               )}
             </Await>
           </Suspense>
         </SectionLayout>
+
         <SectionLayout>
-          <SectionHeader heading="Latency" />
+          <ChartSectionHeader
+            heading="Model Latency Distribution"
+            description={`${LATENCY_METRIC_CONFIG[latencyMetric].description} by model`}
+          >
+            <LatencyTimeWindowSelector
+              value={latencyTimeGranularity}
+              onValueChange={onLatencyTimeGranularityChange}
+            />
+            <LatencyMetricSelector
+              value={latencyMetric}
+              onValueChange={setLatencyMetric}
+            />
+          </ChartSectionHeader>
           <Suspense
             key={`latency-${location.search}`}
-            fallback={<LatencyCardSkeleton />}
+            fallback={<LineChartSkeleton />}
           >
             <Await
               resolve={modelLatencyQuantilesPromise}
               errorElement={
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Model Latency Distribution</CardTitle>
-                    <CardDescription>
-                      Quantiles of latency metrics by model
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ChartAsyncErrorState defaultMessage="Failed to load latency data" />
-                  </CardContent>
-                </Card>
+                <ChartAsyncErrorState defaultMessage="Failed to load latency data" />
               }
             >
               {(latencyData) => (
-                <ModelLatency latencyData={latencyData} quantiles={quantiles} />
+                <LatencyQuantileChart
+                  latencyData={latencyData}
+                  selectedMetric={latencyMetric}
+                  quantiles={quantiles}
+                />
               )}
             </Await>
           </Suspense>

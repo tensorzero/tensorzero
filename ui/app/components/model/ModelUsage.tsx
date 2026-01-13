@@ -1,4 +1,4 @@
-import type { ModelUsageTimePoint } from "~/types/tensorzero";
+import type { ModelUsageTimePoint, TimeWindow } from "~/types/tensorzero";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,
@@ -7,15 +7,7 @@ import {
   formatTooltipTimestamp,
   CHART_COLORS,
 } from "~/utils/chart";
-import { useState } from "react";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
 import {
   ChartContainer,
   ChartLegend,
@@ -31,7 +23,6 @@ import {
   SelectValue,
   SelectTrigger,
 } from "~/components/ui/select";
-import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 export type ModelUsageMetric =
   | "inferences"
@@ -39,7 +30,7 @@ export type ModelUsageMetric =
   | "output_tokens"
   | "total_tokens";
 
-const METRIC_TYPE_CONFIG = {
+export const USAGE_METRIC_CONFIG = {
   inferences: {
     label: "Inferences",
     description: "Number of inference requests",
@@ -62,17 +53,27 @@ const METRIC_TYPE_CONFIG = {
   },
 } as const;
 
-function MetricSelector({
-  selectedMetric,
-  onMetricChange,
+export function UsageTimeWindowSelector({
+  value,
+  onValueChange,
 }: {
-  selectedMetric: ModelUsageMetric;
-  onMetricChange: (metric: ModelUsageMetric) => void;
+  value: TimeWindow;
+  onValueChange: (value: TimeWindow) => void;
+}) {
+  return <TimeWindowSelector value={value} onValueChange={onValueChange} />;
+}
+
+export function UsageMetricSelector({
+  value,
+  onValueChange,
+}: {
+  value: ModelUsageMetric;
+  onValueChange: (metric: ModelUsageMetric) => void;
 }) {
   return (
     <Select
-      value={selectedMetric}
-      onValueChange={(value: ModelUsageMetric) => onMetricChange(value)}
+      value={value}
+      onValueChange={(v: ModelUsageMetric) => onValueChange(v)}
     >
       <SelectTrigger>
         <SelectValue placeholder="Choose metric" />
@@ -87,18 +88,17 @@ function MetricSelector({
   );
 }
 
-interface ModelUsageProps {
+interface ModelUsageChartProps {
   modelUsageData: ModelUsageTimePoint[];
+  selectedMetric: ModelUsageMetric;
+  timeGranularity: TimeWindow;
 }
 
-export function ModelUsage({ modelUsageData }: ModelUsageProps) {
-  const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
-    "usageTimeGranularity",
-    "week",
-  );
-  const [selectedMetric, setSelectedMetric] =
-    useState<ModelUsageMetric>("inferences");
-
+export function ModelUsageChart({
+  modelUsageData,
+  selectedMetric,
+  timeGranularity,
+}: ModelUsageChartProps) {
   const { data, modelNames } = transformModelUsageData(
     modelUsageData,
     selectedMetric,
@@ -116,105 +116,83 @@ export function ModelUsage({ modelUsageData }: ModelUsageProps) {
     );
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between">
-        <div>
-          <CardTitle>Model Usage Over Time</CardTitle>
-          <CardDescription>
-            {METRIC_TYPE_CONFIG[selectedMetric].description} by model
-          </CardDescription>
-        </div>
-        <div className="flex flex-col justify-center gap-2">
-          <TimeWindowSelector
-            value={timeGranularity}
-            onValueChange={onTimeGranularityChange}
+    <ChartContainer config={chartConfig} className="h-80 w-full">
+      <BarChart accessibilityLayer data={data}>
+        <CartesianGrid vertical={false} />
+        {timeGranularity !== "cumulative" && (
+          <XAxis
+            dataKey="date"
+            tickLine={false}
+            tickMargin={10}
+            axisLine={true}
+            tickFormatter={(value) =>
+              formatXAxisTimestamp(new Date(value), timeGranularity)
+            }
           />
-          <MetricSelector
-            selectedMetric={selectedMetric}
-            onMetricChange={setSelectedMetric}
-          />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig} className="h-80 w-full">
-          <BarChart accessibilityLayer data={data}>
-            <CartesianGrid vertical={false} />
-            {timeGranularity !== "cumulative" && (
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                tickMargin={10}
-                axisLine={true}
-                tickFormatter={(value) =>
-                  formatXAxisTimestamp(new Date(value), timeGranularity)
-                }
-              />
-            )}
-            <YAxis
-              tickLine={false}
-              tickMargin={10}
-              axisLine={true}
-              tickFormatter={formatChartNumber}
-            />
-            <ChartTooltip
-              content={
-                <ChartTooltipContent
-                  labelFormatter={(label) =>
-                    timeGranularity === "cumulative"
-                      ? "Total"
-                      : formatTooltipTimestamp(new Date(label), timeGranularity)
-                  }
-                  formatter={(value, name, entry) => {
-                    const count = entry.payload[`${name}_count`];
-                    const inputTokens = entry.payload[`${name}_input_tokens`];
-                    const outputTokens = entry.payload[`${name}_output_tokens`];
-                    const totalTokens = inputTokens + outputTokens;
-
-                    return (
-                      <div className="flex flex-1 items-center justify-between leading-none">
-                        <span className="text-muted-foreground mr-2 font-mono text-xs">
-                          {name}
-                        </span>
-                        <div className="grid text-right">
-                          <span className="text-foreground font-mono font-medium tabular-nums">
-                            {METRIC_TYPE_CONFIG[selectedMetric].formatter(
-                              value as number,
-                            )}
-                          </span>
-                          {selectedMetric === "inferences" && (
-                            <span className="text-muted-foreground text-[10px]">
-                              {formatDetailedNumber(totalTokens)} tokens
-                            </span>
-                          )}
-                          {selectedMetric !== "inferences" && (
-                            <span className="text-muted-foreground text-[10px]">
-                              {formatDetailedNumber(count)} requests
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
+        )}
+        <YAxis
+          tickLine={false}
+          tickMargin={10}
+          axisLine={true}
+          tickFormatter={formatChartNumber}
+        />
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              labelFormatter={(label) =>
+                timeGranularity === "cumulative"
+                  ? "Total"
+                  : formatTooltipTimestamp(new Date(label), timeGranularity)
               }
+              formatter={(value, name, entry) => {
+                const count = entry.payload[`${name}_count`];
+                const inputTokens = entry.payload[`${name}_input_tokens`];
+                const outputTokens = entry.payload[`${name}_output_tokens`];
+                const totalTokens = inputTokens + outputTokens;
+
+                return (
+                  <div className="flex flex-1 items-center justify-between leading-none">
+                    <span className="text-muted-foreground mr-2 font-mono text-xs">
+                      {name}
+                    </span>
+                    <div className="grid text-right">
+                      <span className="text-foreground font-mono font-medium tabular-nums">
+                        {USAGE_METRIC_CONFIG[selectedMetric].formatter(
+                          value as number,
+                        )}
+                      </span>
+                      {selectedMetric === "inferences" && (
+                        <span className="text-muted-foreground text-[10px]">
+                          {formatDetailedNumber(totalTokens)} tokens
+                        </span>
+                      )}
+                      {selectedMetric !== "inferences" && (
+                        <span className="text-muted-foreground text-[10px]">
+                          {formatDetailedNumber(count)} requests
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              }}
             />
-            <ChartLegend
-              content={<ChartLegendContent className="font-mono text-xs" />}
-            />
-            {modelNames.map((modelName, index) => (
-              <Bar
-                key={modelName}
-                dataKey={modelName}
-                name={modelName}
-                fill={CHART_COLORS[index % CHART_COLORS.length]}
-                radius={4}
-                maxBarSize={100}
-              />
-            ))}
-          </BarChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
+          }
+        />
+        <ChartLegend
+          content={<ChartLegendContent className="font-mono text-xs" />}
+        />
+        {modelNames.map((modelName, index) => (
+          <Bar
+            key={modelName}
+            dataKey={modelName}
+            name={modelName}
+            fill={CHART_COLORS[index % CHART_COLORS.length]}
+            radius={4}
+            maxBarSize={100}
+          />
+        ))}
+      </BarChart>
+    </ChartContainer>
   );
 }
 

@@ -7,7 +7,7 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { CHART_COLORS } from "~/utils/chart";
 import {
   Select,
@@ -17,20 +17,23 @@ import {
   SelectTrigger,
 } from "~/components/ui/select";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
-import {
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
 } from "~/components/ui/chart";
-import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
-type LatencyMetric = "response_time_ms" | "ttft_ms";
+export type LatencyMetric = "response_time_ms" | "ttft_ms";
+
+export const LATENCY_METRIC_CONFIG = {
+  response_time_ms: {
+    label: "Response Time",
+    description: "Response time distribution",
+  },
+  ttft_ms: {
+    label: "Time to First Token",
+    description: "Time to first token distribution",
+  },
+} as const;
 
 interface TooltipPayload {
   value: number | null;
@@ -88,7 +91,7 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
 
 const MARGIN = { top: 12, right: 16, bottom: 28, left: 56 };
 
-function LatencyTimeWindowSelector({
+export function LatencyTimeWindowSelector({
   value,
   onValueChange,
 }: {
@@ -111,16 +114,40 @@ function LatencyTimeWindowSelector({
   );
 }
 
+export function LatencyMetricSelector({
+  value,
+  onValueChange,
+}: {
+  value: LatencyMetric;
+  onValueChange: (metric: LatencyMetric) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(v: LatencyMetric) => onValueChange(v)}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Choose metric" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="response_time_ms">Response Time</SelectItem>
+        <SelectItem value="ttft_ms">Time to First Token</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+interface LatencyQuantileChartProps {
+  latencyData: ModelLatencyDatapoint[];
+  selectedMetric: LatencyMetric;
+  quantiles: number[];
+}
+
 export function LatencyQuantileChart({
   latencyData,
   selectedMetric,
   quantiles,
-}: {
-  latencyData: ModelLatencyDatapoint[];
-  selectedMetric: LatencyMetric;
-  quantiles: number[];
-}) {
-  // Prepare eCDF series (your existing transform is fine)
+}: LatencyQuantileChartProps) {
   const { data, modelNames } = useMemo(
     () => transformLatencyData(latencyData, selectedMetric, quantiles),
     [latencyData, selectedMetric, quantiles],
@@ -209,7 +236,6 @@ function transformLatencyData(
   const modelNames = latencyData.map((d) => d.model_name);
   const data: QuantileDataPoint[] = [];
 
-  // Create data points for each quantile/percentile
   quantiles.forEach((percentile) => {
     const dp: QuantileDataPoint = { percentile };
 
@@ -220,7 +246,6 @@ function transformLatencyData(
           ? md.response_time_ms_quantiles
           : md.ttft_ms_quantiles;
 
-      // Find the quantile index for this percentile
       const quantileIndex = quantiles.indexOf(percentile);
       if (quantileIndex >= 0 && quantileIndex < arr.length) {
         const latencyValue = arr[quantileIndex];
@@ -233,56 +258,4 @@ function transformLatencyData(
   });
 
   return { data, modelNames };
-}
-
-interface ModelLatencyProps {
-  latencyData: ModelLatencyDatapoint[];
-  quantiles: number[];
-}
-
-export function ModelLatency({ latencyData, quantiles }: ModelLatencyProps) {
-  const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
-    "latencyTimeGranularity",
-    "week",
-  );
-  const [selectedMetric, setSelectedMetric] =
-    useState<LatencyMetric>("response_time_ms");
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between">
-        <div>
-          <CardTitle>Model Latency Distribution</CardTitle>
-          <CardDescription>
-            Quantiles of latency metrics by model
-          </CardDescription>
-        </div>
-        <div className="flex flex-col justify-center gap-2">
-          <LatencyTimeWindowSelector
-            value={timeGranularity}
-            onValueChange={onTimeGranularityChange}
-          />
-          <Select
-            value={selectedMetric}
-            onValueChange={(value: LatencyMetric) => setSelectedMetric(value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Choose metric" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="response_time_ms">Response Time</SelectItem>
-              <SelectItem value="ttft_ms">Time to First Token</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <LatencyQuantileChart
-          latencyData={latencyData}
-          selectedMetric={selectedMetric}
-          quantiles={quantiles}
-        />
-      </CardContent>
-    </Card>
-  );
 }
