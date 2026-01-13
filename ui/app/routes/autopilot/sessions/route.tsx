@@ -1,13 +1,7 @@
-import { AlertCircle, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Suspense } from "react";
 import type { Route } from "./+types/route";
-import {
-  Await,
-  data,
-  useAsyncError,
-  useLocation,
-  useNavigate,
-} from "react-router";
+import { Await, data, useLocation, useNavigate } from "react-router";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import {
   PageHeader,
@@ -23,13 +17,13 @@ import type { Session } from "~/types/tensorzero";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   Table,
+  TableAsyncErrorState,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_PAGE_SIZE = 20;
@@ -95,25 +89,6 @@ function SkeletonRows() {
         </TableRow>
       ))}
     </>
-  );
-}
-
-// Error state for failed data load
-function TableErrorState() {
-  const error = useAsyncError();
-  const message =
-    error instanceof Error ? error.message : "Failed to load sessions";
-
-  return (
-    <TableRow>
-      <TableCell colSpan={2}>
-        <TableErrorNotice
-          icon={AlertCircle}
-          title="Error loading sessions"
-          description={message}
-        />
-      </TableCell>
-    </TableRow>
   );
 }
 
@@ -212,7 +187,15 @@ export default function AutopilotSessionsPage({
           </TableHeader>
           <TableBody>
             <Suspense key={location.search} fallback={<SkeletonRows />}>
-              <Await resolve={sessionsData} errorElement={<TableErrorState />}>
+              <Await
+                resolve={sessionsData}
+                errorElement={
+                  <TableAsyncErrorState
+                    colSpan={2}
+                    defaultMessage="Failed to load sessions"
+                  />
+                }
+              >
                 {(resolvedData) => (
                   <TableBodyContent
                     data={resolvedData}
