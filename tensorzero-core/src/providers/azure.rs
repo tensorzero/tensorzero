@@ -42,7 +42,7 @@ use super::chat_completions::{
 };
 use super::openai::{
     OpenAIEmbeddingUsage, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
-    SystemOrDeveloper, handle_openai_error, prepare_openai_messages, stream_openai,
+    StreamOptions, SystemOrDeveloper, handle_openai_error, prepare_openai_messages, stream_openai,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -639,6 +639,8 @@ struct AzureRequest<'a> {
     seed: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<StreamOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<ChatCompletionTool<'a>>>,
@@ -714,6 +716,13 @@ impl<'a> AzureRequest<'a> {
         )
         .await?;
         let (tools, tool_choice, _) = prepare_chat_completion_tools(request, true)?;
+        let stream_options = if request.stream {
+            Some(StreamOptions {
+                include_usage: true,
+            })
+        } else {
+            None
+        };
         let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,
@@ -723,6 +732,7 @@ impl<'a> AzureRequest<'a> {
             frequency_penalty: request.frequency_penalty,
             max_completion_tokens: request.max_tokens,
             stream: request.stream,
+            stream_options,
             response_format,
             seed: request.seed,
             tools,
@@ -1246,6 +1256,7 @@ mod tests {
             max_completion_tokens: None,
             seed: None,
             stream: false,
+            stream_options: None,
             response_format: None,
             tools: None,
             // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
