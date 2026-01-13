@@ -39,13 +39,7 @@ interface PageHeaderProps {
 }
 
 // Shared error display for failed count loads - shows "—" with tooltip
-function CountErrorTooltip({
-  as: Element = "span",
-  className,
-}: {
-  as?: "h1" | "span";
-  className?: string;
-}) {
+function CountErrorTooltip({ variant }: { variant: "page" | "section" }) {
   const error = useAsyncError();
   const message =
     error instanceof Error ? error.message : "Failed to load count";
@@ -53,14 +47,14 @@ function CountErrorTooltip({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Element
+        <span
           className={cn(
             "cursor-help font-medium text-red-500 dark:text-red-400",
-            className,
+            variant === "page" ? "text-2xl" : "text-xl",
           )}
         >
           —
-        </Element>
+        </span>
       </TooltipTrigger>
       <TooltipContent>
         <p>{message}</p>
@@ -70,7 +64,7 @@ function CountErrorTooltip({
 }
 
 function PageCountError() {
-  return <CountErrorTooltip as="h1" className="text-2xl" />;
+  return <CountErrorTooltip variant="page" />;
 }
 
 function PageCountValue({ value }: { value: number | bigint }) {
@@ -171,7 +165,7 @@ interface SectionHeaderProps extends React.PropsWithChildren {
 }
 
 function SectionCountError() {
-  return <CountErrorTooltip as="span" className="text-xl" />;
+  return <CountErrorTooltip variant="section" />;
 }
 
 function SectionCountValue({ value }: { value: number | bigint }) {
