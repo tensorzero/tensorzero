@@ -71,7 +71,7 @@ pub const IMPLICIT_TOOL_NAME: &str = "respond";
 pub const IMPLICIT_TOOL_DESCRIPTION: &str = "Respond to the user using the output schema provided.";
 
 pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
-    let tool_schema = JSONSchema::compile_async(schema);
+    let tool_schema = JSONSchema::compile_background(schema);
     let implicit_tool = FunctionToolConfig::DynamicImplicit(DynamicImplicitToolConfig {
         parameters: tool_schema,
     });

@@ -247,7 +247,7 @@ impl FunctionTool {
     pub(crate) fn into_dynamic_tool_config(self) -> DynamicToolConfig {
         DynamicToolConfig {
             description: self.description,
-            parameters: JSONSchema::compile_async(self.parameters),
+            parameters: JSONSchema::compile_background(self.parameters),
             name: self.name,
             strict: self.strict,
         }

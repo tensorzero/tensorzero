@@ -268,7 +268,7 @@ mod tests {
         FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "dynamic_tool".to_string(),
             description: "A dynamic tool".to_string(),
-            parameters: JSONSchema::compile_async(json!({
+            parameters: JSONSchema::compile_background(json!({
                 "type": "object",
                 "properties": {
                     "param1": {"type": "string"}

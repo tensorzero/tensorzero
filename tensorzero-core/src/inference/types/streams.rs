@@ -1389,7 +1389,7 @@ mod tests {
             input_tokens: Some(5),
             output_tokens: Some(10),
         };
-        let dynamic_output_schema = JSONSchema::compile_async(serde_json::json!({
+        let dynamic_output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"},

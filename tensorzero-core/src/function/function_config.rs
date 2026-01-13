@@ -2202,7 +2202,7 @@ mod tests {
             InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
-        let dynamic_output_schema = JSONSchema::compile_async(serde_json::json!({
+        let dynamic_output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {

@@ -12,7 +12,7 @@ use crate::utils::spawn_ignoring_shutdown;
 /// A JSON schema with a lazily-compiled validator.
 ///
 /// The validator is compiled asynchronously on first access (via `validate()` or `ensure_valid()`).
-/// Compilation is kicked off in the background when the schema is created via `compile_async()`,
+/// Compilation is kicked off in the background when the schema is created via `compile_background()`,
 /// so it should typically be ready by the time validation is needed.
 ///
 /// When created via `compile()`, `from_path()`, or `from_value()`, the schema is compiled
@@ -83,7 +83,7 @@ impl JSONSchema {
     /// by the time validation is needed.
     ///
     /// **Note**: This must be called from within a tokio runtime context.
-    pub fn compile_async(schema: Value) -> Self {
+    pub fn compile_background(schema: Value) -> Self {
         let this = Self::new_lazy(schema);
         let this_clone = this.clone();
         // Kick off the schema compilation in the background.
@@ -192,7 +192,7 @@ impl JSONSchema {
                 message: e.to_string(),
             })
         })?;
-        Ok(Self::compile_async(schema))
+        Ok(Self::compile_background(schema))
     }
 }
 
@@ -305,7 +305,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_compile_async() {
+    async fn test_compile_background() {
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -313,7 +313,7 @@ mod tests {
             }
         });
 
-        let dynamic_schema = JSONSchema::compile_async(schema);
+        let dynamic_schema = JSONSchema::compile_background(schema);
         let instance = serde_json::json!({
             "name": "John Doe",
         });
@@ -347,7 +347,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ensure_valid() {
-        let valid_schema = JSONSchema::compile_async(serde_json::json!({
+        let valid_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
             "properties": {
                 "name": { "type": "string" }
@@ -355,7 +355,7 @@ mod tests {
         }));
         assert!(valid_schema.ensure_valid().await.is_ok());
 
-        let invalid_schema = JSONSchema::compile_async(serde_json::json!({
+        let invalid_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "invalid_type"
         }));
         assert!(invalid_schema.ensure_valid().await.is_err());

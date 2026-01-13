@@ -1091,7 +1091,8 @@ mod tests {
             },
             "required": ["result"],
         });
-        let dynamic_output_schema = JSONSchema::compile_async(dynamic_output_schema_value.clone());
+        let dynamic_output_schema =
+            JSONSchema::compile_background(dynamic_output_schema_value.clone());
         let inference_config_dynamic = InferenceConfig {
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),

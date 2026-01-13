@@ -854,7 +854,7 @@ mod tests {
         let tool = FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
-            parameters: JSONSchema::compile_async(parameters.clone()),
+            parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
         let anthropic_tool: AnthropicTool = AnthropicTool::new(&tool, false);
