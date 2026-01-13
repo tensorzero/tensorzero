@@ -1285,6 +1285,8 @@ mod tests {
         let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let clients = InferenceClients {
             http_client: client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -1295,7 +1297,9 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2300,6 +2304,8 @@ mod tests {
         let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let clients = InferenceClients {
             http_client: client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -2310,7 +2316,9 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {

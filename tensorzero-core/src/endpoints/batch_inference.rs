@@ -126,6 +126,7 @@ pub async fn start_batch_inference(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        token_pool_manager,
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
@@ -227,7 +228,7 @@ pub async fn start_batch_inference(
         postgres_connection_info: postgres_connection_info.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: cache_options.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        token_pool_manager,
         tags: tags.clone(),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
