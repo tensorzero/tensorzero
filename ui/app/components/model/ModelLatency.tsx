@@ -23,11 +23,11 @@ export type LatencyMetric = "response_time_ms" | "ttft_ms";
 export const LATENCY_METRIC_CONFIG = {
   response_time_ms: {
     label: "Response Time",
-    description: "Response time",
+    description: "Response time distribution",
   },
   ttft_ms: {
     label: "Time to First Token",
-    description: "Time to first token",
+    description: "Time to first token distribution",
   },
 } as const;
 
