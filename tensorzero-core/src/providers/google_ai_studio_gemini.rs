@@ -51,6 +51,10 @@ use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
+/// Dummy signature for cross-model inference compatibility with Gemini 3+.
+/// See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+const DUMMY_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
+
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -559,9 +563,15 @@ impl<'a> GeminiContent<'a> {
                     let part = convert_non_thought_content_block(block).await?;
                     match part {
                         FlattenUnknown::Normal(part) => {
+                            let thought_signature =
+                                if matches!(part, GeminiPartData::FunctionCall { .. }) {
+                                    Some(DUMMY_THOUGHT_SIGNATURE.to_string())
+                                } else {
+                                    None
+                                };
                             output.push(GeminiContentPart {
                                 thought: false,
-                                thought_signature: None,
+                                thought_signature,
                                 data: FlattenUnknown::Normal(part),
                             });
                         }
@@ -1628,11 +1638,12 @@ mod tests {
                 }),
             }
         );
+        // FunctionCall part should have dummy thought_signature for cross-model inference
         assert_eq!(
             content.parts[1],
             GeminiContentPart {
                 thought: false,
-                thought_signature: None,
+                thought_signature: Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
                 data: FlattenUnknown::Normal(GeminiPartData::FunctionCall {
                     function_call: GeminiFunctionCall {
                         name: "get_temperature",

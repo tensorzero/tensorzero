@@ -77,6 +77,10 @@ pub const PROVIDER_TYPE: &str = "gcp_vertex_gemini";
 
 const INFERENCE_ID_LABEL: &str = "tensorzero::inference_id";
 
+/// Dummy signature for cross-model inference compatibility with Gemini 3+.
+/// See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+const DUMMY_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
+
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 ///
@@ -2399,7 +2403,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
 
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
-                    thought_signature: None,
+                    thought_signature: Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
                     data: FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall {
                         function_call: GCPVertexGeminiFunctionCall {
                             name: Cow::Borrowed(&tool_call.name),
@@ -2436,7 +2440,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
 
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
-                    thought_signature: None,
+                    thought_signature: Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
                     data: FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall {
                         function_call: GCPVertexGeminiFunctionCall {
                             name: Cow::Owned(tool_call.name),
@@ -4154,12 +4158,23 @@ mod tests {
         .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::Model);
         assert_eq!(gcp_content.parts.len(), 2);
+        // Text part should not have thought_signature
+        assert_eq!(
+            gcp_content.parts[0].thought_signature, None,
+            "Text parts should not have thought_signature"
+        );
         match &gcp_content.parts[0].data {
             FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
                 assert_eq!(text, "Hello");
             }
             _ => panic!("Expected a text part"),
         }
+        // FunctionCall part should have dummy thought_signature for cross-model inference
+        assert_eq!(
+            gcp_content.parts[1].thought_signature,
+            Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
+            "FunctionCall parts should have dummy thought_signature for cross-model inference"
+        );
         match &gcp_content.parts[1].data {
             FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { function_call }) => {
                 assert_eq!(function_call.name, Cow::Borrowed("test_function"));
