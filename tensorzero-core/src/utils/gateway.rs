@@ -97,18 +97,21 @@ impl Drop for GatewayHandle {
                 tracing::info!("ClickHouse batch writer finished");
             }
             // Return unused rate limit tokens to the database
-            tokio::task::block_in_place(|| {
-                tracing::info!("Returning unused rate limit tokens to database");
-                let result = Handle::current().block_on(
-                    self.app_state
-                        .token_pool_manager
-                        .shutdown(&self.app_state.postgres_connection_info),
-                );
-                if let Err(e) = result {
-                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
-                }
-                tracing::info!("Rate limit token return complete");
-            });
+            // Only run if there are actual pools (avoids block_in_place on single-threaded runtime)
+            if !self.app_state.token_pool_manager.is_empty() {
+                tokio::task::block_in_place(|| {
+                    tracing::info!("Returning unused rate limit tokens to database");
+                    let result = Handle::current().block_on(
+                        self.app_state
+                            .token_pool_manager
+                            .shutdown(&self.app_state.postgres_connection_info),
+                    );
+                    if let Err(e) = result {
+                        tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
+                    }
+                    tracing::info!("Rate limit token return complete");
+                });
+            }
 
             self.app_state.deferred_tasks.close();
             // The 'wait' future will resolve immediately if the pool is empty.

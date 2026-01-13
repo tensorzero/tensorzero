@@ -836,6 +836,8 @@ mod tests {
             dimensions: None,
             encoding_format: EmbeddingEncodingFormat::Float,
         };
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let response = fallback_embedding_model
             .embed(
                 &request,
@@ -850,7 +852,12 @@ mod tests {
                         enabled: CacheEnabledMode::Off,
                     },
                     tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
+                    token_pool_manager: Arc::new(
+                        crate::rate_limiting::pool::TokenPoolManager::new(
+                            rate_limiting_config.clone(),
+                        ),
+                    ),
+                    rate_limiting_config,
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: crate::rate_limiting::ScopeInfo {

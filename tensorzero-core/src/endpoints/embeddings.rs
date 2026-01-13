@@ -178,12 +178,17 @@ mod tests {
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
 
+        let rate_limiting_config: std::sync::Arc<crate::rate_limiting::RateLimitingConfig> =
+            std::sync::Arc::new(Default::default());
         let result = embeddings(
             config,
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
             tokio_util::task::TaskTracker::new(),
+            std::sync::Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             params,
             None,
         )
@@ -214,12 +219,17 @@ mod tests {
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
 
+        let rate_limiting_config: std::sync::Arc<crate::rate_limiting::RateLimitingConfig> =
+            std::sync::Arc::new(Default::default());
         let result = embeddings(
             config,
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
             tokio_util::task::TaskTracker::new(),
+            std::sync::Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             params,
             None,
         )

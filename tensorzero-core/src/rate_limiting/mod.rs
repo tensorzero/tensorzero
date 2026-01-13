@@ -1590,12 +1590,14 @@ mod tests {
         let config_enabled = RateLimitingConfig {
             rules: vec![],
             enabled: true,
+            pool: Default::default(),
         };
         assert!(config_enabled.enabled());
 
         let config_disabled = RateLimitingConfig {
             rules: vec![],
             enabled: false,
+            pool: Default::default(),
         };
         assert!(!config_disabled.enabled());
 
@@ -1660,6 +1662,7 @@ mod tests {
         let uninitialized = UninitializedRateLimitingConfig {
             rules: vec![rule_priority_5, rule_always],
             enabled: true,
+            pool: Default::default(),
         };
         let err_message = RateLimitingConfig::try_from(uninitialized)
             .unwrap_err()
@@ -1718,6 +1721,7 @@ mod tests {
         let config_numeric_priorities = RateLimitingConfig {
             rules: vec![rule_priority_3, rule_priority_7],
             enabled: true,
+            pool: Default::default(),
         };
 
         let active_limits = config_numeric_priorities.get_active_limits(&scope_info);
@@ -1744,6 +1748,7 @@ mod tests {
         let config_multiple_limits = RateLimitingConfig {
             rules: vec![rule_multiple_limits],
             enabled: true,
+            pool: Default::default(),
         };
 
         let active_limits = config_multiple_limits.get_active_limits(&scope_info);
@@ -2097,6 +2102,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
+            pool: Default::default(),
         };
         let resources = config_with_token.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -2116,6 +2122,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
+            pool: Default::default(),
         };
         let resources = config_model_only.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -2130,6 +2137,7 @@ mod tests {
                 scope: RateLimitingConfigScopes(vec![]),
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
+            pool: Default::default(),
         };
         assert!(
             config_disabled

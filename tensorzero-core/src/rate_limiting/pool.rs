@@ -261,6 +261,12 @@ impl TokenPoolManager {
         }
     }
 
+    /// Returns true if there are no pools tracked by this manager.
+    /// Used to optimize shutdown (skip block_in_place if nothing to do).
+    pub fn is_empty(&self) -> bool {
+        self.pools.is_empty()
+    }
+
     /// Get or create a pool for the given active limit
     fn get_or_create_pool(&self, active_limit: &ActiveRateLimit) -> Arc<TokenPool> {
         let key = active_limit.key.0.clone();
@@ -473,6 +479,7 @@ impl TokenPoolManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rate_limiting::RateLimitInterval;
 
     fn create_test_limit(resource: RateLimitResource, capacity: u64) -> Arc<RateLimit> {
         Arc::new(RateLimit {

@@ -357,9 +357,9 @@ async fn process_embedding_batch(
     // Create InferenceClients context for the embedding model
     let deferred_tasks = tokio_util::task::TaskTracker::new();
     let rate_limiting_config = Arc::new(config.rate_limiting.clone());
-    let token_pool_manager = Arc::new(
-        tensorzero_core::rate_limiting::pool::TokenPoolManager::new(rate_limiting_config.clone()),
-    );
+    let token_pool_manager = Arc::new(tensorzero_core::rate_limiting::pool::TokenPoolManager::new(
+        rate_limiting_config.clone(),
+    ));
     let clients = InferenceClients {
         http_client: client.clone(),
         credentials: Arc::new(credentials.clone()),
