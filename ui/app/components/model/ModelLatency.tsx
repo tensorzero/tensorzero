@@ -85,7 +85,7 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
   );
 }
 
-const MARGIN = { top: 12, right: 16, bottom: 28, left: 56 };
+const MARGIN = { top: 12, right: 12, bottom: 0, left: 0 };
 
 export function LatencyTimeWindowSelector({
   value,
@@ -184,9 +184,9 @@ export function LatencyQuantileChart({
             scale="log"
             domain={["dataMin", "dataMax"]}
             tickLine={false}
-            tickMargin={10}
             axisLine={false}
             tickFormatter={(v) => `${v}ms`}
+            mirror={true}
           />
 
           <Tooltip

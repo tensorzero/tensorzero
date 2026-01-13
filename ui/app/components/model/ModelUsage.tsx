@@ -116,7 +116,11 @@ export function ModelUsageChart({
   return (
     <div>
       <ChartContainer config={chartConfig} className="h-72 w-full">
-        <BarChart accessibilityLayer data={data}>
+        <BarChart
+          accessibilityLayer
+          data={data}
+          margin={{ top: 12, right: 12, bottom: 0, left: 0 }}
+        >
           <CartesianGrid vertical={false} />
           {timeGranularity !== "cumulative" && (
             <XAxis
@@ -131,9 +135,9 @@ export function ModelUsageChart({
           )}
           <YAxis
             tickLine={false}
-            tickMargin={10}
             axisLine={false}
             tickFormatter={formatChartNumber}
+            mirror={true}
           />
           <ChartTooltip
             content={
