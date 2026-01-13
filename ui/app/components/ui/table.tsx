@@ -1,7 +1,9 @@
 import * as React from "react";
 import { useAsyncError } from "react-router";
+import { AlertCircle } from "lucide-react";
 
 import { cn } from "~/utils/common";
+import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 
 const Table = React.forwardRef<
   HTMLTableElement,
@@ -157,11 +159,12 @@ function TableAsyncErrorState({
 
   return (
     <TableRow>
-      <TableCell colSpan={colSpan} className="text-center">
-        <div className="flex flex-col items-center gap-2 py-8 text-red-600">
-          <span className="font-medium">Error loading data</span>
-          <span className="text-muted-foreground text-sm">{message}</span>
-        </div>
+      <TableCell colSpan={colSpan}>
+        <TableErrorNotice
+          icon={AlertCircle}
+          title="Error loading data"
+          description={message}
+        />
       </TableCell>
     </TableRow>
   );

@@ -41,6 +41,8 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertCircle } from "lucide-react";
 
 export type InferencesData = {
   inferences: StoredInference[];
@@ -223,21 +225,17 @@ function FeedbackSectionError() {
         </TableHeader>
         <TableBody>
           <TableRow>
-            <TableCell colSpan={5} className="text-center">
-              <div className="flex flex-col items-center gap-2 py-8 text-red-600">
-                <span className="font-medium">Error loading data</span>
-                <span className="text-muted-foreground text-sm">{message}</span>
-              </div>
+            <TableCell colSpan={5}>
+              <TableErrorNotice
+                icon={AlertCircle}
+                title="Error loading data"
+                description={message}
+              />
             </TableCell>
           </TableRow>
         </TableBody>
       </Table>
-      <PageButtons
-        onPreviousPage={() => {}}
-        onNextPage={() => {}}
-        disablePrevious
-        disableNext
-      />
+      <PageButtons disabled />
     </>
   );
 }
@@ -420,17 +418,8 @@ export default function EpisodeDetailPage({
             onCloseSheet={handleCloseSheet}
             openSheetInferenceId={openSheetInferenceId}
           />
-          <Suspense
-            fallback={
-              <PageButtons
-                onPreviousPage={() => {}}
-                onNextPage={() => {}}
-                disablePrevious
-                disableNext
-              />
-            }
-          >
-            <Await resolve={inferencesData} errorElement={null}>
+          <Suspense fallback={<PageButtons disabled />}>
+            <Await resolve={inferencesData} errorElement={<></>}>
               {(resolvedData) => (
                 <InferencePaginationContent data={resolvedData} />
               )}
@@ -452,12 +441,7 @@ export default function EpisodeDetailPage({
             fallback={
               <>
                 <FeedbackTableSkeleton />
-                <PageButtons
-                  onPreviousPage={() => {}}
-                  onNextPage={() => {}}
-                  disablePrevious
-                  disableNext
-                />
+                <PageButtons disabled />
               </>
             }
           >

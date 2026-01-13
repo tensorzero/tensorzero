@@ -102,17 +102,8 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
       <SectionLayout>
         <EpisodeSearchBar />
         <EpisodesTable data={dataPromise} />
-        <Suspense
-          fallback={
-            <PageButtons
-              onPreviousPage={() => {}}
-              onNextPage={() => {}}
-              disablePrevious
-              disableNext
-            />
-          }
-        >
-          <Await resolve={dataPromise} errorElement={null}>
+        <Suspense fallback={<PageButtons disabled />}>
+          <Await resolve={dataPromise} errorElement={<></>}>
             {(resolvedData) => (
               <PaginationButtons data={resolvedData} limit={limit} />
             )}

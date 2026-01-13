@@ -17,7 +17,7 @@ import {
   ErrorContentHeader,
   ErrorInlineCode,
   PageErrorContainer,
-  PageErrorStack,
+  ErrorNotice,
   StackTraceContent,
   TroubleshootingSection,
 } from "./ErrorContentPrimitives";
@@ -152,7 +152,7 @@ function ServerErrorContent({
 export function PageNotFound() {
   return (
     <PageErrorContainer>
-      <PageErrorStack
+      <ErrorNotice
         icon={FileQuestion}
         title="Page Not Found"
         description="The page you're looking for doesn't exist."
@@ -182,7 +182,7 @@ export function PageErrorContent({ error }: PageErrorContentProps) {
 
   return (
     <PageErrorContainer>
-      <PageErrorStack
+      <ErrorNotice
         icon={AlertTriangle}
         title={status ? `Error ${status}` : title}
         description={message}

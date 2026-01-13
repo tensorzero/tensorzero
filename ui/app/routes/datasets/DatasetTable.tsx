@@ -7,12 +7,19 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
+import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import type { DatasetMetadata } from "~/types/tensorzero";
 import { Link, useFetcher, useLocation } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { toDatasetUrl } from "~/utils/urls";
 import { Button } from "~/components/ui/button";
-import { Trash, ChevronUp, ChevronDown, Search } from "lucide-react";
+import {
+  AlertCircle,
+  Trash,
+  ChevronUp,
+  ChevronDown,
+  Search,
+} from "lucide-react";
 import { Suspense, useMemo, useState } from "react";
 import { Await, useAsyncError } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -70,12 +77,7 @@ function SkeletonTable() {
           ))}
         </TableBody>
       </Table>
-      <PageButtons
-        onPreviousPage={() => {}}
-        onNextPage={() => {}}
-        disablePrevious
-        disableNext
-      />
+      <PageButtons disabled />
     </>
   );
 }
@@ -99,21 +101,17 @@ function TableErrorState() {
         </TableHeader>
         <TableBody>
           <TableRow>
-            <TableCell colSpan={4} className="text-center">
-              <div className="flex flex-col items-center gap-2 py-8 text-red-600">
-                <span className="font-medium">Error loading data</span>
-                <span className="text-muted-foreground text-sm">{message}</span>
-              </div>
+            <TableCell colSpan={4}>
+              <TableErrorNotice
+                icon={AlertCircle}
+                title="Error loading data"
+                description={message}
+              />
             </TableCell>
           </TableRow>
         </TableBody>
       </Table>
-      <PageButtons
-        onPreviousPage={() => {}}
-        onNextPage={() => {}}
-        disablePrevious
-        disableNext
-      />
+      <PageButtons disabled />
     </>
   );
 }
