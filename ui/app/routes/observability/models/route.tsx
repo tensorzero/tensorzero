@@ -76,6 +76,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const numPeriods = parseInt(url.searchParams.get("usageNumPeriods") || "10");
   const client = getTensorZeroClient();
+
   const modelUsageTimeseriesPromise = client
     .getModelUsageTimeseries(usageTimeGranularity, numPeriods)
     .then((response) => response.data);

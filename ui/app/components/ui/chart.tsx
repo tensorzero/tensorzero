@@ -366,45 +366,48 @@ const SKELETON_BAR_HEIGHTS = [45, 65, 35, 80, 55, 40, 70, 50, 60, 30];
  */
 function BarChartSkeleton({ className }: { className?: string }) {
   return (
-    <div className={cn("flex h-72 w-full flex-col", className)}>
-      {/* Chart area with Y-axis and bars */}
-      <div className="flex flex-1">
-        {/* Y-axis labels - w-[60px] matches Recharts default YAxis width */}
-        <div className="flex w-[60px] flex-col items-end justify-between py-2 pr-2">
+    <div className={className}>
+      {/* Chart container - h-72 matches ChartContainer in production */}
+      <div className="flex h-72 w-full flex-col">
+        {/* Chart area with Y-axis and bars */}
+        <div className="flex flex-1">
+          {/* Y-axis labels - w-[60px] matches Recharts default YAxis width */}
+          <div className="flex w-[60px] flex-col items-end justify-between py-2 pr-2">
+            <Skeleton className="h-3 w-8" />
+            <Skeleton className="h-3 w-10" />
+            <Skeleton className="h-3 w-6" />
+            <Skeleton className="h-3 w-9" />
+          </div>
+          {/* Chart content area */}
+          <div className="relative flex-1">
+            {/* Horizontal grid lines */}
+            <div className="absolute inset-0 flex flex-col justify-between py-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="border-border/40 w-full border-t" />
+              ))}
+            </div>
+            {/* Bars */}
+            <div className="absolute inset-x-0 top-2 bottom-2 flex items-end gap-2 px-2">
+              {SKELETON_BAR_HEIGHTS.map((height, i) => (
+                <Skeleton
+                  key={i}
+                  className="flex-1 rounded-t"
+                  style={{ height: `${height}%` }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* X-axis labels */}
+        <div className="ml-[60px] flex justify-between px-2 pt-2">
           <Skeleton className="h-3 w-8" />
-          <Skeleton className="h-3 w-10" />
-          <Skeleton className="h-3 w-6" />
-          <Skeleton className="h-3 w-9" />
-        </div>
-        {/* Chart content area */}
-        <div className="relative flex-1">
-          {/* Horizontal grid lines */}
-          <div className="absolute inset-0 flex flex-col justify-between py-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="border-border/40 w-full border-t" />
-            ))}
-          </div>
-          {/* Bars */}
-          <div className="absolute inset-x-0 top-2 bottom-2 flex items-end gap-2 px-2">
-            {SKELETON_BAR_HEIGHTS.map((height, i) => (
-              <Skeleton
-                key={i}
-                className="flex-1 rounded-t"
-                style={{ height: `${height}%` }}
-              />
-            ))}
-          </div>
+          <Skeleton className="h-3 w-8" />
+          <Skeleton className="h-3 w-8" />
+          <Skeleton className="h-3 w-8" />
+          <Skeleton className="h-3 w-8" />
         </div>
       </div>
-      {/* X-axis labels */}
-      <div className="ml-[60px] flex justify-between px-2 pt-2">
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-8" />
-      </div>
-      {/* Legend */}
+      {/* Legend - outside h-72 container, matches BasicChartLegend placement */}
       <div className="flex justify-center gap-4 pt-6">
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-4 w-24" />
@@ -419,53 +422,166 @@ function BarChartSkeleton({ className }: { className?: string }) {
  * Matches the visual structure of Recharts LineChart.
  */
 function LineChartSkeleton({ className }: { className?: string }) {
+  // 11 evenly spaced vertical grid lines (not at edges)
+  const verticalLines = Array.from({ length: 11 }, (_, i) =>
+    Math.round((100 / 12) * (i + 1)),
+  );
+
   return (
-    <div className={cn("flex h-72 w-full flex-col", className)}>
-      {/* Chart area with Y-axis and line */}
-      <div className="flex flex-1">
-        {/* Y-axis labels - w-[60px] matches Recharts default YAxis width */}
-        <div className="flex w-[60px] flex-col items-end justify-between py-2 pr-2">
-          <Skeleton className="h-3 w-8" />
-          <Skeleton className="h-3 w-10" />
-          <Skeleton className="h-3 w-6" />
-          <Skeleton className="h-3 w-9" />
+    <div className={className}>
+      {/* Chart container - h-72 matches ChartContainer in production */}
+      <div className="flex h-72 w-full flex-col">
+        {/* Chart area with Y-axis and line */}
+        <div className="flex flex-1">
+          {/* Y-axis labels - w-[60px] matches Recharts default YAxis width */}
+          <div className="flex w-[60px] flex-col items-end justify-between py-2 pr-2">
+            <Skeleton className="h-3 w-8" />
+            <Skeleton className="h-3 w-10" />
+            <Skeleton className="h-3 w-6" />
+            <Skeleton className="h-3 w-9" />
+          </div>
+          {/* Chart content area */}
+          <div className="relative flex-1">
+            {/* Grid and distribution lines via SVG */}
+            <svg
+              className="absolute inset-0 h-full w-full"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+            >
+              {/* Chart boundary - top */}
+              <line
+                x1={0}
+                y1={0}
+                x2={100}
+                y2={0}
+                stroke="currentColor"
+                strokeWidth="1"
+                className="text-border/40"
+                vectorEffect="non-scaling-stroke"
+              />
+              {/* Chart boundary - bottom */}
+              <line
+                x1={0}
+                y1={100}
+                x2={100}
+                y2={100}
+                stroke="currentColor"
+                strokeWidth="1"
+                className="text-border/40"
+                vectorEffect="non-scaling-stroke"
+              />
+              {/* Chart boundary - left */}
+              <line
+                x1={0}
+                y1={0}
+                x2={0}
+                y2={100}
+                stroke="currentColor"
+                strokeWidth="1"
+                className="text-border/40"
+                vectorEffect="non-scaling-stroke"
+              />
+              {/* Chart boundary - right */}
+              <line
+                x1={100}
+                y1={0}
+                x2={100}
+                y2={100}
+                stroke="currentColor"
+                strokeWidth="1"
+                className="text-border/40"
+                vectorEffect="non-scaling-stroke"
+              />
+              {/* Horizontal grid lines - interior only */}
+              {[25, 50, 75].map((y) => (
+                <line
+                  key={`h-${y}`}
+                  x1={0}
+                  y1={y}
+                  x2={100}
+                  y2={y}
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  className="text-border/40"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+              {/* Vertical grid lines - 11 evenly spaced */}
+              {verticalLines.map((x) => (
+                <line
+                  key={`v-${x}`}
+                  x1={x}
+                  y1={0}
+                  x2={x}
+                  y2={100}
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  className="text-border/40"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+              {/* Distribution line 1 */}
+              <polyline
+                points="0,85 8,84 17,82 25,79 33,75 42,70 50,64 58,56 67,46 75,36 83,28 92,22 100,20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-muted-foreground/20"
+                vectorEffect="non-scaling-stroke"
+              />
+              {/* Distribution line 2 */}
+              <polyline
+                points="0,88 8,87 17,85 25,82 33,78 42,73 50,67 58,59 67,50 75,41 83,34 92,28 100,26"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-muted-foreground/20"
+                vectorEffect="non-scaling-stroke"
+              />
+              {/* Distribution line 3 */}
+              <polyline
+                points="0,92 8,91 17,89 25,86 33,82 42,77 50,71 58,63 67,54 75,46 83,40 92,35 100,33"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-muted-foreground/20"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+          </div>
         </div>
-        {/* Chart content area */}
-        <div className="relative flex-1">
-          {/* Horizontal grid lines */}
-          <div className="absolute inset-0 flex flex-col justify-between py-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="border-border/40 w-full border-t" />
-            ))}
-          </div>
-          {/* Vertical grid lines - aligned with x-axis tick marks */}
-          <div className="absolute inset-0 flex flex-row justify-between px-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="border-border/40 h-full border-l" />
-            ))}
-          </div>
-          {/* Distribution line placeholders - ascending curves (up and to the right) */}
-          {/* Line 1 - starts low-left, curves up-right */}
-          <Skeleton className="absolute bottom-[25%] left-4 h-1 w-[30%] rounded-full" />
-          <Skeleton className="absolute bottom-[35%] left-[35%] h-1 w-[25%] rounded-full" />
-          <Skeleton className="absolute bottom-[55%] left-[60%] h-1 w-[20%] rounded-full" />
-          <Skeleton className="absolute right-4 bottom-[75%] h-1 w-[12%] rounded-full" />
-          {/* Line 2 - similar pattern, different height */}
-          <Skeleton className="absolute bottom-[15%] left-4 h-1 w-[35%] rounded-full" />
-          <Skeleton className="absolute bottom-[22%] left-[40%] h-1 w-[25%] rounded-full" />
-          <Skeleton className="absolute bottom-[38%] left-[65%] h-1 w-[18%] rounded-full" />
-          <Skeleton className="absolute right-4 bottom-[55%] h-1 w-[10%] rounded-full" />
+        {/* X-axis labels - positioned to align with vertical grid lines */}
+        <div className="relative ml-[60px] h-5 pt-2">
+          {/* Ticks at 0%, 25%, 50%, 75%, 100% (align with some vertical lines) */}
+          <Skeleton
+            className="absolute h-3 w-6"
+            style={{ left: "0%", transform: "translateX(-50%)" }}
+          />
+          <Skeleton
+            className="absolute h-3 w-6"
+            style={{ left: "25%", transform: "translateX(-50%)" }}
+          />
+          <Skeleton
+            className="absolute h-3 w-6"
+            style={{ left: "50%", transform: "translateX(-50%)" }}
+          />
+          <Skeleton
+            className="absolute h-3 w-6"
+            style={{ left: "75%", transform: "translateX(-50%)" }}
+          />
+          <Skeleton
+            className="absolute h-3 w-6"
+            style={{ left: "100%", transform: "translateX(-50%)" }}
+          />
         </div>
       </div>
-      {/* X-axis labels */}
-      <div className="ml-[60px] flex justify-between px-2 pt-2">
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-8" />
-        <Skeleton className="h-3 w-8" />
-      </div>
-      {/* Legend */}
+      {/* Legend - outside h-72 container, matches BasicChartLegend placement */}
       <div className="flex justify-center gap-4 pt-6">
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-4 w-24" />
