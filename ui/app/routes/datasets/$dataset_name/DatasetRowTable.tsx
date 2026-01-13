@@ -336,7 +336,7 @@ export default function DatasetRowTable({
       </Table>
 
       <Suspense key={location.key} fallback={<PageButtons disabled />}>
-        <Await resolve={data} errorElement={<></>}>
+        <Await resolve={data} errorElement={<PageButtons disabled />}>
           {(resolvedData) => (
             <PaginationContent
               data={resolvedData}

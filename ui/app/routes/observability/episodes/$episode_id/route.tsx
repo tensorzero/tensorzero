@@ -417,7 +417,10 @@ export default function EpisodeDetailPage({
             openSheetInferenceId={openSheetInferenceId}
           />
           <Suspense fallback={<PageButtons disabled />}>
-            <Await resolve={inferencesData} errorElement={<></>}>
+            <Await
+              resolve={inferencesData}
+              errorElement={<PageButtons disabled />}
+            >
               {(resolvedData) => (
                 <InferencePaginationContent data={resolvedData} />
               )}

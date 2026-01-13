@@ -336,7 +336,7 @@ export default function InferencesTable({
       </Table>
 
       <Suspense key={location.key} fallback={<PageButtons disabled />}>
-        <Await resolve={data} errorElement={<></>}>
+        <Await resolve={data} errorElement={<PageButtons disabled />}>
           {(resolvedData) => (
             <PaginationButtons
               data={resolvedData}
