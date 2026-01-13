@@ -27,6 +27,13 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 
 type CountValueType = number | bigint | Promise<number | bigint>;
 
+const CountVariant = {
+  Page: "page",
+  Section: "section",
+} as const;
+
+type CountVariantType = (typeof CountVariant)[keyof typeof CountVariant];
+
 interface PageHeaderProps {
   label?: string;
   heading?: string;
@@ -39,7 +46,7 @@ interface PageHeaderProps {
 }
 
 // Shared error display for failed count loads - shows "—" with tooltip
-function CountErrorTooltip({ variant }: { variant: "page" | "section" }) {
+function CountErrorTooltip({ variant }: { variant: CountVariantType }) {
   const error = useAsyncError();
   const message =
     error instanceof Error ? error.message : "Failed to load count";
@@ -50,7 +57,7 @@ function CountErrorTooltip({ variant }: { variant: "page" | "section" }) {
         <span
           className={cn(
             "cursor-help font-medium text-red-500 dark:text-red-400",
-            variant === "page" ? "text-2xl" : "text-xl",
+            variant === CountVariant.Page ? "text-2xl" : "text-xl",
           )}
         >
           —
@@ -64,7 +71,7 @@ function CountErrorTooltip({ variant }: { variant: "page" | "section" }) {
 }
 
 function PageCountError() {
-  return <CountErrorTooltip variant="page" />;
+  return <CountErrorTooltip variant={CountVariant.Page} />;
 }
 
 function PageCountValue({ value }: { value: number | bigint }) {
@@ -165,7 +172,7 @@ interface SectionHeaderProps extends React.PropsWithChildren {
 }
 
 function SectionCountError() {
-  return <CountErrorTooltip variant="section" />;
+  return <CountErrorTooltip variant={CountVariant.Section} />;
 }
 
 function SectionCountValue({ value }: { value: number | bigint }) {
