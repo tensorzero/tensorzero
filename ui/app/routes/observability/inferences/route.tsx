@@ -44,7 +44,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const needsFullInferences = search_query || filters;
 
   // Create promise for total count - will be streamed to the component
-  // Errors propagate to the UI where they can be handled gracefully
   const client = getTensorZeroClient();
   const totalInferencesPromise = client
     .listFunctionsWithInferenceCount()

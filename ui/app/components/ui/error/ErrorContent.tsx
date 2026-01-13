@@ -16,8 +16,7 @@ import {
   ErrorContentCard,
   ErrorContentHeader,
   ErrorInlineCode,
-  PageErrorContainer,
-  ErrorNotice,
+  PageErrorNotice,
   StackTraceContent,
   TroubleshootingSection,
 } from "./ErrorContentPrimitives";
@@ -151,14 +150,12 @@ function ServerErrorContent({
 
 export function PageNotFound() {
   return (
-    <PageErrorContainer>
-      <ErrorNotice
-        icon={FileQuestion}
-        title="Page Not Found"
-        description="The page you're looking for doesn't exist."
-        muted
-      />
-    </PageErrorContainer>
+    <PageErrorNotice
+      icon={FileQuestion}
+      title="Page Not Found"
+      description="The page you're looking for doesn't exist."
+      muted
+    />
   );
 }
 
@@ -181,12 +178,10 @@ export function PageErrorContent({ error }: PageErrorContentProps) {
   const { title, message, status } = getPageErrorInfo(error);
 
   return (
-    <PageErrorContainer>
-      <ErrorNotice
-        icon={AlertTriangle}
-        title={status ? `Error ${status}` : title}
-        description={message}
-      />
-    </PageErrorContainer>
+    <PageErrorNotice
+      icon={AlertTriangle}
+      title={status ? `Error ${status}` : title}
+      description={message}
+    />
   );
 }
