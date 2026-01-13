@@ -571,6 +571,22 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_raw_usage_non_streaming() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                $crate::providers::commonv2::raw_usage::test_raw_usage_inference_with_provider_non_streaming(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_raw_usage_streaming() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                $crate::providers::commonv2::raw_usage::test_raw_usage_inference_with_provider_streaming(provider).await;
+            }
+        }
+
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
