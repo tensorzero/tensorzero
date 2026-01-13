@@ -8,7 +8,13 @@ import {
   Tooltip,
 } from "recharts";
 import { useMemo } from "react";
-import { CHART_COLORS } from "~/utils/chart";
+import {
+  CHART_COLORS,
+  CHART_MARGIN,
+  CHART_AXIS_STROKE,
+  formatLatency,
+} from "~/utils/chart";
+import { BasicChartLegend, ChartContainer } from "~/components/ui/chart";
 import {
   Select,
   SelectItem,
@@ -16,7 +22,6 @@ import {
   SelectValue,
   SelectTrigger,
 } from "~/components/ui/select";
-import { ChartContainer } from "~/components/ui/chart";
 
 export type LatencyMetric = "response_time_ms" | "ttft_ms";
 
@@ -84,8 +89,6 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
     </div>
   );
 }
-
-const MARGIN = { top: 12, right: 0, bottom: 0, left: 0 };
 
 export function LatencyTimeWindowSelector({
   value,
@@ -167,14 +170,14 @@ export function LatencyQuantileChart({
   return (
     <div>
       <ChartContainer config={chartConfig} className="h-72 w-full">
-        <LineChart accessibilityLayer data={data} margin={MARGIN}>
-          <CartesianGrid strokeDasharray="3 3" />
+        <LineChart accessibilityLayer data={data} margin={CHART_MARGIN}>
+          <CartesianGrid />
           <XAxis
             dataKey="percentile"
             domain={[0, 1]}
             tickLine={false}
             tickMargin={10}
-            axisLine={true}
+            axisLine={{ stroke: CHART_AXIS_STROKE }}
             ticks={[
               0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0,
             ]}
@@ -185,8 +188,7 @@ export function LatencyQuantileChart({
             domain={["dataMin", "dataMax"]}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v) => `${v}ms`}
-            mirror={true}
+            tickFormatter={formatLatency}
           />
 
           <Tooltip
@@ -213,19 +215,7 @@ export function LatencyQuantileChart({
           ))}
         </LineChart>
       </ChartContainer>
-      <div className="flex flex-wrap items-center justify-center gap-4 pt-3">
-        {modelNames.map((name, index) => (
-          <div key={name} className="flex items-center gap-1.5">
-            <div
-              className="h-2 w-2 shrink-0 rounded-[2px]"
-              style={{
-                backgroundColor: CHART_COLORS[index % CHART_COLORS.length],
-              }}
-            />
-            <span className="font-mono text-xs">{name}</span>
-          </div>
-        ))}
-      </div>
+      <BasicChartLegend items={modelNames} colors={CHART_COLORS} />
     </div>
   );
 }

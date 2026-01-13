@@ -488,8 +488,37 @@ function ChartAsyncErrorState({
   );
 }
 
+/**
+ * Standalone chart legend component for use outside of Recharts
+ * Renders a simple flex-wrap legend with colored indicators
+ */
+function BasicChartLegend({
+  items,
+  colors,
+}: {
+  items: string[];
+  colors: readonly string[];
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-4 pt-6">
+      {items.map((name, index) => (
+        <div key={name} className="flex items-center gap-1.5">
+          <div
+            className="h-2 w-2 shrink-0 rounded-[2px]"
+            style={{
+              backgroundColor: colors[index % colors.length],
+            }}
+          />
+          <span className="font-mono text-xs">{name}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export {
   BarChartSkeleton,
+  BasicChartLegend,
   ChartAsyncErrorState,
   ChartContainer,
   ChartLegend,
