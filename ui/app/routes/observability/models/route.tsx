@@ -1,4 +1,5 @@
-import { data } from "react-router";
+import { Suspense } from "react";
+import { data, Await, useLocation } from "react-router";
 import type { Route } from "./+types/route";
 import type { RouteHandle } from "react-router";
 
@@ -26,6 +27,18 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
+import {
+  BarChartSkeleton,
+  LineChartSkeleton,
+  ChartAsyncErrorState,
+} from "~/components/ui/chart";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "~/components/ui/card";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -74,7 +87,36 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+function UsageCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Model Usage Over Time</CardTitle>
+        <CardDescription>Usage metrics by model</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <BarChartSkeleton />
+      </CardContent>
+    </Card>
+  );
+}
+
+function LatencyCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Model Latency Distribution</CardTitle>
+        <CardDescription>Quantiles of latency metrics by model</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <LineChartSkeleton />
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ModelsPage({ loaderData }: Route.ComponentProps) {
+  const location = useLocation();
   const {
     modelUsageTimeseriesPromise,
     modelLatencyQuantilesPromise,
@@ -88,14 +130,57 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Usage" />
-          <ModelUsage modelUsageDataPromise={modelUsageTimeseriesPromise} />
+          <Suspense
+            key={`usage-${location.search}`}
+            fallback={<UsageCardSkeleton />}
+          >
+            <Await
+              resolve={modelUsageTimeseriesPromise}
+              errorElement={
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Model Usage Over Time</CardTitle>
+                    <CardDescription>Usage metrics by model</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartAsyncErrorState defaultMessage="Failed to load usage data" />
+                  </CardContent>
+                </Card>
+              }
+            >
+              {(modelUsageData) => (
+                <ModelUsage modelUsageData={modelUsageData} />
+              )}
+            </Await>
+          </Suspense>
         </SectionLayout>
         <SectionLayout>
           <SectionHeader heading="Latency" />
-          <ModelLatency
-            modelLatencyDataPromise={modelLatencyQuantilesPromise}
-            quantiles={quantiles}
-          />
+          <Suspense
+            key={`latency-${location.search}`}
+            fallback={<LatencyCardSkeleton />}
+          >
+            <Await
+              resolve={modelLatencyQuantilesPromise}
+              errorElement={
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Model Latency Distribution</CardTitle>
+                    <CardDescription>
+                      Quantiles of latency metrics by model
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartAsyncErrorState defaultMessage="Failed to load latency data" />
+                  </CardContent>
+                </Card>
+              }
+            >
+              {(latencyData) => (
+                <ModelLatency latencyData={latencyData} quantiles={quantiles} />
+              )}
+            </Await>
+          </Suspense>
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>

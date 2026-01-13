@@ -7,8 +7,7 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import React, { useState, useMemo } from "react";
-import { Await, useLocation } from "react-router";
+import { useState, useMemo } from "react";
 import { CHART_COLORS } from "~/utils/chart";
 import {
   Select,
@@ -25,11 +24,9 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import {
-  ChartAsyncErrorState,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
-  LineChartSkeleton,
 } from "~/components/ui/chart";
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
@@ -239,18 +236,11 @@ function transformLatencyData(
 }
 
 interface ModelLatencyProps {
-  modelLatencyDataPromise: Promise<ModelLatencyDatapoint[]>;
+  latencyData: ModelLatencyDatapoint[];
   quantiles: number[];
-  /** Custom error message shown when data fails to load */
-  errorMessage?: string;
 }
 
-export function ModelLatency({
-  modelLatencyDataPromise,
-  quantiles,
-  errorMessage = "Failed to load latency data",
-}: ModelLatencyProps) {
-  const location = useLocation();
+export function ModelLatency({ latencyData, quantiles }: ModelLatencyProps) {
   const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
     "latencyTimeGranularity",
     "week",
@@ -287,22 +277,11 @@ export function ModelLatency({
         </div>
       </CardHeader>
       <CardContent>
-        <React.Suspense key={location.search} fallback={<LineChartSkeleton />}>
-          <Await
-            resolve={modelLatencyDataPromise}
-            errorElement={
-              <ChartAsyncErrorState defaultMessage={errorMessage} />
-            }
-          >
-            {(latencyData) => (
-              <LatencyQuantileChart
-                latencyData={latencyData}
-                selectedMetric={selectedMetric}
-                quantiles={quantiles}
-              />
-            )}
-          </Await>
-        </React.Suspense>
+        <LatencyQuantileChart
+          latencyData={latencyData}
+          selectedMetric={selectedMetric}
+          quantiles={quantiles}
+        />
       </CardContent>
     </Card>
   );

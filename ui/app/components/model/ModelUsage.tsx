@@ -7,8 +7,7 @@ import {
   formatTooltipTimestamp,
   CHART_COLORS,
 } from "~/utils/chart";
-import { useState, Suspense } from "react";
-import { Await, useLocation } from "react-router";
+import { useState } from "react";
 
 import {
   Card,
@@ -18,8 +17,6 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import {
-  BarChartSkeleton,
-  ChartAsyncErrorState,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
@@ -91,22 +88,32 @@ function MetricSelector({
 }
 
 interface ModelUsageProps {
-  modelUsageDataPromise: Promise<ModelUsageTimePoint[]>;
-  /** Custom error message shown when data fails to load */
-  errorMessage?: string;
+  modelUsageData: ModelUsageTimePoint[];
 }
 
-export function ModelUsage({
-  modelUsageDataPromise,
-  errorMessage = "Failed to load usage data",
-}: ModelUsageProps) {
-  const location = useLocation();
+export function ModelUsage({ modelUsageData }: ModelUsageProps) {
   const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
     "usageTimeGranularity",
     "week",
   );
   const [selectedMetric, setSelectedMetric] =
     useState<ModelUsageMetric>("inferences");
+
+  const { data, modelNames } = transformModelUsageData(
+    modelUsageData,
+    selectedMetric,
+  );
+  const chartConfig: Record<string, { label: string; color: string }> =
+    modelNames.reduce(
+      (config, modelName, index) => ({
+        ...config,
+        [modelName]: {
+          label: modelName,
+          color: CHART_COLORS[index % CHART_COLORS.length],
+        },
+      }),
+      {},
+    );
 
   return (
     <Card>
@@ -129,121 +136,83 @@ export function ModelUsage({
         </div>
       </CardHeader>
       <CardContent>
-        <Suspense key={location.search} fallback={<BarChartSkeleton />}>
-          <Await
-            resolve={modelUsageDataPromise}
-            errorElement={
-              <ChartAsyncErrorState defaultMessage={errorMessage} />
-            }
-          >
-            {(modelUsageData) => {
-              const { data, modelNames } = transformModelUsageData(
-                modelUsageData,
-                selectedMetric,
-              );
-              const chartConfig: Record<
-                string,
-                { label: string; color: string }
-              > = modelNames.reduce(
-                (config, modelName, index) => ({
-                  ...config,
-                  [modelName]: {
-                    label: modelName,
-                    color: CHART_COLORS[index % CHART_COLORS.length],
-                  },
-                }),
-                {},
-              );
+        <ChartContainer config={chartConfig} className="h-80 w-full">
+          <BarChart accessibilityLayer data={data}>
+            <CartesianGrid vertical={false} />
+            {timeGranularity !== "cumulative" && (
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                tickMargin={10}
+                axisLine={true}
+                tickFormatter={(value) =>
+                  formatXAxisTimestamp(new Date(value), timeGranularity)
+                }
+              />
+            )}
+            <YAxis
+              tickLine={false}
+              tickMargin={10}
+              axisLine={true}
+              tickFormatter={formatChartNumber}
+            />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(label) =>
+                    timeGranularity === "cumulative"
+                      ? "Total"
+                      : formatTooltipTimestamp(new Date(label), timeGranularity)
+                  }
+                  formatter={(value, name, entry) => {
+                    const count = entry.payload[`${name}_count`];
+                    const inputTokens = entry.payload[`${name}_input_tokens`];
+                    const outputTokens = entry.payload[`${name}_output_tokens`];
+                    const totalTokens = inputTokens + outputTokens;
 
-              return (
-                <ChartContainer config={chartConfig} className="h-80 w-full">
-                  <BarChart accessibilityLayer data={data}>
-                    <CartesianGrid vertical={false} />
-                    {timeGranularity !== "cumulative" && (
-                      <XAxis
-                        dataKey="date"
-                        tickLine={false}
-                        tickMargin={10}
-                        axisLine={true}
-                        tickFormatter={(value) =>
-                          formatXAxisTimestamp(new Date(value), timeGranularity)
-                        }
-                      />
-                    )}
-                    <YAxis
-                      tickLine={false}
-                      tickMargin={10}
-                      axisLine={true}
-                      tickFormatter={formatChartNumber}
-                    />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          labelFormatter={(label) =>
-                            timeGranularity === "cumulative"
-                              ? "Total"
-                              : formatTooltipTimestamp(
-                                  new Date(label),
-                                  timeGranularity,
-                                )
-                          }
-                          formatter={(value, name, entry) => {
-                            const count = entry.payload[`${name}_count`];
-                            const inputTokens =
-                              entry.payload[`${name}_input_tokens`];
-                            const outputTokens =
-                              entry.payload[`${name}_output_tokens`];
-                            const totalTokens = inputTokens + outputTokens;
-
-                            return (
-                              <div className="flex flex-1 items-center justify-between leading-none">
-                                <span className="text-muted-foreground mr-2 font-mono text-xs">
-                                  {name}
-                                </span>
-                                <div className="grid text-right">
-                                  <span className="text-foreground font-mono font-medium tabular-nums">
-                                    {METRIC_TYPE_CONFIG[
-                                      selectedMetric
-                                    ].formatter(value as number)}
-                                  </span>
-                                  {selectedMetric === "inferences" && (
-                                    <span className="text-muted-foreground text-[10px]">
-                                      {formatDetailedNumber(totalTokens)} tokens
-                                    </span>
-                                  )}
-                                  {selectedMetric !== "inferences" && (
-                                    <span className="text-muted-foreground text-[10px]">
-                                      {formatDetailedNumber(count)} requests
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          }}
-                        />
-                      }
-                    />
-                    <ChartLegend
-                      content={
-                        <ChartLegendContent className="font-mono text-xs" />
-                      }
-                    />
-                    {modelNames.map((modelName, index) => (
-                      <Bar
-                        key={modelName}
-                        dataKey={modelName}
-                        name={modelName}
-                        fill={CHART_COLORS[index % CHART_COLORS.length]}
-                        radius={4}
-                        maxBarSize={100}
-                      />
-                    ))}
-                  </BarChart>
-                </ChartContainer>
-              );
-            }}
-          </Await>
-        </Suspense>
+                    return (
+                      <div className="flex flex-1 items-center justify-between leading-none">
+                        <span className="text-muted-foreground mr-2 font-mono text-xs">
+                          {name}
+                        </span>
+                        <div className="grid text-right">
+                          <span className="text-foreground font-mono font-medium tabular-nums">
+                            {METRIC_TYPE_CONFIG[selectedMetric].formatter(
+                              value as number,
+                            )}
+                          </span>
+                          {selectedMetric === "inferences" && (
+                            <span className="text-muted-foreground text-[10px]">
+                              {formatDetailedNumber(totalTokens)} tokens
+                            </span>
+                          )}
+                          {selectedMetric !== "inferences" && (
+                            <span className="text-muted-foreground text-[10px]">
+                              {formatDetailedNumber(count)} requests
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+              }
+            />
+            <ChartLegend
+              content={<ChartLegendContent className="font-mono text-xs" />}
+            />
+            {modelNames.map((modelName, index) => (
+              <Bar
+                key={modelName}
+                dataKey={modelName}
+                name={modelName}
+                fill={CHART_COLORS[index % CHART_COLORS.length]}
+                radius={4}
+                maxBarSize={100}
+              />
+            ))}
+          </BarChart>
+        </ChartContainer>
       </CardContent>
     </Card>
   );
