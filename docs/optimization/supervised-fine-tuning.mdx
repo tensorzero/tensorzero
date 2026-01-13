@@ -1,0 +1,631 @@
+---
+title: Supervised Fine-Tuning
+sidebarTitle: Supervised Fine-Tuning
+description: Learn how to fine-tune LLMs using TensorZero.
+---
+
+Supervised Fine-Tuning (SFT) trains a language model on curated examples of good behavior, resulting in a custom model that performs better on your specific use case.
+TensorZero simplifies the SFT workflow by helping you curate training data from your historical inferences and feedback, then launching fine-tuning jobs on your preferred provider.
+
+Here's how it works:
+
+1. You collect examples of good LLM behavior (demonstrations or high-scoring inferences).
+2. TensorZero renders these examples using your prompt templates into a training dataset.
+3. TensorZero uploads the dataset and launches a fine-tuning job on your provider (OpenAI, Fireworks, Together, or GCP Vertex AI).
+4. The provider trains a custom model and returns a model identifier.
+5. You update your configuration to use the fine-tuned model.
+
+## When should you use SFT?
+
+SFT is particularly useful when you have substantial high-quality data and want to improve model behavior beyond what prompting alone can achieve.
+
+| Criterion            | Impact   | Details                                                   |
+| -------------------- | -------- | --------------------------------------------------------- |
+| Complexity           | Low      | Requires data curation; few parameters                    |
+| Data Efficiency      | Moderate | Requires hundreds to thousands of high-quality examples   |
+| Optimization Ceiling | High     | Can significantly improve model behavior beyond prompting |
+| Optimization Cost    | Moderate | More expensive than DICL, but relatively cost effective   |
+| Inference Cost       | Low      | Fine-tuned models typically have the same cost as base    |
+| Inference Latency    | Low      | No runtime overhead unlike DICL                           |
+
+<Tip>
+
+SFT tends to work best when:
+
+- You have hundreds to thousands of high-quality examples.
+  - If less: consider [Dynamic In-Context Learning (DICL)](/optimization/dynamic-in-context-learning-dicl) first.
+  - If much more: SFT can continue to improve with more data.
+- Inference cost and latency are important.
+  Unlike DICL, SFT shifts the cost to a one-time optimization workflow.
+  - If inference cost matters: SFT is often more economical than DICL at scale.
+- You want to improve model behavior beyond what prompting can achieve.
+  - If prompts are sufficient: consider [GEPA](/optimization/gepa) for automated prompt engineering.
+
+</Tip>
+
+## Fine-tune your LLM with Supervised Fine-Tuning
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/optimization/supervised-fine-tuning/) of this guide on GitHub.
+
+</Tip>
+
+<Steps>
+
+<Step title="Configure your LLM application">
+
+Define a [function with a baseline variant](/gateway/configure-functions-and-variants) for your application.
+
+```toml title="tensorzero.toml"
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+```
+
+<Accordion title="Example: Data Extraction (Named Entity Recognition) — Configuration">
+
+```text title="system_template.minijinja"
+You are an assistant that is performing a named entity recognition task.
+Your job is to extract entities from a given text.
+
+The entities you are extracting are:
+
+- people
+- organizations
+- locations
+- miscellaneous other entities
+
+Please return the entities in the following JSON format:
+
+{
+"person": ["person1", "person2", ...],
+"organization": ["organization1", "organization2", ...],
+"location": ["location1", "location2", ...],
+"miscellaneous": ["miscellaneous1", "miscellaneous2", ...]
+}
+```
+
+</Accordion>
+
+</Step>
+
+<Step title="Collect your optimization data">
+
+<Tabs>
+
+<Tab title="TensorZero Dataset">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) of good examples for the `extract_entities` function you configured.
+You can create datapoints from historical inferences or external/synthetic datasets.
+
+```python
+from tensorzero import ListDatapointsRequest
+
+datapoints = t0.list_datapoints(
+    dataset_name="extract_entities_dataset",
+    request=ListDatapointsRequest(
+        function_name="extract_entities",
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=datapoints.datapoints,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+</Tab>
+
+<Tab title="Historical Inferences">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
+TensorZero automatically collects structured data about those inferences, which can later be used as training examples for SFT.
+
+You can curate good examples in multiple ways:
+
+- **Collecting demonstrations:** Collect demonstrations of good behavior (or labels) from human annotation or other sources.
+- **Filtering with metrics:** Query inferences that scored well on your metrics (e.g. `output_source="inference"` with a filter for high scores).
+- **Examples from an expensive model:** Run inferences with a powerful model (e.g. GPT-4o) and use those outputs as demonstrations for a smaller model (e.g. GPT-4o Mini).
+
+<Tip>
+
+SFT performance depends heavily on data quality.
+There is a trade-off between dataset size and quality of datapoints.
+
+</Tip>
+
+For this example, we'll use demonstrations.
+You can submit demonstration feedback using the `demonstration` metric:
+
+```python
+t0.feedback(
+    metric_name="demonstration",
+    value=corrected_output,  # Provide the ideal output for that inference
+    inference_id=response.inference_id,
+)
+```
+
+Then, query inferences with `output_source="demonstration"` to get examples where the output has been corrected:
+
+```python
+from tensorzero import ListInferencesRequest
+
+inferences_response = t0.list_inferences(
+    request=ListInferencesRequest(
+        function_name="extract_entities",
+        output_source="demonstration",  # Retrieve demonstrations instead of historical outputs
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=inferences_response.inferences,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+<Step title="Split data for training and validation">
+
+SFT providers use a validation set to monitor training progress and prevent overfitting.
+Split your data into training and validation sets:
+
+```python
+import random
+
+random.shuffle(rendered_samples)
+split_idx = int(len(rendered_samples) * 0.8)  # 80% training, 20% validation
+train_samples = rendered_samples[:split_idx]
+val_samples = rendered_samples[split_idx:]
+
+print(f"Training samples: {len(train_samples)}")
+print(f"Validation samples: {len(val_samples)}")
+```
+
+<Tip>
+
+A typical split is 80% training and 20% validation.
+For smaller datasets, you may want to use a larger training proportion (e.g. 90/10).
+
+</Tip>
+
+</Step>
+
+<Step title="Configure SFT optimization">
+
+Configure SFT by specifying the base model to fine-tune and any hyperparameters.
+
+<Tabs>
+
+<Tab title="OpenAI">
+
+```python
+from tensorzero import OpenAISFTConfig
+
+optimization_config = OpenAISFTConfig(
+    model="gpt-4.1-2025-04-14",
+)
+```
+
+OpenAI uses credentials from the `OPENAI_API_KEY` environment variable by default.
+
+</Tab>
+
+<Tab title="Fireworks">
+
+```python
+from tensorzero import FireworksSFTConfig
+
+optimization_config = FireworksSFTConfig(
+    model="accounts/fireworks/models/glm-4p7",
+    epochs=3,  # optional
+    lora_rank=16,  # optional
+)
+```
+
+Fireworks requires your account ID in `tensorzero.toml`:
+
+```toml title="tensorzero.toml"
+[provider_types.fireworks.sft]
+account_id = "your-fireworks-account-id"
+```
+
+</Tab>
+
+<Tab title="Together">
+
+```python
+from tensorzero import TogetherSFTConfig
+
+optimization_config = TogetherSFTConfig(
+    model="deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+    n_epochs=3,  # optional
+)
+```
+
+Together uses credentials from the `TOGETHER_API_KEY` environment variable by default.
+Optional Weights & Biases integration can be configured in `tensorzero.toml`:
+
+```toml title="tensorzero.toml"
+[provider_types.together.sft]
+wandb_api_key = "your-wandb-api-key"  # optional
+wandb_project_name = "my-project"     # optional
+```
+
+</Tab>
+
+<Tab title="GCP Vertex AI Gemini">
+
+```python
+from tensorzero import GCPVertexGeminiSFTConfig
+
+optimization_config = GCPVertexGeminiSFTConfig(
+    model="gemini-2.5-flash",
+)
+```
+
+GCP Vertex AI requires project and storage configuration in `tensorzero.toml`:
+
+```toml title="tensorzero.toml"
+[provider_types.gcp_vertex_gemini.sft]
+project_id = "your-gcp-project-id"
+region = "us-central1"
+bucket_name = "your-training-data-bucket"
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+<Step title="Launch SFT job">
+
+Launch the SFT job using the TensorZero Gateway:
+
+```python
+job_handle = t0.experimental_launch_optimization(
+    train_samples=train_samples,
+    val_samples=val_samples,
+    optimization_config=optimization_config,
+)
+
+print(f"Job launched! Monitor at: {job_handle.job_url}")
+```
+
+The job handle contains URLs for monitoring progress on the provider's dashboard.
+
+</Step>
+
+<Step title="Poll for completion">
+
+SFT jobs run asynchronously on the provider's infrastructure.
+Poll for completion:
+
+```python
+import time
+from tensorzero import OptimizationJobStatus
+
+job_info = t0.experimental_poll_optimization(job_handle=job_handle)
+
+# For long-running jobs, poll periodically:
+while job_info.status == OptimizationJobStatus.Pending:
+    print(f"Job status: {job_info.status}")
+    time.sleep(60)  # Wait 1 minute between polls
+    job_info = t0.experimental_poll_optimization(job_handle=job_handle)
+
+if job_info.status == OptimizationJobStatus.Completed:
+    print("Fine-tuning complete!")
+else:
+    print(f"Job failed: {job_info.message}")
+```
+
+<Tip>
+
+Fine-tuning typically takes 10-30 minutes for small datasets, but can take hours for large datasets.
+You can close your script and poll later using the job handle.
+
+</Tip>
+
+</Step>
+
+<Step title="Update your configuration with the fine-tuned model">
+
+After optimization completes, extract the fine-tuned model name and update your configuration:
+
+```python
+fine_tuned_model = job_info.output["routing"][0]
+print(f"Fine-tuned model: {fine_tuned_model}")
+```
+
+Add the fine-tuned model and a new variant to your `tensorzero.toml`:
+
+```toml title="tensorzero.toml"
+[models.extract_entities_fine_tuned]
+routing = ["openai"]
+
+[models.extract_entities_fine_tuned.providers.openai]
+type = "openai"
+model_name = "ft:gpt-4.1-2025-04-14:org::xxxxx"  # fine_tuned_model from above
+
+[functions.extract_entities.variants.fine_tuned]
+type = "chat_completion"
+model = "extract_entities_fine_tuned"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+```
+
+<Tip>
+
+For most model providers, you can also use the shorthand syntax in your variant configuration:
+
+```toml
+model = "openai::ft:gpt-4.1-2025-04-14:org::xxxxx"
+```
+
+This avoids needing to define a separate `[models.*]` section.
+
+</Tip>
+
+That's it!
+Your fine-tuned model is now ready to use.
+
+</Step>
+
+</Steps>
+
+<Tip>
+
+You can run experiments comparing your baseline and fine-tuned variants using [adaptive A/B testing](/experimentation/run-adaptive-ab-tests).
+
+</Tip>
+
+## Provider Configuration Reference
+
+### `OpenAISFTConfig`
+
+Configure OpenAI supervised fine-tuning by creating an `OpenAISFTConfig` object with the following parameters:
+
+{/* Required Parameters */}
+
+<ParamField body="model" type="str" required>
+  The base model to fine-tune. See [OpenAI's supported
+  models](https://platform.openai.com/docs/guides/fine-tuning) for available
+  options.
+</ParamField>
+
+{/* Optional Parameters */}
+
+<ParamField body="batch_size" type="int">
+  Batch size for training. If not specified, OpenAI chooses automatically.
+</ParamField>
+
+<ParamField body="learning_rate_multiplier" type="float">
+  Learning rate multiplier. Values between 0.5 and 2.0 are typical.
+</ParamField>
+
+<ParamField body="n_epochs" type="int">
+  Number of training epochs. If not specified, OpenAI chooses automatically
+  based on dataset size.
+</ParamField>
+
+<ParamField body="seed" type="int">
+  Random seed for reproducibility.
+</ParamField>
+
+<ParamField body="suffix" type="str">
+  Suffix to add to the fine-tuned model name for identification.
+</ParamField>
+
+### `FireworksSFTConfig`
+
+Configure Fireworks supervised fine-tuning by creating a `FireworksSFTConfig` object with the following parameters:
+
+{/* Required Parameters */}
+
+<ParamField body="model" type="str" required>
+  The base model to fine-tune. See [Fireworks' supported
+  models](https://docs.fireworks.ai/fine-tuning/fine-tuning-models) for
+  available options.
+</ParamField>
+
+{/* Optional Parameters */}
+
+<ParamField body="batch_size" type="int">
+  Batch size in tokens for training.
+</ParamField>
+
+<ParamField body="deploy_after_training" type="bool" default={false}>
+  Whether to automatically deploy the model after training completes.
+</ParamField>
+
+<ParamField body="display_name" type="str">
+  Display name for the fine-tuning job.
+</ParamField>
+
+<ParamField body="early_stop" type="bool">
+  Whether to enable early stopping based on validation loss.
+</ParamField>
+
+<ParamField body="epochs" type="int">
+  Number of training epochs.
+</ParamField>
+
+<ParamField body="eval_auto_carveout" type="bool">
+  Whether to automatically carve out a portion of training data for evaluation.
+</ParamField>
+
+<ParamField body="is_turbo" type="bool">
+  Whether to enable turbo mode for faster training.
+</ParamField>
+
+<ParamField body="learning_rate" type="float">
+  Learning rate for training.
+</ParamField>
+
+<ParamField body="lora_rank" type="int">
+  LoRA rank for parameter-efficient fine-tuning.
+</ParamField>
+
+<ParamField body="max_context_length" type="int">
+  Maximum context length for training examples.
+</ParamField>
+
+<ParamField body="mtp_enabled" type="bool">
+  Whether to enable Multi-Token Prediction.
+</ParamField>
+
+<ParamField body="mtp_freeze_base_model" type="bool">
+  Whether to freeze the base model when using MTP.
+</ParamField>
+
+<ParamField body="mtp_num_draft_tokens" type="int">
+  Number of draft tokens for Multi-Token Prediction.
+</ParamField>
+
+<ParamField body="nodes" type="int">
+  Number of nodes for distributed training.
+</ParamField>
+
+<ParamField body="output_model" type="str">
+  Custom model ID for the fine-tuned model. Defaults to the job ID.
+</ParamField>
+
+<ParamField body="warm_start_from" type="str">
+  PEFT addon model to start from. Mutually exclusive with `model`.
+</ParamField>
+
+### `TogetherSFTConfig`
+
+Configure Together supervised fine-tuning by creating a `TogetherSFTConfig` object with the following parameters:
+
+{/* Required Parameters */}
+
+<ParamField body="model" type="str" required>
+  The base model to fine-tune. See [Together's supported
+  models](https://docs.together.ai/reference/post-fine-tunes) for available
+  options.
+</ParamField>
+
+{/* Optional Parameters */}
+
+<ParamField body="batch_size" type="int | str" default="max">
+  Batch size for training. Can be an integer or `"max"` for automatic
+  optimization.
+</ParamField>
+
+<ParamField body="from_checkpoint" type="str">
+  Job ID of a previous fine-tuning job to continue from.
+</ParamField>
+
+<ParamField body="from_hf_model" type="str">
+  Hugging Face model to start from instead of a Together model.
+</ParamField>
+
+<ParamField body="hf_model_revision" type="str">
+  Hugging Face model revision/commit to use.
+</ParamField>
+
+<ParamField body="hf_output_repo_name" type="str">
+  Hugging Face repository name for uploading the fine-tuned model.
+</ParamField>
+
+<ParamField body="learning_rate" type="float" default={0.00001}>
+  Learning rate for training.
+</ParamField>
+
+<ParamField body="lr_scheduler" type="dict">
+  Learning rate scheduler configuration. Supports `"linear"` and `"cosine"`
+  types.
+</ParamField>
+
+<ParamField body="max_grad_norm" type="float" default={1.0}>
+  Maximum gradient norm for gradient clipping. Set to 0 to disable.
+</ParamField>
+
+<ParamField body="n_checkpoints" type="int" default={1}>
+  Number of intermediate checkpoints to save during training.
+</ParamField>
+
+<ParamField body="n_epochs" type="int" default={1}>
+  Number of training epochs.
+</ParamField>
+
+<ParamField body="n_evals" type="int">
+  Number of evaluations to run on the validation set during training.
+</ParamField>
+
+<ParamField body="suffix" type="str">
+  Suffix for the fine-tuned model name.
+</ParamField>
+
+<ParamField body="training_method" type="dict">
+  Training method configuration. Supports SFT with options like
+  `train_on_inputs`.
+</ParamField>
+
+<ParamField body="training_type" type="dict">
+  Training type configuration. Supports `"full"` and `"lora"` with parameters
+  like `lora_r`, `lora_alpha`, `lora_dropout`.
+</ParamField>
+
+<ParamField body="wandb_name" type="str">
+  Weights & Biases run name for experiment tracking.
+</ParamField>
+
+<ParamField body="warmup_ratio" type="float" default={0.0}>
+  Warmup ratio as a percentage of total training steps.
+</ParamField>
+
+<ParamField body="weight_decay" type="float" default={0.0}>
+  Weight decay regularization parameter.
+</ParamField>
+
+### `GCPVertexGeminiSFTConfig`
+
+Configure GCP Vertex AI Gemini supervised fine-tuning by creating a `GCPVertexGeminiSFTConfig` object with the following parameters:
+
+{/* Required Parameters */}
+
+<ParamField body="model" type="str" required>
+  The base model to fine-tune. See [Vertex AI's supported
+  models](https://cloud.google.com/vertex-ai/generative-ai/docs/models/tune-gemini-overview)
+  for available options.
+</ParamField>
+
+{/* Optional Parameters */}
+
+<ParamField body="adapter_size" type="int">
+  Adapter size for parameter-efficient tuning.
+</ParamField>
+
+<ParamField body="export_last_checkpoint_only" type="bool">
+  Whether to export only the final checkpoint instead of all checkpoints.
+</ParamField>
+
+<ParamField body="learning_rate_multiplier" type="float">
+  Learning rate multiplier for training.
+</ParamField>
+
+<ParamField body="n_epochs" type="int">
+  Number of training epochs.
+</ParamField>
+
+<ParamField body="seed" type="int">
+  Random seed for reproducibility.
+</ParamField>
+
+<ParamField body="tuned_model_display_name" type="str">
+  Display name for the tuned model in the Vertex AI console.
+</ParamField>

@@ -92,6 +92,7 @@
                 "group": "Guides",
                 "expanded": true,
                 "pages": [
+                  "optimization/supervised-fine-tuning",
                   "optimization/dynamic-in-context-learning-dicl",
                   "optimization/gepa"
                 ]
