@@ -132,7 +132,7 @@ export function ModelUsageChart({
           <YAxis
             tickLine={false}
             tickMargin={10}
-            axisLine={true}
+            axisLine={false}
             tickFormatter={formatChartNumber}
           />
           <ChartTooltip

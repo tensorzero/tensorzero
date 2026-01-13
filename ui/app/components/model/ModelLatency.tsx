@@ -185,7 +185,7 @@ export function LatencyQuantileChart({
             domain={["dataMin", "dataMax"]}
             tickLine={false}
             tickMargin={10}
-            axisLine={true}
+            axisLine={false}
             tickFormatter={(v) => `${v}ms`}
           />
 
