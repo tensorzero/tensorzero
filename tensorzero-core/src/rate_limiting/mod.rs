@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::Extension;
 use serde::{Deserialize, Serialize, Serializer};
@@ -12,6 +13,8 @@ use crate::db::{
 };
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
+
+pub mod pool;
 
 /*
  * The high level flow for our rate limiting system is:
@@ -33,10 +36,46 @@ use tensorzero_auth::middleware::RequestApiKeyExtension;
  *      to not add keys which could trample one another.
  */
 
+/// Configuration for the in-memory token pool used for pre-borrowing
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PoolConfig {
+    /// Minimum tokens to borrow from the database (floor).
+    /// This prevents thrashing when calculated borrow amounts are very small.
+    #[serde(default = "default_min_borrow_floor")]
+    pub min_borrow_floor: u64,
+    /// Timeout in milliseconds for returning tokens to the database on shutdown.
+    #[serde(default = "default_shutdown_timeout_ms")]
+    pub shutdown_timeout_ms: u64,
+}
+
+fn default_min_borrow_floor() -> u64 {
+    1
+}
+
+fn default_shutdown_timeout_ms() -> u64 {
+    5000
+}
+
+impl Default for PoolConfig {
+    fn default() -> Self {
+        Self {
+            min_borrow_floor: default_min_borrow_floor(),
+            shutdown_timeout_ms: default_shutdown_timeout_ms(),
+        }
+    }
+}
+
+impl PoolConfig {
+    pub fn shutdown_timeout(&self) -> Duration {
+        Duration::from_millis(self.shutdown_timeout_ms)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     pub(crate) enabled: bool,
+    pub(crate) pool: PoolConfig,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -45,6 +84,8 @@ pub struct UninitializedRateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
     pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) pool: PoolConfig,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -62,6 +103,7 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
         Ok(Self {
             rules: config.rules,
             enabled: config.enabled,
+            pool: config.pool,
         })
     }
 }
@@ -69,10 +111,15 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
 impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
     fn from(config: &RateLimitingConfig) -> Self {
         // Destructure to ensure all fields are handled (compile error if field added/removed)
-        let RateLimitingConfig { rules, enabled } = config;
+        let RateLimitingConfig {
+            rules,
+            enabled,
+            pool,
+        } = config;
         Self {
             rules: rules.clone(),
             enabled: *enabled,
+            pool: pool.clone(),
         }
     }
 }
@@ -86,6 +133,7 @@ impl Default for UninitializedRateLimitingConfig {
         Self {
             rules: Vec::new(),
             enabled: true,
+            pool: PoolConfig::default(),
         }
     }
 }
@@ -95,6 +143,7 @@ impl Default for RateLimitingConfig {
         Self {
             rules: Vec::new(),
             enabled: true,
+            pool: PoolConfig::default(),
         }
     }
 }
@@ -141,6 +190,10 @@ impl RateLimitingConfig {
 
     pub fn enabled(&self) -> bool {
         self.enabled
+    }
+
+    pub fn pool(&self) -> &PoolConfig {
+        &self.pool
     }
 
     pub fn get_rate_limited_resources(&self, scope_info: &ScopeInfo) -> Vec<RateLimitResource> {
@@ -264,7 +317,7 @@ fn align_and_check_limits(
     // Next, we build up a vector of ConsumeTicketsReceipts
     let mut aligned_receipts = Vec::with_capacity(limits.len());
     for limit in limits {
-        let key = limit.get_key()?;
+        let key = limit.get_key();
         if let Some(receipt) = receipts_map.remove(&key) {
             aligned_receipts.push(receipt);
         } else {
@@ -325,10 +378,12 @@ fn get_failed_rate_limits_err(
     ErrorDetails::RateLimitExceeded { failed_rate_limits }.into()
 }
 
-#[derive(Debug)]
-struct ActiveRateLimit {
-    limit: Arc<RateLimit>,
-    scope_key: Vec<RateLimitingScopeKey>,
+#[derive(Debug, Clone)]
+pub(crate) struct ActiveRateLimit {
+    pub(crate) limit: Arc<RateLimit>,
+    pub(crate) scope_key: Vec<RateLimitingScopeKey>,
+    /// Cached key to avoid recomputation
+    pub(crate) key: ActiveRateLimitKey,
 }
 
 impl ActiveRateLimit {
@@ -355,7 +410,7 @@ impl ActiveRateLimit {
         requested: u64,
     ) -> Result<ConsumeTicketsRequest, Error> {
         Ok(ConsumeTicketsRequest {
-            key: self.get_key()?,
+            key: self.get_key(),
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
             refill_interval: self.limit.interval.to_pg_interval(),
@@ -366,7 +421,7 @@ impl ActiveRateLimit {
     /// Use this one if the borrowed usage < the actual usage
     pub fn get_return_tickets_request(&self, returned: u64) -> Result<ReturnTicketsRequest, Error> {
         Ok(ReturnTicketsRequest {
-            key: self.get_key()?,
+            key: self.get_key(),
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
             refill_interval: self.limit.interval.to_pg_interval(),
@@ -397,13 +452,23 @@ impl std::fmt::Display for ActiveRateLimitKey {
 }
 
 impl ActiveRateLimit {
-    pub fn get_key(&self) -> Result<ActiveRateLimitKey, Error> {
-        let key = ActiveRateLimitKeyHelper {
-            resource: self.limit.resource,
-            scope_key: &self.scope_key,
+    /// Create a new ActiveRateLimit with a precomputed key
+    pub fn new(limit: Arc<RateLimit>, scope_key: Vec<RateLimitingScopeKey>) -> Result<Self, Error> {
+        let key_helper = ActiveRateLimitKeyHelper {
+            resource: limit.resource,
+            scope_key: &scope_key,
         };
+        let key = ActiveRateLimitKey(serde_json::to_string(&key_helper)?);
+        Ok(Self {
+            limit,
+            scope_key,
+            key,
+        })
+    }
 
-        Ok(ActiveRateLimitKey(serde_json::to_string(&key)?))
+    /// Get the cached key for this active rate limit
+    pub fn get_key(&self) -> ActiveRateLimitKey {
+        self.key.clone()
     }
 }
 
@@ -430,9 +495,9 @@ impl RateLimitingConfigRule {
         Some(
             self.limits
                 .iter()
-                .map(|limit| ActiveRateLimit {
-                    limit: limit.clone(),
-                    scope_key: key.clone(),
+                .map(|limit| {
+                    ActiveRateLimit::new(limit.clone(), key.clone())
+                        .expect("Failed to create ActiveRateLimit key - serialization should never fail for these types")
                 })
                 .collect(),
         )
@@ -1732,12 +1797,9 @@ mod tests {
             key: "app_id".to_string(),
         }];
 
-        let active_limit_token = ActiveRateLimit {
-            limit: token_limit.clone(),
-            scope_key: concrete_scope_key.clone(),
-        };
+        let active_limit_token = ActiveRateLimit::new(token_limit.clone(), concrete_scope_key.clone()).unwrap();
 
-        let key = active_limit_token.get_key().unwrap();
+        let key = active_limit_token.get_key();
 
         // Test key content - should contain resource and scope info
         let key_str = key.to_string();
@@ -1747,30 +1809,21 @@ mod tests {
         assert!(key_str.contains("123"));
 
         // Test key stability - same inputs should produce same key
-        let active_limit_token2 = ActiveRateLimit {
-            limit: token_limit.clone(),
-            scope_key: concrete_scope_key.clone(),
-        };
+        let active_limit_token2 = ActiveRateLimit::new(token_limit.clone(), concrete_scope_key.clone()).unwrap();
 
-        let key2 = active_limit_token2.get_key().unwrap();
+        let key2 = active_limit_token2.get_key();
         assert_eq!(key.0, key2.0);
 
         // Test different resources produce different keys
-        let active_limit_inference = ActiveRateLimit {
-            limit: inference_limit,
-            scope_key: concrete_scope_key.clone(),
-        };
+        let active_limit_inference = ActiveRateLimit::new(inference_limit, concrete_scope_key.clone()).unwrap();
 
-        let key_inference = active_limit_inference.get_key().unwrap();
+        let key_inference = active_limit_inference.get_key();
         assert_ne!(key.0, key_inference.0);
 
         // Test different scopes produce different keys
-        let active_limit_different_scope = ActiveRateLimit {
-            limit: token_limit,
-            scope_key: total_scope_key,
-        };
+        let active_limit_different_scope = ActiveRateLimit::new(token_limit, total_scope_key).unwrap();
 
-        let key_different_scope = active_limit_different_scope.get_key().unwrap();
+        let key_different_scope = active_limit_different_scope.get_key();
         assert_ne!(key.0, key_different_scope.0);
     }
 
@@ -1784,13 +1837,13 @@ mod tests {
             refill_rate: 10,
         });
 
-        let token_active_limit = ActiveRateLimit {
-            limit: token_limit.clone(),
-            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+        let token_active_limit = ActiveRateLimit::new(
+            token_limit.clone(),
+            vec![RateLimitingScopeKey::TagConcrete {
                 key: "user_id".to_string(),
                 value: "123".to_string(),
             }],
-        };
+        ).unwrap();
 
         let usage = EstimatedRateLimitResourceUsage {
             model_inferences: Some(5),
@@ -1820,12 +1873,12 @@ mod tests {
             refill_rate: 5,
         });
 
-        let inference_active_limit = ActiveRateLimit {
-            limit: inference_limit.clone(),
-            scope_key: vec![RateLimitingScopeKey::TagTotal {
+        let inference_active_limit = ActiveRateLimit::new(
+            inference_limit.clone(),
+            vec![RateLimitingScopeKey::TagTotal {
                 key: "app_id".to_string(),
             }],
-        };
+        ).unwrap();
 
         let return_request = inference_active_limit
             .get_return_tickets_request(3)
@@ -1879,15 +1932,15 @@ mod tests {
             refill_rate: 10,
         });
 
-        let active_limit = ActiveRateLimit {
+        let active_limit = ActiveRateLimit::new(
             limit,
-            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+            vec![RateLimitingScopeKey::TagConcrete {
                 key: "user_id".to_string(),
                 value: "123".to_string(),
             }],
-        };
+        ).unwrap();
 
-        let key = active_limit.get_key().unwrap();
+        let key = active_limit.get_key();
 
         let receipt = ConsumeTicketsReceipt {
             key: key.clone(),
@@ -1934,14 +1987,14 @@ mod tests {
             refill_rate: 5,
         });
 
-        let active_limit2 = ActiveRateLimit {
-            limit: limit2,
-            scope_key: vec![RateLimitingScopeKey::TagTotal {
+        let active_limit2 = ActiveRateLimit::new(
+            limit2,
+            vec![RateLimitingScopeKey::TagTotal {
                 key: "app_id".to_string(),
             }],
-        };
+        ).unwrap();
 
-        let key2 = active_limit2.get_key().unwrap();
+        let key2 = active_limit2.get_key();
 
         // Try to create with mismatched array lengths
         let receipt2 = ConsumeTicketsReceipt {
@@ -2077,15 +2130,15 @@ mod tests {
             refill_rate: 10,
         });
 
-        let active_limit = ActiveRateLimit {
+        let active_limit = ActiveRateLimit::new(
             limit,
-            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+            vec![RateLimitingScopeKey::TagConcrete {
                 key: "user_id".to_string(),
                 value: "123".to_string(),
             }],
-        };
+        ).unwrap();
 
-        let key = active_limit.get_key().unwrap();
+        let key = active_limit.get_key();
 
         // Test success case
         let success_receipt = ConsumeTicketsReceipt {
@@ -2115,20 +2168,20 @@ mod tests {
         assert!(success_result.is_ok());
 
         // Create a new active limit for the failure test since we used the original
-        let active_limit2 = ActiveRateLimit {
-            limit: Arc::new(RateLimit {
+        let active_limit2 = ActiveRateLimit::new(
+            Arc::new(RateLimit {
                 resource: RateLimitResource::Token,
                 interval: RateLimitInterval::Minute,
                 capacity: 100,
                 refill_rate: 10,
             }),
-            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+            vec![RateLimitingScopeKey::TagConcrete {
                 key: "user_id".to_string(),
                 value: "123".to_string(),
             }],
-        };
+        ).unwrap();
 
-        let key2 = active_limit2.get_key().unwrap();
+        let key2 = active_limit2.get_key();
 
         // Test failure case - requesting 50 but only 30 available
         let failure_receipt = ConsumeTicketsReceipt {
@@ -2207,33 +2260,33 @@ mod tests {
             refill_rate: 100,
         });
 
-        let active_limit_tokens = ActiveRateLimit {
-            limit: token_limit,
-            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+        let active_limit_tokens = ActiveRateLimit::new(
+            token_limit,
+            vec![RateLimitingScopeKey::TagConcrete {
                 key: "user_id".to_string(),
                 value: "user1".to_string(),
             }],
-        };
+        ).unwrap();
 
-        let active_limit_inferences = ActiveRateLimit {
-            limit: inference_limit,
-            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+        let active_limit_inferences = ActiveRateLimit::new(
+            inference_limit,
+            vec![RateLimitingScopeKey::TagConcrete {
                 key: "user_id".to_string(),
                 value: "user1".to_string(),
             }],
-        };
+        ).unwrap();
 
-        let active_limit_tokens_user2 = ActiveRateLimit {
-            limit: token_limit_user2,
-            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+        let active_limit_tokens_user2 = ActiveRateLimit::new(
+            token_limit_user2,
+            vec![RateLimitingScopeKey::TagConcrete {
                 key: "user_id".to_string(),
                 value: "user2".to_string(),
             }],
-        };
+        ).unwrap();
 
-        let key_tokens = active_limit_tokens.get_key().unwrap();
-        let key_inferences = active_limit_inferences.get_key().unwrap();
-        let key_tokens_user2 = active_limit_tokens_user2.get_key().unwrap();
+        let key_tokens = active_limit_tokens.get_key();
+        let key_inferences = active_limit_inferences.get_key();
+        let key_tokens_user2 = active_limit_tokens_user2.get_key();
 
         // Scenario: requesting 80 tokens and 10 inferences
         // - Token limit: only 30 available (FAIL - requested 80, available 30)
