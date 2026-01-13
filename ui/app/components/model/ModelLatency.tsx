@@ -16,11 +16,7 @@ import {
   SelectValue,
   SelectTrigger,
 } from "~/components/ui/select";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-} from "~/components/ui/chart";
+import { ChartContainer } from "~/components/ui/chart";
 
 export type LatencyMetric = "response_time_ms" | "ttft_ms";
 
@@ -169,57 +165,68 @@ export function LatencyQuantileChart({
   );
 
   return (
-    <ChartContainer config={chartConfig} className="h-80 w-full">
-      <LineChart accessibilityLayer data={data} margin={MARGIN}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis
-          dataKey="percentile"
-          domain={[0, 1]}
-          tickLine={false}
-          tickMargin={10}
-          axisLine={true}
-          ticks={[
-            0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0,
-          ]}
-          tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-        />
-        <YAxis
-          scale="log"
-          domain={["dataMin", "dataMax"]}
-          tickLine={false}
-          tickMargin={10}
-          axisLine={true}
-          tickFormatter={(v) => `${v}ms`}
-        />
-
-        <Tooltip
-          content={<CustomTooltipContent />}
-          cursor={{
-            stroke: "#666666",
-            strokeDasharray: "3 3",
-            strokeWidth: 2,
-          }}
-        />
-
-        <ChartLegend
-          content={<ChartLegendContent className="font-mono text-xs" />}
-        />
-
-        {modelNames.map((name, index) => (
-          <Line
-            key={name}
-            type="monotone"
-            dataKey={name}
-            name={name}
-            stroke={CHART_COLORS[index % CHART_COLORS.length]}
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-            isAnimationActive={false}
+    <div>
+      <ChartContainer config={chartConfig} className="h-72 w-full">
+        <LineChart accessibilityLayer data={data} margin={MARGIN}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis
+            dataKey="percentile"
+            domain={[0, 1]}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={true}
+            ticks={[
+              0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0,
+            ]}
+            tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
           />
+          <YAxis
+            scale="log"
+            domain={["dataMin", "dataMax"]}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={true}
+            tickFormatter={(v) => `${v}ms`}
+          />
+
+          <Tooltip
+            content={<CustomTooltipContent />}
+            cursor={{
+              stroke: "#666666",
+              strokeDasharray: "3 3",
+              strokeWidth: 2,
+            }}
+          />
+
+          {modelNames.map((name, index) => (
+            <Line
+              key={name}
+              type="monotone"
+              dataKey={name}
+              name={name}
+              stroke={CHART_COLORS[index % CHART_COLORS.length]}
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+          ))}
+        </LineChart>
+      </ChartContainer>
+      <div className="flex flex-wrap items-center justify-center gap-4 pt-3">
+        {modelNames.map((name, index) => (
+          <div key={name} className="flex items-center gap-1.5">
+            <div
+              className="h-2 w-2 shrink-0 rounded-[2px]"
+              style={{
+                backgroundColor: CHART_COLORS[index % CHART_COLORS.length],
+              }}
+            />
+            <span className="font-mono text-xs">{name}</span>
+          </div>
         ))}
-      </LineChart>
-    </ChartContainer>
+      </div>
+    </div>
   );
 }
 
