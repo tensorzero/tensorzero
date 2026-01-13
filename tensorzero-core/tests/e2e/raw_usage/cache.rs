@@ -432,10 +432,10 @@ async fn make_openai_request_to_gateway(
 
             let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
             // Check for tensorzero_raw_usage at chunk level (sibling to usage)
-            if let Some(ru) = chunk_json.get("tensorzero_raw_usage") {
-                if let Some(arr) = ru.as_array() {
-                    raw_usage_entries.extend(arr.iter().cloned());
-                }
+            if let Some(ru) = chunk_json.get("tensorzero_raw_usage")
+                && let Some(arr) = ru.as_array()
+            {
+                raw_usage_entries.extend(arr.iter().cloned());
             }
         }
 

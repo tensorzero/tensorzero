@@ -1504,7 +1504,8 @@ impl InferenceResponseChunk {
         // Compute the usage
         let usage = if cached {
             // `usage` represents billed tokens. We set values to 0 if TensorZero cached the inference.
-            Some(Usage {
+            // Only include usage on chunks that originally had it (i.e., the final chunk).
+            inference_result.usage().map(|_| Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
             })

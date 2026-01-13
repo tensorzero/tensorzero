@@ -206,8 +206,6 @@ pub fn prepare_serialized_openai_compatible_events(
                 continue;
             };
 
-            eprintln!("DO NOT MERGE Received chunk [OpenAI]: {:?}", chunk);
-
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(
                 chunk,
                 &mut tool_id_to_index,
@@ -217,8 +215,6 @@ pub fn prepare_serialized_openai_compatible_events(
                 include_raw_usage,
             );
             is_first_chunk = false;
-
-            eprintln!("DO NOT MERGE Received compat chunk [OpenAI]: {:?}", openai_compatible_chunks);
 
             for chunk in openai_compatible_chunks {
                 yield Event::default().json_data(&chunk).map_err(|e| {
