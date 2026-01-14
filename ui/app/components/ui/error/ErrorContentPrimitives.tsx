@@ -1,5 +1,6 @@
 import * as React from "react";
-import { type LucideIcon } from "lucide-react";
+import { useAsyncError } from "react-router";
+import { AlertCircle, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
@@ -174,5 +175,60 @@ export function TableErrorNotice(props: ErrorNoticeProps) {
     <TableErrorContainer>
       <ErrorNotice {...props} />
     </TableErrorContainer>
+  );
+}
+
+export function SectionErrorContainer({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-border flex justify-center rounded-md border py-12">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Convenience wrapper: ErrorNotice inside SectionErrorContainer.
+ * Use for section-level error states (BasicInfo, Input, Output, etc.).
+ */
+export function SectionErrorNotice(props: ErrorNoticeProps) {
+  return (
+    <SectionErrorContainer>
+      <ErrorNotice {...props} />
+    </SectionErrorContainer>
+  );
+}
+
+interface SectionAsyncErrorStateProps {
+  defaultMessage?: string;
+}
+
+/**
+ * Error state for sections using React Router's <Await> component.
+ * Must be rendered inside an <Await errorElement={...}> to access the async error.
+ * @throws Error if used outside of an <Await errorElement={...}> context
+ */
+export function SectionAsyncErrorState({
+  defaultMessage = "Failed to load data",
+}: SectionAsyncErrorStateProps) {
+  const error = useAsyncError();
+
+  if (error === undefined) {
+    throw new Error(
+      "SectionAsyncErrorState must be used inside an <Await errorElement={...}>",
+    );
+  }
+
+  const message = error instanceof Error ? error.message : defaultMessage;
+
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading data"
+      description={message}
+    />
   );
 }

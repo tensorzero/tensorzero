@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
-import { data, redirect, useFetcher } from "react-router";
+import { Await, data, redirect, useFetcher, useLocation } from "react-router";
 import { toDatapointUrl } from "~/utils/urls";
+import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
+import { DatapointContentSkeleton } from "./DatapointSkeleton";
 import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
@@ -349,6 +351,11 @@ export const handle: RouteHandle = {
   ],
 };
 
+export type DatapointData = {
+  datapoint: Datapoint;
+  resolvedInput: Input;
+};
+
 export async function loader({
   params,
 }: {
@@ -360,24 +367,26 @@ export async function loader({
       status: 404,
     });
   }
-  const datapoint = await getTensorZeroClient().getDatapoint(id, dataset_name);
-  if (!datapoint) {
-    throw data(`No datapoint found for ID \`${id}\`.`, {
-      status: 404,
-    });
-  }
 
-  // Load file data for InputElement component
-  const resolvedInput = await loadFileDataForInput(datapoint.input);
+  // Stream the datapoint data - returns promise for Suspense/Await
+  const datapointDataPromise: Promise<DatapointData> = getTensorZeroClient()
+    .getDatapoint(id, dataset_name)
+    .then(async (datapoint) => {
+      if (!datapoint) {
+        throw new Error(`No datapoint found for ID \`${id}\`.`);
+      }
+      // Load file data for InputElement component
+      const resolvedInput = await loadFileDataForInput(datapoint.input);
+      return { datapoint, resolvedInput };
+    });
 
   return {
-    datapoint,
-    resolvedInput,
+    datapointData: datapointDataPromise,
   };
 }
 
-export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { datapoint, resolvedInput } = loaderData;
+function DatapointContent({ data }: { data: DatapointData }) {
+  const { datapoint, resolvedInput } = data;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
@@ -629,7 +638,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <PageLayout>
+    <>
       <PageHeader
         label="Datapoint"
         name={datapoint.id}
@@ -772,6 +781,24 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           onRefresh={lastRequestArgs ? handleRefresh : null}
         />
       )}
+    </>
+  );
+}
+
+export default function DatapointPage({ loaderData }: Route.ComponentProps) {
+  const { datapointData } = loaderData;
+  const location = useLocation();
+
+  return (
+    <PageLayout>
+      <Suspense key={location.key} fallback={<DatapointContentSkeleton />}>
+        <Await
+          resolve={datapointData}
+          errorElement={<SectionAsyncErrorState />}
+        >
+          {(resolvedData) => <DatapointContent data={resolvedData} />}
+        </Await>
+      </Suspense>
     </PageLayout>
   );
 }
