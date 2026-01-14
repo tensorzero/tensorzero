@@ -790,7 +790,7 @@ mod tests {
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::System;
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text};
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
     use std::sync::Arc;
 
@@ -819,7 +819,7 @@ mod tests {
             Arc::new(FunctionConfig::Json(FunctionConfigJson {
                 variants: Default::default(),
                 schemas: SchemaData::default(),
-                output_schema: StaticJSONSchema::default(),
+                output_schema: JSONSchema::default(),
                 json_mode_tool_call_config: ToolCallConfig::default(),
                 description: None,
                 experimentation: ExperimentationConfig::default(),

@@ -20,7 +20,7 @@ use tensorzero_core::{
     },
     function::{FunctionConfig, FunctionConfigChat},
     inference::types::{ContentBlockChatOutput, FinishReason, Input, Text, Usage},
-    jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
+    jsonschema_util::{JSONSchema, SchemaWithMetadata},
     optimization::gepa::GEPAConfig,
     tool::StaticToolConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
@@ -50,7 +50,7 @@ pub fn create_test_function_config() -> FunctionConfig {
 pub fn create_test_json_function_config() -> FunctionConfig {
     use tensorzero_core::{function::FunctionConfigJson, tool::create_json_mode_tool_call_config};
 
-    let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+    let output_schema = JSONSchema::from_value(serde_json::json!({
         "type": "object",
         "properties": {
             "result": {"type": "string"}
@@ -74,7 +74,7 @@ pub fn create_test_json_function_config() -> FunctionConfig {
 
 /// Create a Chat FunctionConfig with schemas for validation tests
 pub fn create_test_function_config_with_schemas() -> FunctionConfig {
-    let system_schema = StaticJSONSchema::from_value(serde_json::json!({
+    let system_schema = JSONSchema::from_value(serde_json::json!({
         "type": "object",
         "properties": {
             "greeting": {"type": "string"}
@@ -82,7 +82,7 @@ pub fn create_test_function_config_with_schemas() -> FunctionConfig {
     }))
     .expect("Failed to create system schema");
 
-    let user_schema = StaticJSONSchema::from_value(serde_json::json!({
+    let user_schema = JSONSchema::from_value(serde_json::json!({
         "type": "object",
         "properties": {
             "name": {"type": "string"}
@@ -131,7 +131,7 @@ pub fn create_test_function_config_with_static_tools() -> (
     use tensorzero_core::tool::StaticToolConfig;
 
     // Create calculator tool
-    let calculator_schema = StaticJSONSchema::from_value(serde_json::json!({
+    let calculator_schema = JSONSchema::from_value(serde_json::json!({
         "type": "object",
         "properties": {
             "expression": {
@@ -152,7 +152,7 @@ pub fn create_test_function_config_with_static_tools() -> (
     };
 
     // Create weather tool
-    let weather_schema = StaticJSONSchema::from_value(serde_json::json!({
+    let weather_schema = JSONSchema::from_value(serde_json::json!({
         "type": "object",
         "properties": {
             "location": {
