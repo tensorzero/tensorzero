@@ -32,26 +32,25 @@ impl PartialEq for JSONSchema {
 }
 
 impl Default for JSONSchema {
-    #[expect(clippy::expect_used)]
     fn default() -> Self {
         // Create an empty schema that accepts any object
-        let value = serde_json::json!({});
-        let validator = jsonschema::validator_for(&value)
-            .expect("Empty schema should always compile successfully");
-        Self::new_with_compiled(value, validator)
+        Self {
+            value: serde_json::json!({}),
+            compiled: Arc::new(OnceCell::new()),
+        }
     }
 }
 
 impl JSONSchema {
     /// Creates a new JSONSchema with a pre-compiled validator.
-    #[expect(clippy::expect_used)]
-    fn new_with_compiled(value: Value, validator: Validator) -> Self {
+    fn new_with_compiled(value: Value, validator: Validator) -> Result<Self, Error> {
         let compiled = Arc::new(OnceCell::new());
-        // This cannot fail since the OnceCell is empty
-        compiled
-            .set(validator)
-            .expect("OnceCell should be empty when created");
-        Self { value, compiled }
+        compiled.set(validator).map_err(|e| {
+            Error::new(ErrorDetails::JsonSchema {
+                message: format!("Failed to set validator in OnceCell: {e}"),
+            })
+        })?;
+        Ok(Self { value, compiled })
     }
 
     /// Creates a new JSONSchema with lazy compilation (no pre-compiled validator).
@@ -73,7 +72,7 @@ impl JSONSchema {
                 message: format!("Failed to compile JSON Schema: {e}"),
             })
         })?;
-        Ok(Self::new_with_compiled(schema, validator))
+        Self::new_with_compiled(schema, validator)
     }
 
     /// Compiles a JSON schema asynchronously in the background.
@@ -124,7 +123,7 @@ impl JSONSchema {
             })
         })?;
 
-        Ok(Self::new_with_compiled(schema, validator))
+        Self::new_with_compiled(schema, validator)
     }
 
     /// Creates a JSONSchema from a JSON value.
