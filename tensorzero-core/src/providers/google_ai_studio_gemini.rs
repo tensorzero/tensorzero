@@ -583,6 +583,7 @@ impl<'a> GeminiContent<'a> {
 
         // Post-processing: If no FunctionCall has a real thought_signature (from a preceding Thought block),
         // add dummy signatures to all FunctionCalls for cross-model inference compatibility with Gemini 3+.
+        // See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
         // This preserves the old behavior when real signatures exist (e.g., parallel tool calls where
         // only the first one has a real signature from a Thought block).
         let has_real_signature = output.iter().any(|part| part.thought_signature.is_some());
