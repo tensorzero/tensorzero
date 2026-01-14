@@ -437,9 +437,9 @@ pub enum ClientBuilderMode {
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
         verify_credentials: bool,
-        // Allow turning on batch writes - used in e2e tests.
-        // We don't expose this through the Python client, since we're having deadlock issues
-        // there.
+        /// Allow turning on batch writes - used in e2e tests.
+        /// We don't expose this through the Python client, since we're having deadlock issues
+        /// there.
         allow_batch_writes: bool,
     },
     /// Construct a client from already-initialized components.
