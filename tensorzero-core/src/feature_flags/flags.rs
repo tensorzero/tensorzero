@@ -1,7 +1,7 @@
 //! Feature flag definitions.
 //!
 //! Add new feature flags here. Each flag is read from an environment variable
-//! with the format `TENSORZERO_FLAG_{NAME}` where NAME is the uppercase version of the flag name.
+//! with the format `TENSORZERO_INTERNAL_FLAG_{NAME}` where NAME is the uppercase version of the flag name.
 
 use super::FlagDefinition;
 
