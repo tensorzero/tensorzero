@@ -19,9 +19,6 @@ interface AppProvidersProps {
 /**
  * Shared provider stack for the app shell.
  * Used by both the main App and ErrorAppShell to ensure consistency.
- *
- * Note: ConfigProvider will be moved here in PR 2a once EMPTY_CONFIG
- * is introduced for graceful degradation.
  */
 export function AppProviders({ children, loaderData }: AppProvidersProps) {
   return (
