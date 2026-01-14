@@ -7,11 +7,10 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
 } from "react-router";
 
 import { ConfigProvider } from "./context/config";
-import { ReadOnlyProvider } from "./context/read-only";
-import { AutopilotAvailableProvider } from "./context/autopilot-available";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
 import {
@@ -107,22 +106,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
-  const { config, isReadOnly, autopilotAvailable } = loaderData;
+  const { config } = loaderData;
 
   return (
-    <AppProviders>
-      <ReadOnlyProvider value={isReadOnly}>
-        <AutopilotAvailableProvider value={autopilotAvailable}>
-          <ConfigProvider value={config}>
-            <div className="fixed inset-0 flex">
-              <AppSidebar />
-              <ContentLayout>
-                <Outlet />
-              </ContentLayout>
-            </div>
-          </ConfigProvider>
-        </AutopilotAvailableProvider>
-      </ReadOnlyProvider>
+    <AppProviders loaderData={loaderData}>
+      <ConfigProvider value={config}>
+        <div className="fixed inset-0 flex">
+          <AppSidebar />
+          <ContentLayout>
+            <Outlet />
+          </ContentLayout>
+        </div>
+      </ConfigProvider>
     </AppProviders>
   );
 }
@@ -130,11 +125,17 @@ export default function App({ loaderData }: Route.ComponentProps) {
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const [open, setOpen] = React.useState(true);
 
+  // Try to get root loader data if available (works for client-side errors
+  // like 404s where the root loader succeeded). Falls back gracefully when unavailable.
+  const rootLoaderData = useRouteLoaderData<typeof loader>("root");
+
   // Client 404s (page not found in React Router) - show in content area with sidebar
   // Check that it's not an infrastructure error (those go through classifyError)
   if (isRouteErrorResponse(error) && error.status === 404) {
     if (!isInfraErrorData(error.data)) {
-      return <ErrorAppShell content={<PageNotFound />} />;
+      return (
+        <ErrorAppShell content={<PageNotFound />} loaderData={rootLoaderData} />
+      );
     }
   }
 
@@ -144,6 +145,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 
   return (
     <ErrorAppShell
+      loaderData={rootLoaderData}
       overlay={
         <ErrorDialog
           open={open}
