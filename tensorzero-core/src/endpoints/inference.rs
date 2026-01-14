@@ -903,6 +903,11 @@ fn create_previous_raw_usage_chunk(
     Some(chunk)
 }
 
+/// Transform the response(s) from the model providers for our inference APIs.
+///
+/// NB: After this function, the stream is then further processed by:
+/// - TensorZero Inference API: `prepare_serialized_events`
+/// - OpenAI-Compatible Inference API: `prepare_serialized_openai_compatible_events`
 fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config>,
@@ -1499,7 +1504,8 @@ impl InferenceResponseChunk {
         // Compute the usage
         let usage = if cached {
             // `usage` represents billed tokens. We set values to 0 if TensorZero cached the inference.
-            Some(Usage {
+            // Only include usage on chunks that originally had it (i.e., the final chunk).
+            inference_result.usage().map(|_| Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
             })
