@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ToolParametersSection } from "./ToolParametersSection";
+import { GlobalToastProvider } from "~/providers/global-toast-provider";
+import { Toaster } from "~/components/ui/toaster";
 
 const meta: Meta<typeof ToolParametersSection> = {
   title: "Inference/ToolParametersSection",
@@ -8,10 +10,17 @@ const meta: Meta<typeof ToolParametersSection> = {
     layout: "centered",
   },
   decorators: [
+    // TODO: CodeEditor has a hard dependency on toast infrastructure via its
+    // built-in copy button (CodeEditor -> useCopy -> useToast). This couples
+    // a low-level UI component to application-level providers. Consider making
+    // the copy feature optional or using inline feedback instead of toasts.
     (Story) => (
-      <div className="w-[600px] p-4">
-        <Story />
-      </div>
+      <GlobalToastProvider>
+        <div className="w-[600px] p-4">
+          <Story />
+        </div>
+        <Toaster />
+      </GlobalToastProvider>
     ),
   ],
   tags: ["autodocs"],
