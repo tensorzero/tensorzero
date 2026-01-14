@@ -328,7 +328,7 @@ const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r"Here are the candidate answers (wi
 pub(crate) mod tests {
     use std::path::PathBuf;
 
-    use crate::{config::path::ResolvedTomlPathData, jsonschema_util::StaticJSONSchema};
+    use crate::{config::path::ResolvedTomlPathData, jsonschema_util::JSONSchema};
 
     use super::*;
     use serde_json::json;
@@ -415,8 +415,8 @@ pub(crate) mod tests {
         assert_eq!(result.unwrap(), "Hello, hello, hello, world!");
     }
 
-    pub fn test_system_template_schema() -> StaticJSONSchema {
-        StaticJSONSchema::from_value(json!({
+    pub fn test_system_template_schema() -> JSONSchema {
+        JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "assistant_name": {
@@ -428,8 +428,8 @@ pub(crate) mod tests {
         .unwrap()
     }
 
-    pub fn test_user_template_schema() -> StaticJSONSchema {
-        StaticJSONSchema::from_value(json!({
+    pub fn test_user_template_schema() -> JSONSchema {
+        JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "name": {
@@ -444,8 +444,8 @@ pub(crate) mod tests {
         .unwrap()
     }
 
-    pub fn test_assistant_template_schema() -> StaticJSONSchema {
-        StaticJSONSchema::from_value(json!({
+    pub fn test_assistant_template_schema() -> JSONSchema {
+        JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "reason": {
