@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type {
   Tool,
   ToolChoice,
@@ -144,27 +144,48 @@ interface ToolsListProps<T> {
 }
 
 function ToolsList<T>({ tools, getLabel, renderCard }: ToolsListProps<T>) {
-  const [selectedLabel, setSelectedLabel] = useState<string | null>(() =>
-    getLabel(tools[0], 0),
-  );
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
-  const { items, labelToToolMap } = useMemo(() => {
-    const map = new Map<string, T>();
-    const labels = tools.map((tool, index) => {
+  const items = useMemo(() => {
+    // Track label counts to detect duplicates
+    const labelCounts = new Map<string, number>();
+    tools.forEach((tool, index) => {
       const label = getLabel(tool, index);
-      map.set(label, tool);
-      return label;
+      labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
     });
-    return { items: labels, labelToToolMap: map };
+
+    // Build unique display labels, appending index only for duplicates
+    const seenLabels = new Map<string, number>();
+    return tools.map((tool, index) => {
+      const baseLabel = getLabel(tool, index);
+      const count = labelCounts.get(baseLabel) || 1;
+
+      if (count > 1) {
+        const occurrence = (seenLabels.get(baseLabel) || 0) + 1;
+        seenLabels.set(baseLabel, occurrence);
+        return `${baseLabel} (${occurrence})`;
+      }
+      return baseLabel;
+    });
   }, [tools, getLabel]);
 
-  const selectedTool = selectedLabel ? labelToToolMap.get(selectedLabel) : null;
+  const handleSelect = useCallback(
+    (value: string) => {
+      const index = items.indexOf(value);
+      if (index !== -1) {
+        setSelectedIndex(index);
+      }
+    },
+    [items],
+  );
+
+  const selectedTool = tools[selectedIndex];
 
   return (
     <div className="flex flex-col gap-3">
       <Combobox
-        selected={selectedLabel}
-        onSelect={(value) => setSelectedLabel(value)}
+        selected={items[selectedIndex]}
+        onSelect={handleSelect}
         items={items}
         placeholder="Select tool"
         emptyMessage="No tools found"
@@ -175,12 +196,7 @@ function ToolsList<T>({ tools, getLabel, renderCard }: ToolsListProps<T>) {
 }
 
 function getToolName(tool: Tool): string {
-  if (tool.type === "function") {
-    return tool.name;
-  } else if (tool.type === "openai_custom") {
-    return tool.name;
-  }
-  return "Unknown Tool";
+  return tool.name;
 }
 
 function ToolCard({ tool }: { tool: Tool }) {
