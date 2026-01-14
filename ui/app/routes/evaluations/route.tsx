@@ -109,7 +109,11 @@ export default function EvaluationSummaryPage({
 
   return (
     <PageLayout>
-      <PageHeader heading="Evaluation Runs" count={totalEvaluationRuns} />
+      <PageHeader
+        heading="Evaluation Runs"
+        subheading="Benchmark variants with heuristics and LLM judges"
+        count={totalEvaluationRuns}
+      />
       <SectionLayout>
         <EvaluationsActions
           onNewRun={() => setLaunchEvaluationModalIsOpen(true)}

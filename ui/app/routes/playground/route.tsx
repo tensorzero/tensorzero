@@ -322,7 +322,10 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader name="Playground" />
+      <PageHeader
+        heading="Playground"
+        subheading="Compare variants side-by-side on dataset samples"
+      />
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Function</Label>
         <FunctionSelector

@@ -44,7 +44,11 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   return (
     <PageLayout>
-      <PageHeader heading="Datasets" count={countPromise} />
+      <PageHeader
+        heading="Datasets"
+        subheading="Curated input/output pairs for evaluation and fine-tuning"
+        count={countPromise}
+      />
       <SectionLayout>
         <DatasetsActions
           onBuildDataset={() => navigate("/datasets/builder")}

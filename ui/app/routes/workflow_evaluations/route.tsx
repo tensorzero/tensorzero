@@ -86,7 +86,10 @@ export default function EvaluationSummaryPage({
 
   return (
     <PageLayout>
-      <PageHeader heading="Workflow Evaluations" />
+      <PageHeader
+        heading="Workflow Evaluations"
+        subheading="End-to-end testing for multi-step LLM workflows"
+      />
       <SectionLayout>
         <SectionHeader heading="Projects" count={projectCount} />
         <WorkflowEvaluationProjectsTable

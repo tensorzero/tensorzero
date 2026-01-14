@@ -133,7 +133,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="Inferences" count={totalInferences} />
+      <PageHeader
+        heading="Inferences"
+        subheading="Individual LLM calls with inputs, outputs, and metadata"
+        count={totalInferences}
+      />
       <SectionLayout>
         <InferenceSearchBar />
         <InferencesTable

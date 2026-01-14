@@ -101,7 +101,11 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="Episodes" count={countPromise} />
+      <PageHeader
+        heading="Episodes"
+        subheading="Sequences of related inferences sharing a common outcome"
+        count={countPromise}
+      />
       <SectionLayout>
         <EpisodeSearchBar />
         <EpisodesTable data={dataPromise} />

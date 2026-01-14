@@ -169,7 +169,10 @@ export default function AutopilotSessionsPage({
 
   return (
     <PageLayout>
-      <PageHeader heading="Autopilot Sessions" />
+      <PageHeader
+        heading="Autopilot Sessions"
+        subheading="Automated AI engineer for prompt and model optimization"
+      />
       <SectionLayout>
         <ActionBar>
           <Button

@@ -138,7 +138,10 @@ function SupervisedFineTuningImpl(props: LoaderData) {
 
   return jobInfo.status === "idle" || !formData || !jobHandle ? (
     <PageLayout>
-      <PageHeader heading="Supervised Fine-Tuning" />
+      <PageHeader
+        heading="Supervised Fine-Tuning"
+        subheading="Fine-tune models on curated inference data"
+      />
       <SectionLayout>
         <SFTForm
           config={config}
@@ -185,7 +188,10 @@ export default function SupervisedFineTuning(props: Route.ComponentProps) {
   if (loaderData.jobInfo.status === "failed") {
     return (
       <PageLayout>
-        <PageHeader heading="Supervised Fine-Tuning" />
+        <PageHeader
+          heading="Supervised Fine-Tuning"
+          subheading="Fine-tune models on curated inference data"
+        />
         <SectionLayout>
           <div className="text-sm text-red-500">
             {JSON.stringify(loaderData.jobInfo.error, null, 2)}

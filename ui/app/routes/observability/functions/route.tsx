@@ -52,7 +52,11 @@ export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="Functions" count={displayedFunctionCount} />
+      <PageHeader
+        heading="Functions"
+        subheading="LLM application logic with prompts and model configurations"
+        count={displayedFunctionCount}
+      />
       <SectionLayout>
         <FunctionsTable
           functions={filteredFunctions}

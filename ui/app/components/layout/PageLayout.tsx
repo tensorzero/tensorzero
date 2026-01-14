@@ -29,6 +29,7 @@ type CountValue = number | bigint | Promise<number | bigint>;
 interface PageHeaderProps {
   label?: string;
   heading?: string;
+  subheading?: string;
   name?: string;
   count?: CountValue;
   icon?: ReactNode;
@@ -48,6 +49,7 @@ function CountDisplay({ count }: { count: CountValue }) {
 
 const PageHeader: React.FC<PageHeaderProps> = ({
   heading,
+  subheading,
   label,
   name,
   count,
@@ -89,6 +91,9 @@ const PageHeader: React.FC<PageHeaderProps> = ({
 
           {tag}
         </div>
+        {subheading !== undefined && (
+          <p className="text-fg-secondary text-sm">{subheading}</p>
+        )}
       </div>
 
       {/* TODO Use wrapper for this instead - feels strange here */}

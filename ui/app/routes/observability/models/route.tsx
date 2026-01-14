@@ -83,7 +83,10 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader name="Models" />
+      <PageHeader
+        heading="Models"
+        subheading="Usage and latency metrics for LLM providers"
+      />
 
       <SectionsGroup>
         <SectionLayout>
