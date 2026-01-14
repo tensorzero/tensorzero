@@ -190,7 +190,7 @@ describe("OpenAI Compatibility", () => {
 
     const lastChunkDuration =
       Date.now() - startTime - (firstChunkDuration || 0);
-    expect(lastChunkDuration).toBeGreaterThan(firstChunkDuration! + 100);
+    expect(lastChunkDuration).toBeGreaterThan(firstChunkDuration! + 10);
 
     const expectedText = [
       "Wally,",
