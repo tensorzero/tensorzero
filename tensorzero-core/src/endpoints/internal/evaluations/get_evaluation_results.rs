@@ -147,7 +147,7 @@ mod tests {
     use crate::db::evaluation_queries::MockEvaluationQueries;
     use crate::evaluations::{EvaluatorConfig, ExactMatchConfig, InferenceEvaluationConfig};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -200,7 +200,7 @@ mod tests {
         functions.insert(
             "test_function".to_string(),
             Arc::new(FunctionConfig::Json(FunctionConfigJson {
-                output_schema: StaticJSONSchema::from_value(serde_json::json!({"type": "object"}))
+                output_schema: JSONSchema::from_value(serde_json::json!({"type": "object"}))
                     .unwrap(),
                 ..Default::default()
             })),

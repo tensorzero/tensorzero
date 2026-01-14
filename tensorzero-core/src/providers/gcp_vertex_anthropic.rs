@@ -822,7 +822,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
-    use crate::jsonschema_util::DynamicJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolResult};
 
@@ -854,7 +854,7 @@ mod tests {
         let tool = FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
-            parameters: DynamicJSONSchema::new(parameters.clone()),
+            parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
         let anthropic_tool: AnthropicTool = AnthropicTool::new(&tool, false);
