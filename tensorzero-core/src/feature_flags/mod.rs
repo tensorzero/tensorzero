@@ -4,12 +4,15 @@
 //! Each flag has a typed definition with a default value.
 //!
 //! In tests, use [`FlagDefinition::override_for_test`] to override flag values.
-//! Test builds read from env on every access to support this.
+//! Test builds initialize the flag value on first access to support this.
 
+use std::fmt::Debug;
 use std::sync::OnceLock;
 
+use crate::error::{Error, ErrorDetails};
+
 /// Trait for types that can be used as feature flag values.
-pub trait FlagValue: Clone + Send + Sync + 'static {
+pub trait FlagValue: Clone + Send + Sync + PartialEq + Debug + 'static {
     /// Parse a value from an environment variable string.
     /// Returns `None` if the string is not a valid representation.
     fn parse_from_env(s: &str) -> Option<Self>;
@@ -33,12 +36,17 @@ impl FlagValue for bool {
 }
 
 /// Trait for introspecting feature flags without knowing their concrete type.
+/// All flags must be initialized before use in production.
 pub trait Flag: Send + Sync {
     /// The name of the flag.
     fn name(&self) -> &'static str;
 
     /// The environment variable name for this flag.
     fn env_var_name(&self) -> String;
+
+    /// Initializes the flag value to default value or environment variable override.
+    /// Returns an error if an environment variable is set but its value is invalid.
+    fn init(&self) -> Result<(), Error>;
 }
 
 /// Definition of a feature flag with a specific value type.
@@ -70,27 +78,50 @@ impl<T: FlagValue> FlagDefinition<T> {
     }
 
     /// Reads the flag value from the environment variable.
-    fn read_from_env(&self) -> T {
+    fn read_from_env(&self) -> Result<T, Error> {
         let env_var = self.env_var_name();
         match std::env::var(&env_var) {
             Ok(val) => match T::parse_from_env(&val) {
-                Some(parsed) => parsed,
-                None => {
-                    tracing::warn!(
-                        "Invalid value '{}' for feature flag env var {}, using default",
-                        val,
-                        env_var
-                    );
-                    self.default.clone()
-                }
+                Some(parsed) => Ok(parsed),
+                None => Err(Error::new(ErrorDetails::AppState {
+                    message: format!(
+                        "Invalid value '{}' for feature flag {} (env var: {})",
+                        val, self.name, env_var
+                    ),
+                })),
             },
-            Err(_) => self.default.clone(),
+            Err(_) => Ok(self.default.clone()),
         }
     }
 
-    /// Gets the current value of this flag, and caches the value on first access.
+    /// Gets the value of this flag.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the flag is not initialized.
+    #[cfg(not(test))]
+    #[expect(clippy::expect_used)]
     pub fn get(&self) -> T {
-        self.value.get_or_init(|| self.read_from_env()).clone()
+        self.value
+            .get()
+            .expect("All feature flags must be initialized and validated at startup")
+            .clone()
+    }
+
+    /// Gets the value of this flag.
+    /// In tests, this initializes the flag value on first access.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the flag value from the environment cannot be parsed into the correct type.
+    #[cfg(test)]
+    pub fn get(&self) -> T {
+        self.value
+            .get_or_init(|| {
+                self.read_from_env()
+                    .expect("Failed to parse flag value in tests")
+            })
+            .clone()
     }
 
     /// Overrides this flag's value for the current test process.
@@ -114,9 +145,44 @@ impl<T: FlagValue> Flag for FlagDefinition<T> {
     fn env_var_name(&self) -> String {
         self.env_var_name()
     }
+
+    fn init(&self) -> Result<(), Error> {
+        let flag_value = self.read_from_env()?;
+        match self.value.set(flag_value.clone()) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                if e == flag_value {
+                    Ok(())
+                } else {
+                    // To prevent subtle errors from initializing flags multiple times with different values
+                    // (so at runtime it's hard to reason about the flag value), we error out.
+                    Err(Error::new(ErrorDetails::AppState {
+                        message: format!(
+                            "Attempted to reinitialize flag {} with different value {:?} (current value: {:?})",
+                            self.name,
+                            flag_value,
+                            e.clone()
+                        ),
+                    }))
+                }
+            }
+        }
+    }
 }
 
-pub mod flags;
+mod flags;
+
+pub use flags::*;
+
+/// Initializes all feature flags.
+///
+/// This should be called on application startup.
+pub fn init_flags() -> Result<(), Error> {
+    for flag in ALL_FLAGS {
+        flag.init()?;
+    }
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
@@ -157,6 +223,23 @@ mod tests {
         assert!(
             flags::TEST_FLAG.get(),
             "TEST_FLAG should be enabled after override_for_test(true)"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to parse flag value")]
+    fn test_invalid_env_value_panics_in_test() {
+        let env_var = flags::TEST_FLAG.env_var_name();
+        tensorzero_unsafe_helpers::set_env_var_tests_only(&env_var, "not-a-bool");
+        let _value = flags::TEST_FLAG.get();
+    }
+
+    #[test]
+    fn test_all_flags_includes_test_flag() {
+        // To test the define_flags macro is correct, we check that ALL_FLAGS includes TEST_FLAG.
+        assert!(
+            ALL_FLAGS.iter().any(|f| f.name() == TEST_FLAG.name()),
+            "ALL_FLAGS should include TEST_FLAG"
         );
     }
 }
