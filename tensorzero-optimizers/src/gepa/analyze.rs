@@ -415,7 +415,7 @@ mod tests {
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{ContentBlockChatOutput, Input, Text, Usage},
-        jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
+        jsonschema_util::{JSONSchema, SchemaWithMetadata},
         optimization::gepa::GEPAConfig,
         tool::StaticToolConfig,
         utils::retries::RetryConfig,
@@ -442,7 +442,7 @@ mod tests {
 
     /// Create a Chat FunctionConfig with schemas
     fn create_test_function_config_with_schemas() -> FunctionConfig {
-        let system_schema = StaticJSONSchema::from_value(json!({
+        let system_schema = JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "greeting": {"type": "string"}
@@ -450,7 +450,7 @@ mod tests {
         }))
         .unwrap();
 
-        let user_schema = StaticJSONSchema::from_value(json!({
+        let user_schema = JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"}
@@ -889,7 +889,7 @@ mod tests {
             name: "test_tool".to_string(),
             key: "test_tool".to_string(),
             description: "Test tool".to_string(),
-            parameters: StaticJSONSchema::from_value(json!({
+            parameters: JSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "param1": {"type": "string"}
