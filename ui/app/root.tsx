@@ -9,7 +9,7 @@ import {
   useRouteLoaderData,
 } from "react-router";
 
-import { ConfigProvider, EMPTY_CONFIG } from "./context/config";
+import { EMPTY_CONFIG } from "./context/config";
 import type { UiConfig } from "./types/tensorzero";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
@@ -133,29 +133,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
-  const { config, infraError } = loaderData;
+  const { infraError } = loaderData;
   const [dialogOpen, setDialogOpen] = React.useState(true);
 
   return (
     <AppProviders loaderData={loaderData}>
-      <ConfigProvider value={config}>
-        <div className="fixed inset-0 flex">
-          <AppSidebar />
-          <ContentLayout>
-            <Outlet />
-          </ContentLayout>
-        </div>
-        {infraError && (
-          <ErrorDialog
-            open={dialogOpen}
-            onDismiss={() => setDialogOpen(false)}
-            onReopen={() => setDialogOpen(true)}
-            label={getErrorLabel(infraError.type)}
-          >
-            <ErrorContent error={infraError} />
-          </ErrorDialog>
-        )}
-      </ConfigProvider>
+      <div className="fixed inset-0 flex">
+        <AppSidebar />
+        <ContentLayout>
+          <Outlet />
+        </ContentLayout>
+      </div>
+      {infraError && (
+        <ErrorDialog
+          open={dialogOpen}
+          onDismiss={() => setDialogOpen(false)}
+          onReopen={() => setDialogOpen(true)}
+          label={getErrorLabel(infraError.type)}
+        >
+          <ErrorContent error={infraError} />
+        </ErrorDialog>
+      )}
     </AppProviders>
   );
 }
