@@ -857,16 +857,12 @@ async fn test_openai_compatible_streaming_tool_call() {
                 assert_eq!(index, 0);
             }
         }
-        if let Some(finish_reason) = parsed_chunk["choices"][0]["delta"]["finish_reason"].as_str() {
+        if let Some(finish_reason) = parsed_chunk["choices"][0]["finish_reason"].as_str() {
             assert_eq!(finish_reason, "tool_calls");
-            assert_eq!(i, chunks.len() - 2);
-        }
-        if i == chunks.len() - 2 {
-            assert!(parsed_chunk["choices"][0]["delta"].get("content").is_none());
-            assert!(
-                parsed_chunk["choices"][0]["delta"]
-                    .get("tool_calls")
-                    .is_none()
+            assert_eq!(
+                i,
+                chunks.len() - 1,
+                "finish_reason should be on final chunk"
             );
         }
         if i == chunks.len() - 1 {

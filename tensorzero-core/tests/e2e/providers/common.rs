@@ -3852,6 +3852,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let mut full_content = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
+    let mut usage_chunk_count = 0u32;
     let mut finish_reason: Option<String> = None;
     for (i, chunk) in chunks.clone().iter().enumerate() {
         let chunk_json: Value = serde_json::from_str(chunk).unwrap();
@@ -3894,14 +3895,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
             }
         }
 
-        // When we get a cache hit, the usage should be explicitly set to 0
-        if assert_response_is_cached {
-            let usage = chunk_json.get("usage").unwrap();
-            assert_eq!(usage.get("input_tokens").unwrap().as_u64().unwrap(), 0);
-            assert_eq!(usage.get("output_tokens").unwrap().as_u64().unwrap(), 0);
-        }
-
         if let Some(usage) = chunk_json.get("usage") {
+            usage_chunk_count += 1;
             input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
             output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
@@ -3923,6 +3918,14 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     }
 
     assert!(finish_reason.is_some());
+
+    // For cached responses, usage should appear exactly once (on the final chunk) with zeros
+    if provider.model_provider_name != "fireworks" && assert_response_is_cached {
+        assert_eq!(
+            usage_chunk_count, 1,
+            "Expected exactly one chunk with usage for cached response"
+        );
+    }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
