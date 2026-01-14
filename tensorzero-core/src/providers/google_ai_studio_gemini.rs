@@ -51,6 +51,10 @@ use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
+/// Dummy signature for cross-model inference compatibility with Gemini 3+.
+/// See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+const DUMMY_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
+
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -576,6 +580,31 @@ impl<'a> GeminiContent<'a> {
                 }
             }
         }
+
+        // Post-processing: If no FunctionCall has a real thought_signature (from a preceding Thought block),
+        // add a dummy signature to the first FunctionCall for cross-model inference compatibility with Gemini 3+.
+        // See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+        // We only check FunctionCall parts (not all parts) because signatures on non-FunctionCall parts
+        // don't indicate this is a Gemini-originated conversation with tool calls.
+        let has_function_call_with_signature = output.iter().any(|part| {
+            matches!(
+                part.data,
+                FlattenUnknown::Normal(GeminiPartData::FunctionCall { .. })
+            ) && part.thought_signature.is_some()
+        });
+
+        if !has_function_call_with_signature {
+            // Only add dummy signature to the first FunctionCall (matching how real signatures work)
+            if let Some(part) = output.iter_mut().find(|p| {
+                matches!(
+                    p.data,
+                    FlattenUnknown::Normal(GeminiPartData::FunctionCall { .. })
+                )
+            }) {
+                part.thought_signature = Some(DUMMY_THOUGHT_SIGNATURE.to_string());
+            }
+        }
+
         Ok(GeminiContent {
             role,
             parts: output,
@@ -1628,11 +1657,12 @@ mod tests {
                 }),
             }
         );
+        // FunctionCall part should have dummy thought_signature for cross-model inference
         assert_eq!(
             content.parts[1],
             GeminiContentPart {
                 thought: false,
-                thought_signature: None,
+                thought_signature: Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
                 data: FlattenUnknown::Normal(GeminiPartData::FunctionCall {
                     function_call: GeminiFunctionCall {
                         name: "get_temperature",
