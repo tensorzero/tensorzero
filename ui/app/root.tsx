@@ -125,6 +125,11 @@ export default function App({ loaderData }: Route.ComponentProps) {
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const [open, setOpen] = React.useState(true);
 
+  // Reset dialog to open when error changes (component may re-render, not remount)
+  React.useEffect(() => {
+    setOpen(true);
+  }, [error]);
+
   // Try to get root loader data if available (works for client-side errors
   // like 404s where the root loader succeeded). Falls back gracefully when unavailable.
   const rootLoaderData = useRouteLoaderData<typeof loader>("root");
