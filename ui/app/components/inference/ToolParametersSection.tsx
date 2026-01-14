@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import type {
   Tool,
   ToolChoice,
@@ -7,10 +8,10 @@ import type {
 import {
   SnippetLayout,
   SnippetContent,
-  SnippetTabs,
 } from "~/components/layout/SnippetLayout";
 import { CodeEditor } from "~/components/ui/code-editor";
 import { Badge } from "~/components/ui/badge";
+import { Combobox } from "~/components/ui/combobox";
 
 export function ToolParametersSection({
   allowed_tools,
@@ -143,17 +144,34 @@ interface ToolsListProps<T> {
 }
 
 function ToolsList<T>({ tools, getLabel, renderCard }: ToolsListProps<T>) {
-  if (tools.length === 1) {
-    return <>{renderCard(tools[0])}</>;
-  }
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(() =>
+    getLabel(tools[0], 0),
+  );
 
-  const tabs = tools.map((tool, index) => ({
-    id: String(index),
-    label: getLabel(tool, index),
-    content: renderCard(tool),
-  }));
+  const { items, labelToToolMap } = useMemo(() => {
+    const map = new Map<string, T>();
+    const labels = tools.map((tool, index) => {
+      const label = getLabel(tool, index);
+      map.set(label, tool);
+      return label;
+    });
+    return { items: labels, labelToToolMap: map };
+  }, [tools, getLabel]);
 
-  return <SnippetTabs tabs={tabs} />;
+  const selectedTool = selectedLabel ? labelToToolMap.get(selectedLabel) : null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Combobox
+        selected={selectedLabel}
+        onSelect={(value) => setSelectedLabel(value)}
+        items={items}
+        placeholder="Select tool"
+        emptyMessage="No tools found"
+      />
+      {selectedTool && renderCard(selectedTool)}
+    </div>
+  );
 }
 
 function getToolName(tool: Tool): string {
@@ -173,17 +191,16 @@ function ToolCard({ tool }: { tool: Tool }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
+        {tool.description && (
+          <span className="text-fg-muted text-sm">{tool.description}</span>
+        )}
         <Badge variant="secondary">{tool.type}</Badge>
-        <span className="font-mono text-sm font-medium">{tool.name}</span>
         {isFunctionTool && tool.strict && (
           <Badge variant="outline" className="text-xs">
             strict
           </Badge>
         )}
       </div>
-      {tool.description && (
-        <p className="text-fg-muted text-sm">{tool.description}</p>
-      )}
       {schemaData && (
         <div className="mt-1">
           <span className="text-fg-muted mb-1 block text-xs font-medium uppercase">
