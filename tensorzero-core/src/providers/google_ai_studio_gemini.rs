@@ -589,13 +589,14 @@ impl<'a> GeminiContent<'a> {
         let has_real_signature = output.iter().any(|part| part.thought_signature.is_some());
 
         if !has_real_signature {
-            for part in &mut output {
-                if matches!(
-                    part.data,
+            // Only add dummy signature to the first FunctionCall (matching how real signatures work)
+            if let Some(part) = output.iter_mut().find(|p| {
+                matches!(
+                    p.data,
                     FlattenUnknown::Normal(GeminiPartData::FunctionCall { .. })
-                ) {
-                    part.thought_signature = Some(DUMMY_THOUGHT_SIGNATURE.to_string());
-                }
+                )
+            }) {
+                part.thought_signature = Some(DUMMY_THOUGHT_SIGNATURE.to_string());
             }
         }
 

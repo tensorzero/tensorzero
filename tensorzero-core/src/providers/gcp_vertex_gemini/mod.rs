@@ -2548,13 +2548,14 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
         .any(|part| part.thought_signature.is_some());
 
     if !has_real_signature {
-        for part in &mut model_content_blocks {
-            if matches!(
-                part.data,
+        // Only add dummy signature to the first FunctionCall (matching how real signatures work)
+        if let Some(part) = model_content_blocks.iter_mut().find(|p| {
+            matches!(
+                p.data,
                 FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { .. })
-            ) {
-                part.thought_signature = Some(DUMMY_THOUGHT_SIGNATURE.to_string());
-            }
+            )
+        }) {
+            part.thought_signature = Some(DUMMY_THOUGHT_SIGNATURE.to_string());
         }
     }
 
