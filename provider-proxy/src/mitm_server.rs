@@ -197,7 +197,8 @@ where
                             };
 
                             if let Err(_err) = res {
-                                // Suppress error because if we serving HTTPS proxy server and forward to HTTPS server, it will always error when closing connection.
+                                // Suppress error because if we're serving an HTTPS proxy server and forwarding to an HTTPS server,
+                                // it will always error when closing the connection.
                                 // tracing::error!("Error in proxy: {}", err);
                             }
                         } else {
