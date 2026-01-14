@@ -71,15 +71,24 @@ where
                 let service = service.clone();
 
                 let proxy = proxy.clone();
-                // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-                #[expect(clippy::disallowed_methods)]
-                tokio::spawn(async move {
+                // Spawn each connection handler on a TaskTracker so background tasks are tracked
+                // and can be awaited during shutdown.
+                let connection_tasks = tokio_util::task::TaskTracker::new();
+                let connection_tasks_for_conn = connection_tasks.clone();
+                // Clone again for passing into the service (avoids moving the value out of the one used to
+                // call `spawn`).
+                let connection_tasks_for_service = connection_tasks_for_conn.clone();
+                connection_tasks_for_conn.spawn(async move {
                     if let Err(err) = server::conn::http1::Builder::new()
                         .preserve_header_case(true)
                         .title_case_headers(true)
                         .serve_connection(
                             TokioIo::new(stream),
-                            Self::wrap_service(proxy.clone(), service.clone()),
+                            Self::wrap_service(
+                                proxy.clone(),
+                                service.clone(),
+                                connection_tasks_for_service,
+                            ),
                         )
                         .with_upgrades()
                         .await
@@ -96,6 +105,7 @@ where
     pub fn wrap_service<S>(
         proxy: Arc<Self>,
         service: S,
+        connection_tasks: tokio_util::task::TaskTracker,
     ) -> impl HttpService<
         Incoming,
         ResBody = BoxBody<<S::ResBody as Body>::Data, <S::ResBody as Body>::Error>,
@@ -112,6 +122,7 @@ where
         service_fn(move |req| {
             let proxy = proxy.clone();
             let mut service = service.clone();
+            let connection_tasks = connection_tasks.clone();
 
             async move {
                 if req.method() == Method::CONNECT {
@@ -125,9 +136,10 @@ where
                             .map(|b| b.boxed().map_err(|never| match never {}).boxed()));
                     };
 
-                    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-                    #[expect(clippy::disallowed_methods)]
-                    tokio::spawn(async move {
+                    // Spawn CONNECT upgrade handler onto the provided TaskTracker so this work
+                    // is tracked by the proxy and can be awaited during shutdown.
+                    let connection_tasks_for_req = connection_tasks.clone();
+                    connection_tasks_for_req.spawn(async move {
                         let Ok(client) = hyper::upgrade::on(req).await else {
                             tracing::error!(
                                 "Bad CONNECT request: {}, Reason: Invalid Upgrade",

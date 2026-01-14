@@ -32,6 +32,7 @@ tokio-rustls = "0.26.1"
 tracing = "0.1.43"
 tracing-subscriber.workspace = true
 tempfile = "3.21.0"
+tokio-util = { version = "0.7.18", features = ["rt"] }
 
 
 [lints]
