@@ -52,7 +52,7 @@ use crate::inference::types::{
     ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, ResolvedInput, TextChunk,
     Usage, collect_chunks,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::observability::request_logging::HttpMetricData;
@@ -155,7 +155,7 @@ struct InferenceMetadata {
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
-    pub dynamic_output_schema: Option<DynamicJSONSchema>,
+    pub dynamic_output_schema: Option<JSONSchema>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub json_mode: Option<JsonMode>,
@@ -353,7 +353,7 @@ pub async fn inference(
     }
 
     // Validate the input
-    function.validate_inference_params(&params)?;
+    function.validate_inference_params(&params).await?;
 
     // Validate extra_body and extra_headers filters
     validate_inference_filters(
@@ -410,7 +410,7 @@ pub async fn inference(
     let mut variant_errors: IndexMap<String, Error> = IndexMap::new();
 
     // Set up inference config
-    let output_schema = params.output_schema.map(DynamicJSONSchema::new);
+    let output_schema = params.output_schema.map(JSONSchema::compile_background);
 
     let tags = Arc::new(params.tags.clone());
 
@@ -582,7 +582,7 @@ struct InferVariantArgs<'a> {
     inference_params: InferenceParams,
     templates: &'a Arc<TemplateConfig<'static>>,
     tool_config: &'a Option<ToolCallConfig>,
-    output_schema: &'a Option<DynamicJSONSchema>,
+    output_schema: &'a Option<JSONSchema>,
     config: &'a Arc<Config>,
     clickhouse_connection_info: &'a ClickHouseConnectionInfo,
     tags: &'a HashMap<String, String>,
@@ -903,6 +903,11 @@ fn create_previous_raw_usage_chunk(
     Some(chunk)
 }
 
+/// Transform the response(s) from the model providers for our inference APIs.
+///
+/// NB: After this function, the stream is then further processed by:
+/// - TensorZero Inference API: `prepare_serialized_events`
+/// - OpenAI-Compatible Inference API: `prepare_serialized_openai_compatible_events`
 fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config>,
@@ -1499,7 +1504,8 @@ impl InferenceResponseChunk {
         // Compute the usage
         let usage = if cached {
             // `usage` represents billed tokens. We set values to 0 if TensorZero cached the inference.
-            Some(Usage {
+            // Only include usage on chunks that originally had it (i.e., the final chunk).
+            inference_result.usage().map(|_| Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
             })

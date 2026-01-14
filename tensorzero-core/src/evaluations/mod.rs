@@ -24,7 +24,7 @@ use crate::{
         chat_completion_inference_params::ServiceTier, extra_body::ExtraBodyConfig,
         extra_headers::ExtraHeadersConfig,
     },
-    jsonschema_util::StaticJSONSchema,
+    jsonschema_util::JSONSchema,
     tool::create_json_mode_tool_call_config,
     variant::{
         JsonMode, VariantConfig, VariantInfo,
@@ -81,7 +81,7 @@ pub enum EvaluationFunctionConfig {
     /// Chat function - no output schema validation needed
     Chat,
     /// JSON function - contains output schema for validation
-    Json { output_schema: StaticJSONSchema },
+    Json { output_schema: JSONSchema },
 }
 
 impl From<&FunctionConfig> for EvaluationFunctionConfig {
@@ -443,9 +443,7 @@ impl UninitializedEvaluatorConfig {
                         })?),
                     LLMJudgeInputFormat::Messages => None,
                 };
-                let user_schema = user_schema_value
-                    .map(StaticJSONSchema::from_value)
-                    .transpose()?;
+                let user_schema = user_schema_value.map(JSONSchema::from_value).transpose()?;
                 let output_schema_str = match params.output_type {
                     LLMJudgeOutputType::Float => LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
                     LLMJudgeOutputType::Boolean => LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT,
@@ -456,7 +454,7 @@ impl UninitializedEvaluatorConfig {
                             message: format!("Failed to parse LLM judge output schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                         })
                     })?;
-                let output_schema = StaticJSONSchema::from_value(output_schema_value)?;
+                let output_schema = JSONSchema::from_value(output_schema_value)?;
                 let json_mode_tool_call_config =
                     create_json_mode_tool_call_config(output_schema.clone());
 
@@ -628,7 +626,7 @@ fn convert_chat_completion_judge_to_variant(
     variant_name: &str,
     input_format: &LLMJudgeInputFormat,
     params: UninitializedLLMJudgeChatCompletionVariantConfig,
-    user_schema: Option<StaticJSONSchema>,
+    user_schema: Option<JSONSchema>,
 ) -> Result<ChatCompletionConfig, Error> {
     let system_instructions = params.system_instructions.data();
     let templated_system_instructions = format!(
@@ -785,7 +783,7 @@ impl UninitializedLLMJudgeVariantInfo {
         evaluator_name: &str,
         input_format: &LLMJudgeInputFormat,
         variant_name: &str,
-        user_schema: Option<StaticJSONSchema>,
+        user_schema: Option<JSONSchema>,
     ) -> Result<VariantInfo, Error> {
         let inner = match self.inner {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
@@ -1998,7 +1996,7 @@ mod tests {
     }
 
     // Helper functions for tests
-    fn create_test_schema() -> StaticJSONSchema {
+    fn create_test_schema() -> JSONSchema {
         let schema_value = serde_json::json!({
             "type": "object",
             "properties": {
@@ -2008,6 +2006,6 @@ mod tests {
             },
             "required": ["result"]
         });
-        StaticJSONSchema::from_value(schema_value).unwrap()
+        JSONSchema::from_value(schema_value).unwrap()
     }
 }

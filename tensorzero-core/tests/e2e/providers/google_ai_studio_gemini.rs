@@ -419,3 +419,75 @@ async fn test_google_ai_studio_gemini_tool_choice_auto_with_allowed_tools() {
     );
     assert_eq!(tools_available[0].get("name").unwrap(), "get_humidity");
 }
+
+/// Test cross-model inference: replaying tool calls from other providers (without thought blocks).
+/// This tests that the dummy thought signature injection works correctly with Gemini 3.
+/// When conversations from OpenAI/Anthropic are replayed to Gemini, they don't have thought blocks
+/// or signatures, so we inject dummy signatures to enable cross-model inference.
+#[tokio::test]
+async fn test_gemini_cross_model_inference_tool_calls() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // Simulate a conversation where the assistant made tool calls (from another provider like OpenAI)
+    // Note: No thought blocks - this is the cross-model inference case
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": "google-ai-studio-gemini-3-flash",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What's the weather in Tokyo?"
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "id": "call_123",
+                            "name": "get_temperature",
+                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
+                        }
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "id": "call_123",
+                            "name": "get_temperature",
+                            "result": "25"
+                        }
+                    ]
+                }
+            ]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Should succeed - our dummy signature injection enables cross-model inference
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Cross-model inference should succeed with dummy thought signatures"
+    );
+
+    let response_json = response.json::<Value>().await.unwrap();
+    // Should have a text response summarizing the weather
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(
+        content.iter().any(|block| block["type"] == "text"),
+        "Expected a text block in the response: {content:?}"
+    );
+}

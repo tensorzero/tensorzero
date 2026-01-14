@@ -18,7 +18,7 @@ use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 
 use super::config::DynamicToolConfig;
 
@@ -247,7 +247,7 @@ impl FunctionTool {
     pub(crate) fn into_dynamic_tool_config(self) -> DynamicToolConfig {
         DynamicToolConfig {
             description: self.description,
-            parameters: DynamicJSONSchema::new(self.parameters),
+            parameters: JSONSchema::compile_background(self.parameters),
             name: self.name,
             strict: self.strict,
         }
