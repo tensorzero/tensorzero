@@ -563,15 +563,9 @@ impl<'a> GeminiContent<'a> {
                     let part = convert_non_thought_content_block(block).await?;
                     match part {
                         FlattenUnknown::Normal(part) => {
-                            let thought_signature =
-                                if matches!(part, GeminiPartData::FunctionCall { .. }) {
-                                    Some(DUMMY_THOUGHT_SIGNATURE.to_string())
-                                } else {
-                                    None
-                                };
                             output.push(GeminiContentPart {
                                 thought: false,
-                                thought_signature,
+                                thought_signature: None,
                                 data: FlattenUnknown::Normal(part),
                             });
                         }
@@ -586,6 +580,24 @@ impl<'a> GeminiContent<'a> {
                 }
             }
         }
+
+        // Post-processing: If no FunctionCall has a real thought_signature (from a preceding Thought block),
+        // add dummy signatures to all FunctionCalls for cross-model inference compatibility with Gemini 3+.
+        // This preserves the old behavior when real signatures exist (e.g., parallel tool calls where
+        // only the first one has a real signature from a Thought block).
+        let has_real_signature = output.iter().any(|part| part.thought_signature.is_some());
+
+        if !has_real_signature {
+            for part in &mut output {
+                if matches!(
+                    part.data,
+                    FlattenUnknown::Normal(GeminiPartData::FunctionCall { .. })
+                ) {
+                    part.thought_signature = Some(DUMMY_THOUGHT_SIGNATURE.to_string());
+                }
+            }
+        }
+
         Ok(GeminiContent {
             role,
             parts: output,

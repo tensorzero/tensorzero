@@ -2403,7 +2403,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
 
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
-                    thought_signature: Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
+                    thought_signature: None,
                     data: FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall {
                         function_call: GCPVertexGeminiFunctionCall {
                             name: Cow::Borrowed(&tool_call.name),
@@ -2440,7 +2440,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
 
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
-                    thought_signature: Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
+                    thought_signature: None,
                     data: FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall {
                         function_call: GCPVertexGeminiFunctionCall {
                             name: Cow::Owned(tool_call.name),
@@ -2534,6 +2534,25 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                     thought_signature: None,
                     data: FlattenUnknown::Unknown(Cow::Owned(data)),
                 });
+            }
+        }
+    }
+
+    // Post-processing: If no FunctionCall has a real thought_signature (from a preceding Thought block),
+    // add dummy signatures to all FunctionCalls for cross-model inference compatibility with Gemini 3+.
+    // This preserves the old behavior when real signatures exist (e.g., parallel tool calls where
+    // only the first one has a real signature from a Thought block).
+    let has_real_signature = model_content_blocks
+        .iter()
+        .any(|part| part.thought_signature.is_some());
+
+    if !has_real_signature {
+        for part in &mut model_content_blocks {
+            if matches!(
+                part.data,
+                FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { .. })
+            ) {
+                part.thought_signature = Some(DUMMY_THOUGHT_SIGNATURE.to_string());
             }
         }
     }
