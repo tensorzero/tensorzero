@@ -246,10 +246,10 @@ impl InferenceProvider for AWSSagemakerProvider {
                 Ok(msg) => Ok(reqwest_eventsource::Event::Message(msg)),
                 Err(e) => match e {
                     EventStreamError::Utf8(err) => Err(TensorZeroEventError::EventSource(
-                        reqwest_eventsource::Error::Utf8(err),
+                        Box::new(reqwest_eventsource::Error::Utf8(err)),
                     )),
                     EventStreamError::Parser(err) => Err(TensorZeroEventError::EventSource(
-                        reqwest_eventsource::Error::Parser(err),
+                        Box::new(reqwest_eventsource::Error::Parser(err)),
                     )),
                     EventStreamError::Transport(err) => Err(err),
                 },
