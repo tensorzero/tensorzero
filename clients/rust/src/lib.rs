@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::config::snapshot::ConfigSnapshot;
 use tensorzero_core::config::write_config_snapshot;

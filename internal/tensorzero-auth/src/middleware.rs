@@ -116,7 +116,7 @@ pub async fn tensorzero_auth_middleware(
             }),
         }
     }
-    .instrument(tracing::trace_span!(
+    .instrument(tracing::info_span!(
         "tensorzero_auth",
         otel.name = "tensorzero_auth"
     ));
