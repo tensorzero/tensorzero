@@ -220,6 +220,10 @@ class OptimizationJobInfo:
 
 @final
 class DICLOptimizationConfig:
+    """
+    Configuration for DICL (Dynamic In-Context Learning) optimization.
+    """
+
     def __init__(
         self,
         *,
@@ -232,7 +236,21 @@ class DICLOptimizationConfig:
         k: Optional[int] = None,
         model: Optional[str] = None,
         append_to_existing_variants: Optional[bool] = None,
-    ) -> None: ...
+    ) -> None:
+        """
+        Initialize the DICLOptimizationConfig.
+
+        :param embedding_model: The embedding model to use (required).
+        :param variant_name: The name to be used for the DICL variant (required).
+        :param function_name: The name of the function to optimize (required).
+        :param dimensions: The dimensions of the embeddings. If None, uses the model's default.
+        :param batch_size: The batch size to use for getting embeddings.
+        :param max_concurrency: The maximum concurrency to use for getting embeddings.
+        :param k: The number of nearest neighbors to use for the DICL variant.
+        :param model: The model to use for the DICL variant. This field will be required in a future release.
+        :param append_to_existing_variants: Whether to append to existing variants.
+        """
+        ...
 
 @final
 class OpenAISFTConfig:
