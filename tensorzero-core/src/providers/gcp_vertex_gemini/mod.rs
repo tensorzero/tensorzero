@@ -2539,15 +2539,18 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     }
 
     // Post-processing: If no FunctionCall has a real thought_signature (from a preceding Thought block),
-    // add dummy signatures to all FunctionCalls for cross-model inference compatibility with Gemini 3+.
+    // add a dummy signature to the first FunctionCall for cross-model inference compatibility with Gemini 3+.
     // See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
-    // This preserves the old behavior when real signatures exist (e.g., parallel tool calls where
-    // only the first one has a real signature from a Thought block).
-    let has_real_signature = model_content_blocks
-        .iter()
-        .any(|part| part.thought_signature.is_some());
+    // We only check FunctionCall parts (not all parts) because signatures on non-FunctionCall parts
+    // don't indicate this is a Gemini-originated conversation with tool calls.
+    let has_function_call_with_signature = model_content_blocks.iter().any(|part| {
+        matches!(
+            part.data,
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { .. })
+        ) && part.thought_signature.is_some()
+    });
 
-    if !has_real_signature {
+    if !has_function_call_with_signature {
         // Only add dummy signature to the first FunctionCall (matching how real signatures work)
         if let Some(part) = model_content_blocks.iter_mut().find(|p| {
             matches!(
