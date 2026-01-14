@@ -1,6 +1,7 @@
 use crate::{
     db::inference_count::InferenceCountQueries,
     error::Error,
+    feature_flags::flags,
     utils::gateway::{AppState, AppStateData},
 };
 use axum::{
@@ -30,8 +31,11 @@ pub async fn get_episode_inference_count_handler(
     State(app_state): AppState,
     Path(episode_id): Path<Uuid>,
 ) -> Result<Json<GetEpisodeInferenceCountResponse>, Error> {
-    let stats =
-        get_episode_inference_count(&app_state.clickhouse_connection_info, episode_id).await?;
+    let stats = if flags::ENABLE_POSTGRES_DATA_READ.get() {
+        get_episode_inference_count(&app_state.postgres_connection_info, episode_id).await?
+    } else {
+        get_episode_inference_count(&app_state.clickhouse_connection_info, episode_id).await?
+    };
     Ok(Json(stats))
 }
 

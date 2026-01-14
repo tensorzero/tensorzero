@@ -160,18 +160,6 @@ fn build_count_demonstration_feedbacks_query(
     (query, query_params)
 }
 
-/// Converts a time window to a Duration.
-fn time_window_to_duration(time_window: &TimeWindow) -> Duration {
-    match time_window {
-        TimeWindow::Minute => Duration::from_secs(60),
-        TimeWindow::Hour => Duration::from_secs(60 * 60),
-        TimeWindow::Day => Duration::from_secs(24 * 60 * 60),
-        TimeWindow::Week => Duration::from_secs(7 * 24 * 60 * 60),
-        TimeWindow::Month => Duration::from_secs(30 * 24 * 60 * 60),
-        TimeWindow::Cumulative => Duration::from_secs(365 * 24 * 60 * 60), // 1 year for cumulative
-    }
-}
-
 /// Build query for getting function throughput by variant
 fn build_function_throughput_by_variant_query(
     params: &GetFunctionThroughputByVariantParams<'_>,
@@ -204,7 +192,7 @@ fn build_function_throughput_by_variant_query(
             // Calculate time delta using idiomatic Duration math in Rust.
             // We use ClickHouse's UUIDv7ToDateTime for timestamp comparison,
             // avoiding manual bit manipulation of UUIDv7 format.
-            let time_window_duration = time_window_to_duration(&params.time_window);
+            let time_window_duration = params.time_window.to_duration();
             let time_delta = time_window_duration * (params.max_periods + 1);
             let time_delta_secs = time_delta.as_secs();
             query_params.insert("time_delta_secs".to_string(), time_delta_secs.to_string());
