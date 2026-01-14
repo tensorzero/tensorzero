@@ -183,13 +183,15 @@ function ToolsList<T>({ tools, getLabel, renderCard }: ToolsListProps<T>) {
 
   return (
     <div className="flex flex-col gap-3">
-      <Combobox
-        selected={items[selectedIndex]}
-        onSelect={handleSelect}
-        items={items}
-        placeholder="Select tool"
-        emptyMessage="No tools found"
-      />
+      <div className="max-w-xs">
+        <Combobox
+          selected={items[selectedIndex]}
+          onSelect={handleSelect}
+          items={items}
+          placeholder="Select tool"
+          emptyMessage="No tools found"
+        />
+      </div>
       {selectedTool && renderCard(selectedTool)}
     </div>
   );
