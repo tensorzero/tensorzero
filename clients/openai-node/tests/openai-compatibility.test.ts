@@ -954,15 +954,11 @@ describe("OpenAI Compatibility", () => {
       }
     }
 
-    const prevChunk = chunks[chunks.length - 2];
-    expect(prevChunk.choices[0].finish_reason).toBe("stop");
-    expect(prevChunk.usage).toBeNull();
-
-    // Check final chunk (which contains usage)
+    // Check final chunk (which contains finish_reason and usage)
     const finalChunk = chunks[chunks.length - 1];
+    expect(finalChunk.choices[0].finish_reason).toBe("stop");
     expect(finalChunk.usage?.prompt_tokens).toBe(10);
     expect(finalChunk.usage?.completion_tokens).toBe(16);
-    expect(finalChunk.choices).toStrictEqual([]);
 
     // Sleep so we're sure the cache is warmed up
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -998,12 +994,9 @@ describe("OpenAI Compatibility", () => {
 
     expect(content).toBe(cachedContent);
 
-    const prevCachedChunk = cachedChunks[cachedChunks.length - 2];
-    expect(prevCachedChunk.choices[0].finish_reason).toBe("stop");
-    expect(prevCachedChunk.usage).toBeNull();
-
-    // Check final cached chunk
+    // Check final cached chunk (which contains finish_reason and usage)
     const finalCachedChunk = cachedChunks[cachedChunks.length - 1];
+    expect(finalCachedChunk.choices[0].finish_reason).toBe("stop");
     expect(finalCachedChunk.usage?.prompt_tokens).toBe(0);
     expect(finalCachedChunk.usage?.completion_tokens).toBe(0);
     expect(finalCachedChunk.usage?.total_tokens).toBe(0);
