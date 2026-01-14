@@ -124,18 +124,14 @@ export default function App({ loaderData }: Route.ComponentProps) {
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const [open, setOpen] = React.useState(true);
+  const rootLoaderData = useRouteLoaderData<typeof loader>("root");
 
-  // Reset dialog to open when error changes (component may re-render, not remount)
+  // Reset dialog when error changes (component may re-render, not remount)
   React.useEffect(() => {
     setOpen(true);
   }, [error]);
 
-  // Try to get root loader data if available (works for client-side errors
-  // like 404s where the root loader succeeded). Falls back gracefully when unavailable.
-  const rootLoaderData = useRouteLoaderData<typeof loader>("root");
-
-  // Client 404s (page not found in React Router) - show in content area with sidebar
-  // Check that it's not an infrastructure error (those go through classifyError)
+  // Client 404s - show PageNotFound in content area
   if (isRouteErrorResponse(error) && error.status === 404) {
     if (!isInfraErrorData(error.data)) {
       return (
@@ -144,7 +140,6 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     }
   }
 
-  // All other errors use the dismissible modal pattern with sidebar visible
   const classified = classifyError(error);
   const label = getErrorLabel(classified.type);
 

@@ -6,10 +6,6 @@ import { Toaster } from "~/components/ui/toaster";
 import { ReadOnlyProvider } from "~/context/read-only";
 import { AutopilotAvailableProvider } from "~/context/autopilot-available";
 
-/**
- * Loader data fields used by AppProviders for context setup.
- * These have safe defaults (false) when not provided.
- */
 export interface AppProvidersLoaderData {
   isReadOnly?: boolean;
   autopilotAvailable?: boolean;
@@ -17,11 +13,6 @@ export interface AppProvidersLoaderData {
 
 interface AppProvidersProps {
   children: React.ReactNode;
-  /**
-   * Loader data for context providers. When provided (e.g., from useRouteLoaderData),
-   * enables the sidebar to show correct read-only badge and autopilot section state.
-   * Falls back to safe defaults (false) when data is unavailable.
-   */
   loaderData?: AppProvidersLoaderData;
 }
 
@@ -29,9 +20,8 @@ interface AppProvidersProps {
  * Shared provider stack for the app shell.
  * Used by both the main App and ErrorAppShell to ensure consistency.
  *
- * Note: ConfigProvider is intentionally not included here yet because it requires
- * a valid config value (no safe default). Once EMPTY_CONFIG is introduced for
- * graceful degradation (PR 2a), ConfigProvider will be moved here as well.
+ * Note: ConfigProvider will be moved here in PR 2a once EMPTY_CONFIG
+ * is introduced for graceful degradation.
  */
 export function AppProviders({ children, loaderData }: AppProvidersProps) {
   return (
