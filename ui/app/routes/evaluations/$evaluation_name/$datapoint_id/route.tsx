@@ -291,6 +291,7 @@ export default function EvaluationDatapointPage({
                 {
                   label: evaluation_name,
                   href: `/evaluations/${evaluation_name}`,
+                  isIdentifier: true,
                 },
               ]}
             />
