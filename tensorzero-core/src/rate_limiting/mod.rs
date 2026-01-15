@@ -178,6 +178,17 @@ impl ScopeInfo {
         }
     }
 
+    /// Create a ScopeInfo for load testing with a single tag key.
+    /// The tag key is used to create a unique scope for each rate limit key.
+    pub fn new_for_load_test(key: &str) -> Self {
+        let mut tags = HashMap::new();
+        tags.insert("load_test_key".to_string(), key.to_string());
+        Self {
+            tags: Arc::new(tags),
+            api_key_public_id: None,
+        }
+    }
+
     /// Expose relevant information from this `ScopeInfo` as OpenTelemetry span attributes
     pub(crate) fn apply_otel_span_attributes(&self, span: &Span) {
         let ScopeInfo {
@@ -200,6 +211,40 @@ impl RateLimitingConfig {
 
     pub fn enabled(&self) -> bool {
         self.enabled
+    }
+
+    /// Create a RateLimitingConfig for load testing.
+    /// This creates a simple config with a single rule matching the "load_test_key" tag.
+    #[expect(clippy::expect_used, clippy::missing_panics_doc)]
+    pub fn new_for_load_test(
+        capacity: u64,
+        refill_rate: u64,
+        interval: RateLimitInterval,
+        pool_config: PoolConfig,
+    ) -> Self {
+        let limit = RateLimit {
+            resource: RateLimitResource::Token,
+            interval,
+            capacity,
+            refill_rate,
+        };
+        let scope = RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
+            TagRateLimitingConfigScope {
+                tag_key: "load_test_key".to_string(),
+                tag_value: TagValueScope::Each,
+            },
+        )])
+        .expect("hardcoded scope is valid");
+        let rule = RateLimitingConfigRule {
+            limits: vec![Arc::new(limit)],
+            scope,
+            priority: RateLimitingConfigPriority::Always,
+        };
+        Self {
+            rules: vec![rule],
+            enabled: true,
+            pool: pool_config,
+        }
     }
 
     pub fn get_rate_limited_resources(&self, scope_info: &ScopeInfo) -> Vec<RateLimitResource> {

@@ -1,7 +1,7 @@
-use std::sync::{Arc, atomic::AtomicU64};
+use std::sync::Arc;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -9,10 +9,23 @@ mod benchmark;
 
 use benchmark::{Contention, RateLimitBenchmark, create_bucket_settings, create_postgres_pool};
 
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+pub enum BenchmarkMode {
+    /// Hit the database directly on every request (original behavior)
+    #[default]
+    Direct,
+    /// Use in-memory token pool with adaptive pre-borrowing
+    Pooled,
+}
+
 #[derive(Parser)]
 pub struct Args {
     #[command(flatten)]
     pub bench_opts: rlt::cli::BenchCli,
+
+    /// Benchmark mode: direct (DB every request) or pooled (in-memory pool)
+    #[arg(long, value_enum, default_value_t = BenchmarkMode::Direct)]
+    pub mode: BenchmarkMode,
 
     /// Rate limit capacity (number of tickets in bucket)
     #[arg(long, default_value_t = 1_000_000)]
@@ -68,16 +81,22 @@ async fn main() -> Result<()> {
     let bucket_settings = Arc::new(create_bucket_settings(args.capacity, args.refill_amount));
 
     // Create benchmark
-    let benchmark = RateLimitBenchmark {
+    let benchmark = RateLimitBenchmark::new(
         client,
         bucket_settings,
-        contention: Contention::new(args.contention_keys),
-        tickets_per_request: args.tickets_per_request,
-        requests_per_iteration: args.requests_per_iteration,
-        request_counter: Arc::new(AtomicU64::new(0)),
+        Contention::new(args.contention_keys),
+        args.tickets_per_request,
+        args.requests_per_iteration,
+        args.mode,
+    );
+
+    let mode_str = match args.mode {
+        BenchmarkMode::Direct => "direct (DB every request)",
+        BenchmarkMode::Pooled => "pooled (in-memory token pool)",
     };
 
     println!("Starting rate limiting load test with configuration:");
+    println!("  Mode: {mode_str}");
     println!("  Capacity: {} tickets", args.capacity);
     println!("  Refill: {} tickets/second", args.refill_amount);
     println!(
