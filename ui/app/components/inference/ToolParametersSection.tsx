@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import type {
   Tool,
   ToolChoice,
@@ -146,26 +146,23 @@ interface ToolsListProps<T> {
 function ToolsList<T>({ tools, getLabel, renderCard }: ToolsListProps<T>) {
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
-  const items = useMemo(() => {
-    // Track label counts to detect duplicates
-    const labelCounts = new Map<string, number>();
-    tools.forEach((tool, index) => {
-      const label = getLabel(tool, index);
-      labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
-    });
+  // Reset selection when tools list changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [tools]);
 
-    // Build unique display labels, appending index only for duplicates
-    const seenLabels = new Map<string, number>();
+  const items = useMemo(() => {
+    // Build unique display labels with collision detection
+    const usedLabels = new Set<string>();
     return tools.map((tool, index) => {
       const baseLabel = getLabel(tool, index);
-      const count = labelCounts.get(baseLabel) || 1;
-
-      if (count > 1) {
-        const occurrence = (seenLabels.get(baseLabel) || 0) + 1;
-        seenLabels.set(baseLabel, occurrence);
-        return `${baseLabel} (${occurrence})`;
+      let label = baseLabel;
+      let suffix = 1;
+      while (usedLabels.has(label)) {
+        label = `${baseLabel} (${suffix++})`;
       }
-      return baseLabel;
+      usedLabels.add(label);
+      return label;
     });
   }, [tools, getLabel]);
 
