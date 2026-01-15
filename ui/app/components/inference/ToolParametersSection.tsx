@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type {
   Tool,
   ToolChoice,
@@ -12,6 +12,7 @@ import {
 import { CodeEditor } from "~/components/ui/code-editor";
 import { Badge } from "~/components/ui/badge";
 import { Combobox } from "~/components/ui/combobox";
+import type { ComboboxItem } from "~/components/ui/combobox";
 
 export function ToolParametersSection({
   allowed_tools,
@@ -144,45 +145,35 @@ interface ToolsListProps<T> {
 }
 
 function ToolsList<T>({ tools, getLabel, renderCard }: ToolsListProps<T>) {
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [selectedValue, setSelectedValue] = useState<string>("0");
 
-  // Reset selection when tools list changes
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [tools]);
-
-  const items = useMemo(() => {
-    // Build unique display labels with collision detection
-    const usedLabels = new Set<string>();
-    return tools.map((tool, index) => {
-      const baseLabel = getLabel(tool, index);
-      let label = baseLabel;
-      let suffix = 1;
-      while (usedLabels.has(label)) {
-        label = `${baseLabel} (${suffix++})`;
-      }
-      usedLabels.add(label);
-      return label;
-    });
-  }, [tools, getLabel]);
-
-  const handleSelect = useCallback(
-    (value: string) => {
-      const index = items.indexOf(value);
-      if (index !== -1) {
-        setSelectedIndex(index);
-      }
-    },
-    [items],
+  // Build items with unique values (indices) and display labels
+  const items: ComboboxItem[] = useMemo(
+    () =>
+      tools.map((tool, index) => ({
+        value: String(index),
+        label: getLabel(tool, index),
+      })),
+    [tools, getLabel],
   );
 
-  const selectedTool = tools[selectedIndex];
+  const handleSelect = useCallback((value: string) => {
+    setSelectedValue(value);
+  }, []);
+
+  // Clamp selection to valid range (handles tools array changes)
+  const safeIndex =
+    tools.length > 0
+      ? Math.min(parseInt(selectedValue, 10) || 0, tools.length - 1)
+      : 0;
+  const safeValue = String(safeIndex);
+  const selectedTool = tools[safeIndex];
 
   return (
     <div className="flex flex-col gap-3">
       <div className="max-w-xs">
         <Combobox
-          selected={items[selectedIndex]}
+          selected={safeValue}
           onSelect={handleSelect}
           items={items}
           placeholder="Select tool"
