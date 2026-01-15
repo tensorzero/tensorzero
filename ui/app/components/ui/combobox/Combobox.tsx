@@ -78,10 +78,11 @@ export function Combobox({
   const normalizedItems = useMemo(() => items.map(normalizeItem), [items]);
 
   // Find the label for the currently selected value
+  // Fall back to selected value itself for created items not in list
   const selectedLabel = useMemo(() => {
     if (!selected) return null;
     const item = normalizedItems.find((item) => item.value === selected);
-    return item?.label ?? null;
+    return item?.label ?? selected;
   }, [selected, normalizedItems]);
 
   const filteredItems = useMemo(() => {
