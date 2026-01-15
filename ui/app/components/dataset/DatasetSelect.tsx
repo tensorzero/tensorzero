@@ -1,6 +1,6 @@
 import { Table, TablePlus } from "~/components/icons/Icons";
 import { ButtonIcon } from "~/components/ui/button";
-import { SearchableSelect } from "~/components/ui/searchable-select";
+import { ButtonSelect } from "~/components/ui/select/ButtonSelect";
 import {
   useDatasetOptions,
   getDatasetItemDataAttributes,
@@ -63,20 +63,20 @@ export function DatasetSelect({
   };
 
   return (
-    <SearchableSelect
+    <ButtonSelect
       items={items}
       onSelect={onSelect}
       selected={selected}
       trigger={renderTrigger()}
       triggerClassName="group justify-between border"
-      searchPlaceholder={searchPlaceholder}
+      placeholder={searchPlaceholder}
       emptyMessage="No datasets found"
       disabled={disabled}
       isLoading={isLoading}
       loadingMessage="Loading datasets..."
       isError={isError}
       errorMessage="There was an error loading datasets."
-      allowCreation={allowCreation}
+      creatable={allowCreation}
       createHeading="New dataset"
       existingHeading="Existing"
       getPrefix={getPrefix}

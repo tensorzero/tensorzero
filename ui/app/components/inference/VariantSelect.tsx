@@ -1,4 +1,4 @@
-import { SearchableSelect } from "~/components/ui/searchable-select";
+import { ButtonSelect } from "~/components/ui/select/ButtonSelect";
 import { ButtonIcon } from "~/components/ui/button";
 import { Compare } from "~/components/icons/Icons";
 import { useReadOnly } from "~/context/read-only";
@@ -28,7 +28,7 @@ export function VariantSelect({
 
   return (
     <ReadOnlyGuard asChild>
-      <SearchableSelect
+      <ButtonSelect
         items={options}
         onSelect={handleSelect}
         trigger={
@@ -37,7 +37,7 @@ export function VariantSelect({
             Try with {label}
           </>
         }
-        searchPlaceholder={`Search ${label}s...`}
+        placeholder={`Search ${label}s...`}
         emptyMessage={`No ${label}s found`}
         disabled={isDisabled}
       />

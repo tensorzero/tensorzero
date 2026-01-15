@@ -15,11 +15,11 @@ import {
 import { ComboboxMenuItems } from "~/components/ui/combobox/ComboboxMenuItems";
 import clsx from "clsx";
 
-export interface SearchableSelectRenderTriggerProps {
+export interface ButtonSelectRenderTriggerProps {
   open: boolean;
 }
 
-export interface SearchableSelectProps {
+export interface ButtonSelectProps {
   /** Items to display in the dropdown */
   items: string[];
   /** Called when an item is selected */
@@ -29,9 +29,7 @@ export interface SearchableSelectProps {
   /** Content to render inside the trigger button, or a render function receiving { open } */
   trigger:
     | React.ReactNode
-    | ((props: SearchableSelectRenderTriggerProps) => React.ReactNode);
-  /** Placeholder text for the search input */
-  searchPlaceholder: string;
+    | ((props: ButtonSelectRenderTriggerProps) => React.ReactNode);
   /** Message shown when no items match the search */
   emptyMessage: string;
   /** Whether the select is disabled */
@@ -46,8 +44,6 @@ export interface SearchableSelectProps {
   isError?: boolean;
   /** Message shown on error */
   errorMessage?: string;
-  /** Whether to allow creating new items */
-  allowCreation?: boolean;
   /** Heading for the create option group */
   createHeading?: string;
   /** Heading for the existing items group (shown when create option visible) */
@@ -58,14 +54,21 @@ export interface SearchableSelectProps {
   getSuffix?: (item: string | null) => React.ReactNode;
   /** Get data attributes for each item */
   getItemDataAttributes?: (item: string) => Record<string, string>;
+  /** Whether to show the search input (default: true) */
+  searchable?: boolean;
+  /** Placeholder text for the search input (required when searchable is true) */
+  placeholder?: string;
+  /** Whether to allow creating new items (only works when searchable is true) */
+  creatable?: boolean;
+  /** Alignment of the popover relative to trigger (default: "start") */
+  align?: "start" | "center" | "end";
 }
 
-export function SearchableSelect({
+export function ButtonSelect({
   items,
   onSelect,
   selected,
   trigger,
-  searchPlaceholder,
   emptyMessage,
   disabled = false,
   triggerClassName,
@@ -73,26 +76,30 @@ export function SearchableSelect({
   loadingMessage = "Loading...",
   isError = false,
   errorMessage = "An error occurred.",
-  allowCreation = false,
   createHeading = "Create new",
   existingHeading = "Existing",
   getPrefix,
   getSuffix,
   getItemDataAttributes,
-}: SearchableSelectProps) {
+  searchable = true,
+  placeholder,
+  creatable = false,
+  align = "start",
+}: ButtonSelectProps) {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
 
   const filteredItems = useMemo(() => {
-    if (!searchValue.trim()) {
+    if (!searchable || !searchValue.trim()) {
       return items;
     }
     const search = searchValue.toLowerCase().trim();
     return items.filter((item) => item.toLowerCase().includes(search));
-  }, [items, searchValue]);
+  }, [items, searchValue, searchable]);
 
   const showCreateOption =
-    allowCreation &&
+    searchable &&
+    creatable &&
     Boolean(searchValue.trim()) &&
     !items.some(
       (item) => item.toLowerCase() === searchValue.trim().toLowerCase(),
@@ -137,15 +144,17 @@ export function SearchableSelect({
 
       <PopoverContent
         className="w-[var(--radix-popover-trigger-width)] min-w-64 p-0"
-        align="start"
+        align={align}
       >
         <Command shouldFilter={false}>
-          <CommandInput
-            placeholder={searchPlaceholder}
-            value={searchValue}
-            onValueChange={setSearchValue}
-            className="h-9"
-          />
+          {searchable && (
+            <CommandInput
+              placeholder={placeholder}
+              value={searchValue}
+              onValueChange={setSearchValue}
+              className="h-9"
+            />
+          )}
 
           {isLoading && (
             <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
