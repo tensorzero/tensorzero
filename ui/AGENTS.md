@@ -8,4 +8,4 @@
 
 - **Frontend routes** (user-facing URLs): Use **hyphens** (e.g., `/api-keys`, `/workflow-evaluations`, `/supervised-fine-tuning`)
 - **Backend API routes** (gateway API): Use **underscores** (e.g., `/internal/workflow_evaluations`, `/api/curated_inferences`)
-- This convention aligns with web standards (hyphens for URLs) while maintaining consistency with the gateway API (underscores, like Stripe/OpenAI).
+- This convention aligns with web standards (hyphens for URLs) while maintaining consistency with the gateway API (underscores).
