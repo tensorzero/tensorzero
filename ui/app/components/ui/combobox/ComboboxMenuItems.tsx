@@ -35,7 +35,9 @@ export function ComboboxMenuItems({
             className="flex items-center gap-2"
           >
             {getPrefix?.(null, false)}
-            <span className="truncate font-mono">{searchValue.trim()}</span>
+            <span className="truncate font-mono" title={searchValue.trim()}>
+              {searchValue.trim()}
+            </span>
           </CommandItem>
         </CommandGroup>
       )}
@@ -53,7 +55,9 @@ export function ComboboxMenuItems({
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   {getPrefix?.(item, isSelected)}
-                  <span className="truncate font-mono">{item}</span>
+                  <span className="truncate font-mono" title={item}>
+                    {item}
+                  </span>
                 </div>
                 {getSuffix?.(item)}
               </CommandItem>
