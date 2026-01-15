@@ -23,7 +23,7 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
         OptimizationJobInfo, OptimizerOutput,
-        dicl::{DiclOptimizationConfig, DiclOptimizationJobHandle},
+        dicl::{DEPRECATED_DEFAULT_MODEL, DiclOptimizationConfig, DiclOptimizationJobHandle},
     },
     rate_limiting::ScopeInfo,
     stored_inference::RenderedSample,
@@ -45,6 +45,16 @@ impl Optimizer for DiclOptimizationConfig {
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
+        // Warn if using deprecated default model
+        if self.model.as_ref() == DEPRECATED_DEFAULT_MODEL {
+            tracing::warn!(
+                "DICL optimization is using the deprecated default model `{}`. \
+                 Please specify the `model` field explicitly. \
+                 This field will be required in a future release. (#5616)",
+                DEPRECATED_DEFAULT_MODEL
+            );
+        }
+
         // Validate training examples
         validate_train_examples(&train_examples)?;
 
@@ -633,7 +643,7 @@ mod tests {
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
             StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
-        jsonschema_util::StaticJSONSchema,
+        jsonschema_util::JSONSchema,
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
@@ -1075,7 +1085,7 @@ mod tests {
     }
 
     fn create_test_json_function_config() -> FunctionConfig {
-        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let output_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}
@@ -1098,7 +1108,7 @@ mod tests {
     }
 
     fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
-        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let output_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}

@@ -591,7 +591,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
         FunctionConfig::Json(json_config) => &json_config.output_schema,
         FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     };
-    assert_eq!(output_schema, &StaticJSONSchema::default());
+    assert_eq!(output_schema, &JSONSchema::default());
     assert_eq!(output_schema.value, serde_json::json!({}));
 }
 

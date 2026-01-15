@@ -41,7 +41,7 @@ pub use wire::{ToolCallExt, ToolResultExt};
 
 use serde_json::Value;
 
-use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
+use crate::jsonschema_util::JSONSchema;
 
 /*  Key tool types in TensorZero
  * - DynamicToolParams: the wire format for tool configuration info (flattened into struct body)
@@ -71,7 +71,7 @@ pub const IMPLICIT_TOOL_NAME: &str = "respond";
 pub const IMPLICIT_TOOL_DESCRIPTION: &str = "Respond to the user using the output schema provided.";
 
 pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
-    let tool_schema = DynamicJSONSchema::new(schema);
+    let tool_schema = JSONSchema::compile_background(schema);
     let implicit_tool = FunctionToolConfig::DynamicImplicit(DynamicImplicitToolConfig {
         parameters: tool_schema,
     });
@@ -88,12 +88,12 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
 
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
-pub fn create_json_mode_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
+pub fn create_json_mode_tool_call_config(schema: JSONSchema) -> ToolCallConfig {
     create_json_mode_tool_call_config_with_allowed_tools(schema, AllowedTools::default())
 }
 
 pub fn create_json_mode_tool_call_config_with_allowed_tools(
-    schema: StaticJSONSchema,
+    schema: JSONSchema,
     allowed_tools: AllowedTools,
 ) -> ToolCallConfig {
     let implicit_tool = FunctionToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
@@ -112,7 +112,7 @@ pub fn create_json_mode_tool_call_config_with_allowed_tools(
 impl ToolCallConfig {
     #[expect(clippy::missing_panics_doc)]
     pub fn implicit_from_value(value: &Value) -> Self {
-        let parameters = StaticJSONSchema::from_value(value.clone()).unwrap();
+        let parameters = JSONSchema::from_value(value.clone()).unwrap();
         let implicit_tool_config = FunctionToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             static_tools_available: vec![implicit_tool_config],
@@ -145,7 +145,7 @@ mod tests {
                     name: "get_temperature".to_string(),
                     key: "get_temperature".to_string(),
                     description: "Get the current temperature in a given location".to_string(),
-                    parameters: StaticJSONSchema::from_value(json!({
+                    parameters: JSONSchema::from_value(json!({
                     "type": "object",
                     "properties": {
                         "location": {"type": "string"},
@@ -164,7 +164,7 @@ mod tests {
                     key: "query_articles".to_string(),
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
-                    parameters: StaticJSONSchema::from_value(json!({
+                    parameters: JSONSchema::from_value(json!({
                         "type": "object",
                         "properties": {
                             "keyword": {"type": "string"},
@@ -1267,7 +1267,7 @@ mod tests {
             key: "my_tool_key".to_string(),
             name: "display_name_for_llm".to_string(),
             description: "A tool with different key and name".to_string(),
-            parameters: StaticJSONSchema::from_value(json!({
+            parameters: JSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "input": {"type": "string"}
@@ -1304,7 +1304,7 @@ mod tests {
                 key: "my_tool_key".to_string(),
                 name: "display_name_for_llm".to_string(),
                 description: "A tool with different key and name".to_string(),
-                parameters: StaticJSONSchema::from_value(json!({
+                parameters: JSONSchema::from_value(json!({
                     "type": "object",
                     "properties": {
                         "input": {"type": "string"}

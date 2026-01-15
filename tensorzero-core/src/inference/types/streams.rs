@@ -11,7 +11,7 @@ use crate::inference::types::{
     ProviderInferenceResponseArgs, RawUsageEntry, RequestMessage, Text, Thought,
     ThoughtSummaryBlock, ToolCall, Unknown, Usage,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::{ToolCallChunk, ToolCallConfig};
 use futures::Stream;
@@ -246,7 +246,7 @@ pub struct CollectChunksArgs {
     pub input_messages: Vec<RequestMessage>,
     pub function_name: Arc<str>,
     pub variant_name: Arc<str>,
-    pub dynamic_output_schema: Option<Arc<DynamicJSONSchema>>,
+    pub dynamic_output_schema: Option<Arc<JSONSchema>>,
     pub templates: Arc<TemplateConfig<'static>>,
     pub tool_config: Option<Arc<ToolCallConfig>>,
     pub cached: bool,
@@ -728,7 +728,7 @@ mod tests {
             ContentBlockChatOutput, ContentBlockOutputType, InferenceResult, Text, Thought,
             current_timestamp,
         },
-        jsonschema_util::StaticJSONSchema,
+        jsonschema_util::JSONSchema,
         tool::InferenceResponseToolCall,
     };
 
@@ -985,7 +985,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
+        let output_schema = JSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -1283,7 +1283,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
+        let output_schema = JSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -1390,7 +1390,7 @@ mod tests {
             "required": ["name"]
         });
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
-        let output_schema = StaticJSONSchema::from_value(static_output_schema).unwrap();
+        let output_schema = JSONSchema::from_value(static_output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -1408,7 +1408,7 @@ mod tests {
             input_tokens: Some(5),
             output_tokens: Some(10),
         };
-        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+        let dynamic_output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
