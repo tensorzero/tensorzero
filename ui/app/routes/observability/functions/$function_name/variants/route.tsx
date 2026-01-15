@@ -239,6 +239,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
               {
                 label: function_name,
                 href: `/observability/functions/${function_name}`,
+                isIdentifier: true,
               },
             ]}
           />

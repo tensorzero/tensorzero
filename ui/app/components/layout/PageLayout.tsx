@@ -20,6 +20,8 @@ import { ChevronRight } from "lucide-react";
 export interface BreadcrumbSegment {
   label: string;
   href: string;
+  /** If true, renders label in monospace font (for IDs, names, etc.) */
+  isIdentifier?: boolean;
 }
 
 /**
@@ -35,7 +37,12 @@ function Breadcrumbs({ segments }: { segments: BreadcrumbSegment[] }) {
         {segments.map((segment, index) => (
           <BreadcrumbItem key={segment.href}>
             <BreadcrumbLink asChild>
-              <Link to={segment.href}>{segment.label}</Link>
+              <Link
+                to={segment.href}
+                className={segment.isIdentifier ? "font-mono" : undefined}
+              >
+                {segment.label}
+              </Link>
             </BreadcrumbLink>
             {index < segments.length - 1 && (
               <BreadcrumbSeparator>
