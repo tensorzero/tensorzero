@@ -1,0 +1,183 @@
+import { useCallback, useMemo, useState } from "react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
+import { Button, ButtonIcon } from "~/components/ui/button";
+import { ChevronDown } from "lucide-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandList,
+} from "~/components/ui/command";
+import { ComboboxMenuItems } from "~/components/ui/combobox/ComboboxMenuItems";
+import clsx from "clsx";
+
+export interface SearchableSelectRenderTriggerProps {
+  open: boolean;
+}
+
+export interface SearchableSelectProps {
+  /** Items to display in the dropdown */
+  items: string[];
+  /** Called when an item is selected */
+  onSelect: (item: string, isNew: boolean) => void;
+  /** Currently selected item (for highlighting in list) */
+  selected?: string | null;
+  /** Content to render inside the trigger button, or a render function receiving { open } */
+  trigger:
+    | React.ReactNode
+    | ((props: SearchableSelectRenderTriggerProps) => React.ReactNode);
+  /** Placeholder text for the search input */
+  searchPlaceholder: string;
+  /** Message shown when no items match the search */
+  emptyMessage: string;
+  /** Whether the select is disabled */
+  disabled?: boolean;
+  /** Additional className for the trigger button */
+  triggerClassName?: string;
+  /** Whether the select is in a loading state */
+  isLoading?: boolean;
+  /** Message shown while loading */
+  loadingMessage?: string;
+  /** Whether there was an error loading items */
+  isError?: boolean;
+  /** Message shown on error */
+  errorMessage?: string;
+  /** Whether to allow creating new items */
+  allowCreation?: boolean;
+  /** Heading for the create option group */
+  createHeading?: string;
+  /** Heading for the existing items group (shown when create option visible) */
+  existingHeading?: string;
+  /** Render prefix content for each item */
+  getPrefix?: (item: string | null, isSelected: boolean) => React.ReactNode;
+  /** Render suffix content for each item */
+  getSuffix?: (item: string | null) => React.ReactNode;
+  /** Get data attributes for each item */
+  getItemDataAttributes?: (item: string) => Record<string, string>;
+}
+
+export function SearchableSelect({
+  items,
+  onSelect,
+  selected,
+  trigger,
+  searchPlaceholder,
+  emptyMessage,
+  disabled = false,
+  triggerClassName,
+  isLoading = false,
+  loadingMessage = "Loading...",
+  isError = false,
+  errorMessage = "An error occurred.",
+  allowCreation = false,
+  createHeading = "Create new",
+  existingHeading = "Existing",
+  getPrefix,
+  getSuffix,
+  getItemDataAttributes,
+}: SearchableSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+
+  const filteredItems = useMemo(() => {
+    if (!searchValue.trim()) {
+      return items;
+    }
+    const search = searchValue.toLowerCase().trim();
+    return items.filter((item) => item.toLowerCase().includes(search));
+  }, [items, searchValue]);
+
+  const showCreateOption =
+    allowCreation &&
+    Boolean(searchValue.trim()) &&
+    !items.some(
+      (item) => item.toLowerCase() === searchValue.trim().toLowerCase(),
+    );
+
+  const showMenu = !isLoading && !isError;
+
+  const handleSelectItem = useCallback(
+    (item: string, isNew: boolean) => {
+      onSelect(item, isNew);
+      setSearchValue("");
+      setOpen(false);
+    },
+    [onSelect],
+  );
+
+  const triggerContent =
+    typeof trigger === "function" ? trigger({ open }) : trigger;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild disabled={disabled}>
+        <Button
+          variant="outline"
+          size="sm"
+          role="combobox"
+          aria-expanded={open}
+          className={triggerClassName}
+          disabled={disabled}
+        >
+          {triggerContent}
+          <ButtonIcon
+            as={ChevronDown}
+            className={clsx(
+              "h-4 w-4 shrink-0 transition duration-300 ease-out",
+              open ? "-rotate-180" : "rotate-0",
+            )}
+            variant="tertiary"
+          />
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] min-w-64 p-0"
+        align="start"
+      >
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            value={searchValue}
+            onValueChange={setSearchValue}
+            className="h-9"
+          />
+
+          {isLoading && (
+            <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
+              {loadingMessage}
+            </div>
+          )}
+
+          {isError && (
+            <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
+              {errorMessage}
+            </div>
+          )}
+
+          {showMenu && (
+            <CommandList>
+              <CommandEmpty>{emptyMessage}</CommandEmpty>
+              <ComboboxMenuItems
+                items={filteredItems}
+                selected={selected}
+                searchValue={searchValue}
+                onSelectItem={handleSelectItem}
+                showCreateOption={showCreateOption}
+                createHeading={createHeading}
+                existingHeading={existingHeading}
+                getPrefix={getPrefix}
+                getSuffix={getSuffix}
+                getItemDataAttributes={getItemDataAttributes}
+              />
+            </CommandList>
+          )}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
