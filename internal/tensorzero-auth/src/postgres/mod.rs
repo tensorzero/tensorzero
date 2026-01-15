@@ -71,7 +71,7 @@ pub enum AuthResult {
     /// The API key exists and is not disabled.
     Success(KeyInfo),
     /// The API key exists, but was disabled at the specified time.
-    Disabled(DateTime<Utc>),
+    Disabled(DateTime<Utc>, KeyInfo),
     /// The API key does not exist.
     MissingKey,
 }
@@ -105,7 +105,7 @@ pub async fn check_key(
     match key {
         Some(key) => {
             if let Some(disabled_at) = key.disabled_at {
-                Ok(AuthResult::Disabled(disabled_at))
+                Ok(AuthResult::Disabled(disabled_at, key))
             } else {
                 Ok(AuthResult::Success(key))
             }
