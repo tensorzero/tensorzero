@@ -1,42 +1,11 @@
 import {
+  PageHeaderSkeleton,
   SectionHeader,
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import {
-  BasicInfoLayout,
-  BasicInfoItem,
-  BasicInfoItemTitle,
-  BasicInfoItemContent,
-} from "~/components/layout/BasicInfoLayout";
+import { BasicInfoLayoutSkeleton } from "~/components/layout/BasicInfoLayout";
 import { Skeleton } from "~/components/ui/skeleton";
-
-function PageHeaderSkeleton() {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="text-fg-secondary text-sm font-normal">Datapoint</div>
-      <Skeleton className="h-8 w-72" />
-    </div>
-  );
-}
-
-function BasicInfoSkeleton() {
-  // Matches DatapointBasicInfo: Name, Dataset, Function, Inference?, Episode?, Last updated
-  return (
-    <BasicInfoLayout>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <BasicInfoItem key={i}>
-          <BasicInfoItemTitle>
-            <Skeleton className="h-4 w-20" />
-          </BasicInfoItemTitle>
-          <BasicInfoItemContent>
-            <Skeleton className="h-6 w-40" />
-          </BasicInfoItemContent>
-        </BasicInfoItem>
-      ))}
-    </BasicInfoLayout>
-  );
-}
 
 function ActionsSkeleton() {
   return (
@@ -80,10 +49,10 @@ function TagsSkeleton() {
 export function DatapointContentSkeleton() {
   return (
     <>
-      <PageHeaderSkeleton />
+      <PageHeaderSkeleton label="Datapoint" />
       <SectionsGroup>
         <SectionLayout>
-          <BasicInfoSkeleton />
+          <BasicInfoLayoutSkeleton rows={6} />
         </SectionLayout>
 
         <SectionLayout>
