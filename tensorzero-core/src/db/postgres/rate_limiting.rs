@@ -223,6 +223,7 @@ impl TryFrom<ConsumeTicketsResponse> for ConsumeTicketsReceipt {
             success,
             tickets_remaining,
             tickets_consumed,
+            recorded_epoch: None, // DB calls don't use P99 tracking
         })
     }
 }

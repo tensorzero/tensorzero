@@ -46,6 +46,10 @@ pub struct ConsumeTicketsReceipt {
     pub success: bool,
     pub tickets_remaining: u64,
     pub tickets_consumed: u64,
+    /// The epoch when estimated usage was recorded for P99 tracking.
+    /// Used to adjust the P99 tracker when actual usage differs from estimated.
+    /// Only populated in pooled mode; None for direct mode DB calls.
+    pub recorded_epoch: Option<u32>,
 }
 
 pub struct ReturnTicketsRequest {

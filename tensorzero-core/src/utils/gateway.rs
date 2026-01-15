@@ -98,11 +98,15 @@ impl Drop for GatewayHandle {
             }
             // Return unused rate limit tokens to the database
             if !self.app_state.rate_limiting_manager.is_empty() {
-                tracing::info!("Returning unused rate limit tokens to database");
-                if let Err(e) = self.app_state.rate_limiting_manager.shutdown() {
-                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
-                }
-                tracing::info!("Rate limit token return complete");
+                tokio::task::block_in_place(|| {
+                    tracing::info!("Returning unused rate limit tokens to database");
+                    if let Err(e) =
+                        Handle::current().block_on(self.app_state.rate_limiting_manager.shutdown())
+                    {
+                        tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
+                    }
+                    tracing::info!("Rate limit token return complete");
+                });
             }
 
             self.app_state.deferred_tasks.close();

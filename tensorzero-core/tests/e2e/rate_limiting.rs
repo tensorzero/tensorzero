@@ -221,13 +221,16 @@ scope = [
 
     // First three requests should succeed (aggregate limit of 3)
     let result1 = make_request_with_tags(&client, tags1.clone(), stream).await;
-    assert!(result1.is_ok());
+    assert!(result1.is_ok(), "First request should succeed: {result1:?}");
 
     let result2 = make_request_with_tags(&client, tags2.clone(), stream).await;
-    assert!(result2.is_ok());
+    assert!(
+        result2.is_ok(),
+        "Second request should succeed: {result2:?}"
+    );
 
     let result3 = make_request_with_tags(&client, tags1.clone(), stream).await;
-    assert!(result3.is_ok());
+    assert!(result3.is_ok(), "Third request should succeed: {result3:?}");
 
     // Fourth request should fail
     let result4 = make_request_with_tags(&client, tags2.clone(), stream).await;
@@ -235,7 +238,10 @@ scope = [
 
     // Request without the tag should succeed (not subject to limit)
     let result5 = make_request_with_tags(&client, no_tags, stream).await;
-    assert!(result5.is_ok());
+    assert!(
+        result5.is_ok(),
+        "Request without the tag should succeed: {result5:?}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -272,16 +278,28 @@ scope = [
 
     // Each workspace gets their own separate limit of 2
     let result1a = make_request_with_tags(&client, tags_workspace1.clone(), stream).await;
-    assert!(result1a.is_ok());
+    assert!(
+        result1a.is_ok(),
+        "First request should succeed: {result1a:?}"
+    );
 
     let result1b = make_request_with_tags(&client, tags_workspace1.clone(), stream).await;
-    assert!(result1b.is_ok());
+    assert!(
+        result1b.is_ok(),
+        "Second request should succeed: {result1b:?}"
+    );
 
     let result2a = make_request_with_tags(&client, tags_workspace2.clone(), stream).await;
-    assert!(result2a.is_ok());
+    assert!(
+        result2a.is_ok(),
+        "Third request should succeed: {result2a:?}"
+    );
 
     let result2b = make_request_with_tags(&client, tags_workspace2.clone(), stream).await;
-    assert!(result2b.is_ok());
+    assert!(
+        result2b.is_ok(),
+        "Fourth request should succeed: {result2b:?}"
+    );
 
     // Third request for workspace1 should fail
     let result1c = make_request_with_tags(&client, tags_workspace1.clone(), stream).await;
@@ -457,19 +475,27 @@ scope = [
 // ===== RESOURCE TYPE TESTS =====
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_tokens_non_streaming() {
-    Box::pin(test_rate_limiting_tokens_helper(false)).await;
+async fn test_rate_limiting_tokens_non_streaming_direct() {
+    Box::pin(test_rate_limiting_tokens_helper_direct(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_tokens_streaming() {
-    Box::pin(test_rate_limiting_tokens_helper(true)).await;
+async fn test_rate_limiting_tokens_streaming_direct() {
+    Box::pin(test_rate_limiting_tokens_helper_direct(true)).await;
 }
 
-async fn test_rate_limiting_tokens_helper(stream: bool) {
+async fn test_rate_limiting_tokens_helper_direct(stream: bool) {
+    // This test is sized very small, so it passes in direct mode where each request exactly
+    // refunds the tokens to Postgres. With pooling, if the global capacity is 150
+    // and we get 5 requests all requesting 102 tokens, we will start rejecting requests to limit
+    // round-trips to the database.
     let id = Uuid::now_v7();
     let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+        r#"
+    [rate_limiting.pooling]
+    mode = "direct"
+
+    [[rate_limiting.rules]]
 tokens_per_minute = {{ capacity = 150, refill_rate = 50 }}
 always = true
 scope = [
@@ -482,11 +508,12 @@ scope = [
     );
     let tags = HashMap::from([(format!("test_tokens_user_id_{id}"), "123".to_string())]);
 
-    // Each request uses 11 input tokens and borrows ~102 tokens upfront
-    // With capacity = 150: n*11 + 102 <= 150, so n <= 4.36
-    // So up to 5 requests should succeed, 6th should fail
+    // In direct mode, we borrow the estimated amount from DB, then refund the excess after completion,
+    // so we can calculate exactly how many requests will succeed.
+    // Each request uses 11 actual tokens (5 input + 6 output from dummy model).
+    // Each request estimates ~102 tokens upfront for ChatCompletion.
 
-    // Run 4 sequential requests - should all succeed
+    // Run 4 sequential requests - should all succeed initially
     for i in 0..4 {
         let result = make_request_with_tags(&client, tags.clone(), stream).await;
         assert!(
@@ -494,7 +521,55 @@ scope = [
             "Sequential request {i} should succeed: {result:?}"
         );
     }
+    // 5th request should succeed (4 * 11 = 44, plus 102 borrow = 146 <= 150)
+    let result_5 = make_request_with_tags(&client, tags.clone(), stream).await;
+    assert!(result_5.is_ok(), "5th request should succeed: {result_5:?}");
 
+    // 6th request should fail (5 * 11 = 55, plus 102 borrow = 157 > 150)
+    let result_6 = make_request_with_tags(&client, tags.clone(), stream).await;
+    assert_rate_limit_exceeded(result_6);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rate_limiting_tokens_non_streaming_pooled() {
+    Box::pin(test_rate_limiting_tokens_helper_pooled(false)).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rate_limiting_tokens_streaming_pooled() {
+    Box::pin(test_rate_limiting_tokens_helper_pooled(true)).await;
+}
+
+async fn test_rate_limiting_tokens_helper_pooled(stream: bool) {
+    // With pooling, if the global capacity is 150 and we get 5 requests all
+    // requesting 102 tokens, we will start rejecting requests to limit round-trips to the database.
+    let id = Uuid::now_v7();
+    let config = generate_rate_limit_config(&[&format!(
+        r#"
+    [[rate_limiting.rules]]
+tokens_per_minute = {{ capacity = 150, refill_rate = 50 }}
+always = true
+scope = [
+    {{ tag_key = "test_tokens_user_id_{id}", tag_value = "123" }}
+]"#
+    )]);
+
+    let client = Arc::new(
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await,
+    );
+    let tags = HashMap::from([(format!("test_tokens_user_id_{id}"), "123".to_string())]);
+
+    // Each request uses 11 actual tokens (5 input + 6 output from dummy model).
+    // Each request estimates ~102 tokens upfront for ChatCompletion.
+
+    // Run 2 sequential requests - should all succeed initially
+    for i in 0..4 {
+        let result = make_request_with_tags(&client, tags.clone(), stream).await;
+        assert!(
+            result.is_ok(),
+            "Sequential request {i} should succeed: {result:?}"
+        );
+    }
     // 5th request should succeed (4 * 11 = 44, plus 102 borrow = 146 <= 150)
     let result_5 = make_request_with_tags(&client, tags.clone(), stream).await;
     assert!(result_5.is_ok(), "5th request should succeed: {result_5:?}");
@@ -1142,12 +1217,16 @@ retries = { num_retries = 3 }
     assert!(err.to_string().contains("TensorZero rate limit exceeded"));
 }
 
-#[tokio::test]
-async fn test_rate_limiting_cancelled_stream_return_tokens() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rate_limiting_cancelled_stream_return_tokens_to_postgres_in_direct_mode() {
     let logs_contain = tensorzero_core::utils::testing::capture_logs_with_filter("sqlx=trace");
     let id = Uuid::now_v7();
     let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+        r#"
+    [rate_limiting.pooling]
+    mode = "direct"
+
+    [[rate_limiting.rules]]
     tokens_per_minute = {{ capacity = 100, refill_rate = 100 }}
     always = true
     scope = [
