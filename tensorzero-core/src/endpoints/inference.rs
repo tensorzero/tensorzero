@@ -56,7 +56,7 @@ use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::observability::request_logging::HttpMetricData;
-use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
+use crate::rate_limiting::ScopeInfo;
 use crate::relay::TensorzeroRelay;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -428,7 +428,6 @@ pub async fn inference(
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
         tags: tags.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         token_pool_manager,
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
@@ -1611,7 +1610,6 @@ pub struct InferenceClients {
     pub credentials: Arc<InferenceCredentials>,
     pub cache_options: CacheOptions,
     pub tags: Arc<HashMap<String, String>>,
-    pub rate_limiting_config: Arc<RateLimitingConfig>,
     pub token_pool_manager: Arc<crate::rate_limiting::pool::TokenPoolManager>,
     pub otlp_config: OtlpConfig,
     pub deferred_tasks: TaskTracker,

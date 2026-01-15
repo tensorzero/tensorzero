@@ -18,11 +18,15 @@ use std::time::{Duration, Instant};
 use dashmap::DashMap;
 use tokio::sync::Notify;
 
+use std::collections::HashSet;
+
+use tracing::Span;
+
 use super::{
     ActiveRateLimit, ActiveRateLimitKey, FailedRateLimit, RateLimit, RateLimitResource,
-    RateLimitingConfig,
+    RateLimitedRequest, RateLimitingConfig, RateLimitingConfigPriority, ScopeInfo, TicketBorrows,
 };
-use crate::db::{ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest};
+use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest};
 use crate::error::{Error, ErrorDetails};
 
 /// Duration for the P99 usage tracking rolling window
@@ -245,6 +249,7 @@ impl TokenPool {
 /// - Creating pools for new rate limit keys
 /// - Replenishing pools from the database
 /// - Returning unused tokens on shutdown
+#[derive(Debug)]
 pub struct TokenPoolManager {
     /// Per-key token pools (keyed by the string representation of ActiveRateLimitKey)
     pools: DashMap<String, Arc<TokenPool>>,
@@ -463,6 +468,183 @@ impl TokenPoolManager {
     /// Get the underlying config
     pub fn config(&self) -> &RateLimitingConfig {
         &self.config
+    }
+
+    /// Get the rate-limited resources for a given scope.
+    pub fn get_rate_limited_resources(&self, scope_info: &ScopeInfo) -> Vec<RateLimitResource> {
+        if !self.config.enabled {
+            return vec![];
+        }
+        let limits = self.get_active_limits(scope_info);
+        limits
+            .iter()
+            .map(|limit| limit.limit.resource)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+    }
+
+    /// Consume tickets for a rate-limited request.
+    /// This is the primary entry point for rate limiting.
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences))]
+    pub async fn consume_tickets(
+        self: &Arc<Self>,
+        client: &impl RateLimitQueries,
+        scope_info: &ScopeInfo,
+        rate_limited_request: &impl RateLimitedRequest,
+    ) -> Result<TicketBorrows, Error> {
+        let res = self
+            .consume_tickets_inner(client, scope_info, rate_limited_request)
+            .await;
+        if let Err(e) = &res {
+            e.ensure_otel_span_errored(&Span::current());
+        }
+        res
+    }
+
+    async fn consume_tickets_inner(
+        self: &Arc<Self>,
+        client: &impl RateLimitQueries,
+        scope_info: &ScopeInfo,
+        rate_limited_request: &impl RateLimitedRequest,
+    ) -> Result<TicketBorrows, Error> {
+        let span = Span::current();
+        scope_info.apply_otel_span_attributes(&span);
+        let limits = self.get_active_limits(scope_info);
+        if limits.is_empty() {
+            return Ok(TicketBorrows::empty(Arc::clone(self)));
+        }
+
+        let rate_limited_resources = self.get_rate_limited_resources(scope_info);
+        let rate_limit_resource_requests =
+            rate_limited_request.estimated_resource_usage(&rate_limited_resources)?;
+
+        let tokens = rate_limit_resource_requests.tokens.unwrap_or(0);
+        let model_inferences = rate_limit_resource_requests.model_inferences.unwrap_or(0);
+
+        if let Some(t) = rate_limit_resource_requests.tokens {
+            span.record("estimated_usage.tokens", t as i64);
+        }
+        if let Some(mi) = rate_limit_resource_requests.model_inferences {
+            span.record("estimated_usage.model_inferences", mi as i64);
+        }
+
+        // Try consuming from in-memory pool first
+        match self.try_consume(&limits, tokens, model_inferences) {
+            Ok(()) => {
+                // Successfully consumed from pool - create synthetic receipts
+                let receipts = limits
+                    .iter()
+                    .map(|limit| {
+                        let amount = match limit.limit.resource {
+                            RateLimitResource::Token => tokens,
+                            RateLimitResource::ModelInference => model_inferences,
+                        };
+                        ConsumeTicketsReceipt {
+                            key: limit.key.clone(),
+                            success: true,
+                            tickets_remaining: 0,
+                            tickets_consumed: amount,
+                        }
+                    })
+                    .collect();
+
+                let ticket_requests: Vec<ConsumeTicketsRequest> = limits
+                    .iter()
+                    .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
+                    .collect();
+
+                TicketBorrows::new(Arc::clone(self), receipts, limits, ticket_requests)
+            }
+            Err(needs_replenish) => {
+                // Pool needs replenishment - borrow from DB
+                self.replenish(client, &needs_replenish).await?;
+
+                // Try consuming again after replenishment
+                match self.try_consume(&limits, tokens, model_inferences) {
+                    Ok(()) => {
+                        let receipts = limits
+                            .iter()
+                            .map(|limit| {
+                                let amount = match limit.limit.resource {
+                                    RateLimitResource::Token => tokens,
+                                    RateLimitResource::ModelInference => model_inferences,
+                                };
+                                ConsumeTicketsReceipt {
+                                    key: limit.key.clone(),
+                                    success: true,
+                                    tickets_remaining: 0,
+                                    tickets_consumed: amount,
+                                }
+                            })
+                            .collect();
+
+                        let ticket_requests: Vec<ConsumeTicketsRequest> = limits
+                            .iter()
+                            .map(|limit| {
+                                limit.get_consume_tickets_request(&rate_limit_resource_requests)
+                            })
+                            .collect();
+
+                        TicketBorrows::new(Arc::clone(self), receipts, limits, ticket_requests)
+                    }
+                    Err(still_insufficient) => {
+                        // Even after replenishment, still not enough
+                        let failed_rate_limits: Vec<FailedRateLimit> = still_insufficient
+                            .iter()
+                            .map(|limit| {
+                                let requested = match limit.limit.resource {
+                                    RateLimitResource::Token => tokens,
+                                    RateLimitResource::ModelInference => model_inferences,
+                                };
+                                FailedRateLimit {
+                                    key: limit.key.clone(),
+                                    requested,
+                                    available: 0,
+                                    resource: limit.limit.resource,
+                                    scope_key: limit.scope_key.clone(),
+                                }
+                            })
+                            .collect();
+
+                        Err(ErrorDetails::RateLimitExceeded { failed_rate_limits }.into())
+                    }
+                }
+            }
+        }
+    }
+
+    /// Given a particular scope, finds the RateLimits that are active for that scope.
+    fn get_active_limits(&self, scope_info: &ScopeInfo) -> Vec<ActiveRateLimit> {
+        if !self.config.enabled {
+            return vec![];
+        }
+        let mut max_priority: usize = 0;
+
+        // First pass: collect matching limits and find max priority
+        let matching_limits: Vec<_> = self
+            .config
+            .rules
+            .iter()
+            .map(|rule| rule.get_rate_limits_if_match_update_priority(scope_info, &mut max_priority))
+            .collect();
+
+        // Second pass: filter and flatten based on priority
+        self.config
+            .rules
+            .iter()
+            .zip(matching_limits)
+            .filter_map(|(rule, limits_opt)| match (&rule.priority, limits_opt) {
+                (RateLimitingConfigPriority::Always, Some(limits)) => Some(limits),
+                (RateLimitingConfigPriority::Priority(priority), Some(limits))
+                    if *priority == max_priority =>
+                {
+                    Some(limits)
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect()
     }
 
     /// Adjust usage accounting for a rate limit based on actual vs estimated usage.

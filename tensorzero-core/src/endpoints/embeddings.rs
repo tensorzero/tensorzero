@@ -92,7 +92,6 @@ pub async fn embeddings(
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
         tags: tags.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         token_pool_manager,
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,

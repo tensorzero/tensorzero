@@ -600,10 +600,9 @@ impl EmbeddingProviderInfo {
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
-            .rate_limiting_config
+            .token_pool_manager
             .consume_tickets(
                 &clients.postgres_connection_info,
-                &clients.token_pool_manager,
                 &clients.scope_info,
                 request,
             )
@@ -628,12 +627,11 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
-        let token_pool_manager = clients.token_pool_manager.clone();
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
             async move {
-                if let Err(e) = ticket_borrow.return_tickets(&token_pool_manager, resource_usage) {
+                if let Err(e) = ticket_borrow.return_tickets(resource_usage) {
                     tracing::error!("Failed to return rate limit tickets: {}", e);
                 }
             }

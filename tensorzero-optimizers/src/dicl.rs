@@ -367,7 +367,6 @@ async fn process_embedding_batch(
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         cache_options: CacheOptions::default(),
         tags: tags.clone(),
-        rate_limiting_config,
         token_pool_manager,
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: Default::default(),

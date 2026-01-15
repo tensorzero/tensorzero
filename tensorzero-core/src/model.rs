@@ -734,7 +734,6 @@ fn wrap_provider_stream(
         .clone()
         .map(std::borrow::Cow::into_owned);
     let otlp_config = clients.otlp_config.clone();
-    let token_pool_manager = clients.token_pool_manager.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
     let span_clone = span.clone();
 
@@ -793,7 +792,7 @@ fn wrap_provider_stream(
                 }
             };
 
-            if let Err(e) = ticket_borrow.return_tickets(&token_pool_manager, usage) {
+            if let Err(e) = ticket_borrow.return_tickets(usage) {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
         }.instrument(span_clone.clone()));
@@ -1638,10 +1637,9 @@ impl ModelProvider {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
         let ticket_borrow = clients
-            .rate_limiting_config
+            .token_pool_manager
             .consume_tickets(
                 &clients.postgres_connection_info,
-                &clients.token_pool_manager,
                 &clients.scope_info,
                 request.request,
             )
@@ -1752,13 +1750,10 @@ impl ModelProvider {
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
-            let token_pool_manager = clients.token_pool_manager.clone();
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
                 async move {
-                    if let Err(e) =
-                        ticket_borrow.return_tickets(&token_pool_manager, actual_resource_usage)
-                    {
+                    if let Err(e) = ticket_borrow.return_tickets(actual_resource_usage) {
                         tracing::error!("Failed to return rate limit tickets: {}", e);
                     }
                 }
@@ -1776,10 +1771,9 @@ impl ModelProvider {
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
-            .rate_limiting_config
+            .token_pool_manager
             .consume_tickets(
                 &clients.postgres_connection_info,
-                &clients.token_pool_manager,
                 &clients.scope_info,
                 request.request,
             )
