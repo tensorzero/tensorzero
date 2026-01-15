@@ -20,6 +20,7 @@ import {
   SectionHeader,
   SectionLayout,
   SectionsGroup,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
 import {
@@ -639,7 +640,17 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader
-        label="Datapoint"
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Datasets", href: "/datasets" },
+              {
+                label: datapoint.dataset_name,
+                href: `/datasets/${datapoint.dataset_name}`,
+              },
+            ]}
+          />
+        }
         name={datapoint.id}
         tag={
           <>

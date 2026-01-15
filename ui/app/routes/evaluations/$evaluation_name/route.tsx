@@ -13,6 +13,7 @@ import {
   SectionHeader,
   SectionLayout,
   SectionsGroup,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
 import { data, redirect, useNavigate } from "react-router";
@@ -352,7 +353,14 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader label="Evaluation" name={evaluation_name}>
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[{ label: "Evaluations", href: "/evaluations" }]}
+          />
+        }
+        name={evaluation_name}
+      >
         <BasicInfo evaluation_config={evaluation_config} />
         <ActionBar>
           <DatasetSelect

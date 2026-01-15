@@ -9,8 +9,9 @@ import {
   SectionHeader,
   SectionLayout,
   SectionsGroup,
+  PageLayout,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
-import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
@@ -282,7 +283,20 @@ export default function EvaluationDatapointPage({
     // Provider remains here
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
-        <PageHeader label="Datapoint" name={datapoint_id}>
+        <PageHeader
+          eyebrow={
+            <Breadcrumbs
+              segments={[
+                { label: "Evaluations", href: "/evaluations" },
+                {
+                  label: evaluation_name,
+                  href: `/evaluations/${evaluation_name}`,
+                },
+              ]}
+            />
+          }
+          name={datapoint_id}
+        >
           <BasicInfo
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}

@@ -6,6 +6,7 @@ import {
   PageHeader,
   PageLayout,
   SectionLayout,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
@@ -175,7 +176,13 @@ export default function DatasetDetailPage({
 
   return (
     <PageLayout>
-      <PageHeader label="Dataset" name={dataset_name} count={countPromise}>
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs segments={[{ label: "Datasets", href: "/datasets" }]} />
+        }
+        name={dataset_name}
+        count={countPromise}
+      >
         <div className="flex justify-start">
           <DeleteButton
             onClick={handleDelete}

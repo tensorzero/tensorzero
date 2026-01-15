@@ -83,7 +83,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader name="Models" />
+      <PageHeader heading="Models" />
 
       <SectionsGroup>
         <SectionLayout>

@@ -16,7 +16,7 @@ import {
   type RouteHandle,
 } from "react-router";
 import { Loader2, Plus } from "lucide-react";
-import { PageHeader } from "~/components/layout/PageLayout";
+import { PageHeader, Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
@@ -579,7 +579,13 @@ export default function AutopilotSessionEventsPage({
   return (
     <div className="container mx-auto flex h-full flex-col px-8 py-8">
       <PageHeader
-        label="Autopilot Session"
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Autopilot Sessions", href: "/autopilot/sessions" },
+            ]}
+          />
+        }
         name={isNewSession ? "New Session" : sessionId}
         tag={
           !isNewSession ? (
