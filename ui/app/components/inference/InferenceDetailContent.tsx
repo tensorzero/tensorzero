@@ -31,7 +31,7 @@ import {
   type VariantResponseInfo,
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
-import { VariantSelect } from "~/components/inference/VariantSelect";
+import { TryWithSelect } from "~/components/inference/TryWithSelect";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
@@ -276,7 +276,7 @@ export function InferenceDetailContent({
 
   const actionBarElement = (
     <ActionBar>
-      <VariantSelect
+      <TryWithSelect
         options={options}
         onSelect={onSelect}
         isLoading={variantInferenceIsLoading}

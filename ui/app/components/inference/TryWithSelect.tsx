@@ -4,19 +4,19 @@ import { Compare } from "~/components/icons/Icons";
 import { useReadOnly } from "~/context/read-only";
 import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
-export interface VariantSelectProps {
+export interface TryWithSelectProps {
   options: string[];
   onSelect: (option: string) => void;
   isLoading: boolean;
   isDefaultFunction?: boolean;
 }
 
-export function VariantSelect({
+export function TryWithSelect({
   options,
   onSelect,
   isLoading,
   isDefaultFunction,
-}: VariantSelectProps) {
+}: TryWithSelectProps) {
   const isReadOnly = useReadOnly();
   const isDisabled = isLoading || isReadOnly;
 
