@@ -1,5 +1,5 @@
 import { ActionBar } from "~/components/layout/ActionBar";
-import { TryWithButton } from "~/components/inference/TryWithButton";
+import { VariantSelect } from "~/components/inference/VariantSelect";
 import { EditButton } from "~/components/utils/EditButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { SaveButton } from "~/components/utils/SaveButton";
@@ -60,7 +60,7 @@ export function DatapointActions({
 
   return (
     <ActionBar>
-      <TryWithButton
+      <VariantSelect
         options={options}
         onSelect={isDefault ? onModelSelect : onVariantSelect}
         isLoading={variantInferenceIsLoading}
