@@ -1,3 +1,5 @@
+#[cfg(feature = "e2e_tests")]
+use std::backtrace::Backtrace;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -114,34 +116,72 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
 }
 
 #[derive(Clone, Debug, Error, Serialize)]
-#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
-#[error(transparent)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
 // We arc `ErrorDetails` per the `clippy::result_large_err` lint, as well as to make it cloneable
-pub struct Error(Arc<ErrorDetails>);
+pub struct Error {
+    details: Arc<ErrorDetails>,
+    #[cfg(feature = "e2e_tests")]
+    #[serde(skip)]
+    backtrace: Option<Arc<Backtrace>>,
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl PartialEq for Error {
+    fn eq(&self, other: &Self) -> bool {
+        let Error {
+            details,
+            backtrace: _,
+        } = self;
+        *details == other.details
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.details)
+    }
+}
+
+// In e2e mode, we currently always call `Backtrace::capture`,
+// and rely on the standard library checking `RUST_BACKTRACE`/`RUST_LIB_BACKTRACE`
+// to determine if `Backtrace::capture` actually does anything
+#[cfg(feature = "e2e_tests")]
+#[expect(clippy::unnecessary_wraps)]
+fn opt_capture_backtrace() -> Option<Arc<Backtrace>> {
+    Some(Arc::new(Backtrace::capture()))
+}
 
 impl Error {
     pub fn new(details: ErrorDetails) -> Self {
-        details.log();
-        Error(Arc::new(details))
+        let err = Self {
+            details: Arc::new(details),
+            #[cfg(feature = "e2e_tests")]
+            backtrace: opt_capture_backtrace(),
+        };
+        err.log();
+        err
     }
 
     // If you need to construct an error without logging it, use `DelayedError` instead.
     // This method should only be called within `DelayedError` itself.
     fn new_without_logging(details: ErrorDetails) -> Self {
-        Error(Arc::new(details))
+        Self {
+            details: Arc::new(details),
+            #[cfg(feature = "e2e_tests")]
+            backtrace: opt_capture_backtrace(),
+        }
     }
 
     pub fn status_code(&self) -> StatusCode {
-        self.0.status_code()
+        self.details.status_code()
     }
 
     pub fn underlying_status_code(&self) -> Option<StatusCode> {
-        self.0.underlying_status_code()
+        self.details.underlying_status_code()
     }
 
     pub fn get_details(&self) -> &ErrorDetails {
-        &self.0
+        &self.details
     }
 
     /// Ensures that the OpenTelemetry span corresponding to `span` is marked as an error.
@@ -150,23 +190,37 @@ impl Error {
     /// This is used by callers that only want to log a warning to the console, but want an error to show up in OpenTelemetry
     /// for a particular span.
     pub fn ensure_otel_span_errored(&self, span: &Span) {
-        if self.0.level() != tracing::Level::ERROR {
+        if self.details.level() != tracing::Level::ERROR {
             span.set_status(Status::Error {
                 description: self.to_string().into(),
             });
         }
     }
 
+    fn log_backtrace(&self) {
+        #[cfg(feature = "e2e_tests")]
+        if let Some(backtrace) = &self.backtrace
+            && matches!(
+                backtrace.status(),
+                std::backtrace::BacktraceStatus::Captured
+            )
+        {
+            tracing::error!("Backtrace: {}", backtrace);
+        }
+    }
+
     pub fn log(&self) {
-        self.0.log();
+        self.details.log();
+        self.log_backtrace();
     }
 
     pub fn log_at_level(&self, prefix: &str, level: tracing::Level) {
-        self.0.log_at_level(prefix, level);
+        self.details.log_at_level(prefix, level);
+        self.log_backtrace();
     }
 
     pub fn is_retryable(&self) -> bool {
-        self.0.is_retryable()
+        self.details.is_retryable()
     }
 }
 
