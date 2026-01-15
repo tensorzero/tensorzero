@@ -116,3 +116,92 @@ curl -X POST http://localhost:3000/inference \
     }
   }'
 ```
+
+## Enable AWS Bedrock's prompt caching capability
+
+You can enable [AWS Bedrock's prompt caching capability](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html) for supported models with TensorZero's `extra_body`.
+
+For example, to enable caching on your system prompt:
+
+```bash {14-21}
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "...",
+    "input": {
+      "system": "... very long prompt ...",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a haiku about TensorZero."
+        }
+      ]
+    },
+    "extra_body": [
+        {
+            "pointer": "/system/-",
+            "value": {
+                "cachePoint": {"type": "default"}
+            }
+        }
+    ]
+  }'
+```
+
+<Tip>
+
+The `/abc/-` notation appends a value to the `abc` array.
+
+</Tip>
+
+Similarly, to enable caching on a message:
+
+```bash {16}
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "...",
+    "input": {
+      "system": "... very long prompt ...",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a haiku about TensorZero."
+        }
+      ]
+    },
+    "extra_body": [
+        {
+            "pointer": "/messages/0/content/-",
+            "value": {
+                "cachePoint": {"type": "default"}
+            }
+        }
+    ]
+  }'
+```
+
+<Tip>
+
+You can specify `extra_body` in the [configuration](/gateway/configuration-reference) or at [inference time](/gateway/api-reference/inference).
+If you're using the OpenAI-Compatible Inference API, use `tensorzero::extra_body` instead.
+
+</Tip>
+
+<Tip>
+
+You can retrieve prompt caching usage information with `include_raw_usage`.
+See the [API Reference](/gateway/api-reference/inference) for more information.
+
+</Tip>
+
+## Other Features
+
+See [Extend TensorZero](/operations/extend-tensorzero) for information about Anthropic Computer Use and other beta features.
+
+<Note>
+
+TensorZero integrates with AWS Bedrock's Converse API.
+To use `extra_body` with AWS Bedrock, the JSON Pointer should match the Converse API specification.
+
+</Note>

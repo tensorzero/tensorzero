@@ -130,6 +130,74 @@ curl -X POST http://localhost:3000/inference \
   }'
 ```
 
+## Enable Anthropic's prompt caching capability
+
+You can enable [Anthropic's prompt caching capability](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) with TensorZero's `extra_body`.
+
+For example, to enable caching on your system prompt:
+
+```bash {14-19}
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "anthropic::claude-haiku-4-5",
+    "input": {
+      "system": "... very long prompt ...",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a haiku about TensorZero."
+        }
+      ]
+    },
+    "extra_body": [
+        {
+            "pointer": "/system/0/cache_control",
+            "value": {"type": "ephemeral"}
+        }
+    ]
+  }'
+```
+
+Similarly, to enable caching on a message:
+
+```bash {16}
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "anthropic::claude-haiku-4-5",
+    "input": {
+      "system": "... very long prompt ...",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a haiku about TensorZero."
+        }
+      ]
+    },
+    "extra_body": [
+        {
+            "pointer": "/messages/0/content/0/cache_control",
+            "value": {"type": "ephemeral"}
+        }
+    ]
+  }'
+```
+
+<Tip>
+
+You can specify `extra_body` in the [configuration](/gateway/configuration-reference) or at [inference time](/gateway/api-reference/inference).
+If you're using the OpenAI-Compatible Inference API, use `tensorzero::extra_body` instead.
+
+</Tip>
+
+<Tip>
+
+You can retrieve prompt caching usage information with `include_raw_usage`.
+See the [API Reference](/gateway/api-reference/inference) for more information.
+
+</Tip>
+
 ## Other Features
 
-See [Extending TensorZero](/operations/extend-tensorzero) for information about Anthropic Computer Use and other beta features.
+See [Extend TensorZero](/operations/extend-tensorzero) for information about Anthropic Computer Use and other beta features.
