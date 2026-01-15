@@ -97,28 +97,6 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   );
 };
 
-interface PageHeaderSkeletonProps {
-  /** Optional label to show immediately (e.g., "Datapoint", "Inference") */
-  label?: string;
-}
-
-/**
- * Skeleton for PageHeader - use as loading fallback for page headers.
- * Colocated with PageHeader for easy maintenance when structure changes.
- */
-function PageHeaderSkeleton({ label }: PageHeaderSkeletonProps) {
-  return (
-    <div className="flex flex-col gap-2">
-      {label ? (
-        <div className="text-fg-secondary text-sm font-normal">{label}</div>
-      ) : (
-        <Skeleton className="h-4 w-20" />
-      )}
-      <Skeleton className="h-8 w-72" />
-    </div>
-  );
-}
-
 const SectionsGroup: React.FC<React.ComponentProps<"div">> = ({
   children,
   className,
@@ -192,11 +170,4 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
   </h2>
 );
 
-export {
-  PageHeader,
-  PageHeaderSkeleton,
-  SectionHeader,
-  SectionLayout,
-  SectionsGroup,
-  PageLayout,
-};
+export { PageHeader, SectionHeader, SectionLayout, SectionsGroup, PageLayout };
