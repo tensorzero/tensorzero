@@ -35,8 +35,9 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::file::mime_type_to_ext;
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
+    ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
     ModelInferenceRequest, ModelInferenceRequestJsonMode, ObjectStorageFile,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Role,
@@ -45,6 +46,7 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use uuid::Uuid;
 
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
@@ -196,6 +198,7 @@ impl InferenceProvider for AWSBedrockProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         // We've already taken in this client when the provider was constructed
         _http_client: &'a TensorzeroHttpClient,
@@ -326,6 +329,7 @@ impl InferenceProvider for AWSBedrockProvider {
             model_id: &self.model_id,
             function_type: &request.function_type,
             json_mode: &request.json_mode,
+            model_inference_id,
         }
         .try_into()
     }
@@ -337,6 +341,7 @@ impl InferenceProvider for AWSBedrockProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         // We've already taken in this client when the provider was constructed
         _http_client: &'a TensorzeroHttpClient,
@@ -453,7 +458,7 @@ impl InferenceProvider for AWSBedrockProvider {
 
         let raw_request = get_raw_request()?;
 
-        let mut stream = stream_bedrock(stream, start_time).peekable();
+        let mut stream = stream_bedrock(stream, start_time, model_inference_id).peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if self.model_id.contains("claude")
             && matches!(
@@ -496,6 +501,7 @@ impl InferenceProvider for AWSBedrockProvider {
 fn stream_bedrock(
     mut stream: ConverseStreamOutput,
     start_time: Instant,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
@@ -519,7 +525,7 @@ fn stream_bedrock(
                         // NOTE: AWS Bedrock returns usage (ConverseStreamMetadataEvent) AFTER MessageStop.
 
                         // Convert the event to a tensorzero stream message
-                        let stream_message = bedrock_to_tensorzero_stream_message(output, start_time.elapsed(), &mut current_tool_id);
+                        let stream_message = bedrock_to_tensorzero_stream_message(output, start_time.elapsed(), &mut current_tool_id, model_inference_id);
 
                         match stream_message {
                             Ok(None) => {},
@@ -537,6 +543,7 @@ fn bedrock_to_tensorzero_stream_message(
     output: ConverseStreamOutputType,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
+    model_inference_id: Uuid,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match output {
         ConverseStreamOutputType::ContentBlockDelta(message) => {
@@ -667,18 +674,40 @@ fn bedrock_to_tensorzero_stream_message(
 
             match message.usage {
                 None => Ok(None),
-                Some(usage) => {
+                Some(aws_usage) => {
+                    // Manually construct JSON since AWS SDK types don't implement Serialize.
+                    // In streaming mode, we don't have access to the raw JSON response - the AWS SDK
+                    // deserializes events internally and only gives us typed structs. Unlike
+                    // non-streaming where we can parse `raw_response`, here we must reconstruct
+                    // the usage object from the struct fields. If AWS adds new fields to TokenUsage,
+                    // they'll need to be added here manually.
+                    //
+                    // https://github.com/tensorzero/tensorzero/issues/5492
+                    let raw_usage = Some(raw_usage_entries_from_value(
+                        model_inference_id,
+                        PROVIDER_TYPE,
+                        ApiType::ChatCompletions,
+                        serde_json::json!({
+                            "input_tokens": aws_usage.input_tokens,
+                            "output_tokens": aws_usage.output_tokens,
+                            "total_tokens": aws_usage.total_tokens,
+                            "cache_read_input_tokens": aws_usage.cache_read_input_tokens,
+                            "cache_write_input_tokens": aws_usage.cache_write_input_tokens,
+                        }),
+                    ));
+
                     let usage = Some(Usage {
-                        input_tokens: Some(usage.input_tokens as u32),
-                        output_tokens: Some(usage.output_tokens as u32),
+                        input_tokens: Some(aws_usage.input_tokens as u32),
+                        output_tokens: Some(aws_usage.output_tokens as u32),
                     });
 
-                    Ok(Some(ProviderInferenceResponseChunk::new(
+                    Ok(Some(ProviderInferenceResponseChunk::new_with_raw_usage(
                         vec![],
                         usage,
                         raw_message,
                         message_latency,
                         None,
+                        raw_usage,
                     )))
                 }
             }
@@ -972,6 +1001,7 @@ struct ConverseOutputWithMetadata<'a> {
     model_id: &'a str,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
+    model_inference_id: Uuid,
 }
 
 #[expect(clippy::unnecessary_wraps)]
@@ -1001,6 +1031,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             model_id,
             function_type,
             json_mode,
+            model_inference_id,
         } = value;
         let message = match output.output {
             Some(ConverseOutputType::Message(message)) => Some(message),
@@ -1038,22 +1069,28 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             content = prefill_json_response(content)?;
         }
 
-        let usage = output
-            .usage
-            .map(|u| Usage {
-                input_tokens: Some(u.input_tokens as u32),
-                output_tokens: Some(u.output_tokens as u32),
+        let aws_usage = output.usage.ok_or_else(|| {
+            Error::new(ErrorDetails::InferenceServer {
+                raw_request: None,
+                raw_response: Some(raw_response.clone()),
+                message: "AWS Bedrock returned a message without usage information.".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    raw_request: None,
-                    raw_response: Some(raw_response.clone()),
-                    message: "AWS Bedrock returned a message without usage information."
-                        .to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+        })?;
 
+        let raw_usage = aws_bedrock_usage_from_raw_response(&raw_response).map(|value| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                value,
+            )
+        });
+
+        let usage = Usage {
+            input_tokens: Some(aws_usage.input_tokens as u32),
+            output_tokens: Some(aws_usage.output_tokens as u32),
+        };
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -1062,8 +1099,10 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response,
                 usage,
-                latency,
+                raw_usage,
+                provider_latency: latency,
                 finish_reason: aws_stop_reason_to_tensorzero_finish_reason(output.stop_reason),
+                id: model_inference_id,
             },
         ))
     }
@@ -1088,6 +1127,12 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
             provider_type: PROVIDER_TYPE.to_string(),
         })
     })
+}
+
+fn aws_bedrock_usage_from_raw_response(raw_response: &str) -> Option<serde_json::Value> {
+    serde_json::from_str::<serde_json::Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 impl TryFrom<&FunctionToolConfig> for Tool {

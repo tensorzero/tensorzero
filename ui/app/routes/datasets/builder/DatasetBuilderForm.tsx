@@ -161,7 +161,7 @@ export function DatasetBuilderForm() {
             control={form.control}
             name="dataset"
             label="Dataset"
-            placeholder="Select a dataset"
+            allowCreation
           />
 
           <FunctionFormField

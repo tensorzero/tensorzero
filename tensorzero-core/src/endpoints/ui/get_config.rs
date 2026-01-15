@@ -59,6 +59,7 @@ impl UiConfig {
 /// Handler for GET /internal/ui_config
 ///
 /// Returns a UI-safe subset of the Config.
+#[expect(clippy::unused_async)]
 pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
     Json(UiConfig::from_config(&app_state.config))
 }
@@ -97,6 +98,7 @@ mod tests {
             r#type: MetricConfigType::Boolean,
             optimize: MetricConfigOptimize::Max,
             level: MetricConfigLevel::Inference,
+            description: None,
         };
 
         // Build config with the function and metric
@@ -163,6 +165,7 @@ mod tests {
             r#type: MetricConfigType::Float,
             optimize: MetricConfigOptimize::Min,
             level: MetricConfigLevel::Episode,
+            description: None,
         };
 
         let mut config = Config::default();

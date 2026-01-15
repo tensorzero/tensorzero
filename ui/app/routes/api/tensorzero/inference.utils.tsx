@@ -11,7 +11,6 @@ import type {
   StoredInference,
 } from "~/types/tensorzero";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
   ClientInferenceParams,
@@ -22,6 +21,7 @@ import type {
   JsonInferenceOutput,
   ChatInferenceDatapoint,
   JsonInferenceDatapoint,
+  InferenceResponse,
 } from "~/types/tensorzero";
 import type {
   ZodInput,
@@ -331,6 +331,7 @@ export function prepareInferenceActionRequest(
       enabled: "on",
     },
     include_original_response: false,
+    include_raw_usage: false,
     internal_dynamic_variant_config: null,
   };
 

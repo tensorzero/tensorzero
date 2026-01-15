@@ -6,7 +6,7 @@ use std::{collections::HashMap, net::SocketAddr};
 use secrecy::SecretString;
 use tensorzero::ClientExt;
 
-use object_store::{ObjectStore, aws::AmazonS3Builder};
+use object_store::{ObjectStore, ObjectStoreExt, aws::AmazonS3Builder};
 use std::sync::Arc;
 use tensorzero_core::config::provider_types::{
     AnthropicDefaults, AzureDefaults, DeepSeekDefaults, FireworksDefaults, GCPDefaults,
@@ -568,6 +568,22 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.input_audio;
             for provider in providers {
                 $crate::providers::commonv2::input_audio::test_audio_inference_with_provider_filesystem(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_raw_usage_non_streaming() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                $crate::providers::commonv2::raw_usage::test_raw_usage_inference_with_provider_non_streaming(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_raw_usage_streaming() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                $crate::providers::commonv2::raw_usage::test_raw_usage_inference_with_provider_streaming(provider).await;
             }
         }
 
@@ -1541,7 +1557,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     .await;
 }
 
-async fn create_s3_object_store(
+fn create_s3_object_store(
     bucket_name: Option<String>,
     region: Option<String>,
     endpoint: Option<String>,
@@ -1577,7 +1593,6 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
         None,
         None,
     )
-    .await
     .unwrap();
 
     use rand::distr::Alphanumeric;
@@ -2315,7 +2330,13 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     provider: &E2ETestProvider,
     stream: bool,
 ) {
-    // Inject randomness to prevent this from being cached, since provider-proxy will ignore the (invalid) auth header
+    // NOTE: This test expects error responses (auth failures), which provider-proxy
+    // does not cache. Therefore, this test will always hit live providers.
+    // Consider moving to periodic live tests if this causes merge queue instability.
+    // See: https://github.com/tensorzero/tensorzero/issues/5380
+    //
+    // We inject randomness since provider-proxy sanitizes auth headers for cache key computation,
+    // so without randomness we'd potentially get a cached success response from another test.
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -3715,16 +3736,24 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     }
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
-    // Generate random u32
-    let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false, false,
+        &provider,
+        episode_id,
+        &tag_value,
+        false,
+        false,
+        /*test_id=*/ "streaming_inference_request_with_provider",
     )
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true, false,
+        &provider,
+        episode_id,
+        &tag_value,
+        true,
+        false,
+        /*test_id=*/ "streaming_inference_request_with_provider",
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -3738,17 +3767,25 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
-    // Generate random u32
-    let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false, true,
+        &provider,
+        episode_id,
+        &tag_value,
+        false,
+        true,
+        /*test_id=*/ "streaming_include_original_response_with_provider",
     )
     .await;
 
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true, true,
+        &provider,
+        episode_id,
+        &tag_value,
+        true,
+        true,
+        /*test_id=*/ "streaming_include_original_response_with_provider",
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -3757,10 +3794,11 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
 pub async fn test_simple_streaming_inference_request_with_provider_cache(
     provider: &E2ETestProvider,
     episode_id: Uuid,
-    seed: u32,
     tag_value: &str,
-    check_cache: bool,
+    assert_response_is_cached: bool,
     include_original_response: bool,
+    // test_id is included to make sure requests are distinct across different tests, but cached within the test.
+    test_id: &str,
 ) -> String {
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -3773,7 +3811,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
+               "system": {"assistant_name": format!("Dr. Mehta {test_id}")},
                "messages": [
                 {
                     "role": "user",
@@ -3814,6 +3852,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let mut full_content = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
+    let mut usage_chunk_count = 0u32;
     let mut finish_reason: Option<String> = None;
     for (i, chunk) in chunks.clone().iter().enumerate() {
         let chunk_json: Value = serde_json::from_str(chunk).unwrap();
@@ -3856,14 +3895,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
             }
         }
 
-        // When we get a cache hit, the usage should be explicitly set to 0
-        if check_cache {
-            let usage = chunk_json.get("usage").unwrap();
-            assert_eq!(usage.get("input_tokens").unwrap().as_u64().unwrap(), 0);
-            assert_eq!(usage.get("output_tokens").unwrap().as_u64().unwrap(), 0);
-        }
-
         if let Some(usage) = chunk_json.get("usage") {
+            usage_chunk_count += 1;
             input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
             output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
@@ -3879,21 +3912,20 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
     // This is flaky on Fireworks - it seems like they sometimes don't send us usage information,
     // so TensorZero reports 0 for input/output token usage.
-    if provider.model_provider_name != "fireworks" {
-        // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-        if (provider.variant_name.contains("azure")
-            && !provider.variant_name.contains("azure-ai-foundry"))
-            || check_cache
-        {
-            assert_eq!(input_tokens, 0);
-            assert_eq!(output_tokens, 0);
-        } else {
-            assert!(input_tokens > 0);
-            assert!(output_tokens > 0);
-        }
+    if provider.model_provider_name != "fireworks" && assert_response_is_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
     }
 
     assert!(finish_reason.is_some());
+
+    // For cached responses, usage should appear exactly once (on the final chunk) with zeros
+    if provider.model_provider_name != "fireworks" && assert_response_is_cached {
+        assert_eq!(
+            usage_chunk_count, 1,
+            "Expected exactly one chunk with usage for cached response"
+        );
+    }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -3923,7 +3955,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
+        "system": {"assistant_name": format!("Dr. Mehta {test_id}")},
         "messages": [
             {
                 "role": "user",
@@ -3990,43 +4022,30 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
-
     // This is flaky on Fireworks - it seems like they sometimes don't send us usage information,
     // so TensorZero reports 0 for input/output token usage.
-    if provider.model_provider_name != "fireworks" {
-        // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-        if provider.variant_name.contains("azure")
-            && !provider.variant_name.contains("azure-ai-foundry")
-        {
-            assert!(input_tokens.is_null());
-            assert!(output_tokens.is_null());
-        } else {
-            assert!(input_tokens.as_u64().unwrap() > 0);
-            assert!(output_tokens.as_u64().unwrap() > 0);
-        }
+    if provider.model_provider_name != "fireworks" && !assert_response_is_cached {
+        let input_tokens = result.get("input_tokens").unwrap();
+        let output_tokens = result.get("output_tokens").unwrap();
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    if check_cache {
+    if assert_response_is_cached {
         assert_eq!(response_time_ms, 0);
-    } else {
-        assert!(response_time_ms > 0);
     }
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    if check_cache {
+    if assert_response_is_cached {
         assert_eq!(ttft_ms, 0);
-    } else {
-        assert!(ttft_ms >= 1);
     }
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        format!("You are a helpful and friendly assistant named Dr. Mehta #{seed}")
+        format!("You are a helpful and friendly assistant named Dr. Mehta {test_id}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
@@ -4403,16 +4422,8 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    }
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -4534,17 +4545,8 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
-
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
-    }
+    assert!(input_tokens.as_u64().unwrap() > 0);
+    assert!(output_tokens.as_u64().unwrap() > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
@@ -5084,11 +5086,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert!(tool_name.is_some());
     assert_eq!(tool_name.as_ref().unwrap(), "get_temperature");
 
-    // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
@@ -5256,13 +5254,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens.as_u64().unwrap() > 0);
@@ -5682,14 +5674,8 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         }
     }
 
-    // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    }
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
 
     let inference_id = inference_id.unwrap();
 
@@ -5843,16 +5829,8 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
-    }
+    assert!(input_tokens.as_u64().unwrap() > 0);
+    assert!(output_tokens.as_u64().unwrap() > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
@@ -6327,14 +6305,8 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert!(tool_name.is_some());
     assert_eq!(tool_name.as_ref().unwrap(), "get_temperature");
 
-    // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    }
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
 
     let inference_id = inference_id.unwrap();
     let tool_id = tool_id.unwrap();
@@ -6496,16 +6468,8 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    }
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
@@ -6926,14 +6890,8 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         }
     }
 
-    // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    }
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
 
     let inference_id = inference_id.unwrap();
 
@@ -7081,16 +7039,8 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
-    }
+    assert!(input_tokens.as_u64().unwrap() > 0);
+    assert!(output_tokens.as_u64().unwrap() > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
@@ -7628,14 +7578,8 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         }
     }
 
-    // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    }
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
 
     let inference_id = inference_id.unwrap();
     let tool_id = tool_id.unwrap();
@@ -7837,16 +7781,8 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
-    }
+    assert!(input_tokens.as_u64().unwrap() > 0);
+    assert!(output_tokens.as_u64().unwrap() > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
@@ -8323,11 +8259,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert!(tool_name.is_some());
     assert_eq!(tool_name.as_ref().unwrap(), "get_humidity");
 
-    // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
@@ -8484,13 +8416,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens.as_u64().unwrap() > 0);
@@ -8937,16 +8863,8 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    }
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -9068,16 +8986,8 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
-    }
+    assert!(input_tokens.as_u64().unwrap() > 0);
+    assert!(output_tokens.as_u64().unwrap() > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
@@ -9734,11 +9644,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert!(tool_name.is_some());
     assert_eq!(tool_name.as_ref().unwrap(), "get_temperature");
 
-    // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
@@ -9907,13 +9813,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens.as_u64().unwrap() > 0);
@@ -10468,11 +10368,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(get_temperature_tool_id.is_some());
     assert!(get_humidity_tool_id.is_some());
 
-    // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
@@ -10705,13 +10601,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens.as_u64().unwrap() > 0);
@@ -11376,16 +11266,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    }
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -11511,16 +11393,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
-    }
+    assert!(input_tokens.as_u64().unwrap() > 0);
+    assert!(output_tokens.as_u64().unwrap() > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
@@ -12421,11 +12295,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         }
     }
 
-    // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
@@ -12520,13 +12390,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else if provider.variant_name.contains("together") {
+    if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens.as_u64().unwrap() > 0);

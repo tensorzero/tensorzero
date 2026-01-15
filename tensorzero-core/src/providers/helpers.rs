@@ -747,6 +747,13 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                             }
                         }
                         None => {
+                            if token == "-" {
+                                return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
+                                    message: "Cannot delete using array append operator `-`"
+                                        .to_string(),
+                                    pointer: pointer.to_string(),
+                                }));
+                            }
                             tracing::warn!(
                                 "Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`"
                             );
@@ -783,6 +790,13 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                         }
                     }
                     None => {
+                        if token == "-" {
+                            return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
+                                message: "Cannot delete using array append operator `-`"
+                                    .to_string(),
+                                pointer: pointer.to_string(),
+                            }));
+                        }
                         tracing::warn!(
                             "Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`"
                         );
@@ -827,11 +841,13 @@ fn write_json_pointer_with_parent_creation(
         }));
     }
 
-    let components = pointer
+    let mut components = pointer
         .split('/')
         .skip(1)
-        .map(|x| x.replace("~1", "/").replace("~0", "~"));
-    for token in components {
+        .map(|x| x.replace("~1", "/").replace("~0", "~"))
+        .peekable();
+    while let Some(token) = components.next() {
+        let is_last = components.peek().is_none();
         match value {
             Value::Object(map) => match map.entry(token.clone()) {
                 // Move inside an object if the current pointer component is a valid key
@@ -860,6 +876,20 @@ fn write_json_pointer_with_parent_creation(
                 }
             },
             Value::Array(list) => {
+                // Handle "-" for array append (following JSON Patch RFC 6902 convention)
+                if token == "-" {
+                    if is_last {
+                        list.push(target_value);
+                        return Ok(());
+                    } else {
+                        return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
+                            message:
+                                "Array append operator `-` can only be used at the end of a pointer"
+                                    .to_string(),
+                            pointer: pointer.to_string(),
+                        }));
+                    }
+                }
                 let len = list.len();
                 value = parse_index(&token)
                     .and_then(move |x| list.get_mut(x))
@@ -1031,10 +1061,10 @@ mod tests {
                 id: "0".to_string(),
                 text: "Hello, world!".to_string(),
             })],
-            created: 0,
             usage: None,
+            raw_usage: None,
             raw_response: "My raw response".to_string(),
-            latency: Duration::from_secs(0),
+            provider_latency: Duration::from_secs(0),
             finish_reason: None,
         };
         let mut stream = Box::pin(stream::iter([
@@ -1549,6 +1579,123 @@ mod tests {
         .to_string();
         assert!(
             err.contains("TensorZero doesn't support pointing an index (0) if its container doesn't exist. We'd love to hear about your use case (& help)! Please open a GitHub Discussion: https://github.com/tensorzero/tensorzero/discussions/new` with pointer: `/new-key/0`"),
+            "Unexpected error message: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_json_pointer_array_append_with_dash() {
+        // Test appending to an existing array with elements
+        let mut val = serde_json::json!({"items": ["a", "b"]});
+        write_json_pointer_with_parent_creation(&mut val, "/items/-", serde_json::json!("c"))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"items": ["a", "b", "c"]}),
+            "Expected append to add element at end of array"
+        );
+
+        // Test appending to an empty array
+        let mut val = serde_json::json!({"items": []});
+        write_json_pointer_with_parent_creation(&mut val, "/items/-", serde_json::json!("first"))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"items": ["first"]}),
+            "Expected append to work on empty array"
+        );
+
+        // Test appending complex value
+        let mut val = serde_json::json!({"messages": [{"role": "user"}]});
+        write_json_pointer_with_parent_creation(
+            &mut val,
+            "/messages/-",
+            serde_json::json!({"role": "assistant", "content": "Hello"}),
+        )
+        .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"messages": [{"role": "user"}, {"role": "assistant", "content": "Hello"}]}),
+            "Expected append to work with complex objects"
+        );
+
+        // Test that "-" on an object is treated as a literal key (per JSON Pointer spec)
+        let mut val = serde_json::json!({"obj": {}});
+        write_json_pointer_with_parent_creation(&mut val, "/obj/-", serde_json::json!("value"))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"obj": {"-": "value"}}),
+            "Expected `-` on object to be treated as literal key"
+        );
+
+        // Test appending to nested array
+        let mut val = serde_json::json!({"outer": {"inner": [1, 2]}});
+        write_json_pointer_with_parent_creation(&mut val, "/outer/inner/-", serde_json::json!(3))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"outer": {"inner": [1, 2, 3]}}),
+            "Expected append to work on nested arrays"
+        );
+    }
+
+    #[test]
+    fn test_json_pointer_array_append_errors() {
+        // Test "-" in middle of path (not at leaf) should error
+        let mut val = serde_json::json!({"items": [{"a": 1}]});
+        let err =
+            write_json_pointer_with_parent_creation(&mut val, "/items/-/a", serde_json::json!("x"))
+                .unwrap_err()
+                .to_string();
+        assert!(
+            err.contains("Array append operator `-` can only be used at the end of a pointer"),
+            "Unexpected error message: {err:?}"
+        );
+
+        // Test "-" on non-existent path creates an object with key "-" (since "-" is non-numeric)
+        // This is because when "missing" doesn't exist, we create an empty object for it,
+        // and then "-" on an object is treated as a literal key
+        let mut val = serde_json::json!({});
+        write_json_pointer_with_parent_creation(&mut val, "/missing/-", serde_json::json!("x"))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"missing": {"-": "x"}}),
+            "Expected `-` on newly created object to be treated as literal key"
+        );
+
+        // Test "-" on non-container type should error
+        let mut val = serde_json::json!({"str": "hello"});
+        let err =
+            write_json_pointer_with_parent_creation(&mut val, "/str/-", serde_json::json!("x"))
+                .unwrap_err()
+                .to_string();
+        assert!(
+            err.contains("Can only index into object or array"),
+            "Unexpected error message: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_delete_json_pointer_dash_errors() {
+        // Test that delete with "-" as final index returns an error
+        let mut val = serde_json::json!({"items": ["a", "b"]});
+        let err = delete_json_pointer(&mut val, "/items/-")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Cannot delete using array append operator `-`"),
+            "Unexpected error message: {err:?}"
+        );
+
+        // Test that delete with "-" in intermediate path returns an error
+        let mut val = serde_json::json!({"items": [{"a": 1}]});
+        let err = delete_json_pointer(&mut val, "/items/-/a")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Cannot delete using array append operator `-`"),
             "Unexpected error message: {err:?}"
         );
     }

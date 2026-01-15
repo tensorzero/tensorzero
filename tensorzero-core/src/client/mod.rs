@@ -6,6 +6,7 @@ use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
+use crate::feature_flags;
 use crate::http::TensorzeroResponseWrapper;
 use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
@@ -226,7 +227,7 @@ impl HTTPGateway {
             let inner_err = Error::new(ErrorDetails::StreamError {
                 source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
             });
-            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = e {
+            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = *e {
                 return Err(TensorZeroError::Http {
                     status_code: code.as_u16(),
                     text: resp.text().await.ok(),
@@ -245,7 +246,7 @@ impl HTTPGateway {
             while let Some(ev) = event_source.next().await {
                 match ev {
                     Err(e) => {
-                        if matches!(e, reqwest_eventsource::Error::StreamEnded) {
+                        if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
                             break;
                         }
                         yield Err(Error::new(ErrorDetails::StreamError {
@@ -397,6 +398,8 @@ pub enum ClientBuilderError {
     GatewayVersion(String),
     #[error("Failed to set up embedded gateway: {0}")]
     EmbeddedGatewaySetup(TensorZeroError),
+    #[error("Failed to initialize feature flags: {0}")]
+    FeatureFlags(TensorZeroError),
 }
 
 // Helper type to choose between using Debug or Display for a type
@@ -416,6 +419,13 @@ impl<T: Debug + Display> Display for DisplayOrDebug<T> {
     }
 }
 
+pub enum PostgresConfig {
+    /// Constructs a new Postgres pool from the given url
+    Url(String),
+    /// Re-uses an existing PostgresConnectionInfo
+    ExistingConnectionInfo(PostgresConnectionInfo),
+}
+
 /// Controls how a `Client` is run
 pub enum ClientBuilderMode {
     /// In HTTPGateway mode, we make HTTP requests to a TensorZero gateway server.
@@ -425,14 +435,14 @@ pub enum ClientBuilderMode {
     EmbeddedGateway {
         config_file: Option<PathBuf>,
         clickhouse_url: Option<String>,
-        postgres_url: Option<String>,
+        postgres_config: Option<PostgresConfig>,
         /// A timeout for all TensorZero gateway processing.
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
         verify_credentials: bool,
-        // Allow turning on batch writes - used in e2e tests.
-        // We don't expose this through the Python client, since we're having deadlock issues
-        // there.
+        /// Allow turning on batch writes - used in e2e tests.
+        /// We don't expose this through the Python client, since we're having deadlock issues
+        /// there.
         allow_batch_writes: bool,
     },
     /// Construct a client from already-initialized components.
@@ -518,6 +528,11 @@ impl ClientBuilder {
 
     /// Constructs a `Client`, returning an error if the configuration is invalid.
     pub async fn build(self) -> Result<Client, ClientBuilderError> {
+        // Initialize feature flags (for embedded clients).
+        feature_flags::init_flags().map_err(|e| {
+            ClientBuilderError::FeatureFlags(TensorZeroError::Other { source: e.into() })
+        })?;
+
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => {
                 let client = self.build_http()?;
@@ -526,7 +541,7 @@ impl ClientBuilder {
             ClientBuilderMode::EmbeddedGateway {
                 config_file,
                 clickhouse_url,
-                postgres_url,
+                postgres_config,
                 timeout,
                 verify_credentials,
                 allow_batch_writes,
@@ -573,11 +588,17 @@ impl ClientBuilder {
                     })?;
                 let config = Arc::new(config);
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
-                let postgres_connection_info = setup_postgres(&config, postgres_url.clone())
-                    .await
-                    .map_err(|e| {
+                let postgres_connection_info = match postgres_config {
+                    Some(PostgresConfig::Url(url)) => {
+                        setup_postgres(&config, Some(url.clone())).await.map_err(|e| {
+                            ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+                        })?
+                    }
+                    Some(PostgresConfig::ExistingConnectionInfo(connection_info)) => connection_info.clone(),
+                    None => setup_postgres(&config, None).await.map_err(|e| {
                         ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
-                    })?;
+                    })?
+                };
 
                 let http_client = if self.http_client.is_some() {
                     return Err(ClientBuilderError::HTTPClientBuild(
@@ -660,7 +681,7 @@ impl ClientBuilder {
     }
 
     #[cfg(any(test, feature = "e2e_tests"))]
-    pub async fn build_from_state(handle: GatewayHandle) -> Result<Client, ClientBuilderError> {
+    pub fn build_from_state(handle: GatewayHandle) -> Result<Client, ClientBuilderError> {
         Ok(Client {
             mode: Arc::new(ClientMode::EmbeddedGateway {
                 gateway: EmbeddedGateway { handle },
@@ -694,7 +715,7 @@ impl ClientBuilder {
         snapshot: ConfigSnapshot,
         live_config: &Config,
         clickhouse_url: Option<String>,
-        postgres_url: Option<String>,
+        postgres_config: Option<String>,
         verify_credentials: bool,
         timeout: Option<Duration>,
     ) -> Result<Client, ClientBuilderError> {
@@ -736,9 +757,11 @@ impl ClientBuilder {
 
         // Setup Postgres with runtime URL
         let postgres_connection_info =
-            setup_postgres(&config, postgres_url).await.map_err(|e| {
-                ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
-            })?;
+            setup_postgres(&config, postgres_config)
+                .await
+                .map_err(|e| {
+                    ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+                })?;
 
         // Use HTTP client from config (now overlaid from live_config)
         let http_client = config.http_client.clone();
@@ -1231,7 +1254,7 @@ mod tests {
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
             clickhouse_url: None,
-            postgres_url: None,
+            postgres_config: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1259,7 +1282,7 @@ mod tests {
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(tmp_config.path().to_owned()),
             clickhouse_url: None,
-            postgres_url: None,
+            postgres_config: None,
             timeout: None,
             verify_credentials: false, // Skip credential verification
             allow_batch_writes: false,
@@ -1385,7 +1408,7 @@ mod tests {
                 "../examples/haiku-hidden-preferences/config/tensorzero.toml",
             )),
             clickhouse_url: None,
-            postgres_url: None,
+            postgres_config: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1407,7 +1430,7 @@ mod tests {
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,
             clickhouse_url: None,
-            postgres_url: None,
+            postgres_config: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1424,5 +1447,25 @@ mod tests {
         assert!(logs_contain(
             "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
         ));
+    }
+
+    #[tokio::test]
+    async fn test_feature_flags_are_initialized() {
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: None,
+            clickhouse_url: None,
+            postgres_config: None,
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .expect("Failed to build client");
+
+        assert!(
+            !feature_flags::TEST_FLAG.get(),
+            "Should be able to get TEST_FLAG value without panic"
+        );
     }
 }

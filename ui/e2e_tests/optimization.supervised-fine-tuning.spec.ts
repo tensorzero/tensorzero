@@ -57,10 +57,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
         page,
       }) => {
         await page.goto("/optimization/supervised-fine-tuning");
-        await page
-          .getByRole("combobox")
-          .filter({ hasText: "Select a function" })
-          .click();
+        await page.getByPlaceholder("Select function").click();
         await page.getByRole("option", { name: "extract_entities" }).click();
         await page.getByRole("combobox", { name: "Metric" }).click();
         await page.getByText("exact_match", { exact: true }).click();
@@ -72,7 +69,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
           .getByLabel("gpt4o_mini_initial_prompt")
           .getByText("gpt4o_mini_initial_prompt")
           .click();
-        await page.getByPlaceholder("Select model...").click();
+        await page.getByPlaceholder("Select model").click();
         await page.getByRole("option", { name: model }).click();
         await page
           .getByRole("button", { name: "Start Fine-tuning Job" })
@@ -102,10 +99,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "extract_entities" }).click();
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("demonstration", { exact: true }).click();
@@ -117,7 +111,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
       .click();
-    await page.getByPlaceholder("Select model...").click();
+    await page.getByPlaceholder("Select model").click();
     await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
@@ -153,10 +147,7 @@ model_name = "mock-finetune-1234"
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "image_judger" }).click();
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByRole("option", { name: "None" }).click();
@@ -165,7 +156,7 @@ model_name = "mock-finetune-1234"
       .filter({ hasText: "Select a variant name" })
       .click();
     await page.getByLabel("honest_answer").getByText("honest_answer").click();
-    await page.getByPlaceholder("Select model...").click();
+    await page.getByPlaceholder("Select model").click();
     await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
@@ -202,10 +193,7 @@ model_name = "mock-finetune-1234"
     await page.goto("/optimization/supervised-fine-tuning");
 
     // Select write_haiku function
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Open metric selector
@@ -229,10 +217,7 @@ model_name = "mock-finetune-1234"
     await page.goto("/optimization/supervised-fine-tuning");
 
     // Select function
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "extract_entities" }).click();
 
     // Select metric
@@ -250,7 +235,7 @@ model_name = "mock-finetune-1234"
       .click();
 
     // Select a GCP model from the default list
-    const modelInput = page.getByPlaceholder("Select model...");
+    const modelInput = page.getByPlaceholder("Select model");
     await modelInput.click();
     await page.getByRole("option", { name: "gemini-2.5-flash-lite" }).click();
 
@@ -284,10 +269,7 @@ test.describe("Error handling", () => {
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "extract_entities" }).click();
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("exact_match", { exact: true }).click();
@@ -299,7 +281,7 @@ test.describe("Error handling", () => {
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
       .click();
-    const modelInput = page.getByPlaceholder("Select model...");
+    const modelInput = page.getByPlaceholder("Select model");
     await modelInput.click();
     await modelInput.fill("error");
     // Wait for the options to load
@@ -331,7 +313,7 @@ test.describe("should expose configured providers", () => {
       const modelName = "test-name";
       const providerName = formatProvider(provider).name;
 
-      const modelInput = page.getByPlaceholder("Select model...");
+      const modelInput = page.getByPlaceholder("Select model");
       await modelInput.click();
       await modelInput.fill(modelName);
 
@@ -356,7 +338,7 @@ test.describe("should expose configured providers", () => {
 
     const modelName = "test-name";
 
-    const modelInput = page.getByPlaceholder("Select model...");
+    const modelInput = page.getByPlaceholder("Select model");
     await modelInput.click();
     await modelInput.fill(modelName);
 

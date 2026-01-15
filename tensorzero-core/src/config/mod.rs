@@ -11,7 +11,7 @@ use chrono::Duration;
 use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
-use object_store::{ObjectStore, PutPayload};
+use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
 use provider_types::ProviderTypesConfig;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
@@ -47,7 +47,7 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, ge
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::Usage;
 use crate::inference::types::storage::StorageKind;
-use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
+use crate::jsonschema_util::{JSONSchema, SchemaWithMetadata};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{
     CredentialLocationWithFallback, ModelConfig, ModelTable, UninitializedModelConfig,
@@ -484,11 +484,14 @@ pub enum OtlpTracesFormat {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
     pub optimize: MetricConfigOptimize,
     pub level: MetricConfigLevel,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -810,8 +813,6 @@ struct ProcessedConfigInput {
     postgres: PostgresConfig,
     rate_limiting: UninitializedRateLimitingConfig,
 
-    // Results from branch-specific processing
-    extra_templates: HashMap<String, String>,
     snapshot: ConfigSnapshot,
     /// All functions (user-defined + built-in), loaded and ready to use
     functions: HashMap<String, Arc<FunctionConfig>>,
@@ -909,7 +910,6 @@ async fn process_config_input(
                 optimizers,
                 postgres,
                 rate_limiting,
-                extra_templates,
                 snapshot,
                 functions: all_functions,
                 gateway_config,
@@ -979,6 +979,13 @@ async fn process_config_input(
 
             // Use the overlay object store info directly instead of creating a new one
             let gateway_config = overlay_gateway.load(overlay_object_store_info.as_ref())?;
+            // Initialize templates from ALL functions (including built-in)
+            let all_template_paths = Config::get_templates(&all_functions)?;
+            // We don't use these since the extra templates come directly from the snapshot
+            // We pass in None for the base path to disable searching the file system
+            // for snapshotted configs.
+            let _unused_extra_templates = templates.initialize(all_template_paths, None).await?;
+            templates.add_templates(extra_templates)?;
 
             Ok(ProcessedConfigInput {
                 tools,
@@ -990,7 +997,7 @@ async fn process_config_input(
                 optimizers,
                 postgres: overlay_postgres,
                 rate_limiting: overlay_rate_limiting,
-                extra_templates,
+                // unused
                 snapshot,
                 functions: all_functions,
                 gateway_config,
@@ -1172,7 +1179,6 @@ impl Config {
             optimizers: uninitialized_optimizers,
             postgres,
             rate_limiting,
-            extra_templates: _extra_templates,
             snapshot,
             functions,
             gateway_config,
@@ -1832,9 +1838,9 @@ impl SchemaData {
     }
 
     pub(super) fn load(
-        user_schema: Option<StaticJSONSchema>,
-        assistant_schema: Option<StaticJSONSchema>,
-        system_schema: Option<StaticJSONSchema>,
+        user_schema: Option<JSONSchema>,
+        assistant_schema: Option<JSONSchema>,
+        system_schema: Option<JSONSchema>,
         schemas: UninitializedSchemas,
         function_name: &str,
     ) -> Result<Self, Error> {
@@ -1871,7 +1877,7 @@ impl SchemaData {
                 .insert(
                     name.clone(),
                     SchemaWithMetadata {
-                        schema: StaticJSONSchema::from_path(schema.path)?,
+                        schema: JSONSchema::from_path(schema.path)?,
                         legacy_definition: false,
                     },
                 )
@@ -1981,17 +1987,14 @@ impl UninitializedFunctionConfig {
                 propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
 
                 let schema_data = SchemaData::load(
-                    params
-                        .user_schema
-                        .map(StaticJSONSchema::from_path)
-                        .transpose()?,
+                    params.user_schema.map(JSONSchema::from_path).transpose()?,
                     params
                         .assistant_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params
                         .system_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params.schemas,
                     function_name,
@@ -2046,24 +2049,21 @@ impl UninitializedFunctionConfig {
                 propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
 
                 let schema_data = SchemaData::load(
-                    params
-                        .user_schema
-                        .map(StaticJSONSchema::from_path)
-                        .transpose()?,
+                    params.user_schema.map(JSONSchema::from_path).transpose()?,
                     params
                         .assistant_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params
                         .system_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params.schemas,
                     function_name,
                 )?;
                 let output_schema = match params.output_schema {
-                    Some(path) => StaticJSONSchema::from_path(path)?,
-                    None => StaticJSONSchema::default(),
+                    Some(path) => JSONSchema::from_path(path)?,
+                    None => JSONSchema::default(),
                 };
                 let json_mode_tool_call_config =
                     create_json_mode_tool_call_config(output_schema.clone());
@@ -2231,7 +2231,7 @@ pub struct UninitializedToolConfig {
 
 impl UninitializedToolConfig {
     pub fn load(self, key: String) -> Result<StaticToolConfig, Error> {
-        let parameters = StaticJSONSchema::from_path(self.parameters)?;
+        let parameters = JSONSchema::from_path(self.parameters)?;
         Ok(StaticToolConfig {
             name: self.name.unwrap_or_else(|| key.clone()),
             key,

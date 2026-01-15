@@ -83,7 +83,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
             config_file: Some(config_path.clone()),
             clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-            postgres_url: None,
+            postgres_config: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -196,6 +196,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     api_key_public_id: None,
                 },
                 relay: None,
+                include_raw_usage: false,
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_provider_api() {

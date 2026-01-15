@@ -10,6 +10,7 @@ import type { ToolOutcome } from "./ToolOutcome";
  */
 export type EventPayload =
   | ({ type: "message" } & InputMessage)
+  | { type: "error"; message: string }
   | { type: "status_update"; status_update: StatusUpdate }
   | ({ type: "tool_call" } & AutopilotToolCall)
   | ({ type: "tool_call_authorization" } & ToolCallAuthorization)

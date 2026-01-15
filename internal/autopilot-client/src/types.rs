@@ -40,12 +40,35 @@ pub struct Event {
     pub created_at: DateTime<Utc>,
 }
 
+/// The UX-relevant status of the Autopilot.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[ts(export)]
+#[serde(rename_all = "snake_case", tag = "status")]
+pub enum AutopilotStatus {
+    Idle,
+    ServerSideProcessing,
+    WaitingForToolCallAuthorization,
+    WaitingForToolExecution,
+    WaitingForRetry,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct StreamUpdate {
+    pub event: Event,
+    pub status: AutopilotStatus,
+}
+
 /// The payload of an event.
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     Message(InputMessage),
+    Error {
+        message: String,
+    },
     StatusUpdate {
         status_update: StatusUpdate,
     },
@@ -112,9 +135,8 @@ pub struct AutopilotSideInfo {
     /// The session ID for this autopilot session.
     pub session_id: Uuid,
 
-    /// An optional hash of the current configuration.
-    /// Set if you would like to start from a particular config for a tool call.
-    pub config_snapshot_hash: Option<String>,
+    /// A hash of the current configuration.
+    pub config_snapshot_hash: String,
 
     /// Settings for optimization workflows run on the gateway by autopilot.
     pub optimization: OptimizationWorkflowSideInfo,
@@ -168,12 +190,10 @@ impl AutopilotSideInfo {
             "tensorzero::autopilot::session_id".to_string(),
             self.session_id.to_string(),
         );
-        if let Some(config_hash) = &self.config_snapshot_hash {
-            tags.insert(
-                "tensorzero::autopilot::config_snapshot_hash".to_string(),
-                config_hash.clone(),
-            );
-        }
+        tags.insert(
+            "tensorzero::autopilot::config_snapshot_hash".to_string(),
+            self.config_snapshot_hash.clone(),
+        );
         tags
     }
 }
@@ -213,7 +233,10 @@ pub enum ToolCallAuthorizationStatus {
 pub enum ToolOutcome {
     Success(AutopilotToolResult),
     Failure {
-        message: String,
+        /// Structured error data from the tool.
+        /// For autopilot tools, this is typically a serialized `AutopilotToolError`
+        /// with a `kind` field discriminator (e.g., "ClientError", "Validation").
+        error: serde_json::Value,
     },
     Missing,
     #[serde(other)]
@@ -238,6 +261,8 @@ pub struct CreateEventRequest {
     /// This should only apply to Message events.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_user_message_event_id: Option<Uuid>,
+    /// Must be set if the session id is nil and we are starting a new session
+    pub config_snapshot_hash: Option<String>,
 }
 
 /// Query parameters for listing events.
@@ -297,6 +322,9 @@ pub struct ListEventsResponse {
     pub events: Vec<Event>,
     /// The most recent `message` event with role `user` in this session.
     pub previous_user_message_event_id: Uuid,
+    /// The current status of the Autopilot in this session.
+    /// Ignores pagination parameters.
+    pub status: AutopilotStatus,
     /// All tool calls in Event history that do not have responses.
     /// These may be duplicates of some of the values in events.
     /// All EventPayloads in these Events should be of type ToolCall.

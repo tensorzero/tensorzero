@@ -48,6 +48,9 @@ use tensorzero_core::inference::types::{
 use tensorzero_core::inference::types::{RequestMessage, StoredContentBlock, StoredRequestMessage};
 
 use crate::common::get_gateway_endpoint;
+use tensorzero::test_helpers::{
+    make_embedded_gateway_e2e_with_unique_db, start_http_gateway_with_unique_db,
+};
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
@@ -90,6 +93,7 @@ async fn test_cache_write_and_read() {
         model_name: "test_model",
         provider_name: "test_provider",
         otlp_config: &Default::default(),
+        model_inference_id: Uuid::now_v7(),
     };
 
     // Read (should be None)
@@ -167,7 +171,7 @@ async fn test_cache_write_and_read() {
         }
     );
     assert_eq!(
-        result.latency,
+        result.provider_latency,
         Latency::NonStreaming {
             response_time: Duration::from_secs(0)
         }
@@ -220,6 +224,7 @@ async fn test_cache_stream_write_and_read() {
         model_name: "test_model",
         provider_name: "test_provider",
         otlp_config: &Default::default(),
+        model_inference_id: Uuid::now_v7(),
     };
 
     // Read (should be None)
@@ -238,13 +243,13 @@ async fn test_cache_stream_write_and_read() {
                 id: "0".to_string(),
                 text: "test content".to_string(),
             })],
-            created: 1234,
             usage: Some(Usage {
                 input_tokens: Some(20),
                 output_tokens: Some(40),
             }),
+            raw_usage: None,
             raw_response: "raw response".to_string(),
-            latency: Duration::from_secs(999),
+            provider_latency: Duration::from_secs(999),
             finish_reason: None,
         },
         ProviderInferenceResponseChunk {
@@ -252,13 +257,13 @@ async fn test_cache_stream_write_and_read() {
                 id: "1".to_string(),
                 text: "test content 2".to_string(),
             })],
-            created: 5678,
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
             }),
+            raw_usage: None,
             raw_response: "raw response 2".to_string(),
-            latency: Duration::from_secs(999),
+            provider_latency: Duration::from_secs(999),
             finish_reason: Some(FinishReason::Stop),
         },
     ];
@@ -293,15 +298,13 @@ async fn test_cache_stream_write_and_read() {
     for (i, chunk) in chunks.into_iter().enumerate() {
         let ProviderInferenceResponseChunk {
             content,
-            created,
             usage,
             raw_response,
-            latency,
+            provider_latency,
             finish_reason,
+            ..
         } = &chunk;
         assert_eq!(content, &initial_chunks[i].content);
-        // 'created' should be different (current timestamp is different)
-        assert_ne!(created, &initial_chunks[i].created);
         if i == 0 {
             assert_eq!(
                 usage,
@@ -320,7 +323,7 @@ async fn test_cache_stream_write_and_read() {
             );
         };
         assert_eq!(raw_response, &initial_chunks[i].raw_response);
-        assert_eq!(latency, &Duration::from_secs(0));
+        assert_eq!(provider_latency, &Duration::from_secs(0));
         if i == 0 {
             assert_eq!(finish_reason, &None);
         } else {
@@ -759,4 +762,251 @@ pub async fn check_test_streaming_cache_with_err(
     assert_eq!(output.len(), 1);
 
     full_content
+}
+
+/// Tests that cached streaming responses only have usage on the final chunk (TensorZero native API)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_streaming_cache_usage_only_in_final_chunk_native() {
+    use serde_json::Map;
+    use tensorzero::InferenceResponseChunk;
+    use tensorzero_core::inference::types::System;
+
+    let client = make_embedded_gateway_e2e_with_unique_db("cache_usage_final_chunk").await;
+
+    let input = "cache_usage_test: Tell me a story";
+
+    // Helper to make streaming request and count chunks with usage
+    async fn make_streaming_request(
+        client: &tensorzero::Client,
+        input: &str,
+    ) -> (usize, usize, u64, u64) {
+        let response = client
+            .inference(ClientInferenceParams {
+                function_name: Some("weather_helper".to_string()),
+                variant_name: Some("openai".to_string()),
+                episode_id: Some(Uuid::now_v7()),
+                input: Input {
+                    system: Some(System::Template(
+                        tensorzero_core::inference::types::Arguments({
+                            let mut args = Map::new();
+                            args.insert("assistant_name".to_string(), json!("TestBot"));
+                            args
+                        }),
+                    )),
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: input.to_string(),
+                        })],
+                    }],
+                },
+                stream: Some(true),
+                cache_options: CacheParamsOptions {
+                    enabled: CacheEnabledMode::On,
+                    max_age_s: None,
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let InferenceOutput::Streaming(mut stream) = response else {
+            panic!("Expected streaming response");
+        };
+
+        let mut chunks_with_usage = 0;
+        let mut total_chunks = 0;
+        let mut total_input_tokens = 0u64;
+        let mut total_output_tokens = 0u64;
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.unwrap();
+            total_chunks += 1;
+
+            let usage = match &chunk {
+                InferenceResponseChunk::Chat(c) => &c.usage,
+                InferenceResponseChunk::Json(j) => &j.usage,
+            };
+            if let Some(u) = usage {
+                chunks_with_usage += 1;
+                total_input_tokens += u.input_tokens.unwrap_or(0) as u64;
+                total_output_tokens += u.output_tokens.unwrap_or(0) as u64;
+            }
+        }
+        (
+            chunks_with_usage,
+            total_chunks,
+            total_input_tokens,
+            total_output_tokens,
+        )
+    }
+
+    // First request: cache miss
+    let (chunks_with_usage, total_chunks, input_tokens, output_tokens) =
+        make_streaming_request(&client, input).await;
+
+    assert!(
+        total_chunks > 1,
+        "Test expects multiple chunks to verify usage placement, got {total_chunks}"
+    );
+    assert_eq!(
+        chunks_with_usage, 1,
+        "Cache miss: only the final chunk should have usage, got {chunks_with_usage} out of {total_chunks}"
+    );
+    assert!(
+        input_tokens > 0 || output_tokens > 0,
+        "Cache miss: usage should have non-zero tokens"
+    );
+
+    // Wait for cache write
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Second request: cache hit
+    let (chunks_with_usage, total_chunks, input_tokens, output_tokens) =
+        make_streaming_request(&client, input).await;
+
+    assert!(
+        total_chunks > 1,
+        "Test expects multiple chunks to verify usage placement, got {total_chunks}"
+    );
+    assert_eq!(
+        chunks_with_usage, 1,
+        "Cache hit: only the final chunk should have usage, got {chunks_with_usage} out of {total_chunks}"
+    );
+    assert_eq!(
+        input_tokens, 0,
+        "Cache hit: usage should have zero input tokens"
+    );
+    assert_eq!(
+        output_tokens, 0,
+        "Cache hit: usage should have zero output tokens"
+    );
+}
+
+/// Tests that cached streaming responses only have usage on the final chunk (OpenAI-compatible API)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
+    let (base_url, _shutdown_handle) =
+        start_http_gateway_with_unique_db("cache_usage_final_chunk_openai").await;
+
+    let input = "cache_usage_openai_test: Tell me a story";
+
+    // Helper to make streaming request and count chunks with usage
+    async fn make_streaming_request(base_url: &str, input: &str) -> (usize, usize, u64, u64) {
+        let payload = json!({
+            "model": "tensorzero::function_name::weather_helper",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "tensorzero::arguments": {
+                                "assistant_name": "TestBot"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": input
+                }
+            ],
+            "stream": true,
+            "stream_options": {"include_usage": true},
+            "tensorzero::variant_name": "openai",
+            "tensorzero::episode_id": Uuid::now_v7(),
+            "tensorzero::cache_options": {
+                "enabled": "on"
+            }
+        });
+
+        let url = format!("{base_url}/openai/v1/chat/completions");
+
+        let mut chunks = Client::new()
+            .post(&url)
+            .json(&payload)
+            .eventsource()
+            .unwrap();
+
+        let mut chunks_with_usage = 0;
+        let mut total_chunks = 0;
+        let mut total_prompt_tokens = 0u64;
+        let mut total_completion_tokens = 0u64;
+
+        while let Some(chunk) = chunks.next().await {
+            let chunk = chunk.unwrap();
+            let Event::Message(chunk) = chunk else {
+                continue;
+            };
+            if chunk.data == "[DONE]" {
+                break;
+            }
+
+            total_chunks += 1;
+
+            let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
+            if let Some(usage) = chunk_json.get("usage")
+                && !usage.is_null()
+            {
+                chunks_with_usage += 1;
+                total_prompt_tokens += usage
+                    .get("prompt_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                total_completion_tokens += usage
+                    .get("completion_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            }
+        }
+
+        (
+            chunks_with_usage,
+            total_chunks,
+            total_prompt_tokens,
+            total_completion_tokens,
+        )
+    }
+
+    // First request: cache miss
+    let (chunks_with_usage, total_chunks, prompt_tokens, completion_tokens) =
+        make_streaming_request(&base_url, input).await;
+
+    assert!(
+        total_chunks > 1,
+        "Test expects multiple chunks to verify usage placement, got {total_chunks}"
+    );
+    assert_eq!(
+        chunks_with_usage, 1,
+        "Cache miss: only the final chunk should have usage, got {chunks_with_usage} out of {total_chunks}"
+    );
+    assert!(
+        prompt_tokens > 0 || completion_tokens > 0,
+        "Cache miss: usage should have non-zero tokens"
+    );
+
+    // Wait for cache write
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Second request: cache hit
+    let (chunks_with_usage, total_chunks, prompt_tokens, completion_tokens) =
+        make_streaming_request(&base_url, input).await;
+
+    assert!(
+        total_chunks > 1,
+        "Test expects multiple chunks to verify usage placement, got {total_chunks}"
+    );
+    assert_eq!(
+        chunks_with_usage, 1,
+        "Cache hit: only the final chunk should have usage, got {chunks_with_usage} out of {total_chunks}"
+    );
+    assert_eq!(
+        prompt_tokens, 0,
+        "Cache hit: usage should have zero prompt tokens"
+    );
+    assert_eq!(
+        completion_tokens, 0,
+        "Cache hit: usage should have zero completion tokens"
+    );
 }

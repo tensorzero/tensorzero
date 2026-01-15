@@ -1,16 +1,27 @@
 use std::{
     cell::Cell,
     pin::Pin,
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
     task::{Context, Poll},
     time::{Duration, Instant},
 };
 
-use axum::{body::Body, extract::Request, middleware::Next, response::Response};
+use axum::{
+    body::Body,
+    extract::{MatchedPath, Request, State},
+    middleware::Next,
+    response::Response,
+};
+use dashmap::DashMap;
 use http::{Method, StatusCode};
 use http_body::{Frame, SizeHint};
 use metrics::Label;
 use tracing::{Level, Span};
 use tracing_futures::Instrument;
+use uuid::Uuid;
 
 use crate::observability::overhead_timing::{
     OverheadSpanExt, TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME,
@@ -18,6 +29,8 @@ use crate::observability::overhead_timing::{
 
 /// A drop guard that logs a message on drop if `start_time` is set.
 struct ConnectionDropGuard {
+    // The counter to decrement when the request is finished
+    count_per_route: Arc<AtomicU32>,
     latency_span: Option<Span>,
     request_logging_data: Option<HttpMetricData>,
     span: Span,
@@ -43,6 +56,7 @@ impl ConnectionDropGuard {
 impl Drop for ConnectionDropGuard {
     fn drop(&mut self) {
         let _guard = self.span.enter();
+        self.count_per_route.fetch_sub(1, Ordering::Relaxed);
         let latency_duration = if let Some(finished_with_latency) = self.finished_with_latency.get()
         {
             if let Some(latency_span) = &self.latency_span {
@@ -151,6 +165,29 @@ pub struct HttpMetricData {
     pub extra_overhead_labels: Vec<Label>,
 }
 
+/// A clonable handle that tracks the number of in-flight requests for each route.
+#[derive(Clone)]
+pub struct InFlightRequestsData {
+    count_per_route: Arc<DashMap<String, Arc<AtomicU32>>>,
+}
+
+impl InFlightRequestsData {
+    #[expect(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self {
+            count_per_route: Arc::new(Default::default()),
+        }
+    }
+
+    /// Gets the current in-flight requests counts for each route
+    /// Note that routes that have never been requested will not be included in the iterator.
+    pub fn current_counts_by_route(&self) -> impl Iterator<Item = (String, u32)> {
+        self.count_per_route
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().load(Ordering::Relaxed)))
+    }
+}
+
 // An Axum middleware that logs request processing events
 // * 'started processing request' when we begin processing a request
 // * 'finished processing request' when we we *completely* finish a request.
@@ -158,10 +195,25 @@ pub struct HttpMetricData {
 //    not when the response status code is initially sent
 // * 'Client closed the connection before the response was sent' if the connection is closed early.
 pub async fn request_logging_middleware(
+    state: State<InFlightRequestsData>,
     request: Request,
     next: Next,
 ) -> Response<GuardBodyWrapper> {
     let start_time = Instant::now();
+
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|p| format!("{} {}", request.method(), p.as_str()).to_string())
+        .unwrap_or_else(|| "<unknown_route>".to_string());
+    let count_per_route = state
+        .count_per_route
+        .entry(route)
+        .or_insert_with(|| Arc::new(Default::default()))
+        .clone();
+
+    count_per_route.fetch_add(1, Ordering::Relaxed);
+
     // Create a separate span for latency tracing, using a custom 'target' that will
     // get filtered out when we log to console/otel
     // This prevents the `tensorzero.overhead.*` span attributes from being visible to users
@@ -177,6 +229,9 @@ pub async fn request_logging_middleware(
         None
     };
 
+    // Generate a random ID so that we can associate log lines with this request
+    let request_id = Uuid::now_v7();
+
     let span = if let Some(latency_span) = &latency_span {
         tracing::info_span!(
             target: "gateway",
@@ -185,6 +240,8 @@ pub async fn request_logging_middleware(
             method = %request.method(),
             uri = %request.uri(),
             version = ?request.version(),
+            request_id = %request_id,
+            x_amzn_trace_id = tracing::field::Empty,
         )
     } else {
         tracing::info_span!(
@@ -193,8 +250,17 @@ pub async fn request_logging_middleware(
             method = %request.method(),
             uri = %request.uri(),
             version = ?request.version(),
+            request_id = %request_id,
+            x_amzn_trace_id = tracing::field::Empty,
         )
     };
+    if let Some(x_amzn_trace_id) = request
+        .headers()
+        .get("x-amzn-trace-id")
+        .and_then(|h| h.to_str().ok())
+    {
+        span.record("x_amzn_trace_id", x_amzn_trace_id);
+    }
     span.in_scope(|| {
         tracing::debug!("started processing request");
     });
@@ -208,6 +274,7 @@ pub async fn request_logging_middleware(
         span: span.clone(),
         start_time,
         finished_with_latency: Cell::new(None),
+        count_per_route,
         status: None,
     };
     let mut response = next.run(request).instrument(span).await;

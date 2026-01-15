@@ -12,7 +12,7 @@ This page shows how to:
 
 <Tip>
 
-We provide [complete code examples](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/gateway/call-the-openai-responses-api) on GitHub.
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/gateway/call-the-openai-responses-api) of this guide on GitHub.
 
 </Tip>
 
@@ -938,7 +938,7 @@ routing = ["azure"]
 [models.azure-gpt-5-mini-responses.providers.azure]
 type = "openai"  # CAREFUL: not `azure`!
 api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
-api_key_location = "env::AZURE_OPENAI_API_KEY"
+api_key_location = "env::AZURE_API_KEY"
 model_name = "gpt-5-mini"
 api_type = "responses"
 ```

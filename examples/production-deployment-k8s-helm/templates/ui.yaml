@@ -23,6 +23,10 @@ spec:
       {{- if .Values.ui.serviceAccountName }}
       serviceAccountName: {{ .Values.ui.serviceAccountName }}
       {{- end }}
+      {{- if .Values.ui.securityContext }}
+      securityContext:
+        {{- toYaml .Values.ui.securityContext | nindent 8 }}
+      {{- end }}
       containers:
         - name: ui
           image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag | default .Chart.AppVersion }}"

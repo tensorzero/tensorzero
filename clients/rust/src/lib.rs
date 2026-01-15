@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::config::snapshot::ConfigSnapshot;
 use tensorzero_core::config::write_config_snapshot;
@@ -21,7 +23,7 @@ use uuid::Uuid;
 // Client core types
 pub use tensorzero_core::client::{
     Client, ClientBuilder, ClientBuilderMode, ClientMode, EmbeddedGateway, HTTPGateway,
-    get_config_no_verify_credentials,
+    PostgresConfig, get_config_no_verify_credentials,
 };
 
 // Client error types

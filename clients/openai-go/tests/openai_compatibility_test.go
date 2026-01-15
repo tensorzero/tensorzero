@@ -57,8 +57,9 @@ func systemMessageWithAssistant(t *testing.T, assistant_name string) *openai.Cha
 	data := map[string]interface{}{
 		"content": []map[string]interface{}{
 			{
-				"type": "text",
-				"tensorzero::arguments": map[string]interface{}{
+				"type":      "tensorzero::template",
+				"name":      "system",
+				"arguments": map[string]interface{}{
 					"assistant_name": assistant_name,
 				},
 			},
@@ -848,22 +849,19 @@ func TestStreamingInference(t *testing.T) {
 		assert.Greater(t, lastChunkDuration.Seconds(), firstChunkDuration.Seconds()+0.1,
 			"Last chunk duration should be greater than first chunk duration")
 
-		// Validate the stop chunk
-		require.GreaterOrEqual(t, len(allChunks), 2, "Expected at least two chunks, but got fewer")
-		stopChunk := allChunks[len(allChunks)-2]
-		assert.Empty(t, stopChunk.Choices[0].Delta.Content)
-		assert.Equal(t, stopChunk.Choices[0].FinishReason, "stop")
-
-		// Validate the Completion chunk
-		completionChunk := allChunks[len(allChunks)-1]
-		assert.Equal(t, int64(10), completionChunk.Usage.PromptTokens)
-		assert.Equal(t, int64(16), completionChunk.Usage.CompletionTokens)
-		assert.Equal(t, int64(26), completionChunk.Usage.TotalTokens)
+		// Validate the final chunk (contains finish_reason and usage)
+		require.GreaterOrEqual(t, len(allChunks), 1, "Expected at least one chunk, but got fewer")
+		finalChunk := allChunks[len(allChunks)-1]
+		assert.Empty(t, finalChunk.Choices[0].Delta.Content)
+		assert.Equal(t, finalChunk.Choices[0].FinishReason, "stop")
+		assert.Equal(t, int64(10), finalChunk.Usage.PromptTokens)
+		assert.Equal(t, int64(16), finalChunk.Usage.CompletionTokens)
+		assert.Equal(t, int64(26), finalChunk.Usage.TotalTokens)
 
 		var previousInferenceID, previousEpisodeID string
 		textIndex := 0
 		// Validate the chunk Content
-		for i := range len(allChunks) - 2 {
+		for i := range len(allChunks) - 1 {
 			chunk := allChunks[i]
 			if len(chunk.Choices) == 0 {
 				continue
@@ -957,11 +955,9 @@ func TestStreamingInference(t *testing.T) {
 			}
 		}
 
-		// Check second-to-last chunk has correct finish reason
-		stopChunk := chunks[len(chunks)-2]
-		require.Equal(t, "stop", stopChunk.Choices[0].FinishReason)
-
+		// Check final chunk has correct finish reason and usage
 		finalChunk := chunks[len(chunks)-1]
+		require.Equal(t, "stop", finalChunk.Choices[0].FinishReason)
 		require.Equal(t, int64(10), finalChunk.Usage.PromptTokens)
 		require.Equal(t, int64(16), finalChunk.Usage.CompletionTokens)
 
@@ -998,11 +994,9 @@ func TestStreamingInference(t *testing.T) {
 		}
 		require.Equal(t, content, cachedContent)
 
-		// Check second-to-last chunk has the correct finish reason
-		finishChunk := cachedChunks[len(cachedChunks)-2]
-		require.Equal(t, "stop", finishChunk.Choices[0].FinishReason)
-		// Verify zero usage
+		// Check final cached chunk has correct finish reason and zero usage
 		finalCachedChunk := cachedChunks[len(cachedChunks)-1]
+		require.Equal(t, "stop", finalCachedChunk.Choices[0].FinishReason)
 		require.Equal(t, int64(0), finalCachedChunk.Usage.PromptTokens)
 		require.Equal(t, int64(0), finalCachedChunk.Usage.CompletionTokens)
 		require.Equal(t, int64(0), finalCachedChunk.Usage.TotalTokens)
@@ -1381,23 +1375,20 @@ func TestToolCallingInference(t *testing.T) {
 			`"}`,
 		}
 
-		// Validate the stop chunk
-		require.GreaterOrEqual(t, len(allChunks), 2, "Expected at least two chunks, but got fewer")
-		stopChunk := allChunks[len(allChunks)-2]
-		assert.Empty(t, stopChunk.Choices[0].Delta.Content)
-		assert.Empty(t, stopChunk.Choices[0].Delta.ToolCalls)
-		assert.Equal(t, stopChunk.Choices[0].FinishReason, "tool_calls")
-
-		// Validate the Completion chunk
-		completionChunk := allChunks[len(allChunks)-1]
-		assert.Equal(t, int64(10), completionChunk.Usage.PromptTokens)
-		assert.Equal(t, int64(5), completionChunk.Usage.CompletionTokens)
-		assert.Equal(t, int64(15), completionChunk.Usage.TotalTokens)
+		// Validate the final chunk (contains finish_reason and usage)
+		require.GreaterOrEqual(t, len(allChunks), 1, "Expected at least one chunk, but got fewer")
+		finalChunk := allChunks[len(allChunks)-1]
+		assert.Empty(t, finalChunk.Choices[0].Delta.Content)
+		assert.Empty(t, finalChunk.Choices[0].Delta.ToolCalls)
+		assert.Equal(t, finalChunk.Choices[0].FinishReason, "tool_calls")
+		assert.Equal(t, int64(10), finalChunk.Usage.PromptTokens)
+		assert.Equal(t, int64(5), finalChunk.Usage.CompletionTokens)
+		assert.Equal(t, int64(15), finalChunk.Usage.TotalTokens)
 
 		var previousInferenceID, previousEpisodeID string
 		nameSeen := false
 		//Test for intermediate chunks
-		for i := range len(allChunks) - 2 {
+		for i := range len(allChunks) - 1 {
 			chunk := allChunks[i]
 			if len(chunk.Choices) == 0 {
 				continue

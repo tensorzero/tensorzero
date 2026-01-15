@@ -68,7 +68,28 @@ pub async fn chat_completions_handler(
                 .collect::<Vec<_>>()
         );
     }
-    let stream_options = openai_compatible_params.stream_options;
+    let include_raw_usage = openai_compatible_params.tensorzero_include_raw_usage;
+
+    // Check if user explicitly set include_usage to false
+    let explicit_include_usage = openai_compatible_params
+        .stream_options
+        .as_ref()
+        .map(|opts| opts.include_usage);
+
+    // Error if include_raw_usage=true but include_usage is explicitly false
+    if openai_compatible_params.stream.unwrap_or(false)
+        && include_raw_usage
+        && explicit_include_usage == Some(false)
+    {
+        return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: "`tensorzero::include_raw_usage` requires `stream_options.include_usage` to be true (or omitted) for streaming requests".to_string(),
+        }));
+    }
+
+    // OpenAI default: no usage when stream_options is omitted
+    // But: include_raw_usage=true implies include_usage=true
+    let include_usage = explicit_include_usage.unwrap_or(false) || include_raw_usage;
+
     let params = Params::try_from_openai(openai_compatible_params)?;
 
     // The prefix for the response's `model` field depends on the inference target
@@ -110,7 +131,8 @@ pub async fn chat_completions_handler(
             let openai_compatible_stream = prepare_serialized_openai_compatible_events(
                 stream,
                 response_model_prefix,
-                stream_options,
+                include_usage,
+                include_raw_usage,
             );
             Ok(Sse::new(openai_compatible_stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())

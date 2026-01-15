@@ -3,16 +3,17 @@
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
-use anyhow::Context;
 use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
+use autopilot_tools::AutopilotToolError;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, SimpleTool, SimpleToolContext, TaskTool,
-    TensorZeroClient, ToolAppState, ToolContext, ToolMetadata, ToolOutcome,
-    ToolResult as DurableToolResult,
+    CreateEventGatewayRequest, EventPayload, NonControlToolError, SimpleTool, SimpleToolContext,
+    TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
+    ToolResult as DurableToolResult, ToolResultExt,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
+use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
@@ -79,7 +80,7 @@ impl<T> TaskTool for ClientTaskToolWrapper<T>
 where
     T: TaskTool,
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
 {
     async fn execute(
         llm_params: Self::LlmParams,
@@ -88,27 +89,29 @@ where
     ) -> DurableToolResult<Self::Output> {
         let session_id = side_info.session_id;
         let tool_call_event_id = side_info.tool_call_event_id;
-        let side_info: T::SideInfo = side_info
-            .try_into()
-            .map_err(|e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
-                let e: anyhow::Error = e.into();
-                e
-            })
-            .with_context(|| "Failed to convert AutopilotSideInfo to tool SideInfo: {e}")?;
+        let side_info: T::SideInfo = side_info.try_into().map_err(
+            |e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
+                AutopilotToolError::validation(format!(
+                    "Failed to convert AutopilotSideInfo to tool SideInfo: {e}"
+                ))
+            },
+        )?;
         // Execute the underlying tool
-        let result = T::execute(llm_params, side_info, ctx).await;
+        let result = T::execute(llm_params, side_info, ctx)
+            .await
+            .propagate_control()?;
 
         // Prepare the outcome for the autopilot API
         let tool_name = T::name().to_string();
-        let outcome = match &result {
+        let outcome = match result {
             Ok(output) => {
-                let result_json = serde_json::to_string(output)?;
+                let result_json = serde_json::to_string(&output)?;
                 ToolOutcome::Success(AutopilotToolResult {
                     result: result_json,
                 })
             }
             Err(e) => ToolOutcome::Failure {
-                message: e.to_string(),
+                error: tool_error_to_json(ToolError::NonControl(e)),
             },
         };
 
@@ -184,7 +187,7 @@ impl<T: SimpleTool> Default for ClientSimpleToolWrapper<T> {
 impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T>
 where
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
 {
     fn name() -> Cow<'static, str> {
         T::name()
@@ -214,7 +217,7 @@ struct SimpleToolStepParams<L, S> {
 impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T>
 where
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
 {
     async fn execute(
         llm_params: Self::LlmParams,
@@ -225,20 +228,18 @@ where
         let tool_call_event_id = side_info.tool_call_event_id;
         let session_id = side_info.session_id;
         // Convert AutopilotSideInfo to the underlying tool's SideInfo
-        let converted_side_info: T::SideInfo = side_info
-            .try_into()
-            .map_err(|e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
-                let e: anyhow::Error = e.into();
-                e
-            })
-            .with_context(|| {
-                format!("Failed to convert AutopilotSideInfo to tool SideInfo for tool {tool_name}")
-            })?;
+        let converted_side_info: T::SideInfo = side_info.try_into().map_err(
+            |e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
+                AutopilotToolError::validation(format!(
+                    "Failed to convert AutopilotSideInfo to tool SideInfo for tool {tool_name}: {e}"
+                ))
+            },
+        )?;
 
         // Execute the underlying simple tool within a checkpointed step.
-        // The step returns Ok(Result<output, error_string>) so tool errors are
+        // The step returns Ok(Result<output, error_json>) so tool errors are
         // checkpointed, not retried.
-        let step_result: Result<T::Output, String> = ctx
+        let step_result: Result<T::Output, serde_json::Value> = ctx
             .step(
                 "execute_simple_tool",
                 SimpleToolStepParams {
@@ -252,16 +253,14 @@ where
             .await?;
 
         // Prepare the outcome for the autopilot API
-        let outcome = match &step_result {
+        let outcome = match step_result {
             Ok(output) => {
-                let result_json = serde_json::to_string(output)?;
+                let result_json = serde_json::to_string(&output)?;
                 ToolOutcome::Success(AutopilotToolResult {
                     result: result_json,
                 })
             }
-            Err(error_message) => ToolOutcome::Failure {
-                message: error_message.clone(),
-            },
+            Err(error) => ToolOutcome::Failure { error },
         };
 
         // Publish result to autopilot API (checkpointed)
@@ -281,14 +280,14 @@ where
 
 /// Step function to execute a simple tool.
 ///
-/// Returns `Ok(Result<output, error_message>)` where the inner result is either
+/// Returns `Ok(Result<output, error_json>)` where the inner result is either
 /// success or failure. This ensures tool errors are checkpointed rather than
-/// causing step retries. The error is converted to String since ToolError
-/// contains non-serializable types.
+/// causing step retries. The error is converted to structured JSON for
+/// programmatic parsing by the autopilot API.
 async fn execute_simple_tool_step<T: SimpleTool>(
     params: SimpleToolStepParams<T::LlmParams, T::SideInfo>,
     state: ToolAppState,
-) -> anyhow::Result<Result<T::Output, String>> {
+) -> anyhow::Result<Result<T::Output, serde_json::Value>> {
     let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client());
     let idempotency_key = format!(
         "simple_tool:{}:{}",
@@ -296,7 +295,7 @@ async fn execute_simple_tool_step<T: SimpleTool>(
     );
 
     // Wrap the result in Ok so tool errors are checkpointed, not retried.
-    // Convert ToolError to String since it contains non-serializable types.
+    // Convert ToolError to structured JSON for programmatic error handling.
     Ok(T::execute(
         params.llm_params,
         params.side_info,
@@ -304,7 +303,74 @@ async fn execute_simple_tool_step<T: SimpleTool>(
         &idempotency_key,
     )
     .await
-    .map_err(|e| e.to_string()))
+    .map_err(tool_error_to_json))
+}
+
+/// Convert a `ToolError` to structured JSON for the autopilot API.
+///
+/// For `ToolError::Error`, serializes the `SerializableToolError` directly.
+/// For `ToolError::Control`, returns a control flow error (this should not
+/// normally happen as control flow errors are internal).
+fn tool_error_to_json(e: ToolError) -> serde_json::Value {
+    match e {
+        ToolError::Control(cf) => {
+            // Control flow errors should not be serialized - this is a bug if it happens
+            let failure = ToolFailure::Control {
+                message: format!(
+                    "Unexpected control flow signal: {cf:?}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            };
+            serde_json::to_value(failure).unwrap_or_else(|e| {
+                serde_json::json!({
+                    "kind": "serialization",
+                    "message": format!("Failed to serialize control flow error: {e}"),
+                })
+            })
+        }
+        ToolError::Database(db_error) => {
+            let failure = ToolFailure::Database {
+                message: db_error.to_string(),
+            };
+            serde_json::to_value(failure).unwrap_or_else(|e| {
+                serde_json::json!({
+                    "kind": "serialization",
+                    "message": format!("Failed to serialize database error: {e}"),
+                })
+            })
+        }
+        ToolError::NonControl(non_control_error) => {
+            let failure = ToolFailure::Tool {
+                error: non_control_error,
+            };
+            serde_json::to_value(failure).unwrap_or_else(|e| {
+                serde_json::json!({
+                    "kind": "serialization",
+                    "message": format!("Failed to serialize tool error: {e}"),
+                })
+            })
+        }
+        ToolError::Serialization(err) => {
+            let failure = ToolFailure::Serialization {
+                message: err.to_string(),
+            };
+            serde_json::to_value(failure).unwrap_or_else(|e| {
+                serde_json::json!({
+                    "kind": "serialization",
+                    "message": format!("Failed to serialize serialization error: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                })
+            })
+        }
+    }
+}
+
+/// This is the type that we write in ToolOutcome::Failure for tool errors.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum ToolFailure {
+    Control { message: String },
+    Serialization { message: String },
+    Tool { error: NonControlToolError },
+    Database { message: String },
 }
 
 #[cfg(test)]
@@ -595,8 +661,8 @@ mod tests {
                     &request.payload,
                     EventPayload::ToolResult {
                         tool_call_event_id: tceid,
-                        outcome: ToolOutcome::Failure { message },
-                    } if *tceid == expected_tool_call_event_id && message == "Tool execution failed"
+                        outcome: ToolOutcome::Failure { error },
+                    } if *tceid == expected_tool_call_event_id && error.get("message") == Some(&serde_json::json!("Tool execution failed"))
                 )
             })
             .returning(|sid, _| {
@@ -611,7 +677,7 @@ mod tests {
             tool_call_event_id,
             tool_name: "failing_tool".to_string(),
             outcome: ToolOutcome::Failure {
-                message: "Tool execution failed".to_string(),
+                error: serde_json::json!({ "kind": "TestError", "message": "Tool execution failed" }),
             },
         };
 

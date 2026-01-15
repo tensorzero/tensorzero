@@ -80,7 +80,7 @@ impl Default for AzureDefaults {
     fn default() -> Self {
         Self {
             api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
-                "AZURE_OPENAI_API_KEY".to_string(),
+                "AZURE_API_KEY".to_string(),
             )),
         }
     }

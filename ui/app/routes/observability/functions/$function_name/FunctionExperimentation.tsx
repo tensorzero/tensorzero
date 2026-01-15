@@ -19,7 +19,7 @@ interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
   functionName: string;
   feedbackTimeseries?: CumulativeFeedbackTimeSeriesPoint[];
-  variantSamplingProbabilities: Record<string, number>;
+  variantSamplingProbabilities: { [key in string]?: number };
 }
 
 export const FunctionExperimentation = memo(function FunctionExperimentation({
@@ -42,9 +42,15 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
   const variantWeights: VariantWeight[] = Object.entries(
     variantSamplingProbabilities,
   )
+    .filter(
+      ([_variant_name, weight]) =>
+        // Technically unnecessary, but ts-rs annotates maps with values as potentially undefined types,
+        // so this makes the type cast below obviously safe.
+        weight !== undefined,
+    )
     .map(([variant_name, weight]) => ({
       variant_name,
-      weight,
+      weight: weight as number,
     }))
     .sort((a, b) => a.variant_name.localeCompare(b.variant_name));
 

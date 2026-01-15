@@ -591,7 +591,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
         FunctionConfig::Json(json_config) => &json_config.output_schema,
         FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     };
-    assert_eq!(output_schema, &StaticJSONSchema::default());
+    assert_eq!(output_schema, &JSONSchema::default());
     assert_eq!(output_schema.value, serde_json::json!({}));
 }
 
@@ -1568,7 +1568,7 @@ async fn test_config_load_shorthand_models_only() {
     .unwrap();
     tensorzero_unsafe_helpers::set_env_var_tests_only("OPENAI_API_KEY", "sk-something");
     tensorzero_unsafe_helpers::set_env_var_tests_only("ANTHROPIC_API_KEY", "sk-something");
-    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_OPENAI_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_API_KEY", "sk-something");
 
     Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.table)))
         .await
@@ -1653,7 +1653,7 @@ fn get_sample_valid_config() -> toml::Table {
     let config_str = include_str!("../../fixtures/config/tensorzero.toml");
     tensorzero_unsafe_helpers::set_env_var_tests_only("OPENAI_API_KEY", "sk-something");
     tensorzero_unsafe_helpers::set_env_var_tests_only("ANTHROPIC_API_KEY", "sk-something");
-    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_OPENAI_API_KEY", "sk-something");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_API_KEY", "sk-something");
 
     let table = DeTable::parse(config_str).expect("Failed to parse sample config");
 

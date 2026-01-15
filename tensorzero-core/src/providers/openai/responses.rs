@@ -22,11 +22,12 @@ use serde_json::{Value, json};
 use tokio::time::Instant;
 use url::Url;
 
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
     error::{Error, ErrorDetails, warn_discarded_thought_block},
     inference::types::{
-        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
-        ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
+        ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
+        Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
         TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, file::Detail,
     },
@@ -36,6 +37,7 @@ use crate::{
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
+use uuid::Uuid;
 
 #[derive(Serialize, Debug)]
 pub struct OpenAIResponsesRequest<'a> {
@@ -113,7 +115,7 @@ pub struct OpenAIResponsesIncompleteDetails {
     reason: String,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct OpenAIResponsesUsage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
@@ -129,6 +131,7 @@ impl From<OpenAIResponsesUsage> for Usage {
 }
 
 impl OpenAIResponsesResponse<'_> {
+    #[expect(clippy::too_many_arguments)]
     pub fn into_provider_response(
         self,
         latency: Latency,
@@ -137,6 +140,7 @@ impl OpenAIResponsesResponse<'_> {
         generic_request: &ModelInferenceRequest<'_>,
         model_name: &str,
         provider_name: &str,
+        model_inference_id: Uuid,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut output = Vec::new();
         for message in self.output {
@@ -241,6 +245,15 @@ impl OpenAIResponsesResponse<'_> {
             None => None,
         };
 
+        let raw_usage = openai_responses_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::Responses,
+                usage,
+            )
+        });
+        let usage = self.usage.map(|u| u.into()).unwrap_or_default();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output,
@@ -248,12 +261,20 @@ impl OpenAIResponsesResponse<'_> {
                 input_messages: generic_request.messages.clone(),
                 raw_request,
                 raw_response: raw_response.clone(),
-                usage: self.usage.map(|u| u.into()).unwrap_or_default(),
-                latency,
+                raw_usage,
+                usage,
+                provider_latency: latency,
                 finish_reason,
+                id: model_inference_id,
             },
         ))
     }
+}
+
+fn openai_responses_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
@@ -1112,6 +1133,7 @@ pub(super) enum OpenAIResponsesStreamEvent {
 #[expect(clippy::too_many_arguments)]
 pub fn stream_openai_responses(
     provider_type: String,
+    model_inference_id: Uuid,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
     discard_unknown_chunks: bool,
@@ -1146,7 +1168,7 @@ pub fn stream_openai_responses(
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -1190,6 +1212,8 @@ pub fn stream_openai_responses(
                             &model_name,
                             &provider_name,
                             &raw_request,
+                            model_inference_id,
+                            &provider_type,
                         );
 
                         match stream_message {
@@ -1239,6 +1263,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
     model_name: &str,
     provider_name: &str,
     raw_request: &str,
+    model_inference_id: Uuid,
+    provider_type: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match event {
         // Text delta - the main content streaming event
@@ -1370,7 +1396,9 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
         // Completed event - extract usage and finish reason
         OpenAIResponsesStreamEvent::ResponseCompleted { response } => {
-            let usage = response.get("usage").map(|u| {
+            // Filter out null values to avoid creating RawUsageEntry with null data
+            let usage_value = response.get("usage").filter(|v| !v.is_null()).cloned();
+            let usage = usage_value.as_ref().map(|u| {
                 let input_tokens = match u.get("input_tokens") {
                     None => None,
                     Some(v) => v.as_u64().map(|v| v as u32),
@@ -1386,6 +1414,14 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                     output_tokens,
                 }
             });
+            let raw_usage = usage_value.map(|usage| {
+                raw_usage_entries_from_value(
+                    model_inference_id,
+                    provider_type,
+                    ApiType::Responses,
+                    usage,
+                )
+            });
 
             // The incomplete_details field indicates if response was cut short
             let finish_reason = if response.get("incomplete_details").is_some() {
@@ -1394,13 +1430,23 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 Some(FinishReason::Stop)
             };
 
-            Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![],
-                usage,
-                raw_message,
-                message_latency,
-                finish_reason,
-            )))
+            Ok(Some(match raw_usage {
+                Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
+                    vec![],
+                    usage,
+                    raw_message,
+                    message_latency,
+                    finish_reason,
+                    Some(entries),
+                ),
+                None => ProviderInferenceResponseChunk::new(
+                    vec![],
+                    usage,
+                    raw_message,
+                    message_latency,
+                    finish_reason,
+                ),
+            }))
         }
 
         // Failed event - return error
@@ -1420,7 +1466,9 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
         // Incomplete event - extract finish reason
         OpenAIResponsesStreamEvent::ResponseIncomplete { response } => {
-            let usage = response.get("usage").map(|u| {
+            // Filter out null values to avoid creating RawUsageEntry with null data
+            let usage_value = response.get("usage").filter(|v| !v.is_null()).cloned();
+            let usage = usage_value.as_ref().map(|u| {
                 let input_tokens = match u.get("input_tokens") {
                     None => None,
                     Some(v) => v.as_u64().map(|v| v as u32),
@@ -1437,13 +1485,32 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 }
             });
 
-            Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![],
-                usage,
-                raw_message,
-                message_latency,
-                Some(FinishReason::Length),
-            )))
+            let raw_usage = usage_value.map(|usage| {
+                raw_usage_entries_from_value(
+                    model_inference_id,
+                    provider_type,
+                    ApiType::Responses,
+                    usage,
+                )
+            });
+
+            Ok(Some(match raw_usage {
+                Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
+                    vec![],
+                    usage,
+                    raw_message,
+                    message_latency,
+                    Some(FinishReason::Length),
+                    Some(entries),
+                ),
+                None => ProviderInferenceResponseChunk::new(
+                    vec![],
+                    usage,
+                    raw_message,
+                    message_latency,
+                    Some(FinishReason::Length),
+                ),
+            }))
         }
 
         // Refusal - treat as an error
@@ -1753,6 +1820,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -1789,6 +1858,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -1836,6 +1907,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -1878,6 +1951,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -1917,6 +1992,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -1963,6 +2040,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -1997,6 +2076,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -2028,6 +2109,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -2057,6 +2140,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -2096,6 +2181,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         );
 
         assert!(result.is_err());
@@ -2103,13 +2190,14 @@ mod tests {
 
     #[test]
     fn test_response_completed_conversion() {
+        let usage_json = serde_json::json!({
+            "input_tokens": 15,
+            "output_tokens": 25
+        });
         let response_json = serde_json::json!({
             "id": "resp_123",
             "status": "completed",
-            "usage": {
-                "input_tokens": 15,
-                "output_tokens": 25
-            }
+            "usage": usage_json
         });
 
         let event = OpenAIResponsesStreamEvent::ResponseCompleted {
@@ -2119,6 +2207,7 @@ mod tests {
         let mut tool_id = None;
         let mut tool_name = None;
 
+        let model_inference_id = Uuid::now_v7();
         let result = openai_responses_to_tensorzero_chunk(
             "raw_json".to_string(),
             event,
@@ -2129,6 +2218,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            model_inference_id,
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -2139,23 +2230,35 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
-            })
+            }),
+            "expected usage to include provider raw_usage entries"
+        );
+        assert_eq!(
+            result.raw_usage,
+            Some(raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::Responses,
+                usage_json,
+            )),
+            "expected raw_usage to include provider raw_usage entries"
         );
         assert_eq!(result.finish_reason, Some(FinishReason::Stop));
     }
 
     #[test]
     fn test_response_incomplete_conversion() {
+        let usage_json = serde_json::json!({
+            "input_tokens": 10,
+            "output_tokens": 100
+        });
         let response_json = serde_json::json!({
             "id": "resp_123",
             "status": "incomplete",
             "incomplete_details": {
                 "reason": "max_output_tokens"
             },
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 100
-            }
+            "usage": usage_json
         });
 
         let event = OpenAIResponsesStreamEvent::ResponseIncomplete {
@@ -2165,6 +2268,7 @@ mod tests {
         let mut tool_id = None;
         let mut tool_name = None;
 
+        let model_inference_id = Uuid::now_v7();
         let result = openai_responses_to_tensorzero_chunk(
             "raw_json".to_string(),
             event,
@@ -2175,6 +2279,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            model_inference_id,
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -2185,7 +2291,18 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(100),
-            })
+            }),
+            "expected usage to include provider raw_usage entries"
+        );
+        assert_eq!(
+            result.raw_usage,
+            Some(raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::Responses,
+                usage_json,
+            )),
+            "expected raw_usage to include provider raw_usage entries"
         );
     }
 
@@ -2217,6 +2334,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         );
 
         assert!(result.is_err());
@@ -2244,6 +2363,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         );
 
         assert!(result.is_err());
@@ -2271,6 +2392,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         );
 
         assert!(result.is_err());
@@ -2311,6 +2434,8 @@ mod tests {
                 "test_model",
                 "test_provider",
                 "",
+                Uuid::now_v7(),
+                PROVIDER_TYPE,
             )
             .unwrap();
 
@@ -2339,6 +2464,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -2379,6 +2506,8 @@ mod tests {
             "test_model",
             "test_provider",
             "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
 
@@ -2480,6 +2609,7 @@ mod tests {
             &generic_request,
             "test-model",
             "test-provider",
+            Uuid::now_v7(),
         );
 
         assert!(result.is_ok());
@@ -2578,6 +2708,7 @@ mod tests {
             &generic_request,
             "gpt-5-nano",
             "openai",
+            Uuid::now_v7(),
         );
 
         assert!(result.is_ok());

@@ -29,7 +29,7 @@ use crate::inference::types::{
     role::{ASSISTANT_TEXT_TEMPLATE_VAR, SYSTEM_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR},
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::variant::JsonMode;
@@ -50,7 +50,7 @@ use super::{
 #[ts(export)]
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
-    pub schema: Option<StaticJSONSchema>,
+    pub schema: Option<JSONSchema>,
     // If true, this is a template declared with the legacy `user_template`/`assistant_template`/`system_template`
     // or `input_wrappers.user`/`input_wrappers.assistant`/`input_wrappers.system` fields.
     // We allow using these templates without a schema, in which case we inject the special variable
@@ -809,7 +809,7 @@ pub enum TemplateKind {
 
 pub fn validate_legacy_template_and_schema(
     kind: TemplateKind,
-    schema: Option<&StaticJSONSchema>,
+    schema: Option<&JSONSchema>,
     template: Option<&TemplateWithSchema>,
     templates: &TemplateConfig,
 ) -> Result<(), Error> {
@@ -900,7 +900,7 @@ mod tests {
         Arguments, ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode,
         Usage,
     };
-    use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
+    use crate::jsonschema_util::JSONSchema;
     use crate::minijinja_util::tests::{
         get_assistant_template, get_greeting_with_age_template, get_system_filled_template,
         get_system_template, get_test_template_config, test_assistant_template_schema,
@@ -1303,6 +1303,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let system_template = get_system_template();
@@ -1332,7 +1333,7 @@ mod tests {
             },
         )
         .unwrap();
-        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
+        let schema_any = JSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::load(
@@ -1846,8 +1847,8 @@ mod tests {
             "additionalProperties": false
         });
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
-        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
+        let output_schema = JSONSchema::from_value(output_schema).unwrap();
+        let schema_any = JSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
@@ -2035,9 +2036,8 @@ mod tests {
         });
         let json_mode_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
-        let hardcoded_output_schema =
-            StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
-        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
+        let hardcoded_output_schema = JSONSchema::from_value(hardcoded_output_schema).unwrap();
+        let schema_any = JSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
@@ -2068,7 +2068,7 @@ mod tests {
             },
         };
         // Will dynamically set "answer" instead of "response"
-        let output_schema = DynamicJSONSchema::new(serde_json::json!({
+        let output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {
@@ -2168,9 +2168,8 @@ mod tests {
         });
         let json_mode_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
-        let hardcoded_output_schema =
-            StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
-        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
+        let hardcoded_output_schema = JSONSchema::from_value(hardcoded_output_schema).unwrap();
+        let schema_any = JSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
@@ -2189,7 +2188,7 @@ mod tests {
         }));
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
-        let output_schema = DynamicJSONSchema::new(serde_json::json!({
+        let output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
             "properties": {
                 "response": {
@@ -2319,9 +2318,10 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let templates = Box::leak(Box::new(get_test_template_config().await));
-        let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
+        let schema_any = JSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::load(
@@ -2744,7 +2744,7 @@ mod tests {
             variants: HashMap::new(),
             schemas: SchemaData::load(None, None, None, UninitializedSchemas::default(), "test")
                 .unwrap(),
-            output_schema: StaticJSONSchema::from_value(output_schema_value.clone()).unwrap(),
+            output_schema: JSONSchema::from_value(output_schema_value.clone()).unwrap(),
             ..Default::default()
         });
         let inference_config = InferenceConfig {
@@ -2821,7 +2821,7 @@ mod tests {
         assert_eq!(inference_params.chat_completion.max_tokens, None);
         assert_eq!(inference_params.chat_completion.seed, None);
 
-        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+        let dynamic_output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {
@@ -2874,7 +2874,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config().await;
-        let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
+        let schema = JSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))
@@ -2952,7 +2952,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config().await; // Default TemplateConfig
-        let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
+        let schema = JSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))

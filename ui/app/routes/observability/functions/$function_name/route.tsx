@@ -29,7 +29,6 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { TimeWindow } from "~/types/tensorzero";
-import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { applyPaginationLogic } from "~/utils/pagination";
 
@@ -113,21 +112,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     : Promise.resolve(undefined);
 
   // Get variant sampling probabilities from the gateway
-  // Skip for default function - it has no configured variants
-  const variantSamplingProbabilitiesPromise = (async () => {
-    if (function_name === DEFAULT_FUNCTION) {
-      return {};
-    }
-    try {
-      const tensorZeroClient = await getNativeTensorZeroClient();
-      return await tensorZeroClient.getVariantSamplingProbabilities(
-        function_name,
-      );
-    } catch (error) {
-      logger.error("Failed to get variant sampling probabilities:", error);
-      return {};
-    }
-  })();
+  const variantSamplingProbabilitiesPromise = tensorZeroClient
+    .getVariantSamplingProbabilities(function_name)
+    .then((response) => response.probabilities);
 
   const [
     inferenceResult,

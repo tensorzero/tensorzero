@@ -58,7 +58,7 @@ test.describe("Inference Filtering", () => {
     await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
 
     // Select function using FunctionSelector (combobox pattern)
-    await page.getByRole("combobox", { name: "Function filter" }).click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Apply filters and wait for results
@@ -216,7 +216,7 @@ test.describe("Inference Filtering", () => {
     await page.getByRole("button", { name: "Demonstration" }).click();
 
     // Also select a specific function to ensure deterministic results
-    await page.getByRole("combobox", { name: "Function filter" }).click();
+    await page.getByPlaceholder("Select function").click();
     await page
       .getByRole("option", { name: "json_success_no_input_schema" })
       .click();
@@ -244,7 +244,7 @@ test.describe("Inference Filtering", () => {
     await page.getByRole("button", { name: "Demonstration" }).click();
 
     // Also select a specific function to ensure deterministic results
-    await page.getByRole("combobox", { name: "Function filter" }).click();
+    await page.getByPlaceholder("Select function").click();
     await page
       .getByRole("option", { name: "json_success_no_input_schema" })
       .click();
@@ -324,7 +324,7 @@ test.describe("Inference Filtering", () => {
     await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
 
     // Select function
-    await page.getByRole("combobox", { name: "Function filter" }).click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Select variant from dropdown

@@ -42,6 +42,11 @@ use crate::inference::types::chat_completion_inference_params::{
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::{Detail, mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
+use crate::inference::types::usage::raw_usage_entries_from_value;
+use crate::inference::types::{
+    ApiType, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+    ThoughtChunk,
+};
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -49,10 +54,12 @@ use crate::inference::types::{
     TextChunk, Unknown, Usage,
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
 };
-use crate::inference::types::{
-    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
-};
 use crate::model::{Credential, ModelProvider};
+use crate::providers::helpers::{
+    InjectedResponse, convert_stream_error, inject_extra_request_data_and_send,
+    inject_extra_request_data_and_send_eventsource_with_headers,
+    inject_extra_request_data_and_send_with_headers,
+};
 use crate::providers::openai::responses::{
     OpenAIResponsesInput, OpenAIResponsesInputInner, OpenAIResponsesInputMessage,
     OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,
@@ -61,12 +68,6 @@ use crate::providers::openai::responses::{
 use crate::tool::{
     FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolCallConfig,
     ToolChoice, ToolConfigRef,
-};
-
-use crate::providers::helpers::{
-    InjectedResponse, convert_stream_error, inject_extra_request_data_and_send,
-    inject_extra_request_data_and_send_eventsource_with_headers,
-    inject_extra_request_data_and_send_with_headers,
 };
 
 use super::helpers::{JsonlBatchFileInfo, parse_jsonl_batch_file};
@@ -92,7 +93,7 @@ type PreparedOpenAIToolsResult<'a> = (
     Option<bool>,
 );
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -153,6 +154,10 @@ impl OpenAIProvider {
 
     pub fn model_name(&self) -> &str {
         &self.model_name
+    }
+
+    pub fn api_type(&self) -> OpenAIAPIType {
+        self.api_type
     }
 }
 
@@ -253,6 +258,7 @@ impl WrappedProvider for OpenAIProvider {
             provider_name,
             model_name,
             otlp_config: _,
+            model_inference_id: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
         match self.api_type {
@@ -297,6 +303,7 @@ impl WrappedProvider for OpenAIProvider {
         latency: Latency,
         model_name: &str,
         provider_name: &str,
+        model_inference_id: Uuid,
     ) -> Result<ProviderInferenceResponse, Error> {
         match self.api_type {
             OpenAIAPIType::Responses => {
@@ -321,6 +328,7 @@ impl WrappedProvider for OpenAIProvider {
                     request,
                     model_name,
                     provider_name,
+                    model_inference_id,
                 )
             }
             OpenAIAPIType::ChatCompletions => {
@@ -342,6 +350,7 @@ impl WrappedProvider for OpenAIProvider {
                     latency,
                     raw_request,
                     generic_request: request,
+                    model_inference_id,
                 }
                 .try_into()
             }
@@ -355,9 +364,11 @@ impl WrappedProvider for OpenAIProvider {
         >,
         start_time: Instant,
         raw_request: &str,
+        model_inference_id: Uuid,
     ) -> ProviderInferenceResponseStreamInner {
         stream_openai(
             PROVIDER_TYPE.to_string(),
+            model_inference_id,
             event_source,
             start_time,
             None,
@@ -453,6 +464,7 @@ impl InferenceProvider for OpenAIProvider {
                         request.request,
                         request.model_name,
                         request.provider_name,
+                        request.model_inference_id,
                     )
                 }
                 OpenAIAPIType::ChatCompletions => {
@@ -477,6 +489,7 @@ impl InferenceProvider for OpenAIProvider {
                         latency,
                         raw_request: raw_request.clone(),
                         generic_request: request.request,
+                        model_inference_id: request.model_inference_id,
                     }
                     .try_into()?)
                 }
@@ -519,6 +532,7 @@ impl InferenceProvider for OpenAIProvider {
             provider_name,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -583,6 +597,7 @@ impl InferenceProvider for OpenAIProvider {
                 let request_id = extract_request_id(&headers);
                 let stream = stream_openai_responses(
                     PROVIDER_TYPE.to_string(),
+                    model_inference_id,
                     event_source.map_err(TensorZeroEventError::EventSource),
                     start_time,
                     model_provider.discard_unknown_chunks,
@@ -637,6 +652,7 @@ impl InferenceProvider for OpenAIProvider {
                 let request_id = extract_request_id(&headers);
                 let stream = stream_openai(
                     PROVIDER_TYPE.to_string(),
+                    model_inference_id,
                     event_source.map_err(TensorZeroEventError::EventSource),
                     start_time,
                     request_id,
@@ -1000,6 +1016,7 @@ impl EmbeddingProvider for OpenAIProvider {
 
 pub fn stream_openai(
     provider_type: String,
+    model_inference_id: Uuid,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
     request_id: Option<String>,
@@ -1027,7 +1044,7 @@ pub fn stream_openai(
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -1053,7 +1070,14 @@ pub fn stream_openai(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
+                            openai_to_tensorzero_chunk(
+                                message.data,
+                                d,
+                                latency,
+                                &mut tool_call_ids,
+                                model_inference_id,
+                                &provider_type,
+                            )
                         });
                         if stream_message.as_ref().is_ok_and(|chunk| !chunk.content.is_empty()) {
                             saw_content_block = true;
@@ -2649,6 +2673,7 @@ struct OpenAIResponseWithMetadata<'a> {
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     raw_response: String,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -2660,6 +2685,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             raw_request,
             raw_response,
             generic_request,
+            model_inference_id,
         } = value;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -2695,6 +2721,14 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         };
+        let raw_usage = openai_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
@@ -2705,9 +2739,11 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 input_messages: messages,
                 raw_request,
                 raw_response: raw_response.clone(),
+                raw_usage,
                 usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
+                id: model_inference_id,
             },
         ))
     }
@@ -2787,6 +2823,8 @@ fn openai_to_tensorzero_chunk(
     mut chunk: OpenAIChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
+    model_inference_id: Uuid,
+    provider_type: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -2797,6 +2835,14 @@ fn openai_to_tensorzero_chunk(
         }
         .into());
     }
+    let raw_usage = openai_usage_from_raw_response(&raw_message).map(|usage| {
+        raw_usage_entries_from_value(
+            model_inference_id,
+            provider_type,
+            ApiType::ChatCompletions,
+            usage,
+        )
+    });
     let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
@@ -2852,13 +2898,25 @@ fn openai_to_tensorzero_chunk(
         }
     }
 
-    Ok(ProviderInferenceResponseChunk::new(
-        content,
-        usage,
-        raw_message,
-        latency,
-        finish_reason,
-    ))
+    Ok(match raw_usage {
+        Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
+            content,
+            usage,
+            raw_message,
+            latency,
+            finish_reason,
+            Some(entries),
+        ),
+        None => {
+            ProviderInferenceResponseChunk::new(content, usage, raw_message, latency, finish_reason)
+        }
+    })
+}
+
+fn openai_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 #[derive(Debug, Serialize)]
@@ -2929,15 +2987,27 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             .into_iter()
             .map(|embedding| embedding.embedding)
             .collect();
-
-        Ok(EmbeddingProviderResponse::new(
+        let provider_usage = response.usage;
+        let usage = provider_usage.clone().map(Into::into).unwrap_or_default();
+        let raw_usage_value = openai_usage_from_raw_response(&raw_response);
+        let mut embedding_response = EmbeddingProviderResponse::new(
             embeddings,
             request.input.clone(),
             raw_request,
             raw_response,
-            response.usage.map(|usage| usage.into()).unwrap_or_default(),
+            usage,
             latency,
-        ))
+            None,
+        );
+        embedding_response.raw_usage = raw_usage_value.map(|usage| {
+            raw_usage_entries_from_value(
+                embedding_response.id,
+                PROVIDER_TYPE,
+                ApiType::Embeddings,
+                usage,
+            )
+        });
+        Ok(embedding_response)
     }
 }
 
@@ -3600,6 +3670,7 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -3611,7 +3682,7 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_millis(100)
             }
@@ -3691,6 +3762,7 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -3709,7 +3781,7 @@ mod tests {
             Some(FinishReason::ToolCall)
         );
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_millis(110)
             }
@@ -3752,6 +3824,7 @@ mod tests {
             raw_request: serde_json::to_string(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -3806,6 +3879,7 @@ mod tests {
             raw_request: serde_json::to_string(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -4010,6 +4084,8 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -4044,6 +4120,8 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -4079,6 +4157,8 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap_err();
         let details = error.get_details();
@@ -4115,6 +4195,8 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(
@@ -4131,27 +4213,66 @@ mod tests {
 
         // Check a chunk with no choices and only usage
         // Test a correct new tool chunk
+        let usage = OpenAIUsage {
+            prompt_tokens: Some(10),
+            completion_tokens: Some(20),
+        };
         let chunk = OpenAIChatChunk {
             choices: vec![],
-            usage: Some(OpenAIUsage {
-                prompt_tokens: Some(10),
-                completion_tokens: Some(20),
-            }),
+            usage: Some(usage.clone()),
         };
+        let model_inference_id = Uuid::now_v7();
+        let raw_message = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+                "prompt_tokens_details": {
+                    "cached_tokens": 2
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1
+                }
+            }
+        })
+        .to_string();
         let message = openai_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
+            raw_message,
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
+            model_inference_id,
+            PROVIDER_TYPE,
         )
         .unwrap();
+        let expected_raw_usage = Some(raw_usage_entries_from_value(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            serde_json::json!({
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+                "prompt_tokens_details": {
+                    "cached_tokens": 2
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1
+                }
+            }),
+        ));
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-            })
+            }),
+            "expected usage to include provider raw_usage entries"
+        );
+        assert_eq!(
+            message.raw_usage, expected_raw_usage,
+            "expected raw_usage to include provider raw_usage entries"
         );
     }
 

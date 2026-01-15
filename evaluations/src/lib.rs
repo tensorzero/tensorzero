@@ -20,8 +20,8 @@ pub use types::*;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::Input;
 use tensorzero_core::client::{
-    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams,
-    InferenceOutput, InferenceParams, InferenceResponse,
+    ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams, InferenceOutput,
+    InferenceParams, InferenceResponse, PostgresConfig,
     input_handling::resolved_input_to_client_input,
 };
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
@@ -42,13 +42,11 @@ use tokio::{
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
-pub mod betting_confidence_sequences;
 pub mod cli;
 pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 pub mod stopping;
-pub mod topk;
 pub mod types;
 
 /// Buffer size for the mpsc channel used to stream evaluation updates.
@@ -56,7 +54,7 @@ pub mod types;
 const EVALUATION_CHANNEL_BUFFER_SIZE: usize = 128;
 
 pub struct Clients {
-    pub tensorzero_client: Client,
+    pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
@@ -173,7 +171,7 @@ pub async fn run_evaluation(
         }
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
-            postgres_url,
+            postgres_config: postgres_url.map(PostgresConfig::Url),
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
             verify_credentials: true,
@@ -184,8 +182,11 @@ pub async fn run_evaluation(
     .await
     .map_err(|e| anyhow!("Failed to build client: {e}"))?;
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
     let core_args = EvaluationCoreArgs {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse_client.clone(),
         evaluation_config,
         function_configs,
@@ -275,6 +276,72 @@ pub async fn run_evaluation(
     Ok(())
 }
 
+/// Run an evaluation using the gateway's `AppStateData` directly.
+///
+/// This is a higher-level function that sets up the evaluation infrastructure and
+/// calls `run_evaluation_core_streaming`. It's used by:
+/// - The gateway HTTP handler (`run_evaluation_handler`)
+/// - Embedded mode in durable-tools
+///
+/// This function:
+/// 1. Creates a fresh ClickHouse client for the evaluation (with independent batch writer)
+/// 2. Creates an `AppStateInferenceExecutor` to call inference/feedback endpoints directly
+/// 3. Builds the function configs table
+/// 4. Generates a new evaluation run ID
+/// 5. Calls `run_evaluation_core_streaming` with the prepared args
+///
+/// ## Returns
+///
+/// Returns `EvaluationStreamResult` containing:
+/// - `receiver`: Channel receiver for consuming `EvaluationUpdate` messages
+/// - `run_info`: Metadata (evaluation_run_id, num_datapoints)
+/// - `evaluation_config`: The evaluation configuration
+#[instrument(skip_all, fields(evaluation_name = %params.evaluation_name, dataset_name = ?params.dataset_name, variant = ?params.variant, concurrency = %params.concurrency))]
+pub async fn run_evaluation_with_app_state(
+    app_state: tensorzero_core::utils::gateway::AppStateData,
+    params: RunEvaluationWithAppStateParams,
+) -> Result<EvaluationStreamResult> {
+    // Create a fresh ClickHouse client for the evaluation (with independent batch writer)
+    let clickhouse_client = app_state
+        .clickhouse_connection_info
+        .recreate()
+        .await
+        .map_err(|e| anyhow!("Failed to create ClickHouse client for evaluation: {e}"))?;
+
+    // Create AppStateInferenceExecutor to call handlers directly without HTTP overhead
+    let inference_executor = Arc::new(AppStateInferenceExecutor::new(app_state));
+
+    // Extract function name from evaluation config
+    let EvaluationConfig::Inference(ref inference_eval_config) = params.evaluation_config;
+    let function_name = inference_eval_config.function_name.clone();
+
+    // Build function configs table
+    let mut function_configs = EvaluationFunctionConfigTable::new();
+    function_configs.insert(function_name, params.function_config);
+    let function_configs = Arc::new(function_configs);
+
+    // Generate a new evaluation run ID
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Build the core args
+    let core_args = EvaluationCoreArgs {
+        inference_executor,
+        clickhouse_client,
+        evaluation_config: Arc::new(params.evaluation_config),
+        function_configs,
+        dataset_name: params.dataset_name,
+        datapoint_ids: params.datapoint_ids,
+        variant: params.variant,
+        evaluation_name: params.evaluation_name,
+        evaluation_run_id,
+        inference_cache: params.cache_mode,
+        concurrency: params.concurrency,
+    };
+
+    // Run the evaluation
+    run_evaluation_core_streaming(core_args, params.max_datapoints, params.precision_targets).await
+}
+
 /// Core streaming evaluation function with optional adaptive stopping.
 ///
 /// This function runs an evaluation and streams results as they complete via an mpsc channel.
@@ -352,7 +419,7 @@ pub async fn run_evaluation_core_streaming(
     // Build the semaphore and clients
     let semaphore = Arc::new(Semaphore::new(args.concurrency));
     let clients = Arc::new(Clients {
-        tensorzero_client: args.tensorzero_client,
+        inference_executor: args.inference_executor,
         clickhouse_client: args.clickhouse_client,
     });
 
@@ -446,6 +513,9 @@ pub async fn run_evaluation_core_streaming(
     // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
     let cancellation_tokens_arc = Arc::new(stopping_manager.get_tokens().clone());
 
+    // Save batcher_join_handle before moving clients into batch_params
+    let batcher_join_handle = clients.clickhouse_client.batcher_join_handle();
+
     // Build batch processing params
     let batch_params = ProcessBatchParams {
         clients,
@@ -517,6 +587,7 @@ pub async fn run_evaluation_core_streaming(
         receiver,
         run_info,
         evaluation_config: evaluators,
+        batcher_join_handle,
     })
 }
 
@@ -669,6 +740,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         stream: Some(false),
         params: InferenceParams::default(),
         include_original_response: false,
+        include_raw_usage: false,
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
@@ -679,7 +751,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         api_key: None,
     };
     debug!("Making inference request");
-    let inference_result = clients.tensorzero_client.inference(params).await?;
+    let inference_result = clients.inference_executor.inference(params).await?;
     match inference_result {
         InferenceOutput::NonStreaming(inference_response) => {
             debug!(inference_id = %inference_response.inference_id(), "Inference completed successfully");
@@ -800,9 +872,8 @@ pub async fn process_batch(
             .input()
             .clone()
             .into_stored_input_without_file_handling()?;
-        let resolved_input = stored_input
-            .reresolve(&params.clients.tensorzero_client)
-            .await?;
+        let resolver = ExecutorStorageResolver(params.clients.inference_executor.clone());
+        let resolved_input = stored_input.reresolve(&resolver).await?;
         let input = Arc::new(resolved_input_to_client_input(resolved_input)?);
         datapoints_with_inputs.push((Arc::new(datapoint), input));
     }

@@ -167,7 +167,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Install pnpm
         run: |
@@ -217,7 +217,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Install pnpm
         run: |
@@ -434,7 +434,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Install pnpm
         run: |
@@ -575,7 +575,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Install pnpm
         run: |
@@ -658,13 +658,10 @@ jobs:
       # - name: Run nb-clean
       #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
-      - name: Install cargo-nextest, cargo-deny, and cargo-hack
+      - name: Install cargo-nextest and cargo-hack
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
-          tool: cargo-nextest,cargo-deny,cargo-hack
-
-      - name: Run cargo-deny
-        run: cargo deny check
+          tool: cargo-nextest,cargo-hack
 
       - name: Check durable dependencies
         run: ./ci/check-durable-deps.sh
@@ -684,6 +681,24 @@ jobs:
 
       - name: Lint Helm charts
         run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
+
+  # This job is intentionally NOT included in check-all-general-jobs-passed
+  # It runs as an optional check that shows up in the PR but doesn't block merging
+  cargo-deny:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        with:
+          tool: cargo-deny
+
+      - name: Run cargo-deny
+        run: cargo deny check
 
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
@@ -1150,6 +1165,16 @@ jobs:
     needs: [build-mock-provider-api-container]
     secrets: inherit
 
+  autopilot-e2e:
+    permissions:
+      contents: read
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    needs: [build-gateway-e2e-container]
+    uses: ./.github/workflows/dispatch-autopilot-e2e.yml
+    secrets:
+      AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
+      AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
@@ -1183,6 +1208,7 @@ jobs:
         ui-tests-e2e-regen-model-inference-cache,
         mock-optimization-tests,
         run-merge-queue-checks,
+        autopilot-e2e,
       ]
     runs-on: ubuntu-latest
     steps:

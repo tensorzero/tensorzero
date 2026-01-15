@@ -12,6 +12,11 @@
   "contextual": {
     "options": ["copy", "view", "chatgpt", "claude"]
   },
+  "integrations": {
+    "gtm": {
+      "tagId": "GTM-M57LVZ4N"
+    }
+  },
   "navigation": {
     "tabs": [
       {
@@ -76,13 +81,20 @@
             ]
           },
           {
+            "group": "Observability",
+            "pages": ["observability/query-historical-inferences"]
+          },
+          {
             "group": "Optimization",
             "pages": [
-              "recipes/index",
+              "optimization/index",
               {
                 "group": "Guides",
                 "expanded": true,
-                "pages": ["optimization/gepa"]
+                "pages": [
+                  "optimization/dynamic-in-context-learning-dicl",
+                  "optimization/gepa"
+                ]
               }
             ]
           },
@@ -411,6 +423,14 @@
     {
       "source": "/gateway/tutorial/",
       "destination": "/quickstart"
+    },
+    {
+      "source": "/recipes",
+      "destination": "/optimization"
+    },
+    {
+      "source": "/recipes/",
+      "destination": "/optimization"
     }
   ]
 }

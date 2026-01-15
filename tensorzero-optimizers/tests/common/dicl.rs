@@ -83,7 +83,7 @@ pub async fn test_dicl_optimization_chat() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
@@ -195,7 +195,7 @@ pub async fn test_dicl_optimization_chat() {
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -367,7 +367,7 @@ pub async fn test_dicl_optimization_json() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
@@ -479,7 +479,7 @@ pub async fn test_dicl_optimization_json() {
 
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
-        postgres_url: None,
+        postgres_config: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
@@ -659,6 +659,7 @@ fn create_inference_params(
         otlp_traces_extra_attributes: Default::default(),
         otlp_traces_extra_resources: Default::default(),
         api_key: None,
+        include_raw_usage: false,
     }
 }
 

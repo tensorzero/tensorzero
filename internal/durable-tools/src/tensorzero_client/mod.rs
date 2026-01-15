@@ -18,8 +18,8 @@ pub use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
     GetConfigResponse, GetDatapointsResponse, InferenceResponse, ListDatapointsRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
-    WriteConfigResponse,
+    PostgresConfig, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::cache::CacheEnabledMode;
@@ -73,9 +73,12 @@ pub enum TensorZeroClientError {
     Evaluation(String),
 }
 
-// TODO: These evaluation types are defined here temporarily because there is no HTTP
-// endpoint for evaluations yet. Once an HTTP endpoint is added, these should be replaced
-// with the wire types from tensorzero-core (re-exported through the SDK).
+// Note: These evaluation types are specific to durable-tools and cannot be replaced with
+// the HTTP wire types from gateway/src/routes/evaluations.rs. The HTTP endpoint uses SSE
+// streaming with per-datapoint events, while these types provide an aggregated response
+// suitable for tool use cases. Additionally, RunEvaluationParams takes only evaluation_name
+// (looking up config internally), while the HTTP endpoint requires the caller to pass in
+// the resolved evaluation_config and function_config.
 
 /// Parameters for running an evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -384,12 +387,12 @@ pub fn http_gateway_client(url: Url) -> Result<Arc<dyn TensorZeroClient>, Client
 pub async fn embedded_gateway_client(
     config_file: Option<PathBuf>,
     clickhouse_url: Option<String>,
-    postgres_url: Option<String>,
+    postgres_config: Option<String>,
 ) -> Result<Arc<dyn TensorZeroClient>, ClientBuilderError> {
     let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file,
         clickhouse_url,
-        postgres_url,
+        postgres_config: postgres_config.map(PostgresConfig::Url),
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: false,

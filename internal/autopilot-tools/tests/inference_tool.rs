@@ -23,79 +23,6 @@ use common::{MockTensorZeroClient, create_mock_chat_response};
 use crate::common::create_mock_stored_chat_inference;
 
 #[sqlx::test(migrator = "MIGRATOR")]
-async fn test_inference_tool_without_snapshot_hash(pool: PgPool) {
-    // Create mock response
-    let mock_response = create_mock_chat_response("Hello from mock!");
-
-    // Prepare test data
-    let session_id = Uuid::now_v7();
-    let tool_call_event_id = Uuid::now_v7();
-
-    let input = Input {
-        system: None,
-        messages: vec![InputMessage {
-            role: Role::User,
-            content: vec![InputMessageContent::Text(Text {
-                text: "Hello".to_string(),
-            })],
-        }],
-    };
-
-    let llm_params = InferenceToolParams {
-        function_name: Some("test_function".to_string()),
-        model_name: None,
-        input,
-        params: Default::default(),
-        variant_name: None,
-        dynamic_tool_params: Default::default(),
-        output_schema: None,
-    };
-
-    let side_info = AutopilotSideInfo {
-        tool_call_event_id,
-        session_id,
-        config_snapshot_hash: None,
-        optimization: OptimizationWorkflowSideInfo::default(),
-    };
-
-    // Create mock client with expectations
-    let mut mock_client = MockTensorZeroClient::new();
-    mock_client
-        .expect_inference()
-        .withf(move |params| {
-            params.function_name == Some("test_function".to_string())
-                && params.episode_id.is_none()
-                && params.dryrun == Some(false)
-                && params.stream == Some(false)
-                && params.internal
-                && params.tags.get("tensorzero::autopilot::session_id")
-                    == Some(&session_id.to_string())
-                && params.tags.get("tensorzero::autopilot::tool_call_event_id")
-                    == Some(&tool_call_event_id.to_string())
-        })
-        .returning(move |_| Ok(mock_response.clone()));
-
-    // Create the tool and context
-    let tool = InferenceTool;
-    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
-
-    // Execute the tool
-    let result = tool
-        .execute_erased(
-            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
-            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
-            ctx,
-            "test-idempotency-key",
-        )
-        .await
-        .expect("InferenceTool execution should succeed");
-
-    // The result should be an InferenceResponse (serialized as JSON)
-    assert!(result.is_object(), "Result should be a JSON object");
-}
-
-#[sqlx::test(migrator = "MIGRATOR")]
 async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
     // Create mock response
     let mock_response = create_mock_chat_response("Hello from action!");
@@ -130,7 +57,7 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: Some(test_snapshot_hash.to_string()),
+        config_snapshot_hash: test_snapshot_hash.to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -193,7 +120,7 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -237,7 +164,7 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -286,7 +213,7 @@ async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -322,7 +249,7 @@ async fn test_list_inferences_tool_error(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: None,
+        config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 

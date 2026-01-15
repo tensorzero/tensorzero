@@ -10,9 +10,11 @@ use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
+use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
@@ -20,10 +22,11 @@ use crate::{
     inference::{
         InferenceProvider,
         types::{
-            ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
-            ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-            ProviderInferenceResponse, ProviderInferenceResponseArgs,
-            ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, Usage,
+            ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
+            ModelInferenceRequest, ModelInferenceRequestJsonMode,
+            PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+            ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStreamInner, TextChunk, Usage,
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
@@ -39,6 +42,7 @@ use crate::{
     },
     tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
 };
+use uuid::Uuid;
 
 use super::openai::{
     OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolType, get_chat_url,
@@ -158,6 +162,7 @@ impl InferenceProvider for MistralProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -228,6 +233,7 @@ impl InferenceProvider for MistralProvider {
                 raw_response,
                 raw_request,
                 generic_request: request,
+                model_inference_id,
             }
             .try_into()
         } else {
@@ -255,6 +261,7 @@ impl InferenceProvider for MistralProvider {
             provider_name: _,
             model_name,
             otlp_config: _,
+            model_inference_id,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -291,7 +298,8 @@ impl InferenceProvider for MistralProvider {
             builder,
         )
         .await?;
-        let stream = stream_mistral(event_source, start_time, &raw_request).peekable();
+        let stream =
+            stream_mistral(event_source, start_time, &raw_request, model_inference_id).peekable();
         Ok((stream, raw_request))
     }
 
@@ -350,6 +358,7 @@ pub fn stream_mistral(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     raw_request: &str,
+    model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
     Box::pin(async_stream::stream! {
@@ -357,7 +366,7 @@ pub fn stream_mistral(
             let mut last_tool_name = None;
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -377,7 +386,14 @@ pub fn stream_mistral(
                             }.into());
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            mistral_to_tensorzero_chunk(message.data, d, latency, &mut last_tool_name)
+                            mistral_to_tensorzero_chunk(
+                                message.data,
+                                d,
+                                latency,
+                                &mut last_tool_name,
+                                model_inference_id,
+                                PROVIDER_TYPE,
+                            )
                         });
                         yield stream_message;
                     }
@@ -709,6 +725,7 @@ struct MistralResponseWithMetadata<'a> {
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_inference_id: Uuid,
 }
 
 impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -720,6 +737,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             latency,
             raw_request,
             generic_request,
+            model_inference_id,
         } = value;
         if response.choices.len() != 1 {
             return Err(Error::new(ErrorDetails::InferenceServer {
@@ -732,7 +750,6 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 raw_response: Some(raw_response.clone()),
             }));
         }
-        let usage = response.usage.into();
         let MistralResponseChoice {
             message,
             finish_reason,
@@ -757,6 +774,15 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
+        let raw_usage = mistral_usage_from_raw_response(&raw_response).map(|usage| {
+            raw_usage_entries_from_value(
+                model_inference_id,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+                usage,
+            )
+        });
+        let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -767,8 +793,10 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 raw_request,
                 raw_response: raw_response.clone(),
                 usage,
-                latency,
+                raw_usage,
+                provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
+                id: model_inference_id,
             },
         ))
     }
@@ -819,6 +847,8 @@ fn mistral_to_tensorzero_chunk(
     mut chunk: MistralChatChunk,
     latency: Duration,
     last_tool_name: &mut Option<String>,
+    model_inference_id: Uuid,
+    provider_type: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -829,6 +859,14 @@ fn mistral_to_tensorzero_chunk(
         }
         .into());
     }
+    let raw_usage = mistral_usage_from_raw_response(&raw_message).map(|usage| {
+        raw_usage_entries_from_value(
+            model_inference_id,
+            provider_type,
+            ApiType::ChatCompletions,
+            usage,
+        )
+    });
     let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
@@ -855,13 +893,25 @@ fn mistral_to_tensorzero_chunk(
         }
     }
 
-    Ok(ProviderInferenceResponseChunk::new(
-        content,
-        usage,
-        raw_message,
-        latency,
-        finish_reason,
-    ))
+    Ok(match raw_usage {
+        Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
+            content,
+            usage,
+            raw_message,
+            latency,
+            finish_reason,
+            Some(entries),
+        ),
+        None => {
+            ProviderInferenceResponseChunk::new(content, usage, raw_message, latency, finish_reason)
+        }
+    })
+}
+
+fn mistral_usage_from_raw_response(raw_response: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 #[cfg(test)]
@@ -1255,6 +1305,7 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -1265,7 +1316,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(10));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_millis(100)
             }
@@ -1348,6 +1399,7 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -1362,7 +1414,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(15));
         assert_eq!(inference_response.usage.output_tokens, Some(25));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_millis(110)
             }
@@ -1408,6 +1460,7 @@ mod tests {
             raw_request: serde_json::to_string(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -1460,6 +1513,7 @@ mod tests {
             raw_request: serde_json::to_string(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_inference_id: Uuid::now_v7(),
         });
         let error = result.unwrap_err();
         let details = error.get_details();
