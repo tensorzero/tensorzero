@@ -10,7 +10,7 @@
 //! - Threshold-based replenishment when pool drops below 20%
 //! - Graceful shutdown with token return to database
 
-use std::collections::VecDeque;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -18,10 +18,9 @@ use std::time::{Duration, Instant};
 use dashmap::DashMap;
 use tokio::sync::Notify;
 
-use std::collections::HashSet;
-
 use tracing::Span;
 
+use super::usage_histogram::RollingUsageTracker;
 use super::{
     ActiveRateLimit, ActiveRateLimitKey, FailedRateLimit, RateLimit, RateLimitResource,
     RateLimitedRequest, RateLimitingConfig, RateLimitingConfigPriority, ScopeInfo, TicketBorrows,
@@ -43,21 +42,13 @@ const MAX_BORROW_CAP: f64 = 0.25;
 /// Fraction of capacity to borrow on cold start (no usage history)
 const COLD_START_BORROW_PCT: f64 = 0.10;
 
-/// A record of usage at a specific point in time
-#[derive(Debug, Clone)]
-struct UsageRecord {
-    timestamp: Instant,
-    tokens_used: u64,
-    model_inferences_used: u64,
-}
-
 /// In-memory token pool for a single rate limit key.
 ///
 /// This pool tracks:
 /// - Available tokens in the local pool
 /// - Total borrowed from DB (for return on shutdown)
 /// - Total actually consumed (for accurate accounting)
-/// - Usage history for P99 calculation
+/// - Usage distribution for P99 calculation (via bucketed histogram)
 #[derive(Debug)]
 struct TokenPool {
     /// Currently available tokens in the local pool (can go negative temporarily)
@@ -66,8 +57,8 @@ struct TokenPool {
     borrowed_from_db: AtomicU64,
     /// Total tokens actually consumed from this pool
     used_from_pool: AtomicU64,
-    /// Usage history for P99 calculation
-    usage_history: Mutex<VecDeque<UsageRecord>>,
+    /// Usage tracker for P99 calculation (lock-free histogram)
+    usage_tracker: RollingUsageTracker,
     /// Last time we replenished from DB
     last_replenish: Mutex<Instant>,
     /// The rate limit parameters for this pool
@@ -84,7 +75,7 @@ impl TokenPool {
             available: AtomicI64::new(0),
             borrowed_from_db: AtomicU64::new(0),
             used_from_pool: AtomicU64::new(0),
-            usage_history: Mutex::new(VecDeque::new()),
+            usage_tracker: RollingUsageTracker::new(P99_WINDOW_DURATION),
             last_replenish: Mutex::new(Instant::now()),
             limit,
             replenish_notify: Notify::new(),
@@ -117,56 +108,14 @@ impl TokenPool {
         }
     }
 
-    /// Record usage for P99 tracking
+    /// Record usage for P99 tracking - O(1), lock-free.
     fn record_usage(&self, tokens: u64, model_inferences: u64) {
-        let record = UsageRecord {
-            timestamp: Instant::now(),
-            tokens_used: tokens,
-            model_inferences_used: model_inferences,
-        };
-        if let Ok(mut history) = self.usage_history.lock() {
-            history.push_back(record);
-        }
+        self.usage_tracker.record(tokens, model_inferences);
     }
 
-    /// Prune old usage records outside the rolling window
-    fn prune_old_usage(&self) {
-        let cutoff = Instant::now() - P99_WINDOW_DURATION;
-        if let Ok(mut history) = self.usage_history.lock() {
-            while let Some(front) = history.front() {
-                if front.timestamp < cutoff {
-                    history.pop_front();
-                } else {
-                    break;
-                }
-            }
-        }
-    }
-
-    /// Calculate P99 usage for the given resource type
+    /// Calculate P99 usage for the given resource type - O(NUM_BUCKETS).
     fn calculate_p99(&self, resource: RateLimitResource) -> Option<u64> {
-        self.prune_old_usage();
-        let history = self.usage_history.lock().ok()?;
-
-        if history.is_empty() {
-            return None;
-        }
-
-        let mut usages: Vec<u64> = history
-            .iter()
-            .map(|r| match resource {
-                RateLimitResource::Token => r.tokens_used,
-                RateLimitResource::ModelInference => r.model_inferences_used,
-            })
-            .collect();
-
-        usages.sort_unstable();
-
-        // Calculate P99 index
-        let p99_index = ((usages.len() as f64) * 0.99).ceil() as usize - 1;
-        let p99_index = p99_index.min(usages.len() - 1);
-
-        Some(usages[p99_index])
+        self.usage_tracker.p99(resource)
     }
 
     /// Check if replenishment is needed based on threshold
@@ -774,12 +723,12 @@ mod tests {
             pool.record_usage(i, 1);
         }
 
-        // P99 should be around 99
+        // P99 of 0-99 is ~99, which falls in bucket 7 (64-127) with upper bound 128.
+        // The bucketed histogram returns approximate values for O(1) performance.
         let borrow = pool.calculate_borrow_amount(1);
-        assert!(
-            borrow >= 98 && borrow <= 100,
-            "P99-based borrow should be around 99, got {}",
-            borrow
+        assert_eq!(
+            borrow, 128,
+            "P99-based borrow should be bucket upper bound 128 for actual P99 ~99",
         );
     }
 

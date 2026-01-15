@@ -13,6 +13,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 pub mod pool;
+mod usage_histogram;
 
 /*
  * The high level flow for our rate limiting system is:
