@@ -10,10 +10,10 @@ import { Skeleton } from "~/components/ui/skeleton";
 function ActionsSkeleton() {
   return (
     <div className="flex flex-wrap gap-2">
-      <Skeleton className="h-9 w-32" />
-      <Skeleton className="h-9 w-32" />
-      <Skeleton className="h-9 w-24" />
-      <Skeleton className="h-9 w-20" />
+      <Skeleton className="h-8 w-36" />
+      <Skeleton className="h-8 w-24" />
+      <Skeleton className="h-8 w-8" />
+      <Skeleton className="h-8 w-8" />
     </div>
   );
 }
