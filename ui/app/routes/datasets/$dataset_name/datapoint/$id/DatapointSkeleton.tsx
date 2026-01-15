@@ -1,5 +1,5 @@
 import {
-  PageHeaderSkeleton,
+  PageHeader,
   SectionHeader,
   SectionLayout,
   SectionsGroup,
@@ -19,37 +19,28 @@ function ActionsSkeleton() {
 }
 
 function InputSkeleton() {
-  return (
-    <div className="space-y-4">
-      <Skeleton className="h-24 w-full" />
-      <Skeleton className="h-32 w-full" />
-    </div>
-  );
-}
-
-function OutputSkeleton() {
   return <Skeleton className="h-32 w-full" />;
 }
 
-function TagsSkeleton() {
-  return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <Skeleton className="h-6 w-24" />
-        <Skeleton className="h-6 w-32" />
-      </div>
-      <div className="flex gap-2">
-        <Skeleton className="h-6 w-20" />
-        <Skeleton className="h-6 w-28" />
-      </div>
-    </div>
-  );
+function OutputSkeleton() {
+  return <Skeleton className="h-48 w-full" />;
 }
 
-export function DatapointContentSkeleton() {
+function TagsSkeleton() {
+  return <Skeleton className="h-16 w-full" />;
+}
+
+interface DatapointContentSkeletonProps {
+  /** Datapoint ID from route params - shown immediately in header */
+  id?: string;
+}
+
+export function DatapointContentSkeleton({
+  id,
+}: DatapointContentSkeletonProps) {
   return (
     <>
-      <PageHeaderSkeleton label="Datapoint" />
+      <PageHeader label="Datapoint" name={id} />
       <SectionsGroup>
         <SectionLayout>
           <BasicInfoLayoutSkeleton rows={6} />

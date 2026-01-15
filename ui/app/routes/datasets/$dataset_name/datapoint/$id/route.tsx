@@ -785,13 +785,19 @@ function DatapointContent({ data }: { data: DatapointData }) {
   );
 }
 
-export default function DatapointPage({ loaderData }: Route.ComponentProps) {
+export default function DatapointPage({
+  loaderData,
+  params,
+}: Route.ComponentProps) {
   const { datapointData } = loaderData;
   const location = useLocation();
 
   return (
     <PageLayout>
-      <Suspense key={location.key} fallback={<DatapointContentSkeleton />}>
+      <Suspense
+        key={location.key}
+        fallback={<DatapointContentSkeleton id={params.id} />}
+      >
         <Await
           resolve={datapointData}
           errorElement={<SectionAsyncErrorState />}

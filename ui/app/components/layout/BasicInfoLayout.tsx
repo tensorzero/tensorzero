@@ -50,10 +50,10 @@ export function BasicInfoLayoutSkeleton({
       {Array.from({ length: rows }).map((_, i) => (
         <BasicInfoItem key={i}>
           <BasicInfoItemTitle>
-            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-5 w-20" />
           </BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-5 w-48" />
           </BasicInfoItemContent>
         </BasicInfoItem>
       ))}
