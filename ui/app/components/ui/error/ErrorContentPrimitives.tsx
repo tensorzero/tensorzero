@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useAsyncError } from "react-router";
+import { useAsyncError, isRouteErrorResponse } from "react-router";
 import { AlertCircle, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
@@ -222,7 +222,14 @@ export function SectionAsyncErrorState({
     );
   }
 
-  const message = error instanceof Error ? error.message : defaultMessage;
+  let message: string;
+  if (isRouteErrorResponse(error)) {
+    message = error.data ?? `${error.status} ${error.statusText}`;
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else {
+    message = defaultMessage;
+  }
 
   return (
     <SectionErrorNotice
