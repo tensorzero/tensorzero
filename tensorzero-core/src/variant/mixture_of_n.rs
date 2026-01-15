@@ -957,7 +957,7 @@ mod tests {
             Arguments, ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
             JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
-        jsonschema_util::StaticJSONSchema,
+        jsonschema_util::JSONSchema,
         minijinja_util::tests::{
             get_system_filled_template, get_system_template, get_test_template_config,
             test_system_template_schema,
@@ -1351,7 +1351,7 @@ mod tests {
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
+            output_schema: JSONSchema::from_value(json!({})).unwrap(),
             json_mode_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),

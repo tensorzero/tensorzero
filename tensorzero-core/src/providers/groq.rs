@@ -345,7 +345,7 @@ pub fn stream_groq(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, None).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, None).await);
                         }
                     }
                 }

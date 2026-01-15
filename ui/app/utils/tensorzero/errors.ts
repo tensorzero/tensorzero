@@ -177,8 +177,17 @@ export function isClickHouseError(error: unknown): boolean {
 /**
  * Check if an error is an infrastructure error that should trigger graceful degradation.
  * Includes: gateway unreachable, auth failed, route not found (version mismatch), ClickHouse unavailable.
+ *
+ * Handles both:
+ * - RouteErrorResponse with InfraErrorData (thrown via data() helper)
+ * - Direct Error instances (server-side or serialized)
  */
 export function isInfraError(error: unknown): boolean {
+  // Check for RouteErrorResponse with InfraErrorData (thrown via data() helper)
+  if (isRouteErrorResponse(error) && isInfraErrorData(error.data)) {
+    return true;
+  }
+  // Check for direct Error instances (server-side) or serialized errors
   return (
     isGatewayConnectionError(error) ||
     isAuthenticationError(error) ||

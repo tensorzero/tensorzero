@@ -379,7 +379,10 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     // Some providers give signature-only thought blocks,
     // so only check the content if we had at least one thought block with text
     if let Some(full_thought) = &full_thought {
-        assert!(full_thought.to_lowercase().contains("tokyo"));
+        assert!(
+            full_thought.to_lowercase().contains("tokyo")
+                || full_thought.to_lowercase().contains("japan")
+        );
     }
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {

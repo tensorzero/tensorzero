@@ -6,6 +6,7 @@ import {
 } from "react-router";
 import type { Route } from "./+types/layout";
 import { AutopilotUnavailableState } from "~/components/ui/error/AutopilotUnavailableState";
+import { LayoutErrorBoundary } from "~/components/ui/error";
 import { isAutopilotUnavailableError } from "~/utils/tensorzero/errors";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 
@@ -35,7 +36,7 @@ export default function AutopilotLayout() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  // Check if this is an autopilot unavailable error
+  // Autopilot unavailable gets special treatment
   if (
     isRouteErrorResponse(error) &&
     error.data?.errorType === AUTOPILOT_UNAVAILABLE_ERROR
@@ -46,6 +47,6 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     return <AutopilotUnavailableState />;
   }
 
-  // Re-throw other errors to be handled by parent error boundary
-  throw error;
+  // All other errors (including infra) handled by LayoutErrorBoundary
+  return <LayoutErrorBoundary error={error} />;
 }

@@ -35,7 +35,7 @@ use crate::inference::types::{
     ContentBlockChatOutput, FetchContext, Input, InputExt, JsonInferenceOutput,
     TaggedInferenceDatabaseInsert,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::tool::{LegacyToolCallConfigDatabaseInsert, Tool};
 use crate::{
     config::{Config, snapshot::SnapshotHash},
@@ -395,7 +395,7 @@ pub async fn update_datapoint_handler(
                 .into_lazy_resolved_input(&fetch_context)?
                 .resolve()
                 .await?;
-            function_config.validate_input(&chat.input)?;
+            function_config.validate_input(&chat.input).await?;
             // If there are no tool params in the UpdateChatInferenceDatapointRequest, we use the default tool params (empty tools).
             // This is consistent with how they are serialized at inference time.
 
@@ -501,7 +501,7 @@ pub async fn update_datapoint_handler(
                 .into_lazy_resolved_input(&fetch_context)?
                 .resolve()
                 .await?;
-            function_config.validate_input(&json.input)?;
+            function_config.validate_input(&json.input).await?;
 
             // Validate the user-provided output_schema
             let schema_str = serde_json::to_string(&json.output_schema).map_err(|e| {
@@ -509,7 +509,7 @@ pub async fn update_datapoint_handler(
                     message: format!("Failed to serialize output_schema: {e}"),
                 })
             })?;
-            let parsed_schema = DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
+            let parsed_schema = JSONSchema::parse_from_str(&schema_str).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Invalid output_schema: {e}"),
                 })
@@ -761,12 +761,11 @@ pub async fn insert_datapoint(
                             ),
                         })
                     })?;
-                    let parsed_schema =
-                        DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
-                            Error::new(ErrorDetails::InvalidRequest {
-                                message: format!("Invalid output_schema for datapoint {i}: {e}"),
-                            })
-                        })?;
+                    let parsed_schema = JSONSchema::parse_from_str(&schema_str).map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Invalid output_schema for datapoint {i}: {e}"),
+                        })
+                    })?;
                     // Ensure the schema is valid by forcing compilation
                     parsed_schema.ensure_valid().await?;
                     user_schema.clone()

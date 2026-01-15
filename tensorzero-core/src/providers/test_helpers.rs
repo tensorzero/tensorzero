@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::tool::{FunctionToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice};
 use lazy_static::lazy_static;
 use serde_json::json;
@@ -11,7 +11,7 @@ lazy_static! {
         name: "get_temperature".to_string(),
         key: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
-        parameters: StaticJSONSchema::from_value(json!({
+        parameters: JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "location": {"type": "string"},
@@ -34,7 +34,7 @@ lazy_static! {
         name: "query_articles".to_string(),
         key: "query_articles".to_string(),
         description: "Query articles from Wikipedia".to_string(),
-        parameters: StaticJSONSchema::from_value(json!({
+        parameters: JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "query": {"type": "string"},

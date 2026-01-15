@@ -20,7 +20,7 @@ use crate::inference::types::{
     ContentBlockOutput, InferenceResult, InferenceResultStream, InternalJsonInferenceOutput,
     JsonInferenceResult, Thought,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::relay::TensorzeroRelay;
@@ -210,8 +210,8 @@ impl Variant for ChainOfThoughtConfig {
 
 /// Converts the output schema of the actual function being called into a schema that enforces chain
 /// of thought reasoning.
-fn prepare_thinking_output_schema(previous_output_schema: &Value) -> DynamicJSONSchema {
-    DynamicJSONSchema::new(json!({
+fn prepare_thinking_output_schema(previous_output_schema: &Value) -> JSONSchema {
+    JSONSchema::compile_background(json!({
         "type": "object",
         "properties": {
             "thinking": {
