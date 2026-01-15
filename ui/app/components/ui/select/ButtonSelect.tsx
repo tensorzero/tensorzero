@@ -62,6 +62,8 @@ export interface ButtonSelectProps {
   creatable?: boolean;
   /** Alignment of the popover relative to trigger (default: "start") */
   align?: "start" | "center" | "end";
+  /** Additional className for the popover menu */
+  menuClassName?: string;
 }
 
 export function ButtonSelect({
@@ -85,6 +87,7 @@ export function ButtonSelect({
   placeholder,
   creatable = false,
   align = "start",
+  menuClassName,
 }: ButtonSelectProps) {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -143,7 +146,10 @@ export function ButtonSelect({
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] min-w-64 p-0"
+        className={clsx(
+          "w-[var(--radix-popover-trigger-width)] min-w-64 p-0",
+          menuClassName,
+        )}
         align={align}
       >
         <Command shouldFilter={false}>

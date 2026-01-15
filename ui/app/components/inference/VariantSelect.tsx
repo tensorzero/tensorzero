@@ -40,6 +40,7 @@ export function VariantSelect({
         placeholder={`Search ${label}s...`}
         emptyMessage={`No ${label}s found`}
         disabled={isDisabled}
+        menuClassName="min-w-[32rem]"
       />
     </ReadOnlyGuard>
   );
