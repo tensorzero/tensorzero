@@ -785,6 +785,15 @@ function DatapointContent({ data }: { data: DatapointData }) {
   );
 }
 
+function DatapointErrorState({ id }: { id?: string }) {
+  return (
+    <>
+      <PageHeader label="Datapoint" name={id} />
+      <SectionAsyncErrorState />
+    </>
+  );
+}
+
 export default function DatapointPage({
   loaderData,
   params,
@@ -800,7 +809,7 @@ export default function DatapointPage({
       >
         <Await
           resolve={datapointData}
-          errorElement={<SectionAsyncErrorState />}
+          errorElement={<DatapointErrorState id={params.id} />}
         >
           {(resolvedData) => <DatapointContent data={resolvedData} />}
         </Await>
