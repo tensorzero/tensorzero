@@ -373,7 +373,7 @@ export async function loader({
     .getDatapoint(id, dataset_name)
     .then(async (datapoint) => {
       if (!datapoint) {
-        throw new Error(`No datapoint found for ID \`${id}\`.`);
+        throw data(`No datapoint found for ID \`${id}\`.`, { status: 404 });
       }
       // Load file data for InputElement component
       const resolvedInput = await loadFileDataForInput(datapoint.input);
