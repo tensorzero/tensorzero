@@ -4,6 +4,7 @@ import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
   data,
+  isRouteErrorResponse,
   useNavigate,
   useParams,
   type RouteHandle,
@@ -434,8 +435,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const params = useParams<{ episode_id: string }>();
   logger.error(error);
 
-  const message =
-    error instanceof Error ? error.message : "Failed to load episode";
+  let message: string;
+  if (isRouteErrorResponse(error)) {
+    message = error.data ?? `${error.status} ${error.statusText}`;
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else {
+    message = "Failed to load episode";
+  }
 
   return (
     <PageLayout>
