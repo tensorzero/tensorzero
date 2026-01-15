@@ -322,7 +322,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader name="Playground" />
+      <PageHeader heading="Playground" />
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Function</Label>
         <FunctionSelector
