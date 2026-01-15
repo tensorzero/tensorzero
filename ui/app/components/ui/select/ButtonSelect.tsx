@@ -136,10 +136,7 @@ export function ButtonSelect({
           {triggerContent}
           <ButtonIcon
             as={ChevronDown}
-            className={clsx(
-              "h-4 w-4 shrink-0 transition duration-300 ease-out",
-              open ? "-rotate-180" : "rotate-0",
-            )}
+            className={clsx("h-4 w-4 shrink-0", open && "-rotate-180")}
             variant="tertiary"
           />
         </Button>
