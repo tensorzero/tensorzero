@@ -51,7 +51,7 @@ export function ComboboxMenuItems({
             return (
               <CommandItem
                 key={item.value}
-                value={item.label}
+                value={item.value}
                 onSelect={() => onSelectItem(item.value, false)}
                 className="group flex w-full items-center gap-2"
                 {...getItemDataAttributes?.(item.value)}

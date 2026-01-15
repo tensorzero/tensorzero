@@ -100,7 +100,7 @@ export function ToolParametersSection({
               </span>
               <ToolsList
                 tools={additional_tools}
-                getLabel={(tool) => getToolName(tool)}
+                getLabel={getToolName}
                 renderCard={(tool) => <ToolCard tool={tool} />}
               />
             </div>
@@ -185,7 +185,7 @@ function ToolsList<T>({ tools, getLabel, renderCard }: ToolsListProps<T>) {
   );
 }
 
-function getToolName(tool: Tool): string {
+function getToolName(tool: Tool, _index: number): string {
   return tool.name;
 }
 
