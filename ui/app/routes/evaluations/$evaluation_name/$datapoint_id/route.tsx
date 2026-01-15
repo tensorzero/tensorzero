@@ -1,3 +1,4 @@
+import { Suspense, useEffect } from "react";
 import {
   getEvaluationsForDatapoint,
   pollForEvaluations,
@@ -15,11 +16,13 @@ import Input from "~/components/inference/Input";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 import {
+  Await,
   data,
   isRouteErrorResponse,
   Link,
   redirect,
   useFetcher,
+  useLocation,
   type RouteHandle,
 } from "react-router";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
@@ -51,15 +54,18 @@ import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
 } from "~/types/tensorzero";
+import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { renameDatapoint } from "~/routes/datasets/$dataset_name/datapoint/$id/datapointOperations.server";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
+import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
+import { EvaluationDatapointContentSkeleton } from "./EvaluationDatapointSkeleton";
+import type { ConsolidatedEvaluationResult } from "~/utils/clickhouse/evaluations";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -68,41 +74,32 @@ export const handle: RouteHandle = {
   ],
 };
 
-export async function loader({ request, params }: Route.LoaderArgs) {
-  const evaluation_name = params.evaluation_name;
-  const datapoint_id = params.datapoint_id;
+interface LoaderData {
+  consolidatedEvaluationResults: ConsolidatedEvaluationResult[];
+  evaluation_name: string;
+  datapoint_id: string;
+  selected_evaluation_run_infos: EvaluationRunInfo[];
+  allowedEvaluationRunInfos: EvaluationRunInfo[];
+  selectedRunIds: string[];
+  newFeedbackId: string | null;
+  newJudgeDemonstrationId: string | null;
+  datapoint_staled_at: string | null;
+}
+
+async function fetchEvaluationDatapointData(
+  request: Request,
+  evaluation_name: string,
+  datapoint_id: string,
+  selectedRunIds: string[],
+  function_name: string,
+): Promise<LoaderData> {
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
-  const config = await getConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
-    throw data(
-      `Evaluation config not found for evaluation ${evaluation_name}`,
-      { status: 404 },
-    );
-  }
-  const function_name = evaluation_config.function_name;
   const newFeedbackId = searchParams.get("newFeedbackId");
   const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
 
-  const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
-  const selectedRunIds = selected_evaluation_run_ids
-    ? selected_evaluation_run_ids.split(",")
-    : [];
-  if (selectedRunIds.length === 0) {
-    return redirect(toEvaluationUrl(evaluation_name));
-  }
-
-  // Validate datapoint exists using v1 API
-  const tensorZeroClient = getTensorZeroClient();
-  const tensorZeroDatapoint = await tensorZeroClient.getDatapoint(datapoint_id);
-  if (!tensorZeroDatapoint) {
-    throw data(`No datapoint found for ID \`${datapoint_id}\`.`, {
-      status: 404,
-    });
-  }
-
   // Define all promises
+  const tensorZeroClient = getTensorZeroClient();
   const selectedEvaluationRunInfosPromise = tensorZeroClient
     .getEvaluationRunInfos(selectedRunIds, function_name)
     .then((response) => response.run_infos);
@@ -163,6 +160,49 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const evaluation_name = params.evaluation_name;
+  const datapoint_id = params.datapoint_id;
+  const url = new URL(request.url);
+  const searchParams = new URLSearchParams(url.search);
+  const config = await getConfig();
+  const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
+  const function_name = evaluation_config.function_name;
+
+  const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
+  const selectedRunIds = selected_evaluation_run_ids
+    ? selected_evaluation_run_ids.split(",")
+    : [];
+  if (selectedRunIds.length === 0) {
+    return redirect(toEvaluationUrl(evaluation_name));
+  }
+
+  // Validate datapoint exists using v1 API
+  const tensorZeroClient = getTensorZeroClient();
+  const tensorZeroDatapoint = await tensorZeroClient.getDatapoint(datapoint_id);
+  if (!tensorZeroDatapoint) {
+    throw data(`No datapoint found for ID \`${datapoint_id}\`.`, {
+      status: 404,
+    });
+  }
+
+  // Return promise for streaming - data will be resolved inside Await
+  const evaluationDataPromise = fetchEvaluationDatapointData(
+    request,
+    evaluation_name,
+    datapoint_id,
+    selectedRunIds,
+    function_name,
+  );
+  return { evaluationData: evaluationDataPromise, selectedRunIds };
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
@@ -212,9 +252,22 @@ export async function action({ request }: Route.ActionArgs) {
   }
 }
 
-export default function EvaluationDatapointPage({
-  loaderData,
-}: Route.ComponentProps) {
+function EvaluationDatapointErrorState({ id }: { id?: string }) {
+  return (
+    <>
+      <PageHeader label="Datapoint" name={id} />
+      <SectionAsyncErrorState />
+    </>
+  );
+}
+
+interface EvaluationDatapointContentProps {
+  data: LoaderData;
+}
+
+function EvaluationDatapointContent({
+  data: loaderData,
+}: EvaluationDatapointContentProps) {
   const {
     consolidatedEvaluationResults,
     evaluation_name,
@@ -279,41 +332,68 @@ export default function EvaluationDatapointPage({
   };
 
   return (
-    // Provider remains here
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
-      <PageLayout>
-        <PageHeader label="Datapoint" name={datapoint_id}>
-          <BasicInfo
-            evaluation_name={evaluation_name}
-            evaluation_config={evaluation_config}
-            dataset_name={consolidatedEvaluationResults[0].dataset_name}
-            datapoint_id={datapoint_id}
-            datapoint_name={consolidatedEvaluationResults[0].name}
-            datapoint_staled_at={datapoint_staled_at}
-            onRenameDatapoint={handleRenameDatapoint}
-          />
-          <EvalRunSelector
-            evaluationName={evaluation_name}
-            selectedRunIdInfos={selected_evaluation_run_infos}
-            allowedRunInfos={allowedEvaluationRunInfos}
-            // This must be passed so the component can filter by datapoint_id in search
-          />
-        </PageHeader>
+      <PageHeader label="Datapoint" name={datapoint_id}>
+        <BasicInfo
+          evaluation_name={evaluation_name}
+          evaluation_config={evaluation_config}
+          dataset_name={consolidatedEvaluationResults[0].dataset_name}
+          datapoint_id={datapoint_id}
+          datapoint_name={consolidatedEvaluationResults[0].name}
+          datapoint_staled_at={datapoint_staled_at}
+          onRenameDatapoint={handleRenameDatapoint}
+        />
+        <EvalRunSelector
+          evaluationName={evaluation_name}
+          selectedRunIdInfos={selected_evaluation_run_infos}
+          allowedRunInfos={allowedEvaluationRunInfos}
+          // This must be passed so the component can filter by datapoint_id in search
+        />
+      </PageHeader>
 
-        <SectionsGroup>
-          <SectionLayout>
-            <SectionHeader heading="Input" />
-            <Input {...consolidatedEvaluationResults[0].input} />
-          </SectionLayout>
-          <OutputsSection
-            outputsToDisplay={outputsToDisplay}
-            evaluation_name={evaluation_name}
-            evaluation_config={evaluation_config}
-            datapointId={datapoint_id}
-          />
-        </SectionsGroup>
-      </PageLayout>
+      <SectionsGroup>
+        <SectionLayout>
+          <SectionHeader heading="Input" />
+          <Input {...consolidatedEvaluationResults[0].input} />
+        </SectionLayout>
+        <OutputsSection
+          outputsToDisplay={outputsToDisplay}
+          evaluation_name={evaluation_name}
+          evaluation_config={evaluation_config}
+          datapointId={datapoint_id}
+        />
+      </SectionsGroup>
     </ColorAssignerProvider>
+  );
+}
+
+export default function EvaluationDatapointPage({
+  loaderData,
+  params,
+}: Route.ComponentProps) {
+  const { evaluationData } = loaderData;
+  const location = useLocation();
+
+  return (
+    <PageLayout>
+      <Suspense
+        key={location.key}
+        fallback={
+          <EvaluationDatapointContentSkeleton
+            datapointId={params.datapoint_id}
+          />
+        }
+      >
+        <Await
+          resolve={evaluationData}
+          errorElement={
+            <EvaluationDatapointErrorState id={params.datapoint_id} />
+          }
+        >
+          {(resolvedData) => <EvaluationDatapointContent data={resolvedData} />}
+        </Await>
+      </Suspense>
+    </PageLayout>
   );
 }
 
