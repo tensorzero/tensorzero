@@ -1,12 +1,53 @@
 import { Badge } from "~/components/ui/badge";
 import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbSeparator,
+} from "~/components/ui/breadcrumb";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { Suspense, use, type ReactNode } from "react";
+import { Link } from "react-router";
 import { cn } from "~/utils/common";
 import { Skeleton } from "~/components/ui/skeleton";
+import { ChevronRight } from "lucide-react";
+
+export interface BreadcrumbSegment {
+  label: string;
+  href: string;
+}
+
+/**
+ * Renders breadcrumb segments for use in PageHeader eyebrow.
+ * All segments are clickable links.
+ */
+function Breadcrumbs({ segments }: { segments: BreadcrumbSegment[] }) {
+  if (segments.length === 0) return null;
+
+  return (
+    <Breadcrumb>
+      <BreadcrumbList className="gap-1.5 text-sm">
+        {segments.map((segment, index) => (
+          <BreadcrumbItem key={segment.href}>
+            <BreadcrumbLink asChild>
+              <Link to={segment.href}>{segment.label}</Link>
+            </BreadcrumbLink>
+            {index < segments.length - 1 && (
+              <BreadcrumbSeparator>
+                <ChevronRight className="h-3 w-3" />
+              </BreadcrumbSeparator>
+            )}
+          </BreadcrumbItem>
+        ))}
+      </BreadcrumbList>
+    </Breadcrumb>
+  );
+}
 
 const PageLayout: React.FC<React.ComponentProps<"div">> = ({
   children,
@@ -27,13 +68,16 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 type CountValue = number | bigint | Promise<number | bigint>;
 
 interface PageHeaderProps {
-  label?: string;
+  /**
+   * Eyebrow content displayed above the title.
+   * Can be simple text (for modals) or breadcrumbs (for pages).
+   */
+  eyebrow?: ReactNode;
   heading?: string;
   name?: string;
   count?: CountValue;
-  icon?: ReactNode;
-  iconBg?: string;
   children?: ReactNode;
+  /** Inline badge/tag displayed after the title */
   tag?: ReactNode;
 }
 
@@ -48,38 +92,26 @@ function CountDisplay({ count }: { count: CountValue }) {
 
 const PageHeader: React.FC<PageHeaderProps> = ({
   heading,
-  label,
+  eyebrow,
   name,
   count,
-  icon,
-  iconBg = "bg-none",
   children,
   tag,
 }: PageHeaderProps) => {
   return (
     <div className="flex flex-col">
-      <div className="flex flex-col gap-2">
-        {label !== undefined && (
-          <div className="text-fg-secondary flex items-center gap-1.5 text-sm font-normal">
-            {icon && (
-              <span
-                className={`${iconBg} flex size-5 items-center justify-center rounded-sm`}
-              >
-                {icon}
-              </span>
-            )}
-
-            {label}
-          </div>
+      <div className="flex flex-col gap-3">
+        {eyebrow !== undefined && (
+          <div className="text-fg-secondary text-sm font-normal">{eyebrow}</div>
         )}
         <div className="flex items-center gap-2">
           {heading !== undefined && (
             <h1 className="text-2xl font-medium">{heading}</h1>
           )}
           {name !== undefined && (
-            <span className="font-mono text-2xl leading-none font-medium">
+            <h1 className="font-mono text-2xl leading-none font-medium">
               {name}
-            </span>
+            </h1>
           )}
           {count !== undefined && (
             <Suspense fallback={<Skeleton className="h-8 w-24" />}>
@@ -87,7 +119,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             </Suspense>
           )}
 
-          {tag}
+          {tag && <div className="ml-1 flex items-center">{tag}</div>}
         </div>
       </div>
 
@@ -170,4 +202,11 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
   </h2>
 );
 
-export { PageHeader, SectionHeader, SectionLayout, SectionsGroup, PageLayout };
+export {
+  PageHeader,
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+  PageLayout,
+  Breadcrumbs,
+};

@@ -25,6 +25,7 @@ import {
   SectionLayout,
   SectionsGroup,
   SectionHeader,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
 import { applyPaginationLogic } from "~/utils/pagination";
@@ -230,7 +231,20 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const function_type = function_config.type;
   return (
     <PageLayout>
-      <PageHeader label="Variant" name={variant_name} />
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Functions", href: "/observability/functions" },
+              {
+                label: function_name,
+                href: `/observability/functions/${function_name}`,
+              },
+            ]}
+          />
+        }
+        name={variant_name}
+      />
 
       <SectionsGroup>
         <SectionLayout>

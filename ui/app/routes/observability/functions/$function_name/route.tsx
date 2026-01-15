@@ -24,6 +24,7 @@ import {
   SectionLayout,
   SectionsGroup,
   SectionHeader,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
@@ -269,10 +270,22 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Functions", href: "/observability/functions" },
+            ]}
+          />
+        }
         name={function_name}
-        label={`${function_config.type} · Function`}
-        icon={getFunctionTypeIcon(function_config.type).icon}
-        iconBg={getFunctionTypeIcon(function_config.type).iconBg}
+        tag={
+          <span
+            className={`${getFunctionTypeIcon(function_config.type).iconBg} inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 font-mono text-sm`}
+          >
+            {getFunctionTypeIcon(function_config.type).icon}
+            {function_config.type}
+          </span>
+        }
       >
         <BasicInfo functionConfig={function_config} />
       </PageHeader>

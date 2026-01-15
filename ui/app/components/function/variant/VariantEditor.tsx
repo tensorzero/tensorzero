@@ -89,7 +89,7 @@ export function VariantEditor({
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="right" className="w-full md:w-5/6">
-        <PageHeader label="Variant Configuration" name={variantName} />
+        <PageHeader eyebrow="Variant Configuration" name={variantName} />
 
         <div className="mt-4 max-h-[calc(100vh-12rem)] space-y-6 overflow-y-auto">
           {/* Weight */}
