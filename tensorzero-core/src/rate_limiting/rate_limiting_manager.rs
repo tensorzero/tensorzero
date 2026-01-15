@@ -2,17 +2,22 @@
 //!
 //! The `RateLimitingManager` is the primary interface for rate limiting operations.
 //! It wraps a `RateLimitingConfig` and provides methods to consume and return tickets.
+//!
+//! The manager supports two modes:
+//! - **Direct mode**: Every request hits the database directly
+//! - **Pooled mode**: Pre-borrows tokens into an in-memory pool to reduce database contention
 
 use std::sync::Arc;
 
 use tracing::Span;
 
+use super::token_pool::TokenPoolRegistry;
 use super::{
-    RateLimitResource, RateLimitResourceUsage, RateLimitedRequest, RateLimitingConfig, ScopeInfo,
-    TicketBorrow, TicketBorrows,
+    PoolMode, RateLimitResource, RateLimitResourceUsage, RateLimitedRequest, RateLimitingConfig,
+    ScopeInfo, TicketBorrow, TicketBorrows,
 };
 use crate::db::postgres::PostgresConnectionInfo;
-use crate::db::{ConsumeTicketsRequest, RateLimitQueries};
+use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest};
 use crate::error::Error;
 
 /// Manager for rate limiting operations.
@@ -24,6 +29,8 @@ pub struct RateLimitingManager {
     config: Arc<RateLimitingConfig>,
     /// The database client for rate limiting operations
     client: Arc<dyn RateLimitQueries>,
+    /// Registry for in-memory token pools (used in pooled mode)
+    pool_registry: TokenPoolRegistry,
 }
 
 impl std::fmt::Debug for RateLimitingManager {
@@ -31,6 +38,7 @@ impl std::fmt::Debug for RateLimitingManager {
         f.debug_struct("RateLimitingManager")
             .field("config", &self.config)
             .field("client", &"<dyn RateLimitQueries>")
+            .field("pool_registry", &self.pool_registry)
             .finish()
     }
 }
@@ -41,6 +49,7 @@ impl RateLimitingManager {
         Self {
             config,
             client: Arc::new(client),
+            pool_registry: TokenPoolRegistry::new(),
         }
     }
 
@@ -50,7 +59,11 @@ impl RateLimitingManager {
         config: Arc<RateLimitingConfig>,
         client: Arc<dyn RateLimitQueries>,
     ) -> Self {
-        Self { config, client }
+        Self {
+            config,
+            client,
+            pool_registry: TokenPoolRegistry::new(),
+        }
     }
 
     /// Create a new, dummy RateLimitingManager for unit tests.
@@ -59,6 +72,7 @@ impl RateLimitingManager {
         Self {
             config: Arc::new(RateLimitingConfig::default()),
             client: Arc::new(PostgresConnectionInfo::Disabled),
+            pool_registry: TokenPoolRegistry::new(),
         }
     }
 
@@ -71,6 +85,11 @@ impl RateLimitingManager {
     /// Get the underlying config
     pub fn config(&self) -> &RateLimitingConfig {
         &self.config
+    }
+
+    /// Returns the pool mode configured for this manager.
+    fn pool_mode(&self) -> PoolMode {
+        self.config.pool.mode
     }
 
     /// Consume tickets for a rate-limited request.
@@ -110,16 +129,184 @@ impl RateLimitingManager {
             span.record("estimated_usage.model_inferences", model_inferences as i64);
         }
 
-        // Consume tickets directly from the database
         let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
             .iter()
             .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
             .collect();
         let ticket_requests = ticket_requests?;
 
-        let receipts = self.client.consume_tickets(&ticket_requests).await?;
+        // Choose path based on pool mode
+        let receipts = match self.pool_mode() {
+            PoolMode::Direct => {
+                // Direct mode: hit the database for every request
+                self.client.consume_tickets(&ticket_requests).await?
+            }
+            PoolMode::Pooled => {
+                // Pooled mode: try to consume from local pools first
+                self.consume_from_pools(&limits, &ticket_requests).await?
+            }
+        };
 
         TicketBorrows::new(Arc::clone(self), receipts, limits, ticket_requests)
+    }
+
+    /// Consume tickets from the in-memory pools, replenishing from DB if needed.
+    ///
+    /// During warm-up (first 100 requests per key), requests go directly to the DB
+    /// while building up P99 usage data in the histogram. After warm-up, requests
+    /// are served from the local pool with adaptive pre-borrowing.
+    async fn consume_from_pools(
+        &self,
+        limits: &[super::ActiveRateLimit],
+        ticket_requests: &[ConsumeTicketsRequest],
+    ) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
+        // Get or create pools for all limits
+        let pools: Vec<Arc<super::token_pool::TokenPool>> = limits
+            .iter()
+            .map(|limit| self.pool_registry.get_or_create(limit))
+            .collect();
+
+        // Check if any pool is still in warm-up phase
+        let any_warming_up = pools.iter().any(|p| p.is_warming_up());
+
+        if any_warming_up {
+            // Warm-up phase: go directly to DB while building histogram data.
+            // Increment request count for each pool (even if rate limit fails).
+            for pool in &pools {
+                pool.increment_request_count();
+            }
+            let receipts = self.client.consume_tickets(ticket_requests).await?;
+
+            // Update tickets_remaining for adaptive borrow cap calculation.
+            // Also record estimated usage so the histogram has data for post-warmup borrowing.
+            for ((pool, receipt), request) in pools
+                .iter()
+                .zip(receipts.iter())
+                .zip(ticket_requests.iter())
+            {
+                pool.update_tickets_remaining(receipt.tickets_remaining);
+                // Record estimated usage for this request. We use the requested amount
+                // as the estimate since actual usage isn't known yet. This ensures the
+                // histogram has data for rate-aware borrowing after warm-up completes.
+                let (tokens, model_inferences) = match pool.limit.resource {
+                    super::RateLimitResource::Token => (request.requested, 0),
+                    super::RateLimitResource::ModelInference => (0, request.requested),
+                };
+                pool.record_usage(tokens, model_inferences);
+            }
+
+            return Ok(receipts);
+        }
+
+        // All pools warmed up: use pooled consumption
+        let mut consumed_pools = Vec::with_capacity(limits.len());
+        let mut consumed_amounts = Vec::with_capacity(limits.len());
+
+        for ((limit, request), pool) in limits.iter().zip(ticket_requests.iter()).zip(pools.iter())
+        {
+            // Check if we need to replenish before consuming
+            if pool.needs_replenishment() {
+                self.replenish_pool(limit, pool).await?;
+            }
+
+            // Try to consume from the pool
+            if pool.try_consume(request.requested) {
+                consumed_pools.push(Arc::clone(pool));
+                consumed_amounts.push(request.requested);
+            } else {
+                // Rollback any successful consumptions before this one
+                for (prev_pool, amount) in consumed_pools.iter().zip(consumed_amounts.iter()) {
+                    prev_pool.rollback_consume(*amount);
+                }
+
+                // Fall back to direct DB access for this request
+                // This ensures we can still serve the request even if the pool is exhausted
+                return self.client.consume_tickets(ticket_requests).await;
+            }
+        }
+
+        // All consumptions succeeded from local pools
+        // Build synthetic receipts for the successful consumptions
+        let receipts: Vec<ConsumeTicketsReceipt> = ticket_requests
+            .iter()
+            .map(|r| ConsumeTicketsReceipt {
+                key: r.key.clone(),
+                success: true,
+                // Note: This value is inaccurate (assumes bucket was at capacity) but is unused.
+                // Adaptive borrow cap uses real DB responses only; error reporting only triggers
+                // on failed receipts; return_tickets only uses tickets_consumed.
+                tickets_remaining: r.capacity.saturating_sub(r.requested),
+                tickets_consumed: r.requested,
+            })
+            .collect();
+
+        Ok(receipts)
+    }
+
+    /// Replenish a pool by borrowing tokens from the database.
+    async fn replenish_pool(
+        &self,
+        limit: &super::ActiveRateLimit,
+        pool: &super::token_pool::TokenPool,
+    ) -> Result<(), Error> {
+        // Try to acquire the replenishment lock. If someone else is replenishing,
+        // wait for them and check if we still need to replenish.
+        loop {
+            if !pool
+                .replenish_in_progress
+                .swap(true, std::sync::atomic::Ordering::AcqRel)
+            {
+                // We acquired the lock, proceed with replenishment
+                break;
+            }
+
+            // Another task is already replenishing, wait for it.
+            // Use tokio::select! with a timeout to handle the race where
+            // signal_replenishment_complete() is called before we start waiting.
+            tokio::select! {
+                () = pool.wait_for_replenishment() => {}
+                () = tokio::time::sleep(std::time::Duration::from_millis(10)) => {}
+            }
+
+            // Check if the pool has enough tokens now
+            if !pool.needs_replenishment() {
+                return Ok(());
+            }
+            // Still needs replenishment, try to acquire the lock again
+        }
+
+        // Calculate how much to borrow
+        let borrow_amount = pool.calculate_borrow_amount();
+
+        // Borrow from the database
+        let request = ConsumeTicketsRequest {
+            key: limit.key.clone(),
+            capacity: limit.limit.capacity,
+            refill_amount: limit.limit.refill_rate,
+            refill_interval: limit.limit.interval.to_pg_interval(),
+            requested: borrow_amount,
+        };
+
+        let result = self.client.consume_tickets(&[request]).await;
+
+        match result {
+            Ok(receipts) => {
+                if let Some(receipt) = receipts.first() {
+                    // Always update tickets_remaining for adaptive cap calculation
+                    pool.update_tickets_remaining(receipt.tickets_remaining);
+
+                    if receipt.success {
+                        pool.add_tokens(receipt.tickets_consumed);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to replenish token pool: {e}");
+            }
+        }
+
+        pool.signal_replenishment_complete();
+        Ok(())
     }
 
     /// Return tickets based on actual resource usage.
@@ -143,7 +330,7 @@ impl RateLimitingManager {
     ) -> Result<(), Error> {
         let span = Span::current();
         // We cast the usage values to i64 so that they are reported as integers in OpenTelemetry (rather than strings)
-        match actual_usage {
+        let (tokens, model_inferences) = match actual_usage {
             RateLimitResourceUsage::Exact {
                 tokens,
                 model_inferences,
@@ -151,6 +338,7 @@ impl RateLimitingManager {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
                 span.record("underestimate", false);
+                (tokens, model_inferences)
             }
             RateLimitResourceUsage::UnderEstimate {
                 tokens,
@@ -159,6 +347,22 @@ impl RateLimitingManager {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
                 span.record("underestimate", true);
+                (tokens, model_inferences)
+            }
+        };
+
+        // Record usage for P99 tracking (in pooled mode)
+        if self.pool_mode() == PoolMode::Pooled {
+            for borrow in ticket_borrows.borrows() {
+                let pool = self.pool_registry.get_or_create(&borrow.active_limit);
+                pool.record_usage(tokens, model_inferences);
+
+                // Adjust pool accounting based on actual vs estimated usage
+                let actual_usage_this_request = match borrow.active_limit.limit.resource {
+                    RateLimitResource::ModelInference => model_inferences,
+                    RateLimitResource::Token => tokens,
+                };
+                pool.adjust_usage(borrow.receipt.tickets_consumed, actual_usage_this_request);
             }
         }
 
@@ -215,20 +419,70 @@ impl RateLimitingManager {
             };
         }
 
-        let (consume_result, return_result) = tokio::join!(
-            self.client.consume_tickets(&requests),
-            self.client.return_tickets(returns)
-        );
+        // Only make DB calls if there's actually work to do
+        if !requests.is_empty() || !returns.is_empty() {
+            let consume_future = async {
+                if requests.is_empty() {
+                    Ok(vec![])
+                } else {
+                    self.client.consume_tickets(&requests).await
+                }
+            };
+            let return_future = async {
+                if returns.is_empty() {
+                    Ok(vec![])
+                } else {
+                    self.client.return_tickets(returns).await
+                }
+            };
 
-        consume_result?;
-        return_result?;
+            let (consume_result, return_result) = tokio::join!(consume_future, return_future);
+
+            consume_result?;
+            return_result?;
+        }
 
         Ok(())
     }
 
     /// Shutdown the rate limiting manager.
-    /// This is a no-op in direct mode (no tokens to return).
-    pub fn shutdown(&self) -> Result<(), Error> {
+    /// In pooled mode, returns unused tokens to the database.
+    pub async fn shutdown(&self) -> Result<(), Error> {
+        if self.pool_mode() == PoolMode::Direct || self.pool_registry.is_empty() {
+            return Ok(());
+        }
+
+        // Collect all unused tokens from pools and return them to the database
+        let mut return_requests = Vec::new();
+
+        for (key, pool) in self.pool_registry.iter() {
+            let unused = pool.unused_tokens();
+            if unused > 0 {
+                return_requests.push(ReturnTicketsRequest {
+                    key: super::ActiveRateLimitKey::new(key),
+                    capacity: pool.limit.capacity,
+                    refill_amount: pool.limit.refill_rate,
+                    refill_interval: pool.limit.interval.to_pg_interval(),
+                    returned: unused,
+                });
+            }
+        }
+
+        if !return_requests.is_empty() {
+            // Use a timeout to avoid blocking shutdown indefinitely
+            let timeout = self.config.pool.shutdown_timeout();
+            match tokio::time::timeout(timeout, self.client.return_tickets(return_requests)).await {
+                Ok(result) => {
+                    if let Err(e) = result {
+                        tracing::warn!("Failed to return tokens during shutdown: {e}");
+                    }
+                }
+                Err(_) => {
+                    tracing::warn!("Timeout returning tokens during shutdown");
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -238,8 +492,8 @@ mod tests {
     use super::*;
     use crate::db::{ConsumeTicketsReceipt, MockRateLimitQueries, ReturnTicketsReceipt};
     use crate::rate_limiting::{
-        EstimatedRateLimitResourceUsage, RateLimit, RateLimitInterval, RateLimitingConfigPriority,
-        RateLimitingConfigRule, RateLimitingConfigScopes,
+        EstimatedRateLimitResourceUsage, PoolConfig, RateLimit, RateLimitInterval,
+        RateLimitingConfigPriority, RateLimitingConfigRule, RateLimitingConfigScopes,
     };
     use std::collections::HashMap;
 
@@ -273,6 +527,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
+            pool: PoolConfig::default(),
         });
         let manager = RateLimitingManager::new(config, PostgresConnectionInfo::Disabled);
 
@@ -282,10 +537,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_shutdown_returns_ok() {
+    #[tokio::test]
+    async fn test_shutdown_returns_ok() {
         let manager = RateLimitingManager::new_dummy();
-        let result = manager.shutdown();
+        let result = manager.shutdown().await;
         assert!(result.is_ok(), "Shutdown should return Ok");
     }
 
@@ -354,6 +609,17 @@ mod tests {
         mock
     }
 
+    fn make_direct_config_with_rule(rule: RateLimitingConfigRule) -> Arc<RateLimitingConfig> {
+        Arc::new(RateLimitingConfig {
+            rules: vec![rule],
+            enabled: true,
+            pool: PoolConfig {
+                mode: PoolMode::Direct,
+                ..PoolConfig::default()
+            },
+        })
+    }
+
     #[tokio::test]
     async fn test_consume_tickets_empty_rules() {
         // With empty rules, consume_tickets doesn't call the client
@@ -387,6 +653,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: false,
+            pool: PoolConfig::default(),
         });
         let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -405,17 +672,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_consume_tickets_success() {
+    async fn test_consume_tickets_success_direct_mode() {
         let mock = create_mock_client_success();
         let rule = RateLimitingConfigRule {
             limits: vec![make_token_limit(1000)],
             scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
             priority: RateLimitingConfigPriority::Always,
         };
-        let config = Arc::new(RateLimitingConfig {
-            rules: vec![rule],
-            enabled: true,
-        });
+        let config = make_direct_config_with_rule(rule);
         let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
@@ -430,17 +694,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_consume_tickets_rate_limit_exceeded() {
+    async fn test_consume_tickets_rate_limit_exceeded_direct_mode() {
         let mock = create_mock_client_rate_limited();
         let rule = RateLimitingConfigRule {
             limits: vec![make_token_limit(1000)],
             scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
             priority: RateLimitingConfigPriority::Always,
         };
-        let config = Arc::new(RateLimitingConfig {
-            rules: vec![rule],
-            enabled: true,
-        });
+        let config = make_direct_config_with_rule(rule);
         let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
@@ -460,10 +721,7 @@ mod tests {
             scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
             priority: RateLimitingConfigPriority::Always,
         };
-        let config = Arc::new(RateLimitingConfig {
-            rules: vec![rule],
-            enabled: true,
-        });
+        let config = make_direct_config_with_rule(rule);
         let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
@@ -493,10 +751,7 @@ mod tests {
             scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
             priority: RateLimitingConfigPriority::Always,
         };
-        let config = Arc::new(RateLimitingConfig {
-            rules: vec![rule],
-            enabled: true,
-        });
+        let config = make_direct_config_with_rule(rule);
         let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
@@ -529,10 +784,7 @@ mod tests {
             scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
             priority: RateLimitingConfigPriority::Always,
         };
-        let config = Arc::new(RateLimitingConfig {
-            rules: vec![rule],
-            enabled: true,
-        });
+        let config = make_direct_config_with_rule(rule);
         let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
@@ -565,10 +817,7 @@ mod tests {
             scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
             priority: RateLimitingConfigPriority::Always,
         };
-        let config = Arc::new(RateLimitingConfig {
-            rules: vec![rule],
-            enabled: true,
-        });
+        let config = make_direct_config_with_rule(rule);
         let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
@@ -588,5 +837,231 @@ mod tests {
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(result.is_ok(), "Should succeed with underestimate usage");
+    }
+
+    // Tests for pooled mode
+
+    fn make_pooled_config_with_rule(rule: RateLimitingConfigRule) -> Arc<RateLimitingConfig> {
+        Arc::new(RateLimitingConfig {
+            rules: vec![rule],
+            enabled: true,
+            pool: PoolConfig {
+                mode: PoolMode::Pooled,
+                ..PoolConfig::default()
+            },
+        })
+    }
+
+    /// Create a mock client that tracks call counts and returns successful responses.
+    /// Returns (mock, call_counter) where call_counter can be used to verify DB calls.
+    fn create_mock_client_with_counter() -> (MockRateLimitQueries, Arc<std::sync::atomic::AtomicU32>)
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        let consume_count = Arc::new(AtomicU32::new(0));
+        let consume_count_clone = Arc::clone(&consume_count);
+
+        let mut mock = MockRateLimitQueries::new();
+        mock.expect_consume_tickets().returning(move |requests| {
+            consume_count_clone.fetch_add(1, Ordering::SeqCst);
+            let receipts: Vec<ConsumeTicketsReceipt> = requests
+                .iter()
+                .map(|r| ConsumeTicketsReceipt {
+                    key: r.key.clone(),
+                    success: true,
+                    tickets_remaining: r.capacity.saturating_sub(r.requested),
+                    tickets_consumed: r.requested,
+                })
+                .collect();
+            Box::pin(async move { Ok(receipts) })
+        });
+        mock.expect_return_tickets().returning(|requests| {
+            let receipts: Vec<ReturnTicketsReceipt> = requests
+                .iter()
+                .map(|r| ReturnTicketsReceipt {
+                    key: r.key.clone(),
+                    balance: r.returned,
+                })
+                .collect();
+            Box::pin(async move { Ok(receipts) })
+        });
+
+        (mock, consume_count)
+    }
+
+    #[tokio::test]
+    async fn test_pooled_mode_warmup_hits_db_each_request() {
+        // During warm-up (first 100 requests), each request should hit the DB
+        let (mock, consume_count) = create_mock_client_with_counter();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_token_limit(10000)],
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = make_pooled_config_with_rule(rule);
+        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+
+        // Make 10 requests during warm-up
+        for i in 0..10 {
+            let request = MockRateLimitedRequest {
+                tokens: 10,
+                model_inferences: 1,
+            };
+            let result = manager.consume_tickets(&scope_info, &request).await;
+            assert!(result.is_ok(), "Request {i} should succeed during warm-up");
+        }
+
+        // Each warm-up request should have hit the DB
+        assert_eq!(
+            consume_count.load(std::sync::atomic::Ordering::SeqCst),
+            10,
+            "Each warm-up request should hit the DB"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pooled_mode_after_warmup_serves_from_pool() {
+        // After warm-up completes, requests should be served from the in-memory pool
+        // without hitting the DB (until replenishment is needed)
+        let (mock, consume_count) = create_mock_client_with_counter();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_token_limit(1_000_000)], // Large capacity
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = make_pooled_config_with_rule(rule);
+        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+
+        // Complete warm-up phase (100 requests)
+        for _ in 0..100 {
+            let request = MockRateLimitedRequest {
+                tokens: 10,
+                model_inferences: 1,
+            };
+            let _ = manager.consume_tickets(&scope_info, &request).await;
+        }
+
+        let warmup_db_calls = consume_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(warmup_db_calls, 100, "Warm-up should make 100 DB calls");
+
+        // After warm-up, first post-warmup request triggers one replenishment
+        let request = MockRateLimitedRequest {
+            tokens: 10,
+            model_inferences: 1,
+        };
+        let result = manager.consume_tickets(&scope_info, &request).await;
+        assert!(result.is_ok(), "Post-warmup request should succeed");
+
+        let after_first_post_warmup =
+            consume_count.load(std::sync::atomic::Ordering::SeqCst) - warmup_db_calls;
+        assert_eq!(
+            after_first_post_warmup, 1,
+            "First post-warmup request should trigger one replenishment"
+        );
+
+        // Subsequent requests should be served from pool without DB calls
+        // (as long as pool has capacity)
+        let db_calls_before = consume_count.load(std::sync::atomic::Ordering::SeqCst);
+        for i in 0..50 {
+            let request = MockRateLimitedRequest {
+                tokens: 10,
+                model_inferences: 1,
+            };
+            let result = manager.consume_tickets(&scope_info, &request).await;
+            assert!(
+                result.is_ok(),
+                "Request {i} should succeed from pool without DB"
+            );
+        }
+        let db_calls_after = consume_count.load(std::sync::atomic::Ordering::SeqCst);
+
+        // Should have made 0 or very few additional DB calls (only if replenishment triggered)
+        let additional_calls = db_calls_after - db_calls_before;
+        assert!(
+            additional_calls <= 5,
+            "Should serve most requests from pool without DB calls, but made {additional_calls} calls"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pooled_mode_return_tickets_no_db_call_when_exact_match() {
+        // In pooled mode, returning tickets with exact usage match should not hit DB
+        let (mock, consume_count) = create_mock_client_with_counter();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_token_limit(1_000_000)],
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = make_pooled_config_with_rule(rule);
+        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+
+        // Complete warm-up and get a borrow
+        for _ in 0..100 {
+            let request = MockRateLimitedRequest {
+                tokens: 10,
+                model_inferences: 1,
+            };
+            let _ = manager.consume_tickets(&scope_info, &request).await;
+        }
+
+        // Get one more borrow after warm-up
+        let request = MockRateLimitedRequest {
+            tokens: 100,
+            model_inferences: 1,
+        };
+        let borrows = manager
+            .consume_tickets(&scope_info, &request)
+            .await
+            .unwrap();
+
+        let db_calls_before_return = consume_count.load(std::sync::atomic::Ordering::SeqCst);
+
+        // Return with exact match - should not hit DB
+        let actual_usage = RateLimitResourceUsage::Exact {
+            tokens: 100,
+            model_inferences: 1,
+        };
+        let result = manager.return_tickets(borrows, actual_usage).await;
+        assert!(result.is_ok(), "Return tickets should succeed");
+
+        let db_calls_after_return = consume_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            db_calls_before_return, db_calls_after_return,
+            "Return tickets with exact match should not hit DB"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_direct_mode_always_hits_db() {
+        // In direct mode, every request should hit the DB
+        let (mock, consume_count) = create_mock_client_with_counter();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_token_limit(10000)],
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = make_direct_config_with_rule(rule);
+        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+
+        // Make 150 requests (more than warm-up threshold)
+        for i in 0..150 {
+            let request = MockRateLimitedRequest {
+                tokens: 10,
+                model_inferences: 1,
+            };
+            let result = manager.consume_tickets(&scope_info, &request).await;
+            assert!(result.is_ok(), "Request {i} should succeed in direct mode");
+        }
+
+        // Every request should have hit the DB in direct mode
+        assert_eq!(
+            consume_count.load(std::sync::atomic::Ordering::SeqCst),
+            150,
+            "Direct mode should hit DB for every request"
+        );
     }
 }
