@@ -136,6 +136,13 @@ export default function App({ loaderData }: Route.ComponentProps) {
   const { infraError } = loaderData;
   const [dialogOpen, setDialogOpen] = React.useState(true);
 
+  // Reset dialog when infraError changes (component re-renders, not remounts)
+  React.useEffect(() => {
+    if (infraError) {
+      setDialogOpen(true);
+    }
+  }, [infraError]);
+
   return (
     <AppProviders loaderData={loaderData}>
       <div className="fixed inset-0 flex">
