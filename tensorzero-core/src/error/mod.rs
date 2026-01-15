@@ -197,6 +197,7 @@ impl Error {
         }
     }
 
+    #[allow(clippy::allow_attributes, clippy::unused_self)]
     fn log_backtrace(&self) {
         #[cfg(feature = "e2e_tests")]
         if let Some(backtrace) = &self.backtrace
