@@ -1,3 +1,4 @@
+import { Suspense, useEffect } from "react";
 import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
@@ -5,9 +6,14 @@ import {
   loadFileDataForStoredInput,
 } from "~/utils/resolve.server";
 import type { Route } from "./+types/route";
-import { data, useNavigate, type RouteHandle } from "react-router";
+import {
+  Await,
+  data,
+  useLocation,
+  useNavigate,
+  type RouteHandle,
+} from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import { useEffect } from "react";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
@@ -15,13 +21,37 @@ import {
   InferenceDetailContent,
   type InferenceDetailData,
 } from "~/components/inference/InferenceDetailContent";
+import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
+import { InferenceContentSkeleton } from "./InferenceSkeleton";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
 };
 
-export async function loader({ request, params }: Route.LoaderArgs) {
-  const { inference_id } = params;
+interface LoaderData {
+  inference: Awaited<
+    ReturnType<ReturnType<typeof getTensorZeroClient>["getInferences"]>
+  >["inferences"][0];
+  resolvedInput: Awaited<ReturnType<typeof loadFileDataForStoredInput>>;
+  model_inferences: Awaited<ReturnType<typeof resolveModelInferences>>;
+  usedVariants: string[];
+  feedback: Awaited<
+    ReturnType<ReturnType<typeof getTensorZeroClient>["getFeedbackByTargetId"]>
+  >;
+  feedback_bounds: Awaited<
+    ReturnType<
+      ReturnType<typeof getTensorZeroClient>["getFeedbackBoundsByTargetId"]
+    >
+  >;
+  hasDemonstration: boolean;
+  newFeedbackId: string | null;
+  latestFeedbackByMetric: Record<string, string>;
+}
+
+async function fetchInferenceData(
+  request: Request,
+  inference_id: string,
+): Promise<LoaderData> {
   const url = new URL(request.url);
   const newFeedbackId = url.searchParams.get("newFeedbackId");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
@@ -133,7 +163,27 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-export default function InferencePage({ loaderData }: Route.ComponentProps) {
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const { inference_id } = params;
+  // Return promise for streaming - data will be resolved inside Await
+  const inferenceDataPromise = fetchInferenceData(request, inference_id);
+  return { inferenceData: inferenceDataPromise };
+}
+
+function InferenceErrorState({ id }: { id?: string }) {
+  return (
+    <>
+      <PageHeader label="Inference" name={id} />
+      <SectionAsyncErrorState />
+    </>
+  );
+}
+
+interface InferenceContentProps {
+  data: LoaderData;
+}
+
+function InferenceContent({ data: loaderData }: InferenceContentProps) {
   const {
     inference,
     resolvedInput,
@@ -221,25 +271,47 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
+    <InferenceDetailContent
+      data={inferenceData}
+      onFeedbackAdded={handleFeedbackAdded}
+      feedbackFooter={
+        <PageButtons
+          onNextPage={handleNextFeedbackPage}
+          onPreviousPage={handlePreviousFeedbackPage}
+          disableNext={disableNextFeedbackPage}
+          disablePrevious={disablePreviousFeedbackPage}
+        />
+      }
+      renderHeader={({ basicInfo, actionBar }) => (
+        <PageHeader label="Inference" name={inference.inference_id}>
+          {basicInfo}
+          {actionBar}
+        </PageHeader>
+      )}
+    />
+  );
+}
+
+export default function InferencePage({
+  loaderData,
+  params,
+}: Route.ComponentProps) {
+  const { inferenceData } = loaderData;
+  const location = useLocation();
+
+  return (
     <PageLayout>
-      <InferenceDetailContent
-        data={inferenceData}
-        onFeedbackAdded={handleFeedbackAdded}
-        feedbackFooter={
-          <PageButtons
-            onNextPage={handleNextFeedbackPage}
-            onPreviousPage={handlePreviousFeedbackPage}
-            disableNext={disableNextFeedbackPage}
-            disablePrevious={disablePreviousFeedbackPage}
-          />
-        }
-        renderHeader={({ basicInfo, actionBar }) => (
-          <PageHeader label="Inference" name={inference.inference_id}>
-            {basicInfo}
-            {actionBar}
-          </PageHeader>
-        )}
-      />
+      <Suspense
+        key={location.key}
+        fallback={<InferenceContentSkeleton id={params.inference_id} />}
+      >
+        <Await
+          resolve={inferenceData}
+          errorElement={<InferenceErrorState id={params.inference_id} />}
+        >
+          {(resolvedData) => <InferenceContent data={resolvedData} />}
+        </Await>
+      </Suspense>
     </PageLayout>
   );
 }
