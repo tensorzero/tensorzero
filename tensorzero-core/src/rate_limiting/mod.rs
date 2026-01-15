@@ -1427,12 +1427,20 @@ mod tests {
         };
 
         // Disabled config should return empty limits
-        let active_limits_disabled = config_disabled.get_active_limits(&scope_info);
-        assert!(active_limits_disabled.is_empty());
+        let pool_manager_disabled = pool::TokenPoolManager::new(Arc::new(config_disabled));
+        let active_limits_disabled = pool_manager_disabled.get_active_limits(&scope_info);
+        assert!(
+            active_limits_disabled.is_empty(),
+            "Disabled config should return empty limits"
+        );
 
         // Enabled config with no rules should return empty limits
-        let active_limits_no_rules = config_enabled.get_active_limits(&scope_info);
-        assert!(active_limits_no_rules.is_empty());
+        let pool_manager_enabled = pool::TokenPoolManager::new(Arc::new(config_enabled));
+        let active_limits_no_rules = pool_manager_enabled.get_active_limits(&scope_info);
+        assert!(
+            active_limits_no_rules.is_empty(),
+            "Enabled config with no rules should return empty limits"
+        );
     }
 
     #[test]
@@ -1535,18 +1543,24 @@ mod tests {
             priority: RateLimitingConfigPriority::Priority(7),
         };
 
-        let config_numeric_priorities = RateLimitingConfig {
+        let config_numeric_priorities = Arc::new(RateLimitingConfig {
             rules: vec![rule_priority_3, rule_priority_7],
             enabled: true,
             pool: Default::default(),
-        };
+        });
 
-        let active_limits = config_numeric_priorities.get_active_limits(&scope_info);
+        let pool_manager = pool::TokenPoolManager::new(config_numeric_priorities);
+        let active_limits = pool_manager.get_active_limits(&scope_info);
         // Should only have the limit from priority 7 rule
-        assert_eq!(active_limits.len(), 1);
+        assert_eq!(
+            active_limits.len(),
+            1,
+            "Should only have the limit from priority 7 rule"
+        );
         assert_eq!(
             active_limits[0].limit.resource,
-            RateLimitResource::ModelInference
+            RateLimitResource::ModelInference,
+            "Should be ModelInference from priority 7 rule"
         );
 
         // Test 2: Multiple limits in same rule
@@ -1562,20 +1576,27 @@ mod tests {
             priority: RateLimitingConfigPriority::Always,
         };
 
-        let config_multiple_limits = RateLimitingConfig {
+        let config_multiple_limits = Arc::new(RateLimitingConfig {
             rules: vec![rule_multiple_limits],
             enabled: true,
             pool: Default::default(),
-        };
+        });
 
-        let active_limits = config_multiple_limits.get_active_limits(&scope_info);
-        assert_eq!(active_limits.len(), 2);
+        let pool_manager = pool::TokenPoolManager::new(config_multiple_limits);
+        let active_limits = pool_manager.get_active_limits(&scope_info);
+        assert_eq!(active_limits.len(), 2, "Should have 2 active limits");
         let resources: Vec<RateLimitResource> = active_limits
             .iter()
             .map(|limit| limit.limit.resource)
             .collect();
-        assert!(resources.contains(&RateLimitResource::Token));
-        assert!(resources.contains(&RateLimitResource::ModelInference));
+        assert!(
+            resources.contains(&RateLimitResource::Token),
+            "Should contain Token resource"
+        );
+        assert!(
+            resources.contains(&RateLimitResource::ModelInference),
+            "Should contain ModelInference resource"
+        );
     }
 
     #[test]
@@ -1762,9 +1783,17 @@ mod tests {
     fn test_ticket_borrow_lifecycle() {
         use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest};
 
+        // Create a pool manager for testing
+        let rate_limiting_config = Arc::new(RateLimitingConfig::default());
+        let pool_manager = Arc::new(pool::TokenPoolManager::new(rate_limiting_config));
+
         // Test empty borrow creation
-        let empty_borrow = TicketBorrows::empty();
-        assert_eq!(empty_borrow.borrows.len(), 0);
+        let empty_borrow = TicketBorrows::empty(pool_manager.clone());
+        assert_eq!(
+            empty_borrow.borrows.len(),
+            0,
+            "Empty borrow should have no borrows"
+        );
 
         // Test valid borrow creation
         let limit = Arc::new(RateLimit {
@@ -1803,9 +1832,18 @@ mod tests {
             requested: 50,
         };
 
-        let valid_borrow =
-            TicketBorrows::new(vec![receipt], vec![active_limit], vec![request]).unwrap();
-        assert_eq!(valid_borrow.borrows.len(), 1);
+        let valid_borrow = TicketBorrows::new(
+            pool_manager.clone(),
+            vec![receipt],
+            vec![active_limit],
+            vec![request],
+        )
+        .unwrap();
+        assert_eq!(
+            valid_borrow.borrows.len(),
+            1,
+            "Valid borrow should have one borrow"
+        );
 
         // Test iterator functionality
         let mut iter_count = 0;
@@ -1858,8 +1896,12 @@ mod tests {
             requested: 10,
         };
 
-        let mismatched_result = TicketBorrows::new(vec![receipt2], vec![], vec![request2]);
-        assert!(mismatched_result.is_err());
+        let mismatched_result =
+            TicketBorrows::new(pool_manager.clone(), vec![receipt2], vec![], vec![request2]);
+        assert!(
+            mismatched_result.is_err(),
+            "Mismatched array lengths should return error"
+        );
 
         // Another mismatch test - more active limits than receipts
         let receipt3 = ConsumeTicketsReceipt {
@@ -1881,9 +1923,16 @@ mod tests {
             requested: 15,
         };
 
-        let mismatched_result2 =
-            TicketBorrows::new(vec![receipt3], vec![active_limit2], vec![request3]);
-        assert!(mismatched_result2.is_ok()); // This should actually work - 1:1 ratio
+        let mismatched_result2 = TicketBorrows::new(
+            pool_manager.clone(),
+            vec![receipt3],
+            vec![active_limit2],
+            vec![request3],
+        );
+        assert!(
+            mismatched_result2.is_ok(),
+            "1:1 ratio should work - this should actually work"
+        );
     }
 
     #[test]
@@ -1912,7 +1961,7 @@ mod tests {
             capacity: 1000,
             refill_rate: 100,
         });
-        let config_with_token = RateLimitingConfig {
+        let config_with_token = Arc::new(RateLimitingConfig {
             rules: vec![RateLimitingConfigRule {
                 limits: vec![token_limit.clone()],
                 scope: RateLimitingConfigScopes(vec![]),
@@ -1920,10 +1969,14 @@ mod tests {
             }],
             enabled: true,
             pool: Default::default(),
-        };
-        let resources = config_with_token.get_rate_limited_resources(&scope_info);
-        assert_eq!(resources.len(), 1);
-        assert!(resources.contains(&RateLimitResource::Token));
+        });
+        let pool_manager = pool::TokenPoolManager::new(config_with_token);
+        let resources = pool_manager.get_rate_limited_resources(&scope_info);
+        assert_eq!(resources.len(), 1, "Token resource should be included");
+        assert!(
+            resources.contains(&RateLimitResource::Token),
+            "Should contain Token resource"
+        );
 
         // Only ModelInference limits - should NOT include Token resource
         let model_limit = Arc::new(RateLimit {
@@ -1932,7 +1985,7 @@ mod tests {
             capacity: 100,
             refill_rate: 10,
         });
-        let config_model_only = RateLimitingConfig {
+        let config_model_only = Arc::new(RateLimitingConfig {
             rules: vec![RateLimitingConfigRule {
                 limits: vec![model_limit.clone()],
                 scope: RateLimitingConfigScopes(vec![]),
@@ -1940,14 +1993,25 @@ mod tests {
             }],
             enabled: true,
             pool: Default::default(),
-        };
-        let resources = config_model_only.get_rate_limited_resources(&scope_info);
-        assert_eq!(resources.len(), 1);
-        assert!(resources.contains(&RateLimitResource::ModelInference));
-        assert!(!resources.contains(&RateLimitResource::Token));
+        });
+        let pool_manager = pool::TokenPoolManager::new(config_model_only);
+        let resources = pool_manager.get_rate_limited_resources(&scope_info);
+        assert_eq!(
+            resources.len(),
+            1,
+            "Only ModelInference resource should be included"
+        );
+        assert!(
+            resources.contains(&RateLimitResource::ModelInference),
+            "Should contain ModelInference resource"
+        );
+        assert!(
+            !resources.contains(&RateLimitResource::Token),
+            "Should not contain Token resource"
+        );
 
         // Disabled config - should return empty even with token limits
-        let config_disabled = RateLimitingConfig {
+        let config_disabled = Arc::new(RateLimitingConfig {
             enabled: false,
             rules: vec![RateLimitingConfigRule {
                 limits: vec![token_limit.clone()],
@@ -1955,11 +2019,13 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             pool: Default::default(),
-        };
+        });
+        let pool_manager = pool::TokenPoolManager::new(config_disabled);
         assert!(
-            config_disabled
+            pool_manager
                 .get_rate_limited_resources(&scope_info)
-                .is_empty()
+                .is_empty(),
+            "Disabled config should return empty resources"
         );
     }
 

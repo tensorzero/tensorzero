@@ -26,7 +26,9 @@ use super::{
     ActiveRateLimit, ActiveRateLimitKey, FailedRateLimit, RateLimit, RateLimitResource,
     RateLimitedRequest, RateLimitingConfig, RateLimitingConfigPriority, ScopeInfo, TicketBorrows,
 };
-use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest};
+use crate::db::{
+    ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
+};
 use crate::error::{Error, ErrorDetails};
 
 /// Duration for the P99 usage tracking rolling window
@@ -615,7 +617,7 @@ impl TokenPoolManager {
     }
 
     /// Given a particular scope, finds the RateLimits that are active for that scope.
-    fn get_active_limits(&self, scope_info: &ScopeInfo) -> Vec<ActiveRateLimit> {
+    pub(crate) fn get_active_limits(&self, scope_info: &ScopeInfo) -> Vec<ActiveRateLimit> {
         if !self.config.enabled {
             return vec![];
         }
@@ -626,7 +628,9 @@ impl TokenPoolManager {
             .config
             .rules
             .iter()
-            .map(|rule| rule.get_rate_limits_if_match_update_priority(scope_info, &mut max_priority))
+            .map(|rule| {
+                rule.get_rate_limits_if_match_update_priority(scope_info, &mut max_priority)
+            })
             .collect();
 
         // Second pass: filter and flatten based on priority

@@ -2615,9 +2615,8 @@ mod tests {
             },
             tags: Arc::new(Default::default()),
             token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
-                rate_limiting_config.clone(),
+                rate_limiting_config,
             )),
-            rate_limiting_config,
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2753,9 +2752,8 @@ mod tests {
             },
             tags: Arc::new(tags.clone()),
             token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
-                rate_limiting_config_arc.clone(),
+                rate_limiting_config_arc,
             )),
-            rate_limiting_config: rate_limiting_config_arc,
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2848,9 +2846,8 @@ mod tests {
             },
             tags: Arc::new(Default::default()),
             token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
-                rate_limiting_config.clone(),
+                rate_limiting_config,
             )),
-            rate_limiting_config,
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3000,9 +2997,8 @@ mod tests {
             },
             tags: Arc::new(Default::default()),
             token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
-                rate_limiting_config.clone(),
+                rate_limiting_config,
             )),
-            rate_limiting_config,
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3179,9 +3175,8 @@ mod tests {
             },
             tags: Arc::new(Default::default()),
             token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
-                rate_limiting_config.clone(),
+                rate_limiting_config,
             )),
-            rate_limiting_config,
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3279,9 +3274,8 @@ mod tests {
             },
             tags: Arc::new(Default::default()),
             token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
-                rate_limiting_config.clone(),
+                rate_limiting_config,
             )),
-            rate_limiting_config,
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3347,9 +3341,8 @@ mod tests {
             },
             tags: Arc::new(Default::default()),
             token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
-                rate_limiting_config.clone(),
+                rate_limiting_config,
             )),
-            rate_limiting_config,
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3418,9 +3411,8 @@ mod tests {
             },
             tags: Arc::new(Default::default()),
             token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
-                rate_limiting_config.clone(),
+                rate_limiting_config,
             )),
-            rate_limiting_config,
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3485,9 +3477,8 @@ mod tests {
             },
             tags: Arc::new(Default::default()),
             token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
-                rate_limiting_config.clone(),
+                rate_limiting_config,
             )),
-            rate_limiting_config,
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {

@@ -851,11 +851,8 @@ mod tests {
                     },
                     tags: Arc::new(Default::default()),
                     token_pool_manager: Arc::new(
-                        crate::rate_limiting::pool::TokenPoolManager::new(
-                            rate_limiting_config.clone(),
-                        ),
+                        crate::rate_limiting::pool::TokenPoolManager::new(rate_limiting_config),
                     ),
-                    rate_limiting_config,
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: crate::rate_limiting::ScopeInfo {
