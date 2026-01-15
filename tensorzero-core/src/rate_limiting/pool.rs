@@ -22,7 +22,7 @@ use tracing::Span;
 
 use super::usage_histogram::RollingUsageTracker;
 use super::{
-    ActiveRateLimit, ActiveRateLimitKey, FailedRateLimit, RateLimit, RateLimitResource,
+    ActiveRateLimit, ActiveRateLimitKey, FailedRateLimit, PoolMode, RateLimit, RateLimitResource,
     RateLimitedRequest, RateLimitingConfig, RateLimitingConfigPriority, ScopeInfo, TicketBorrows,
 };
 use crate::db::{
@@ -480,6 +480,13 @@ impl TokenPoolManager {
             span.record("estimated_usage.model_inferences", mi as i64);
         }
 
+        // Check mode: Direct bypasses the pool entirely
+        if self.config.pool().mode == PoolMode::Direct {
+            return self
+                .consume_tickets_direct(client, &limits, &rate_limit_resource_requests)
+                .await;
+        }
+
         // Try consuming from in-memory pool first
         match self.try_consume(&limits, tokens, model_inferences) {
             Ok(()) => {
@@ -563,6 +570,46 @@ impl TokenPoolManager {
                 }
             }
         }
+    }
+
+    /// Consume tickets directly from the database, bypassing the in-memory pool.
+    /// Used when `PoolMode::Direct` is configured.
+    async fn consume_tickets_direct(
+        self: &Arc<Self>,
+        client: &impl RateLimitQueries,
+        limits: &[ActiveRateLimit],
+        rate_limit_resource_requests: &super::EstimatedRateLimitResourceUsage,
+    ) -> Result<TicketBorrows, Error> {
+        let ticket_requests: Vec<ConsumeTicketsRequest> = limits
+            .iter()
+            .map(|limit| limit.get_consume_tickets_request(rate_limit_resource_requests))
+            .collect();
+
+        let receipts = client.consume_tickets(&ticket_requests).await?;
+
+        let failed_rate_limits: Vec<FailedRateLimit> = receipts
+            .iter()
+            .zip(limits.iter())
+            .filter_map(|(receipt, limit)| {
+                if receipt.success {
+                    None
+                } else {
+                    Some(FailedRateLimit {
+                        key: limit.key.clone(),
+                        requested: receipt.tickets_consumed,
+                        available: receipt.tickets_remaining,
+                        resource: limit.limit.resource,
+                        scope_key: limit.scope_key.clone(),
+                    })
+                }
+            })
+            .collect();
+
+        if !failed_rate_limits.is_empty() {
+            return Err(ErrorDetails::RateLimitExceeded { failed_rate_limits }.into());
+        }
+
+        TicketBorrows::new(Arc::clone(self), receipts, limits.to_vec(), ticket_requests)
     }
 
     /// Given a particular scope, finds the RateLimits that are active for that scope.

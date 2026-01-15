@@ -35,9 +35,23 @@ mod usage_histogram;
  *      to not add keys which could trample one another.
  */
 
+/// Mode for rate limiting token management
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PoolMode {
+    /// Use in-memory token pool with adaptive pre-borrowing (default)
+    #[default]
+    Pooled,
+    /// Bypass pool and hit database directly on every request
+    Direct,
+}
+
 /// Configuration for the in-memory token pool used for pre-borrowing
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PoolConfig {
+    /// Mode for token management: "pooled" (default) or "direct"
+    #[serde(default)]
+    pub mode: PoolMode,
     /// Minimum tokens to borrow from the database (floor).
     /// This prevents thrashing when calculated borrow amounts are very small.
     #[serde(default = "default_min_borrow_floor")]
@@ -58,6 +72,7 @@ fn default_shutdown_timeout_ms() -> u64 {
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
+            mode: PoolMode::default(),
             min_borrow_floor: default_min_borrow_floor(),
             shutdown_timeout_ms: default_shutdown_timeout_ms(),
         }
@@ -167,6 +182,16 @@ impl ScopeInfo {
         }
     }
 
+    /// Create a ScopeInfo for load testing with a specific key tag.
+    pub fn new_for_load_test(key: &str) -> Self {
+        let mut tags = HashMap::new();
+        tags.insert("load_test_key".to_string(), key.to_string());
+        Self {
+            tags: Arc::new(tags),
+            api_key_public_id: None,
+        }
+    }
+
     /// Expose relevant information from this `ScopeInfo` as OpenTelemetry span attributes
     pub(crate) fn apply_otel_span_attributes(&self, span: &Span) {
         let ScopeInfo {
@@ -193,6 +218,34 @@ impl RateLimitingConfig {
 
     pub fn pool(&self) -> &PoolConfig {
         &self.pool
+    }
+
+    /// Create a RateLimitingConfig for load testing with a single rule that matches any key.
+    /// The rule will be configured with the given capacity, refill rate, and interval.
+    pub fn new_for_load_test(
+        capacity: u64,
+        refill_rate: u64,
+        interval: RateLimitInterval,
+        pool_config: PoolConfig,
+    ) -> Self {
+        let limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval,
+            capacity,
+            refill_rate,
+        });
+
+        let rule = RateLimitingConfigRule {
+            scope: RateLimitingConfigScopes::new_for_load_test(),
+            limits: vec![limit],
+            priority: RateLimitingConfigPriority::Always,
+        };
+
+        Self {
+            rules: vec![rule],
+            enabled: true,
+            pool: pool_config,
+        }
     }
 }
 
@@ -521,6 +574,15 @@ impl RateLimitingConfigScopes {
         // stable order when generating the key
         scopes.sort();
         Ok(RateLimitingConfigScopes(scopes))
+    }
+
+    /// Create a RateLimitingConfigScopes for load testing that matches on the "load_test_key" tag.
+    pub fn new_for_load_test() -> Self {
+        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
+            tag_key: "load_test_key".to_string(),
+            tag_value: TagValueScope::Each,
+        });
+        RateLimitingConfigScopes(vec![scope])
     }
 
     /// Returns the key (as a Vec) if the scope matches the given info, or None if it does not.
