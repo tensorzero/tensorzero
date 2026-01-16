@@ -736,7 +736,6 @@ fn wrap_provider_stream(
         .clone()
         .map(std::borrow::Cow::into_owned);
     let otlp_config = clients.otlp_config.clone();
-    let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
     let span_clone = span.clone();
 
@@ -795,10 +794,7 @@ fn wrap_provider_stream(
                 }
             };
 
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, usage)
-                .await
-            {
+            if let Err(e) = ticket_borrow.return_tickets(usage).await {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
         }.instrument(span_clone.clone()));
@@ -1778,12 +1774,8 @@ impl ModelProvider {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request.request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request.request)
             .await?;
         let res = match &self.config {
             ProviderConfig::Anthropic(provider) => {
@@ -1891,14 +1883,10 @@ impl ModelProvider {
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
-            let postgres_connection_info = clients.postgres_connection_info.clone();
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
                 async move {
-                    if let Err(e) = ticket_borrow
-                        .return_tickets(&postgres_connection_info, actual_resource_usage)
-                        .await
-                    {
+                    if let Err(e) = ticket_borrow.return_tickets(actual_resource_usage).await {
                         tracing::error!("Failed to return rate limit tickets: {}", e);
                     }
                 }
@@ -1916,12 +1904,8 @@ impl ModelProvider {
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request.request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request.request)
             .await?;
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
@@ -2773,7 +2757,7 @@ mod tests {
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
             DummyCredentials,
         },
-        rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig},
+        rate_limiting::{RateLimitingConfig, RateLimitingManager, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
@@ -2821,7 +2805,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2955,7 +2939,10 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(tags.clone()),
-            rate_limiting_config: Arc::new(rate_limit_config.clone()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new(
+                Arc::new(rate_limit_config),
+                postgres_mock.clone(),
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3045,7 +3032,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3183,6 +3170,26 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            tags: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -3194,30 +3201,7 @@ mod tests {
                 },
             messages: _input,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3270,30 +3254,7 @@ mod tests {
             skip_relay: false,
         };
         let response = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await;
         assert!(response.is_err());
         let error = match response {
@@ -3383,6 +3344,26 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            tags: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -3394,30 +3375,7 @@ mod tests {
                 },
             messages: _,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3491,7 +3449,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3554,7 +3512,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3620,7 +3578,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3682,7 +3640,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {

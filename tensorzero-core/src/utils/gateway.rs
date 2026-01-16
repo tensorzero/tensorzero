@@ -3,8 +3,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::db::postgres::PostgresConnectionInfo;
-use crate::endpoints::openai_compatible::RouterExt;
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, FromRequest, Json, Request, rejection::JsonRejection};
 use moka::sync::Cache;
@@ -22,10 +20,13 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::feedback::FeedbackQueries;
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints;
+use crate::endpoints::openai_compatible::RouterExt;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
+use crate::rate_limiting::RateLimitingManager;
 use autopilot_client::AutopilotClient;
 
 #[cfg(test)]
@@ -95,6 +96,15 @@ impl Drop for GatewayHandle {
                 });
                 tracing::info!("ClickHouse batch writer finished");
             }
+            // Return unused rate limit tokens to the database
+            if !self.app_state.rate_limiting_manager.is_empty() {
+                tracing::info!("Returning unused rate limit tokens to database");
+                if let Err(e) = self.app_state.rate_limiting_manager.shutdown() {
+                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
+                }
+                tracing::info!("Rate limit token return complete");
+            }
+
             self.app_state.deferred_tasks.close();
             // The 'wait' future will resolve immediately if the pool is empty.
             // Closing the pool doesn't block more futures from being added, so checking
@@ -141,6 +151,8 @@ pub struct AppStateData {
     pub autopilot_client: Option<Arc<AutopilotClient>>,
     /// The deployment ID from ClickHouse (64-char hex string)
     pub deployment_id: Option<String>,
+    /// Token pool manager for rate limiting pre-borrowing
+    pub rate_limiting_manager: Arc<RateLimitingManager>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -216,6 +228,10 @@ impl GatewayHandle {
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
         let auth_cache = create_auth_cache_from_config(&config);
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new(
+            Arc::new(config.rate_limiting.clone()),
+            postgres_connection_info.clone(),
+        ));
         Self {
             app_state: AppStateData {
                 config,
@@ -227,6 +243,7 @@ impl GatewayHandle {
                 config_snapshot_cache: None,
                 autopilot_client: None,
                 deployment_id: None,
+                rate_limiting_manager,
                 _private: (),
             },
             cancel_token,
@@ -289,6 +306,11 @@ impl GatewayHandle {
         let autopilot_client =
             setup_autopilot_client(&postgres_connection_info, deployment_id.as_ref()).await?;
 
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new(
+            Arc::new(config.rate_limiting.clone()),
+            postgres_connection_info.clone(),
+        ));
+
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -300,6 +322,7 @@ impl GatewayHandle {
                 config_snapshot_cache,
                 autopilot_client,
                 deployment_id,
+                rate_limiting_manager,
                 _private: (),
             },
             cancel_token,
@@ -320,6 +343,10 @@ impl AppStateData {
         postgres_connection_info: PostgresConnectionInfo,
         deferred_tasks: TaskTracker,
     ) -> Self {
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new(
+            Arc::new(config.rate_limiting.clone()),
+            postgres_connection_info.clone(),
+        ));
         Self {
             config,
             http_client,
@@ -330,6 +357,7 @@ impl AppStateData {
             config_snapshot_cache: None,
             autopilot_client: None,
             deployment_id: None,
+            rate_limiting_manager,
             _private: (),
         }
     }

@@ -56,7 +56,7 @@ use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::observability::request_logging::HttpMetricData;
-use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
+use crate::rate_limiting::{RateLimitingManager, ScopeInfo};
 use crate::relay::TensorzeroRelay;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -177,6 +177,7 @@ pub async fn inference_handler(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        rate_limiting_manager,
         ..
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
@@ -202,6 +203,7 @@ pub async fn inference_handler(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        rate_limiting_manager,
         params,
         api_key_ext,
     ))
@@ -273,12 +275,17 @@ pub struct InferenceOutputData {
         otel.name = "function_inference"
     )
 )]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Function signature matches existing API pattern"
+)]
 pub async fn inference(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
+    rate_limiting_manager: Arc<RateLimitingManager>,
     mut params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<InferenceOutputData, Error> {
@@ -421,7 +428,7 @@ pub async fn inference(
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
         tags: tags.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        rate_limiting_manager,
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
@@ -1588,7 +1595,7 @@ pub struct InferenceClients {
     pub credentials: Arc<InferenceCredentials>,
     pub cache_options: CacheOptions,
     pub tags: Arc<HashMap<String, String>>,
-    pub rate_limiting_config: Arc<RateLimitingConfig>,
+    pub rate_limiting_manager: Arc<RateLimitingManager>,
     pub otlp_config: OtlpConfig,
     pub deferred_tasks: TaskTracker,
     pub scope_info: ScopeInfo,
