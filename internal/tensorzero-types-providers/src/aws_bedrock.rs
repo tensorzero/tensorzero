@@ -3,9 +3,6 @@
 //! These types mirror the AWS Bedrock Converse API request/response structures
 //! for direct HTTP calls without the AWS SDK.
 
-// Allow unused fields/types - these are defined for API completeness and may be used in the future
-#![expect(dead_code)]
-
 use serde::{Deserialize, Serialize};
 
 // =============================================================================

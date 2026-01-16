@@ -16,13 +16,6 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::aws_bedrock_types::{
-    self as types, ContentBlock as BedrockContentBlock, ContentBlockDelta, ContentBlockDeltaEvent,
-    ContentBlockStart, ContentBlockStartEvent, ConverseRequest, ConverseResponse, InferenceConfig,
-    Message, MessageStopEvent, MetadataEvent, ResponseContentBlock, ResponseReasoningContent, Role,
-    StopReason, SystemContentBlock, Tool, ToolChoice, ToolConfig, ToolInputSchema,
-    ToolResultContent, ToolSpec,
-};
 use super::aws_common::{
     self, AWSCredentials, AWSEndpointUrl, AWSRegion, get_credentials, sign_request,
     warn_if_credential_exfiltration_risk,
@@ -51,6 +44,13 @@ use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thoug
 use crate::model::ModelProvider;
 use crate::tool::{
     FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice as TensorZeroToolChoice,
+};
+use tensorzero_types_providers::aws_bedrock::{
+    self as types, ContentBlock as BedrockContentBlock, ContentBlockDelta, ContentBlockDeltaEvent,
+    ContentBlockStart, ContentBlockStartEvent, ConverseRequest, ConverseResponse, InferenceConfig,
+    Message, MessageStopEvent, MetadataEvent, ResponseContentBlock, ResponseReasoningContent, Role,
+    StopReason, SystemContentBlock, Tool, ToolChoice, ToolConfig, ToolInputSchema,
+    ToolResultContent, ToolSpec,
 };
 use uuid::Uuid;
 

@@ -1,6 +1,5 @@
 pub mod anthropic;
 pub mod aws_bedrock;
-mod aws_bedrock_types;
 pub mod aws_common;
 mod aws_http_client;
 pub mod aws_sagemaker;

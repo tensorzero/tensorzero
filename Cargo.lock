@@ -6210,6 +6210,7 @@ dependencies = [
  "tensorzero-auth",
  "tensorzero-derive",
  "tensorzero-types",
+ "tensorzero-types-providers",
  "tensorzero-unsafe-helpers",
  "thiserror 2.0.17",
  "tokio",
@@ -6331,6 +6332,14 @@ dependencies = [
  "ts-rs",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "tensorzero-types-providers"
+version = "2026.1.2"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
