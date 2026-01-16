@@ -85,30 +85,26 @@ pub fn validate_gepa_config(
         }
     }
 
-    // Validate that function's variants are ChatCompletion (GEPA requirement)
+    // Validate that specified initial_variants are ChatCompletion (GEPA requirement).
+    // When initial_variants is None, we filter to only ChatCompletion variants below,
+    // and get_uninitialized_variant_configs will error if none exist.
     let function_variants = function_config.variants();
 
-    let variants_to_check: Vec<&String> = if let Some(initial_variants) = &config.initial_variants {
-        // Only check the specified variants
-        initial_variants.iter().collect()
-    } else {
-        // Check all variant names
-        function_variants.keys().collect()
-    };
-
-    for variant_name in variants_to_check {
-        if let Some(variant_info) = function_variants.get(variant_name) {
-            match &variant_info.inner {
-                VariantConfig::ChatCompletion(_) => {
-                    // Valid - ChatCompletion variant
-                }
-                _ => {
-                    return Err(Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Variant '{}' in Function '{}' is not a ChatCompletion variant. GEPA only supports ChatCompletion variants.",
-                            variant_name, config.function_name
-                        ),
-                    }));
+    if let Some(initial_variants) = &config.initial_variants {
+        for variant_name in initial_variants {
+            if let Some(variant_info) = function_variants.get(variant_name) {
+                match &variant_info.inner {
+                    VariantConfig::ChatCompletion(_) => {
+                        // Valid - ChatCompletion variant
+                    }
+                    _ => {
+                        return Err(Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Variant '{}' in Function '{}' is not a ChatCompletion variant. GEPA only supports ChatCompletion variants.",
+                                variant_name, config.function_name
+                            ),
+                        }));
+                    }
                 }
             }
         }
