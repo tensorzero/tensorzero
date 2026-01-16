@@ -16,9 +16,15 @@ use tensorzero_core::{
         Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
     },
     config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
-    endpoints::{datasets::Datapoint, inference::InferenceResponse},
+    endpoints::{
+        datasets::{ChatInferenceDatapoint, Datapoint},
+        inference::InferenceResponse,
+    },
     error::{Error, ErrorDetails},
-    inference::types::{Arguments, ContentBlockChatOutput, InputExt, Role, StoredInput, Template},
+    inference::types::{
+        Arguments, ContentBlockChatOutput, InputExt, Role, StoredInput, StoredInputMessageContent,
+        Template,
+    },
     optimization::gepa::GEPAConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
@@ -27,28 +33,53 @@ use evaluations::stats::EvaluationInfo;
 
 use crate::gepa::validate::FunctionContext;
 
-/// Recursively removes `signature` fields from Thought content blocks in serialized JSON.
-///
-/// Thought blocks are identified by `"type": "thought"` (from serde tag serialization).
-/// This strips the encrypted Anthropic signature which has no semantic value for GEPA analysis.
-pub(crate) fn strip_thought_signatures(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            // Check if this is a Thought block (has "type": "thought")
-            if map.get("type").and_then(Value::as_str) == Some("thought") {
-                map.remove("signature");
-            }
-            // Recurse into all values
-            for v in map.values_mut() {
-                strip_thought_signatures(v);
-            }
-        }
-        Value::Array(arr) => {
-            for v in arr.iter_mut() {
-                strip_thought_signatures(v);
+// ============================================================================
+// Type-safe thought signature stripping
+// ============================================================================
+//
+// These functions remove the `signature` field from Thought content blocks at
+// the Rust type level, before serialization. This is more type-safe than JSON
+// manipulation and ensures compile-time errors if type structures change.
+//
+// Thought signatures are Anthropic-specific encrypted blobs that have no semantic
+// value and waste tokens when passed to GEPA analysis/mutation models.
+
+/// Strip signatures from input message content blocks.
+fn strip_signatures_from_input(input: &mut Input) {
+    for message in &mut input.messages {
+        for content in &mut message.content {
+            if let InputMessageContent::Thought(thought) = content {
+                thought.signature = None;
             }
         }
-        _ => {}
+    }
+}
+
+/// Strip signatures from stored input message content blocks.
+fn strip_signatures_from_stored_input(input: &mut StoredInput) {
+    for message in &mut input.messages {
+        for content in &mut message.content {
+            if let StoredInputMessageContent::Thought(thought) = content {
+                thought.signature = None;
+            }
+        }
+    }
+}
+
+/// Strip signatures from chat output content blocks.
+fn strip_signatures_from_chat_output(blocks: &mut [ContentBlockChatOutput]) {
+    for block in blocks {
+        if let ContentBlockChatOutput::Thought(thought) = block {
+            thought.signature = None;
+        }
+    }
+}
+
+/// Strip signatures from a Chat datapoint's input and output.
+fn strip_signatures_from_chat_datapoint(datapoint: &mut ChatInferenceDatapoint) {
+    strip_signatures_from_input(&mut datapoint.input);
+    if let Some(ref mut output) = datapoint.output {
+        strip_signatures_from_chat_output(output);
     }
 }
 
@@ -114,23 +145,6 @@ fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatC
     analyze_config
 }
 
-/// Serializes inference output to JSON Value.
-///
-/// Extracts the output from either Chat or Json inference responses.
-///
-/// Returns the serialized output as a JSON Value.
-fn serialize_inference_output(response: &InferenceResponse) -> Result<Value, Error> {
-    match response {
-        InferenceResponse::Chat(chat_response) => to_value(&chat_response.content),
-        InferenceResponse::Json(json_response) => to_value(&json_response.output),
-    }
-    .map_err(|e| {
-        Error::new(ErrorDetails::Inference {
-            message: format!("Failed to serialize inference output: {e}"),
-        })
-    })
-}
-
 /// Builds input JSON for the analyze function.
 ///
 /// Passes high-level objects to the template for serialization.
@@ -159,8 +173,6 @@ pub fn build_analyze_input(
         .map(|(name, config)| (name.clone(), config.path.data().to_string()))
         .collect();
 
-    let output = serialize_inference_output(&eval_info.response)?;
-
     // Build evaluation_scores map with just the scores
     let mut evaluation_scores = Map::new();
     for (evaluator_name, result_opt) in &eval_info.evaluations {
@@ -188,17 +200,25 @@ pub fn build_analyze_input(
     );
     map.insert("templates_map".to_string(), json!(templates_map));
 
-    // Strip thought signatures only from Chat types to avoid modifying legitimate JSON domain data
-    let mut datapoint_value = to_value(&eval_info.datapoint)?;
-    if matches!(eval_info.datapoint, Datapoint::Chat(_)) {
-        strip_thought_signatures(&mut datapoint_value);
-    }
+    // Strip thought signatures at the type level before serialization.
+    // Only Chat types can contain Thought blocks; Json outputs are left intact.
+    let datapoint_value = match eval_info.datapoint.clone() {
+        Datapoint::Chat(mut chat_datapoint) => {
+            strip_signatures_from_chat_datapoint(&mut chat_datapoint);
+            to_value(Datapoint::Chat(chat_datapoint))?
+        }
+        json_datapoint @ Datapoint::Json(_) => to_value(&json_datapoint)?,
+    };
     map.insert("datapoint".to_string(), datapoint_value);
 
-    let mut output_value = json!(output);
-    if matches!(eval_info.response, InferenceResponse::Chat(_)) {
-        strip_thought_signatures(&mut output_value);
-    }
+    let output_value = match &eval_info.response {
+        InferenceResponse::Chat(chat_response) => {
+            let mut content = chat_response.content.clone();
+            strip_signatures_from_chat_output(&mut content);
+            to_value(&content)?
+        }
+        InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
+    };
     map.insert("output".to_string(), output_value);
 
     map.insert("evaluation_scores".to_string(), json!(evaluation_scores));
@@ -307,17 +327,26 @@ async fn analyze_inference(
 
     // Conditionally include inference context based on config flag
     let inference = if gepa_config.include_inference_for_mutation {
-        let mut output_value = serialize_inference_output(&eval_info.response)?;
-        // Only strip thought signatures from Chat responses to avoid modifying JSON domain data
-        if matches!(eval_info.response, InferenceResponse::Chat(_)) {
-            strip_thought_signatures(&mut output_value);
-        }
+        // Strip signatures from input at the type level
+        let mut stored_input = eval_info
+            .datapoint
+            .input()
+            .clone()
+            .into_stored_input_without_file_handling()?;
+        strip_signatures_from_stored_input(&mut stored_input);
+
+        // Strip signatures from output at the type level (Chat only)
+        let output_value = match &eval_info.response {
+            InferenceResponse::Chat(chat_response) => {
+                let mut content = chat_response.content.clone();
+                strip_signatures_from_chat_output(&mut content);
+                to_value(&content)?
+            }
+            InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
+        };
+
         Some(Inference {
-            input: eval_info
-                .datapoint
-                .input()
-                .clone()
-                .into_stored_input_without_file_handling()?,
+            input: stored_input,
             output: output_value,
         })
     } else {
@@ -979,147 +1008,237 @@ mod tests {
     }
 
     // ============================================================================
-    // Unit Tests for strip_thought_signatures
+    // Unit Tests for type-safe thought signature stripping
     // ============================================================================
 
+    use tensorzero_core::inference::types::{Thought, ThoughtSummaryBlock};
+
     #[test]
-    fn test_strip_thought_signatures_removes_signature() {
-        let mut value = json!({
-            "type": "thought",
-            "text": "Let me think...",
-            "signature": "encrypted-blob",
-            "provider_type": "anthropic"
-        });
-        strip_thought_signatures(&mut value);
+    fn test_strip_signatures_from_chat_output_removes_signature() {
+        let mut blocks = vec![ContentBlockChatOutput::Thought(Thought {
+            text: Some("Let me think...".to_string()),
+            signature: Some("encrypted-blob".to_string()),
+            summary: None,
+            provider_type: Some("anthropic".to_string()),
+        })];
+
+        strip_signatures_from_chat_output(&mut blocks);
+
+        let ContentBlockChatOutput::Thought(thought) = &blocks[0] else {
+            panic!("Expected Thought block");
+        };
         assert!(
-            !value.as_object().unwrap().contains_key("signature"),
+            thought.signature.is_none(),
             "signature should be removed from thought block"
         );
         assert_eq!(
-            value["text"], "Let me think...",
-            "other fields should be preserved"
+            thought.text,
+            Some("Let me think...".to_string()),
+            "text should be preserved"
         );
-        assert_eq!(value["type"], "thought", "type field should be preserved");
         assert_eq!(
-            value["provider_type"], "anthropic",
-            "provider_type field should be preserved"
+            thought.provider_type,
+            Some("anthropic".to_string()),
+            "provider_type should be preserved"
         );
     }
 
     #[test]
-    fn test_strip_thought_signatures_nested_in_array() {
-        let mut value = json!([
-            {"type": "text", "text": "Hello"},
-            {"type": "thought", "text": "Thinking...", "signature": "sig123"}
-        ]);
-        strip_thought_signatures(&mut value);
+    fn test_strip_signatures_from_chat_output_mixed_blocks() {
+        let mut blocks = vec![
+            ContentBlockChatOutput::Text(Text {
+                text: "Hello".to_string(),
+            }),
+            ContentBlockChatOutput::Thought(Thought {
+                text: Some("Thinking...".to_string()),
+                signature: Some("sig123".to_string()),
+                summary: Some(vec![ThoughtSummaryBlock::SummaryText {
+                    text: "Summary".to_string(),
+                }]),
+                provider_type: None,
+            }),
+            ContentBlockChatOutput::Text(Text {
+                text: "World".to_string(),
+            }),
+        ];
+
+        strip_signatures_from_chat_output(&mut blocks);
+
+        // First text block unchanged
+        let ContentBlockChatOutput::Text(text1) = &blocks[0] else {
+            panic!("Expected Text block");
+        };
+        assert_eq!(text1.text, "Hello", "first text block should be preserved");
+
+        // Thought block has signature removed
+        let ContentBlockChatOutput::Thought(thought) = &blocks[1] else {
+            panic!("Expected Thought block");
+        };
         assert!(
-            value[1].as_object().unwrap().contains_key("text"),
+            thought.signature.is_none(),
+            "signature should be removed from thought block"
+        );
+        assert_eq!(
+            thought.text,
+            Some("Thinking...".to_string()),
             "thought text should be preserved"
         );
-        assert!(
-            !value[1].as_object().unwrap().contains_key("signature"),
-            "signature should be removed from thought block in array"
+        assert_eq!(
+            thought.summary,
+            Some(vec![ThoughtSummaryBlock::SummaryText {
+                text: "Summary".to_string(),
+            }]),
+            "thought summary should be preserved"
         );
-        // Verify the text block is unchanged
-        assert!(
-            value[0].as_object().unwrap().contains_key("text"),
-            "text block should be preserved"
+
+        // Second text block unchanged
+        let ContentBlockChatOutput::Text(text2) = &blocks[2] else {
+            panic!("Expected Text block");
+        };
+        assert_eq!(text2.text, "World", "second text block should be preserved");
+    }
+
+    #[test]
+    fn test_strip_signatures_from_chat_output_multiple_thoughts() {
+        let mut blocks = vec![
+            ContentBlockChatOutput::Thought(Thought {
+                text: Some("First thought".to_string()),
+                signature: Some("sig1".to_string()),
+                summary: None,
+                provider_type: None,
+            }),
+            ContentBlockChatOutput::Thought(Thought {
+                text: Some("Second thought".to_string()),
+                signature: Some("sig2".to_string()),
+                summary: Some(vec![ThoughtSummaryBlock::SummaryText {
+                    text: "A summary".to_string(),
+                }]),
+                provider_type: Some("anthropic".to_string()),
+            }),
+        ];
+
+        strip_signatures_from_chat_output(&mut blocks);
+
+        for (i, block) in blocks.iter().enumerate() {
+            let ContentBlockChatOutput::Thought(thought) = block else {
+                panic!("Expected Thought block at index {i}");
+            };
+            assert!(
+                thought.signature.is_none(),
+                "signature should be removed from thought block at index {i}"
+            );
+        }
+
+        // Verify other fields preserved
+        let ContentBlockChatOutput::Thought(first) = &blocks[0] else {
+            panic!("Expected Thought");
+        };
+        assert_eq!(first.text, Some("First thought".to_string()));
+
+        let ContentBlockChatOutput::Thought(second) = &blocks[1] else {
+            panic!("Expected Thought");
+        };
+        assert_eq!(second.text, Some("Second thought".to_string()));
+        assert_eq!(
+            second.summary,
+            Some(vec![ThoughtSummaryBlock::SummaryText {
+                text: "A summary".to_string(),
+            }])
+        );
+        assert_eq!(second.provider_type, Some("anthropic".to_string()));
+    }
+
+    #[test]
+    fn test_strip_signatures_from_chat_output_no_signature() {
+        let mut blocks = vec![ContentBlockChatOutput::Thought(Thought {
+            text: Some("Already clean".to_string()),
+            signature: None,
+            summary: None,
+            provider_type: None,
+        })];
+
+        strip_signatures_from_chat_output(&mut blocks);
+
+        let ContentBlockChatOutput::Thought(thought) = &blocks[0] else {
+            panic!("Expected Thought block");
+        };
+        assert!(thought.signature.is_none(), "signature should remain None");
+        assert_eq!(
+            thought.text,
+            Some("Already clean".to_string()),
+            "text should be preserved"
         );
     }
 
     #[test]
-    fn test_strip_thought_signatures_deeply_nested() {
-        let mut value = json!({
+    fn test_strip_signatures_from_chat_output_empty() {
+        let mut blocks: Vec<ContentBlockChatOutput> = vec![];
+        strip_signatures_from_chat_output(&mut blocks);
+        assert!(blocks.is_empty(), "empty vector should remain empty");
+    }
+
+    #[test]
+    fn test_strip_signatures_from_input_removes_signature() {
+        let mut input = Input {
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::Thought(Thought {
+                    text: Some("User thought".to_string()),
+                    signature: Some("user-sig".to_string()),
+                    summary: None,
+                    provider_type: None,
+                })],
+            }],
+            system: None,
+        };
+
+        strip_signatures_from_input(&mut input);
+
+        let InputMessageContent::Thought(thought) = &input.messages[0].content[0] else {
+            panic!("Expected Thought content");
+        };
+        assert!(
+            thought.signature.is_none(),
+            "signature should be removed from input thought"
+        );
+        assert_eq!(
+            thought.text,
+            Some("User thought".to_string()),
+            "text should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_strip_signatures_from_stored_input_removes_signature() {
+        // Create StoredInput with a Thought block
+        let stored_input_json = json!({
             "messages": [{
-                "content": [
-                    {"type": "thought", "text": "deep thinking", "signature": "deep-sig"}
-                ]
+                "role": "user",
+                "content": [{
+                    "type": "thought",
+                    "text": "Stored thought",
+                    "signature": "stored-sig"
+                }]
             }]
         });
-        strip_thought_signatures(&mut value);
+
+        let mut stored_input: StoredInput =
+            serde_json::from_value(stored_input_json).expect("Valid StoredInput JSON");
+
+        strip_signatures_from_stored_input(&mut stored_input);
+
+        let StoredInputMessageContent::Thought(thought) = &stored_input.messages[0].content[0]
+        else {
+            panic!("Expected Thought content");
+        };
         assert!(
-            !value["messages"][0]["content"][0]
-                .as_object()
-                .unwrap()
-                .contains_key("signature"),
-            "deeply nested signature should be removed"
+            thought.signature.is_none(),
+            "signature should be removed from stored input thought"
         );
         assert_eq!(
-            value["messages"][0]["content"][0]["text"], "deep thinking",
-            "deeply nested text should be preserved"
-        );
-    }
-
-    #[test]
-    fn test_strip_thought_signatures_preserves_non_thought_objects() {
-        let mut value = json!({
-            "type": "text",
-            "signature": "not-a-thought-signature"
-        });
-        let original = value.clone();
-        strip_thought_signatures(&mut value);
-        assert_eq!(
-            value, original,
-            "non-thought objects with signature field should be unchanged"
-        );
-    }
-
-    #[test]
-    fn test_strip_thought_signatures_handles_empty_structures() {
-        // Empty object
-        let mut empty_obj = json!({});
-        strip_thought_signatures(&mut empty_obj);
-        assert_eq!(empty_obj, json!({}), "empty object should remain unchanged");
-
-        // Empty array
-        let mut empty_arr = json!([]);
-        strip_thought_signatures(&mut empty_arr);
-        assert_eq!(empty_arr, json!([]), "empty array should remain unchanged");
-
-        // Null value
-        let mut null_val = json!(null);
-        strip_thought_signatures(&mut null_val);
-        assert_eq!(null_val, json!(null), "null value should remain unchanged");
-    }
-
-    #[test]
-    fn test_strip_thought_signatures_multiple_thoughts() {
-        let mut value = json!([
-            {"type": "thought", "text": "First thought", "signature": "sig1"},
-            {"type": "text", "text": "Some text"},
-            {"type": "thought", "text": "Second thought", "signature": "sig2", "summary": "A summary"}
-        ]);
-        strip_thought_signatures(&mut value);
-
-        // Check first thought
-        assert!(
-            !value[0].as_object().unwrap().contains_key("signature"),
-            "first thought signature should be removed"
-        );
-        assert_eq!(
-            value[0]["text"], "First thought",
-            "first thought text should be preserved"
-        );
-
-        // Check text block is unchanged
-        assert_eq!(
-            value[1]["text"], "Some text",
-            "text block should be preserved"
-        );
-
-        // Check second thought
-        assert!(
-            !value[2].as_object().unwrap().contains_key("signature"),
-            "second thought signature should be removed"
-        );
-        assert_eq!(
-            value[2]["text"], "Second thought",
-            "second thought text should be preserved"
-        );
-        assert_eq!(
-            value[2]["summary"], "A summary",
-            "second thought summary should be preserved"
+            thought.text,
+            Some("Stored thought".to_string()),
+            "text should be preserved"
         );
     }
 }
