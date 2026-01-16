@@ -80,6 +80,18 @@ impl RateLimitingManager {
         scope_info: &ScopeInfo,
         rate_limited_request: &impl RateLimitedRequest,
     ) -> Result<TicketBorrows, Error> {
+        // We want rate-limiting errors to show up as errors in OpenTelemetry,
+        // even though they only get logged as warnings to the console.
+        self.consume_tickets_inner(scope_info, rate_limited_request)
+            .await
+            .inspect_err(|e| e.ensure_otel_span_errored(&Span::current()))
+    }
+
+    async fn consume_tickets_inner(
+        self: &Arc<Self>,
+        scope_info: &ScopeInfo,
+        rate_limited_request: &impl RateLimitedRequest,
+    ) -> Result<TicketBorrows, Error> {
         let span = Span::current();
         scope_info.apply_otel_span_attributes(&span);
         let limits = self.config.get_active_limits(scope_info);
@@ -107,17 +119,24 @@ impl RateLimitingManager {
 
         let receipts = self.client.consume_tickets(&ticket_requests).await?;
 
-        // TicketBorrows::new will validate receipts and generate proper errors
-        //
-        // If any errors occur, we want them to show up as errors in OpenTelemetry,
-        // even though they only get logged as warnings to the console.
         TicketBorrows::new(Arc::clone(self), receipts, limits, ticket_requests)
-            .inspect_err(|e| e.ensure_otel_span_errored(&Span::current()))
     }
 
     /// Return tickets based on actual resource usage.
     #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, underestimate))]
     pub async fn return_tickets(
+        &self,
+        ticket_borrows: TicketBorrows,
+        actual_usage: RateLimitResourceUsage,
+    ) -> Result<(), Error> {
+        // We want rate-limiting errors to show up as errors in OpenTelemetry,
+        // even though they only get logged as warnings to the console.
+        self.return_tickets_inner(ticket_borrows, actual_usage)
+            .await
+            .inspect_err(|e| e.ensure_otel_span_errored(&Span::current()))
+    }
+
+    async fn return_tickets_inner(
         &self,
         ticket_borrows: TicketBorrows,
         actual_usage: RateLimitResourceUsage,
@@ -201,10 +220,8 @@ impl RateLimitingManager {
             self.client.return_tickets(returns)
         );
 
-        // We want rate-limiting errors to show up as errors in OpenTelemetry,
-        // even though they only get logged as warnings to the console.
-        consume_result.inspect_err(|e| e.ensure_otel_span_errored(&Span::current()))?;
-        return_result.inspect_err(|e| e.ensure_otel_span_errored(&Span::current()))?;
+        consume_result?;
+        return_result?;
 
         Ok(())
     }
