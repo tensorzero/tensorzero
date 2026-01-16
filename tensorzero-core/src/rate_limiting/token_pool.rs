@@ -141,6 +141,12 @@ impl TokenPool {
             .store(tickets_remaining, Ordering::Release);
     }
 
+    /// Get current available tokens in the pool.
+    /// Used for pre-checking if pooled consumption is viable before replenishment.
+    pub(super) fn available(&self) -> i64 {
+        self.available.load(Ordering::Acquire)
+    }
+
     /// Try to consume tokens from the local pool.
     /// Returns true if successful, false if insufficient tokens.
     pub(super) fn try_consume(&self, amount: u64) -> bool {

@@ -211,28 +211,55 @@ impl RateLimitingManager {
         }
 
         // All pools warmed up: use pooled consumption
-        let mut consumed_pools = Vec::with_capacity(limits.len());
-        let mut consumed_amounts = Vec::with_capacity(limits.len());
+        //
+        // We use a three-phase approach to avoid wasteful replenishment DB calls:
+        // 1. Pre-check if pooled consumption is viable for all pools
+        // 2. Replenish pools that need it (only if all pools can satisfy their requests)
+        // 3. Consume from all pools
 
-        for ((limit, request), pool) in limits.iter().zip(ticket_requests.iter()).zip(pools.iter())
-        {
-            // Check if we need to replenish before consuming
+        // Phase 1: Check if pooled consumption is viable for all pools
+        for (pool, request) in pools.iter().zip(ticket_requests.iter()) {
+            let current_available = pool.available();
+            let potential_borrow = if pool.needs_replenishment() {
+                pool.calculate_borrow_amount() as i64
+            } else {
+                0
+            };
+            let potential_available = current_available + potential_borrow;
+
+            if potential_available < request.requested as i64 {
+                // This pool can't satisfy the request even after replenishment.
+                // Fall back to DB immediately without wasting replenishment calls.
+                let receipts = self.client.consume_tickets(ticket_requests).await?;
+                return Ok((receipts, false));
+            }
+        }
+
+        // Phase 2: Replenish pools that need it (we know they'll have enough)
+        for (limit, pool) in limits.iter().zip(pools.iter()) {
             if pool.needs_replenishment() {
                 self.replenish_pool(limit, pool).await?;
             }
+        }
 
-            // Try to consume from the pool
+        // Phase 3: Consume from all pools
+        let mut consumed_pools = Vec::with_capacity(limits.len());
+        let mut consumed_amounts = Vec::with_capacity(limits.len());
+
+        for (pool, request) in pools.iter().zip(ticket_requests.iter()) {
             if pool.try_consume(request.requested) {
                 consumed_pools.push(Arc::clone(pool));
                 consumed_amounts.push(request.requested);
             } else {
-                // Rollback any successful consumptions before this one
+                // Rollback any successful consumptions before this one.
+                // This can happen due to race conditions (another request consumed tokens
+                // between our check and consumption) or if replenishment returned fewer
+                // tokens than expected.
                 for (prev_pool, amount) in consumed_pools.iter().zip(consumed_amounts.iter()) {
                     prev_pool.rollback_consume(*amount);
                 }
 
                 // Fall back to direct DB access for this request
-                // This ensures we can still serve the request even if the pool is exhausted
                 let receipts = self.client.consume_tickets(ticket_requests).await?;
                 return Ok((receipts, false)); // served_from_pool = false (fallback)
             }
@@ -1080,6 +1107,130 @@ mod tests {
             consume_count.load(std::sync::atomic::Ordering::SeqCst),
             150,
             "Direct mode should hit DB for every request"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pooled_mode_large_request_falls_back_without_replenishment() {
+        // When a request is too large for the pool (even after potential replenishment),
+        // we should fall back to DB immediately without making replenishment calls.
+        // This tests the "pre-check viability" optimization.
+        let (mock, consume_count) = create_mock_client_with_counter();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_token_limit(1_000_000)], // Large capacity
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = make_pooled_config_with_rule(rule);
+        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+
+        // Complete warm-up phase with small requests (10 tokens each)
+        // This builds a histogram with P99 around 16 (bucket upper bound for 10)
+        for _ in 0..100 {
+            let request = MockRateLimitedRequest {
+                tokens: 10,
+                model_inferences: 1,
+            };
+            let _ = manager.consume_tickets(&scope_info, &request).await;
+        }
+
+        let warmup_db_calls = consume_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(warmup_db_calls, 100, "Warm-up should make 100 DB calls");
+
+        // Now make a request that's much larger than P99 * rate would borrow.
+        // With P99 ~16 and low rate, calculate_borrow_amount() will return a small value.
+        // A request for 100,000 tokens can't be satisfied by the pool.
+        let request = MockRateLimitedRequest {
+            tokens: 100_000,
+            model_inferences: 1,
+        };
+        let result = manager.consume_tickets(&scope_info, &request).await;
+        assert!(result.is_ok(), "Large request should succeed via DB fallback");
+
+        // Should have made exactly 1 additional DB call (the fallback), not 2
+        // (no replenishment call since pre-check detected it wouldn't help)
+        let post_warmup_db_calls =
+            consume_count.load(std::sync::atomic::Ordering::SeqCst) - warmup_db_calls;
+        assert_eq!(
+            post_warmup_db_calls, 1,
+            "Large request should fall back to DB without replenishment call"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pooled_mode_request_within_borrow_capacity_uses_pool() {
+        // When a request can be satisfied by the pool after replenishment,
+        // we should replenish and serve from pool (not fall back to DB).
+        let (mock, consume_count) = create_mock_client_with_counter();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_token_limit(1_000_000)], // Large capacity
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = make_pooled_config_with_rule(rule);
+        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+
+        // Complete warm-up phase with medium requests (100 tokens each)
+        // This builds a histogram with P99 around 128 (bucket upper bound for 100)
+        for _ in 0..100 {
+            let request = MockRateLimitedRequest {
+                tokens: 100,
+                model_inferences: 1,
+            };
+            let _ = manager.consume_tickets(&scope_info, &request).await;
+        }
+
+        let warmup_db_calls = consume_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(warmup_db_calls, 100, "Warm-up should make 100 DB calls");
+
+        // First post-warmup request triggers replenishment
+        let request = MockRateLimitedRequest {
+            tokens: 50, // Well within what the pool can provide
+            model_inferences: 1,
+        };
+        let borrows = manager
+            .consume_tickets(&scope_info, &request)
+            .await
+            .unwrap();
+
+        // Should have made 1 replenishment call
+        let after_first_request =
+            consume_count.load(std::sync::atomic::Ordering::SeqCst) - warmup_db_calls;
+        assert_eq!(
+            after_first_request, 1,
+            "First post-warmup request should trigger replenishment"
+        );
+
+        // Verify it was served from pool (not DB fallback)
+        assert!(
+            borrows.served_from_pool(),
+            "Request should be served from pool, not DB"
+        );
+
+        // Subsequent small requests should be served from pool without DB calls
+        let db_calls_before = consume_count.load(std::sync::atomic::Ordering::SeqCst);
+        for _ in 0..10 {
+            let request = MockRateLimitedRequest {
+                tokens: 50,
+                model_inferences: 1,
+            };
+            let borrows = manager
+                .consume_tickets(&scope_info, &request)
+                .await
+                .unwrap();
+            assert!(
+                borrows.served_from_pool(),
+                "Request should be served from pool"
+            );
+        }
+        let db_calls_after = consume_count.load(std::sync::atomic::Ordering::SeqCst);
+
+        // Should have made 0 additional DB calls (all served from pool)
+        assert_eq!(
+            db_calls_after, db_calls_before,
+            "Subsequent requests should be served from pool without DB calls"
         );
     }
 }
