@@ -736,7 +736,6 @@ fn wrap_provider_stream(
         .clone()
         .map(std::borrow::Cow::into_owned);
     let otlp_config = clients.otlp_config.clone();
-    let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
     let span_clone = span.clone();
 
@@ -795,10 +794,7 @@ fn wrap_provider_stream(
                 }
             };
 
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, usage)
-                .await
-            {
+            if let Err(e) = ticket_borrow.return_tickets(usage) {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
         }.instrument(span_clone.clone()));
@@ -1778,7 +1774,7 @@ impl ModelProvider {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
         let ticket_borrow = clients
-            .rate_limiting_config
+            .token_pool_manager
             .consume_tickets(
                 &clients.postgres_connection_info,
                 &clients.scope_info,
@@ -1891,14 +1887,10 @@ impl ModelProvider {
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
-            let postgres_connection_info = clients.postgres_connection_info.clone();
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
                 async move {
-                    if let Err(e) = ticket_borrow
-                        .return_tickets(&postgres_connection_info, actual_resource_usage)
-                        .await
-                    {
+                    if let Err(e) = ticket_borrow.return_tickets(actual_resource_usage) {
                         tracing::error!("Failed to return rate limit tickets: {}", e);
                     }
                 }
@@ -1916,7 +1908,7 @@ impl ModelProvider {
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
-            .rate_limiting_config
+            .token_pool_manager
             .consume_tickets(
                 &clients.postgres_connection_info,
                 &clients.scope_info,
@@ -2811,6 +2803,8 @@ mod tests {
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -2821,7 +2815,9 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2944,6 +2940,8 @@ mod tests {
             toml::from_str(toml_str).unwrap();
         let rate_limit_config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
+        let rate_limiting_config_arc: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(rate_limit_config.clone());
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -2954,7 +2952,9 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(tags.clone()),
-            rate_limiting_config: Arc::new(rate_limit_config.clone()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config_arc,
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3034,6 +3034,8 @@ mod tests {
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -3044,7 +3046,9 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3181,6 +3185,30 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            tags: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -3192,30 +3220,7 @@ mod tests {
                 },
             messages: _input,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3268,30 +3273,7 @@ mod tests {
             skip_relay: false,
         };
         let response = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await;
         assert!(response.is_err());
         let error = match response {
@@ -3381,6 +3363,30 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            tags: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -3392,30 +3398,7 @@ mod tests {
                 },
             messages: _,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3479,6 +3462,8 @@ mod tests {
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -3489,7 +3474,9 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3542,6 +3529,8 @@ mod tests {
             "TEST_KEY".to_string(),
             SecretString::from("notgoodkey".to_string()),
         )]);
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -3552,7 +3541,9 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3608,6 +3599,8 @@ mod tests {
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -3618,7 +3611,9 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3670,6 +3665,8 @@ mod tests {
             "TEST_KEY".to_string(),
             SecretString::from("good_key".to_string()),
         )]);
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -3680,7 +3677,9 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            token_pool_manager: Arc::new(crate::rate_limiting::pool::TokenPoolManager::new(
+                rate_limiting_config,
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {

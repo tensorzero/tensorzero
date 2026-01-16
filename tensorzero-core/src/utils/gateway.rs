@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
+use crate::rate_limiting::pool::TokenPoolManager;
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, FromRequest, Json, Request, rejection::JsonRejection};
 use moka::sync::Cache;
@@ -95,6 +96,23 @@ impl Drop for GatewayHandle {
                 });
                 tracing::info!("ClickHouse batch writer finished");
             }
+            // Return unused rate limit tokens to the database
+            // Only run if there are actual pools (avoids block_in_place on single-threaded runtime)
+            if !self.app_state.token_pool_manager.is_empty() {
+                tokio::task::block_in_place(|| {
+                    tracing::info!("Returning unused rate limit tokens to database");
+                    let result = Handle::current().block_on(
+                        self.app_state
+                            .token_pool_manager
+                            .shutdown(&self.app_state.postgres_connection_info),
+                    );
+                    if let Err(e) = result {
+                        tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
+                    }
+                    tracing::info!("Rate limit token return complete");
+                });
+            }
+
             self.app_state.deferred_tasks.close();
             // The 'wait' future will resolve immediately if the pool is empty.
             // Closing the pool doesn't block more futures from being added, so checking
@@ -141,6 +159,8 @@ pub struct AppStateData {
     pub autopilot_client: Option<Arc<AutopilotClient>>,
     /// The deployment ID from ClickHouse (64-char hex string)
     pub deployment_id: Option<String>,
+    /// Token pool manager for rate limiting pre-borrowing
+    pub token_pool_manager: Arc<TokenPoolManager>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -216,6 +236,9 @@ impl GatewayHandle {
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
         let auth_cache = create_auth_cache_from_config(&config);
+        let token_pool_manager = Arc::new(TokenPoolManager::new(Arc::new(
+            config.rate_limiting.clone(),
+        )));
         Self {
             app_state: AppStateData {
                 config,
@@ -227,6 +250,7 @@ impl GatewayHandle {
                 config_snapshot_cache: None,
                 autopilot_client: None,
                 deployment_id: None,
+                token_pool_manager,
                 _private: (),
             },
             cancel_token,
@@ -289,6 +313,11 @@ impl GatewayHandle {
         let autopilot_client =
             setup_autopilot_client(&postgres_connection_info, deployment_id.as_ref()).await?;
 
+        // Create token pool manager for rate limiting pre-borrowing
+        let token_pool_manager = Arc::new(TokenPoolManager::new(Arc::new(
+            config.rate_limiting.clone(),
+        )));
+
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -300,6 +329,7 @@ impl GatewayHandle {
                 config_snapshot_cache,
                 autopilot_client,
                 deployment_id,
+                token_pool_manager,
                 _private: (),
             },
             cancel_token,
@@ -320,6 +350,9 @@ impl AppStateData {
         postgres_connection_info: PostgresConnectionInfo,
         deferred_tasks: TaskTracker,
     ) -> Self {
+        let token_pool_manager = Arc::new(TokenPoolManager::new(Arc::new(
+            config.rate_limiting.clone(),
+        )));
         Self {
             config,
             http_client,
@@ -330,6 +363,7 @@ impl AppStateData {
             config_snapshot_cache: None,
             autopilot_client: None,
             deployment_id: None,
+            token_pool_manager,
             _private: (),
         }
     }

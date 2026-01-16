@@ -600,7 +600,7 @@ impl EmbeddingProviderInfo {
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
-            .rate_limiting_config
+            .token_pool_manager
             .consume_tickets(
                 &clients.postgres_connection_info,
                 &clients.scope_info,
@@ -627,15 +627,11 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
-        let postgres_connection_info = clients.postgres_connection_info.clone();
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
             async move {
-                if let Err(e) = ticket_borrow
-                    .return_tickets(&postgres_connection_info, resource_usage)
-                    .await
-                {
+                if let Err(e) = ticket_borrow.return_tickets(resource_usage) {
                     tracing::error!("Failed to return rate limit tickets: {}", e);
                 }
             }
@@ -838,6 +834,8 @@ mod tests {
             dimensions: None,
             encoding_format: EmbeddingEncodingFormat::Float,
         };
+        let rate_limiting_config: Arc<crate::rate_limiting::RateLimitingConfig> =
+            Arc::new(Default::default());
         let response = fallback_embedding_model
             .embed(
                 &request,
@@ -852,7 +850,9 @@ mod tests {
                         enabled: CacheEnabledMode::Off,
                     },
                     tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
+                    token_pool_manager: Arc::new(
+                        crate::rate_limiting::pool::TokenPoolManager::new(rate_limiting_config),
+                    ),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: crate::rate_limiting::ScopeInfo {

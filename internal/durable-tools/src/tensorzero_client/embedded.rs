@@ -75,6 +75,7 @@ impl TensorZeroClient for EmbeddedClient {
             self.app_state.clickhouse_connection_info.clone(),
             self.app_state.postgres_connection_info.clone(),
             self.app_state.deferred_tasks.clone(),
+            self.app_state.token_pool_manager.clone(),
             internal_params,
             None, // No API key in embedded mode
         ))
