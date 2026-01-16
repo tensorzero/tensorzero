@@ -2402,9 +2402,14 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             assert!(!res["error"].as_str().unwrap().is_empty());
         }
         "aws_bedrock" => {
+            // HTTP/2 may reject Content-Length mismatch at send time vs HTTP/1.1 getting "Bad Request"
             assert!(
                 res["error"].as_str().unwrap().contains("Bad Request")
-                    || res["error"].as_str().unwrap().contains("ConnectorError"),
+                    || res["error"].as_str().unwrap().contains("ConnectorError")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .contains("error sending request"),
                 "Unexpected error: {res}"
             );
         }
