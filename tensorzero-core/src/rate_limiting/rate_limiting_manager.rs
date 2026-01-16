@@ -190,16 +190,14 @@ impl RateLimitingManager {
             let receipts = self.client.consume_tickets(ticket_requests).await?;
 
             // Update tickets_remaining for adaptive borrow cap calculation.
-            // Also record estimated usage so the histogram has data for post-warmup borrowing.
+            // Record estimated usage so the histogram has data for post-warmup borrowing.
+            // return_tickets will NOT record during warm-up (served_from_pool = false) to avoid double-counting.
             for ((pool, receipt), request) in pools
                 .iter()
                 .zip(receipts.iter())
                 .zip(ticket_requests.iter())
             {
                 pool.update_tickets_remaining(receipt.tickets_remaining);
-                // Record estimated usage for this request. We use the requested amount
-                // as the estimate since actual usage isn't known yet. This ensures the
-                // histogram has data for rate-aware borrowing after warm-up completes.
                 let (tokens, model_inferences) = match pool.limit.resource {
                     super::RateLimitResource::Token => (request.requested, 0),
                     super::RateLimitResource::ModelInference => (0, request.requested),
@@ -231,6 +229,10 @@ impl RateLimitingManager {
                 // This pool can't satisfy the request even after replenishment.
                 // Fall back to DB immediately without wasting replenishment calls.
                 let receipts = self.client.consume_tickets(ticket_requests).await?;
+                // Update tickets_remaining for adaptive caps even on fallback
+                for (pool, receipt) in pools.iter().zip(receipts.iter()) {
+                    pool.update_tickets_remaining(receipt.tickets_remaining);
+                }
                 return Ok((receipts, false));
             }
         }
@@ -261,6 +263,10 @@ impl RateLimitingManager {
 
                 // Fall back to direct DB access for this request
                 let receipts = self.client.consume_tickets(ticket_requests).await?;
+                // Update tickets_remaining for adaptive caps even on fallback
+                for (pool, receipt) in pools.iter().zip(receipts.iter()) {
+                    pool.update_tickets_remaining(receipt.tickets_remaining);
+                }
                 return Ok((receipts, false)); // served_from_pool = false (fallback)
             }
         }
@@ -392,15 +398,16 @@ impl RateLimitingManager {
         };
 
         // Record usage for P99 tracking and adjust pool accounting.
-        // Only adjust pool accounting if tickets were actually consumed from the pool
-        // (not during warmup or DB fallback).
+        // Only do this if tickets were actually consumed from the pool (served_from_pool = true).
+        // During warmup and DB fallback (served_from_pool = false), usage was already recorded
+        // in consume_from_pools to avoid double-counting.
         if self.pool_mode() == PoolMode::Pooled {
             let served_from_pool = ticket_borrows.served_from_pool();
-            for borrow in ticket_borrows.borrows() {
-                let pool = self.pool_registry.get_or_create(&borrow.active_limit);
-                pool.record_usage(tokens, model_inferences);
-
-                if served_from_pool {
+            if served_from_pool {
+                for borrow in ticket_borrows.borrows() {
+                    let pool = self.pool_registry.get_or_create(&borrow.active_limit);
+                    // Record actual usage for P99 tracking
+                    pool.record_usage(tokens, model_inferences);
                     // Adjust pool accounting based on actual vs estimated usage
                     let actual_usage_this_request = match borrow.active_limit.limit.resource {
                         RateLimitResource::ModelInference => model_inferences,
@@ -1146,7 +1153,10 @@ mod tests {
             model_inferences: 1,
         };
         let result = manager.consume_tickets(&scope_info, &request).await;
-        assert!(result.is_ok(), "Large request should succeed via DB fallback");
+        assert!(
+            result.is_ok(),
+            "Large request should succeed via DB fallback"
+        );
 
         // Should have made exactly 1 additional DB call (the fallback), not 2
         // (no replenishment call since pre-check detected it wouldn't help)

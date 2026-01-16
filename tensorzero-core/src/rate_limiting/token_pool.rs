@@ -274,17 +274,19 @@ impl TokenPool {
     }
 
     /// Adjust usage accounting based on actual vs estimated usage.
-    /// If actual > estimated, we need to account for more usage.
-    /// If actual < estimated, we can recover some usage.
+    /// If actual > estimated, we need to account for more usage (both available and used_from_pool).
+    /// If actual < estimated, we can recover some usage (restore available and reduce used_from_pool).
     pub(super) fn adjust_usage(&self, estimated: u64, actual: u64) {
         if actual > estimated {
-            // We used more than estimated - increase used_from_pool
+            // We used more than estimated - need to consume extra from pool
             let extra = actual - estimated;
+            self.available.fetch_sub(extra as i64, Ordering::Release);
             self.used_from_pool.fetch_add(extra, Ordering::Release);
         } else if actual < estimated {
-            // We used less than estimated - decrease used_from_pool
-            // (but don't go negative)
+            // We used less than estimated - restore the difference to available
             let refund = estimated - actual;
+            self.available.fetch_add(refund as i64, Ordering::Release);
+            // Decrease used_from_pool (but don't go negative)
             let _ =
                 self.used_from_pool
                     .fetch_update(Ordering::Release, Ordering::Acquire, |current| {

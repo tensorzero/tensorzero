@@ -129,7 +129,10 @@ impl UsageHistogram {
 pub(super) struct RollingUsageTracker {
     histograms: [UsageHistogram; 2],
     current_index: AtomicUsize,
-    last_rotation: Mutex<Instant>,
+    /// Last rotation time stored as nanoseconds since `created_at` for fast atomic read
+    last_rotation_nanos: AtomicU64,
+    /// Lock for the rare rotation path (only acquired when actually rotating)
+    rotation_lock: Mutex<()>,
     rotation_interval: Duration,
     /// Total window duration (used for rate calculation)
     window_duration: Duration,
@@ -143,7 +146,8 @@ impl RollingUsageTracker {
         Self {
             histograms: [UsageHistogram::new(), UsageHistogram::new()],
             current_index: AtomicUsize::new(0),
-            last_rotation: Mutex::new(now),
+            last_rotation_nanos: AtomicU64::new(0),
+            rotation_lock: Mutex::new(()),
             rotation_interval: window_duration / 2,
             window_duration,
             created_at: now,
@@ -157,37 +161,37 @@ impl RollingUsageTracker {
     }
 
     /// Maybe rotate histograms if enough time has passed.
-    /// Called occasionally (e.g., when computing P99).
+    /// Uses atomic check on hot path; only acquires lock when rotating (rare).
     fn maybe_rotate(&self) {
-        let now = Instant::now();
+        let elapsed_nanos = self.created_at.elapsed().as_nanos() as u64;
+        let last_rotation = self.last_rotation_nanos.load(Ordering::Relaxed);
+        let interval_nanos = self.rotation_interval.as_nanos() as u64;
 
-        // Quick check without lock
-        let should_rotate = self
-            .last_rotation
-            .lock()
-            .ok()
-            .map(|l| now.duration_since(*l) >= self.rotation_interval)
-            .unwrap_or(false);
-
-        if !should_rotate {
+        // Quick atomic check - no lock needed for common case
+        if elapsed_nanos.saturating_sub(last_rotation) < interval_nanos {
             return;
         }
 
-        // Double-check with lock held for rotation
-        let Ok(mut last) = self.last_rotation.lock() else {
+        // Rare case: might need to rotate. Try to acquire lock without blocking.
+        let Ok(_guard) = self.rotation_lock.try_lock() else {
+            // Someone else is rotating, skip
             return;
         };
 
-        if now.duration_since(*last) < self.rotation_interval {
+        // Double-check after acquiring lock (another thread may have just rotated)
+        let last_rotation = self.last_rotation_nanos.load(Ordering::Acquire);
+        if elapsed_nanos.saturating_sub(last_rotation) < interval_nanos {
             return;
         }
 
+        // Perform rotation
         let old_idx = self.current_index.load(Ordering::Relaxed);
         let new_idx = 1 - old_idx;
 
         self.histograms[new_idx].reset();
-        self.current_index.store(new_idx, Ordering::Relaxed);
-        *last = now;
+        self.current_index.store(new_idx, Ordering::Release);
+        self.last_rotation_nanos
+            .store(elapsed_nanos, Ordering::Release);
     }
 
     /// Get P99 for the specified resource, using data from both histograms.
