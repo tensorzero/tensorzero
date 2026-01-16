@@ -14,7 +14,7 @@ use crate::{
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     inference::types::Usage,
-    rate_limiting::ScopeInfo,
+    rate_limiting::{RateLimitingManager, ScopeInfo},
 };
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
@@ -38,12 +38,17 @@ pub struct EmbeddingsParams {
 }
 
 #[instrument(name = "embeddings", skip_all, fields(model, num_inputs))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Function signature matches existing API pattern"
+)]
 pub async fn embeddings(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
+    rate_limiting_manager: std::sync::Arc<RateLimitingManager>,
     params: EmbeddingsParams,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<EmbeddingResponse, Error> {
@@ -87,7 +92,7 @@ pub async fn embeddings(
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
         tags: tags.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        rate_limiting_manager,
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
@@ -119,7 +124,7 @@ mod tests {
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;
-    use std::collections::HashMap;
+
     #[tokio::test]
     async fn test_no_warning_when_model_exists() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -171,13 +176,13 @@ mod tests {
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
-
         let result = embeddings(
             config,
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
             tokio_util::task::TaskTracker::new(),
+            Arc::new(RateLimitingManager::new_dummy()),
             params,
             None,
         )
@@ -214,6 +219,7 @@ mod tests {
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
             tokio_util::task::TaskTracker::new(),
+            Arc::new(RateLimitingManager::new_dummy()),
             params,
             None,
         )

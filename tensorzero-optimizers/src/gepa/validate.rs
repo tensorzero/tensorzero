@@ -192,10 +192,17 @@ fn validate_stored_output(stored_output: Option<&StoredOutput>) -> Result<(), St
                     }
                 }
                 // Check Thought block
+                // Destructure to cause compile error if new fields are added to Thought
                 ContentBlockChatOutput::Thought(thought) => {
-                    if thought.text.is_none() && thought.summary.is_none() {
+                    let tensorzero_core::inference::types::Thought {
+                        text,
+                        signature,
+                        summary,
+                        provider_type: _,
+                    } = thought;
+                    if text.is_none() && signature.is_none() && summary.is_none() {
                         return Err(format!(
-                            "stored_output[{content_idx}] Thought block has both text and summary as None"
+                            "stored_output[{content_idx}] Thought block has text, signature, and summary all as None"
                         ));
                     }
                 }
@@ -248,10 +255,17 @@ fn validate_stored_input_messages(
                     }
                 }
                 // Check Thought block
+                // Destructure to cause compile error if new fields are added to Thought
                 StoredInputMessageContent::Thought(thought) => {
-                    if thought.text.is_none() && thought.summary.is_none() {
+                    let tensorzero_core::inference::types::Thought {
+                        text,
+                        signature,
+                        summary,
+                        provider_type: _,
+                    } = thought;
+                    if text.is_none() && signature.is_none() && summary.is_none() {
                         return Err(format!(
-                            "stored_input.messages[{msg_idx}].content[{content_idx}] Thought block has both text and summary as None"
+                            "stored_input.messages[{msg_idx}].content[{content_idx}] Thought block has text, signature, and summary all as None"
                         ));
                     }
                 }
@@ -277,7 +291,7 @@ fn validate_stored_input_messages(
 /// - Any message contains a File block (StoredInputMessageContent::File(_))
 /// - Any Text block has empty text (text.is_empty())
 /// - Any ToolCall block has name as None/empty
-/// - Any Thought block has both text and summary as None
+/// - Any Thought block has text, signature, and summary all as None
 ///
 /// Returns filtered list of valid examples, or error if all examples are dropped
 pub fn validate_examples(examples: Vec<RenderedSample>) -> Result<Vec<RenderedSample>, Error> {
@@ -751,7 +765,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_stored_output_chat_thought_both_none() {
+    fn test_validate_stored_output_chat_thought_all_none() {
         use tensorzero_core::inference::types::Thought;
 
         let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Thought(
@@ -768,7 +782,28 @@ mod tests {
         assert!(
             result
                 .unwrap_err()
-                .contains("Thought block has both text and summary as None")
+                .contains("Thought block has text, signature, and summary all as None")
+        );
+    }
+
+    #[test]
+    fn test_validate_stored_output_chat_thought_signature_only() {
+        use tensorzero_core::inference::types::Thought;
+
+        // Thought with only signature set should be valid
+        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Thought(
+            Thought {
+                text: None,
+                summary: None,
+                provider_type: None,
+                signature: Some("encrypted_thinking_signature".to_string()),
+            },
+        )]));
+
+        let result = validate_stored_output(output.as_ref());
+        assert!(
+            result.is_ok(),
+            "Thought with only signature should be valid"
         );
     }
 
@@ -855,7 +890,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_stored_input_messages_thought_both_none() {
+    fn test_validate_stored_input_messages_thought_all_none() {
         use tensorzero_core::inference::types::Thought;
 
         let messages = vec![StoredInputMessage {
@@ -873,7 +908,29 @@ mod tests {
         assert!(
             result
                 .unwrap_err()
-                .contains("Thought block has both text and summary as None")
+                .contains("Thought block has text, signature, and summary all as None")
+        );
+    }
+
+    #[test]
+    fn test_validate_stored_input_messages_thought_signature_only() {
+        use tensorzero_core::inference::types::Thought;
+
+        // Thought with only signature set should be valid
+        let messages = vec![StoredInputMessage {
+            role: Role::Assistant,
+            content: vec![StoredInputMessageContent::Thought(Thought {
+                text: None,
+                summary: None,
+                provider_type: None,
+                signature: Some("encrypted_thinking_signature".to_string()),
+            })],
+        }];
+
+        let result = validate_stored_input_messages(&messages);
+        assert!(
+            result.is_ok(),
+            "Thought with only signature should be valid"
         );
     }
 

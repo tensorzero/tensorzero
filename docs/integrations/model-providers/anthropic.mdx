@@ -198,6 +198,47 @@ See the [API Reference](/gateway/api-reference/inference) for more information.
 
 </Tip>
 
+## Use Anthropic models on third-party platforms
+
+### Use Anthropic models on AWS Bedrock
+
+You can use Anthropic models on AWS Bedrock with the `aws_bedrock` model provider.
+
+```toml
+[models.claude_haiku_4_5.providers.aws]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+region = "us-east-1"  # TODO: set your AWS region
+```
+
+Read more about the [AWS Bedrock model provider](/integrations/model-providers/aws-bedrock).
+
+### Use Anthropic models on Azure
+
+You can use Anthropic models on Azure AI Foundry by overriding the API base in your configuration:
+
+```toml
+[models.claude_haiku_4_5.providers.azure]
+type = "anthropic"
+model_name = "claude-haiku-4-5"
+api_base = "https://YOUR-RESOURCE-NAME.services.ai.azure.com/anthropic/v1/messages"  # TODO: set your resource name
+api_key_location = "env::AZURE_API_KEY"  # optional
+```
+
+### Use Anthropic models on GCP Vertex AI
+
+You can use Anthropic models on GCP Vertex AI with the `gcp_vertex_anthropic` model provider.
+
+```toml
+[models.claude_haiku_4_5.providers.gcp]
+type = "gcp_vertex_anthropic"
+model_id = "claude-haiku-4-5@20251001"
+location = "us-central1"  # TODO: set your GCP region
+project_id = "YOUR-PROJECT-ID"  # TODO: set your GCP project ID
+```
+
+Read more about the [GCP Vertex AI Anthropic model provider](/integrations/model-providers/gcp-vertex-ai-anthropic).
+
 ## Other Features
 
 See [Extend TensorZero](/operations/extend-tensorzero) for information about Anthropic Computer Use and other beta features.

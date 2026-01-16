@@ -25,7 +25,7 @@ use tensorzero_core::{
         OptimizationJobInfo, OptimizerOutput,
         dicl::{DEPRECATED_DEFAULT_MODEL, DiclOptimizationConfig, DiclOptimizationJobHandle},
     },
-    rate_limiting::ScopeInfo,
+    rate_limiting::{RateLimitingManager, ScopeInfo},
     stored_inference::RenderedSample,
     variant::dicl::UninitializedDiclConfig,
 };
@@ -356,14 +356,20 @@ async fn process_embedding_batch(
 
     // Create InferenceClients context for the embedding model
     let deferred_tasks = tokio_util::task::TaskTracker::new();
+    let rate_limiting_config = Arc::new(config.rate_limiting.clone());
+    let postgres_connection_info = PostgresConnectionInfo::Disabled;
+    let rate_limiting_manager = Arc::new(RateLimitingManager::new(
+        rate_limiting_config.clone(),
+        postgres_connection_info.clone(),
+    ));
     let clients = InferenceClients {
         http_client: client.clone(),
         credentials: Arc::new(credentials.clone()),
         clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        postgres_connection_info,
         cache_options: CacheOptions::default(),
         tags: tags.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        rate_limiting_manager,
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: Default::default(),
         deferred_tasks: deferred_tasks.clone(),
