@@ -796,6 +796,9 @@ impl RateLimitingScopeKey {
 pub struct TicketBorrows {
     pool_manager: Arc<RateLimitingManager>,
     borrows: Vec<TicketBorrow>,
+    /// Whether tickets were consumed from the in-memory pool (true) or directly from DB (false).
+    /// Used to determine whether to adjust pool accounting in return_tickets.
+    served_from_pool: bool,
 }
 
 #[derive(Debug)]
@@ -816,6 +819,7 @@ impl TicketBorrows {
         Self {
             pool_manager,
             borrows: Vec::new(),
+            served_from_pool: false,
         }
     }
 
@@ -824,6 +828,7 @@ impl TicketBorrows {
         results: Vec<ConsumeTicketsReceipt>,
         active_limits: Vec<ActiveRateLimit>,
         ticket_requests: Vec<ConsumeTicketsRequest>,
+        served_from_pool: bool,
     ) -> Result<Self, Error> {
         // Assert all vectors have the same length
         let results_len = results.len();
@@ -849,6 +854,7 @@ impl TicketBorrows {
         Ok(Self {
             pool_manager,
             borrows,
+            served_from_pool,
         })
     }
 
@@ -860,6 +866,11 @@ impl TicketBorrows {
     /// Get access to the borrows for processing by the manager.
     pub(crate) fn borrows(&self) -> &[TicketBorrow] {
         &self.borrows
+    }
+
+    /// Whether tickets were consumed from the in-memory pool.
+    pub(crate) fn served_from_pool(&self) -> bool {
+        self.served_from_pool
     }
 
     /// Return tickets based on actual resource usage.

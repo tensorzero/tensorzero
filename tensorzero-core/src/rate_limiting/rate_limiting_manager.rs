@@ -17,7 +17,9 @@ use super::{
     ScopeInfo, TicketBorrow, TicketBorrows,
 };
 use crate::db::postgres::PostgresConnectionInfo;
-use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest};
+use crate::db::{
+    ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
+};
 use crate::error::Error;
 
 /// Manager for rate limiting operations.
@@ -136,10 +138,11 @@ impl RateLimitingManager {
         let ticket_requests = ticket_requests?;
 
         // Choose path based on pool mode
-        let receipts = match self.pool_mode() {
+        let (receipts, served_from_pool) = match self.pool_mode() {
             PoolMode::Direct => {
                 // Direct mode: hit the database for every request
-                self.client.consume_tickets(&ticket_requests).await?
+                let receipts = self.client.consume_tickets(&ticket_requests).await?;
+                (receipts, false)
             }
             PoolMode::Pooled => {
                 // Pooled mode: try to consume from local pools first
@@ -147,7 +150,13 @@ impl RateLimitingManager {
             }
         };
 
-        TicketBorrows::new(Arc::clone(self), receipts, limits, ticket_requests)
+        TicketBorrows::new(
+            Arc::clone(self),
+            receipts,
+            limits,
+            ticket_requests,
+            served_from_pool,
+        )
     }
 
     /// Consume tickets from the in-memory pools, replenishing from DB if needed.
@@ -155,11 +164,14 @@ impl RateLimitingManager {
     /// During warm-up (first 100 requests per key), requests go directly to the DB
     /// while building up P99 usage data in the histogram. After warm-up, requests
     /// are served from the local pool with adaptive pre-borrowing.
+    ///
+    /// Returns `(receipts, served_from_pool)` where `served_from_pool` indicates whether
+    /// tickets were actually consumed from the in-memory pool (vs. direct DB access).
     async fn consume_from_pools(
         &self,
         limits: &[super::ActiveRateLimit],
         ticket_requests: &[ConsumeTicketsRequest],
-    ) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
+    ) -> Result<(Vec<ConsumeTicketsReceipt>, bool), Error> {
         // Get or create pools for all limits
         let pools: Vec<Arc<super::token_pool::TokenPool>> = limits
             .iter()
@@ -195,7 +207,7 @@ impl RateLimitingManager {
                 pool.record_usage(tokens, model_inferences);
             }
 
-            return Ok(receipts);
+            return Ok((receipts, false)); // served_from_pool = false (warmup)
         }
 
         // All pools warmed up: use pooled consumption
@@ -221,7 +233,8 @@ impl RateLimitingManager {
 
                 // Fall back to direct DB access for this request
                 // This ensures we can still serve the request even if the pool is exhausted
-                return self.client.consume_tickets(ticket_requests).await;
+                let receipts = self.client.consume_tickets(ticket_requests).await?;
+                return Ok((receipts, false)); // served_from_pool = false (fallback)
             }
         }
 
@@ -240,7 +253,7 @@ impl RateLimitingManager {
             })
             .collect();
 
-        Ok(receipts)
+        Ok((receipts, true)) // served_from_pool = true
     }
 
     /// Replenish a pool by borrowing tokens from the database.
@@ -351,18 +364,23 @@ impl RateLimitingManager {
             }
         };
 
-        // Record usage for P99 tracking (in pooled mode)
+        // Record usage for P99 tracking and adjust pool accounting.
+        // Only adjust pool accounting if tickets were actually consumed from the pool
+        // (not during warmup or DB fallback).
         if self.pool_mode() == PoolMode::Pooled {
+            let served_from_pool = ticket_borrows.served_from_pool();
             for borrow in ticket_borrows.borrows() {
                 let pool = self.pool_registry.get_or_create(&borrow.active_limit);
                 pool.record_usage(tokens, model_inferences);
 
-                // Adjust pool accounting based on actual vs estimated usage
-                let actual_usage_this_request = match borrow.active_limit.limit.resource {
-                    RateLimitResource::ModelInference => model_inferences,
-                    RateLimitResource::Token => tokens,
-                };
-                pool.adjust_usage(borrow.receipt.tickets_consumed, actual_usage_this_request);
+                if served_from_pool {
+                    // Adjust pool accounting based on actual vs estimated usage
+                    let actual_usage_this_request = match borrow.active_limit.limit.resource {
+                        RateLimitResource::ModelInference => model_inferences,
+                        RateLimitResource::Token => tokens,
+                    };
+                    pool.adjust_usage(borrow.receipt.tickets_consumed, actual_usage_this_request);
+                }
             }
         }
 
