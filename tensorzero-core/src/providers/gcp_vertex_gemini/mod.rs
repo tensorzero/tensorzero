@@ -815,10 +815,7 @@ fn make_provider_batch_inference_output(
             provider_type: PROVIDER_TYPE.to_string(),
         })
     })?;
-    let usage = Usage {
-        input_tokens: usage_metadata.prompt_token_count,
-        output_tokens: usage_metadata.candidates_token_count,
-    };
+    let usage = usage_metadata.into();
 
     let (output, finish_reason) = get_response_content(
         response,
@@ -2915,6 +2912,16 @@ struct GCPVertexGeminiUsageMetadata {
     candidates_token_count: Option<u32>,
 }
 
+impl From<GCPVertexGeminiUsageMetadata> for Usage {
+    fn from(value: GCPVertexGeminiUsageMetadata) -> Self {
+        Usage {
+            input_tokens: value.prompt_token_count,
+            output_tokens: value.candidates_token_count,
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiResponse {
@@ -3001,10 +3008,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 usage,
             )
         });
-        let usage = Usage {
-            input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count,
-        };
+        let usage = usage_metadata.into();
 
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
@@ -3092,10 +3096,7 @@ fn convert_stream_response_with_metadata_to_chunk(
             let usage = if metadata.prompt_token_count.is_some()
                 || metadata.candidates_token_count.is_some()
             {
-                Some(Usage {
-                    input_tokens: metadata.prompt_token_count,
-                    output_tokens: metadata.candidates_token_count,
-                })
+                Some(metadata.into())
             } else {
                 None
             };
@@ -3769,6 +3770,7 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             }
         );
         assert_eq!(model_inference_response.provider_latency, latency);
@@ -3883,6 +3885,7 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(20),
+                ..Default::default()
             }
         );
         assert_eq!(model_inference_response.provider_latency, latency);
@@ -4011,6 +4014,7 @@ mod tests {
             Usage {
                 input_tokens: Some(25),
                 output_tokens: Some(40),
+                ..Default::default()
             }
         );
         assert_eq!(model_inference_response.provider_latency, latency);

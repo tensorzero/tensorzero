@@ -190,6 +190,7 @@ impl TensorzeroRelay {
                             (Some(total), Some(prompt)) => Some(total - prompt),
                             _ => None,
                         },
+                        ..Default::default()
                     })
                     .unwrap_or_default(),
                 model,

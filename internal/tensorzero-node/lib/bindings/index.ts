@@ -315,6 +315,8 @@ export * from "./TagRateLimitingConfigScope";
 export * from "./TagValueScope";
 export * from "./Template";
 export * from "./TemplateWithSchema";
+export * from "./TensorzeroCacheHit";
+export * from "./TensorzeroTokenDetails";
 export * from "./Text";
 export * from "./TextKind";
 export * from "./Thought";

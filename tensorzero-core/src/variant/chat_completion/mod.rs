@@ -1712,10 +1712,11 @@ mod tests {
             .unwrap();
         assert!(matches!(result, InferenceResult::Chat(_)));
         assert_eq!(
-            result.usage_considering_cached(),
+            result.aggregate_usage(),
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -1796,10 +1797,11 @@ mod tests {
             .unwrap();
         assert!(matches!(result, InferenceResult::Chat(_)));
         assert_eq!(
-            result.usage_considering_cached(),
+            result.aggregate_usage(),
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -1893,10 +1895,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            result.usage_considering_cached(),
+            result.aggregate_usage(),
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -1997,10 +2000,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            result.usage_considering_cached(),
+            result.aggregate_usage(),
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -2129,10 +2133,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            result.usage_considering_cached(),
+            result.aggregate_usage(),
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -2254,10 +2259,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            result.usage_considering_cached(),
+            result.aggregate_usage(),
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -2587,6 +2593,7 @@ mod tests {
                     Some(&Usage {
                         input_tokens: Some(10),
                         output_tokens: Some(16),
+                        ..Default::default()
                     })
                 );
                 break;

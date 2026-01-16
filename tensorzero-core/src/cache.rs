@@ -487,7 +487,7 @@ pub async fn cache_lookup_streaming(
     }))
 }
 
-pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
+async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     cache_key: CacheKey,
     max_age_s: Option<u32>,

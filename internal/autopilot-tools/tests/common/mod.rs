@@ -166,6 +166,7 @@ pub fn create_mock_chat_response(text: &str) -> InferenceResponse {
         usage: Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            ..Default::default()
         },
         raw_usage: None,
         original_response: None,

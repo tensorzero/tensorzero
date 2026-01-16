@@ -40,9 +40,36 @@ pub fn raw_usage_entries_from_value(
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
+pub struct TensorzeroTokenDetails {
+    pub tensorzero_cached_tokens: u32,
+}
+
+impl TensorzeroTokenDetails {
+    pub fn zero() -> Self {
+        Self {
+            tensorzero_cached_tokens: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+pub enum TensorzeroCacheHit {
+    Yes,
+    Partial,
+    #[default]
+    No,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
+    pub input_tokens_details: TensorzeroTokenDetails,
+    pub output_tokens_details: TensorzeroTokenDetails,
+    pub tensorzero_cache_hit: TensorzeroCacheHit,
 }
 
 impl Usage {
@@ -50,6 +77,9 @@ impl Usage {
         Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            input_tokens_details: TensorzeroTokenDetails::zero(),
+            output_tokens_details: TensorzeroTokenDetails::zero(),
+            tensorzero_cache_hit: TensorzeroCacheHit::No,
         }
     }
 
@@ -88,6 +118,9 @@ where
             let Usage {
                 input_tokens: chunk_input_tokens,
                 output_tokens: chunk_output_tokens,
+                input_tokens_details: chunk_input_tokens_details,
+                output_tokens_details: chunk_output_tokens_details,
+                tensorzero_cache_hit: chunk_tensorzero_cache_hit,
             } = chunk_usage;
 
             acc.input_tokens = match (acc.input_tokens, chunk_input_tokens) {
@@ -126,6 +159,20 @@ where
                 }
             };
 
+            acc.input_tokens_details = TensorzeroTokenDetails {
+                tensorzero_cached_tokens: acc.input_tokens_details.tensorzero_cached_tokens + chunk_input_tokens_details.tensorzero_cached_tokens,
+            };
+
+            acc.output_tokens_details = TensorzeroTokenDetails {
+                tensorzero_cached_tokens: acc.output_tokens_details.tensorzero_cached_tokens + chunk_output_tokens_details.tensorzero_cached_tokens,
+            };
+
+            acc.tensorzero_cache_hit = if acc.tensorzero_cache_hit == chunk_tensorzero_cache_hit {
+                acc.tensorzero_cache_hit
+            } else {
+                TensorzeroCacheHit::Partial
+            };
+
             acc
         })
 }
@@ -146,6 +193,9 @@ where
         let Usage {
             input_tokens: mi_input_tokens,
             output_tokens: mi_output_tokens,
+            input_tokens_details: mi_input_tokens_details,
+            output_tokens_details: mi_output_tokens_details,
+            tensorzero_cache_hit: mi_tensorzero_cache_hit,
         } = mi_usage;
 
         Usage {
@@ -156,6 +206,23 @@ where
             output_tokens: match (acc.output_tokens, mi_output_tokens) {
                 (Some(a), Some(b)) => Some(a + b),
                 _ => None,
+            },
+            input_tokens_details: {
+                TensorzeroTokenDetails {
+                    tensorzero_cached_tokens: acc.input_tokens_details.tensorzero_cached_tokens
+                        + mi_input_tokens_details.tensorzero_cached_tokens,
+                }
+            },
+            output_tokens_details: {
+                TensorzeroTokenDetails {
+                    tensorzero_cached_tokens: acc.output_tokens_details.tensorzero_cached_tokens
+                        + mi_output_tokens_details.tensorzero_cached_tokens,
+                }
+            },
+            tensorzero_cache_hit: if acc.tensorzero_cache_hit == mi_tensorzero_cache_hit {
+                acc.tensorzero_cache_hit
+            } else {
+                TensorzeroCacheHit::Partial
             },
         }
     })
@@ -233,6 +300,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(100),
             output_tokens: Some(50),
+            ..Default::default()
         };
         let result = aggregate_usage_from_single_streaming_model_inference(vec![usage]);
         assert_eq!(
@@ -254,14 +322,17 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(10),
+                ..Default::default()
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(25),
+                ..Default::default()
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -284,14 +355,17 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
+                ..Default::default()
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -313,10 +387,12 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -336,10 +412,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: None,
+                ..Default::default()
             },
             Usage {
                 input_tokens: None,
                 output_tokens: Some(50),
+                ..Default::default()
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -364,10 +442,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
             Usage {
                 input_tokens: Some(80),  // Smaller than previous (unexpected)
                 output_tokens: Some(30), // Smaller than previous (unexpected)
+                ..Default::default()
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -414,6 +494,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(100),
             output_tokens: Some(50),
+            ..Default::default()
         };
         let result = aggregate_usage_across_model_inferences(vec![usage]);
         assert_eq!(
@@ -434,10 +515,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
+                ..Default::default()
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -459,10 +542,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
             Usage {
                 input_tokens: None, // This should propagate None for input_tokens
                 output_tokens: Some(100),
+                ..Default::default()
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -483,10 +568,12 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: Some(50),
+                ..Default::default()
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: None,
+                ..Default::default()
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -506,10 +593,12 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);

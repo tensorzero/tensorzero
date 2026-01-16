@@ -8,8 +8,9 @@ use aws_sdk_bedrockruntime::types::{
     ConverseStreamOutput as ConverseStreamOutputType, DocumentBlock, DocumentFormat,
     DocumentSource, ImageBlock, ImageFormat, ImageSource, InferenceConfiguration, Message,
     ReasoningContentBlock, ReasoningContentBlockDelta, ReasoningTextBlock, SpecificToolChoice,
-    StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice, ToolConfiguration,
-    ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification, ToolUseBlock,
+    StopReason, SystemContentBlock, TokenUsage as AWSBedrockTokenUsage, Tool,
+    ToolChoice as AWSBedrockToolChoice, ToolConfiguration, ToolInputSchema, ToolResultBlock,
+    ToolResultContentBlock, ToolSpecification, ToolUseBlock,
 };
 use aws_smithy_types::{Document, Number, error::display::DisplayErrorContext};
 use aws_types::region::Region;
@@ -175,6 +176,16 @@ fn number_from_i32(value: i32) -> Number {
         Number::PosInt(value as u64)
     } else {
         Number::NegInt(value as i64)
+    }
+}
+
+impl From<AWSBedrockTokenUsage> for Usage {
+    fn from(value: AWSBedrockTokenUsage) -> Self {
+        Usage {
+            input_tokens: Some(value.input_tokens as u32),
+            output_tokens: Some(value.output_tokens as u32),
+            ..Default::default()
+        }
     }
 }
 
@@ -775,10 +786,7 @@ fn bedrock_to_tensorzero_stream_message(
                         }),
                     ));
 
-                    let usage = Some(Usage {
-                        input_tokens: Some(aws_usage.input_tokens as u32),
-                        output_tokens: Some(aws_usage.output_tokens as u32),
-                    });
+                    let usage = Some(aws_usage.into());
 
                     Ok(Some(ProviderInferenceResponseChunk::new_with_raw_usage(
                         vec![],
@@ -1166,10 +1174,8 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             )
         });
 
-        let usage = Usage {
-            input_tokens: Some(aws_usage.input_tokens as u32),
-            output_tokens: Some(aws_usage.output_tokens as u32),
-        };
+        let usage = aws_usage.into();
+
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,

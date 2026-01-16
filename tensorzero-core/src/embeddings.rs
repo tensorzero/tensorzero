@@ -12,9 +12,9 @@ use crate::cache::{
 use crate::config::provider_types::ProviderTypesConfig;
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::{ContentBlock, Text};
+use crate::inference::types::{RequestMessagesOrBatch, TensorzeroCacheHit, TensorzeroTokenDetails};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
 use crate::model_table::{OpenAIKind, ShorthandModelConfig};
@@ -424,8 +424,15 @@ impl EmbeddingModelResponse {
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
-                input_tokens: cache_lookup.input_tokens,
-                output_tokens: cache_lookup.output_tokens,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
+                input_tokens_details: TensorzeroTokenDetails {
+                    tensorzero_cached_tokens: cache_lookup.input_tokens.unwrap_or(0),
+                },
+                output_tokens_details: TensorzeroTokenDetails {
+                    tensorzero_cached_tokens: cache_lookup.output_tokens.unwrap_or(0),
+                },
+                tensorzero_cache_hit: TensorzeroCacheHit::Yes,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
@@ -433,21 +440,6 @@ impl EmbeddingModelResponse {
             embedding_provider_name: Arc::from(request.provider_name),
             cached: true,
             raw_usage: None,
-        }
-    }
-
-    /// We return the actual usage (meaning the number of tokens the user would be billed for)
-    /// in the HTTP response.
-    /// However, we store the number of tokens that would have been used in the database.
-    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
-    pub fn usage_considering_cached(&self) -> Usage {
-        if self.cached {
-            Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
-            }
-        } else {
-            self.usage
         }
     }
 }

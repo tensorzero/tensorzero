@@ -975,7 +975,7 @@ fn create_stream(
         // Then add the usage from previous inferences (e.g. best-of-N candidates)
         // This is the total usage for the TensorZero inference
         let inference_usage = aggregate_usage_across_model_inferences(
-            metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).chain(std::iter::once(model_inference_usage))
+            metadata.previous_model_inference_results.iter().map(|r| r.usage).chain(std::iter::once(model_inference_usage))
         );
 
         let chunk = match *function {
@@ -1189,7 +1189,6 @@ fn prepare_response_chunk(
         metadata.inference_id,
         metadata.episode_id,
         metadata.variant_name.clone(),
-        metadata.cached,
         metadata.include_original_response,
         metadata.json_mode,
         metadata.include_raw_usage,
@@ -1336,7 +1335,7 @@ impl InferenceResponse {
         variant_name: String,
         include_raw_usage: bool,
     ) -> Self {
-        let usage = inference_result.usage_considering_cached();
+        let usage = inference_result.aggregate_usage();
 
         // Build raw_usage if requested
         // Returns Some(entries) if requested (even if empty when all cached), None if not requested
@@ -1490,29 +1489,15 @@ pub struct JsonInferenceResponseChunk {
 }
 
 impl InferenceResponseChunk {
-    #[expect(clippy::too_many_arguments)]
     fn new(
         inference_result: InferenceResultChunk,
         inference_id: Uuid,
         episode_id: Uuid,
         variant_name: String,
-        cached: bool,
         include_original_response: bool,
         json_mode: Option<JsonMode>,
         include_raw_usage: bool,
     ) -> Self {
-        // Compute the usage
-        let usage = if cached {
-            // `usage` represents billed tokens. We set values to 0 if TensorZero cached the inference.
-            // Only include usage on chunks that originally had it (i.e., the final chunk).
-            inference_result.usage().map(|_| Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
-            })
-        } else {
-            inference_result.usage().copied()
-        };
-
         // Compute the raw usage
         let raw_usage = if include_raw_usage {
             inference_result.raw_usage().cloned()
@@ -1549,7 +1534,7 @@ impl InferenceResponseChunk {
                     content,
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage,
+                    usage: result.usage,
                     raw_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
@@ -1563,7 +1548,7 @@ impl InferenceResponseChunk {
                     raw: result.raw.unwrap_or_default(),
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage,
+                    usage: result.usage,
                     raw_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
@@ -1808,7 +1793,8 @@ mod tests {
     use crate::inference::types::{
         ApiType, Base64File, ChatInferenceResultChunk, ContentBlockChunk, ContentBlockOutput, File,
         InputMessageContent, JsonInferenceResultChunk, Latency, ModelInferenceResponseWithMetadata,
-        ObjectStoragePointer, RequestMessagesOrBatch, Role, Text, TextChunk, UrlFile,
+        ObjectStoragePointer, RequestMessagesOrBatch, Role, TensorzeroCacheHit,
+        TensorzeroTokenDetails, Text, TextChunk, UrlFile,
         storage::{StorageKind, StoragePath},
         usage::RawUsageEntry,
     };
@@ -2333,6 +2319,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             }),
             raw_usage: Some(raw_usage_entries.clone()),
             finish_reason: Some(FinishReason::Stop),
@@ -2383,6 +2370,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             }),
             raw_usage: Some(raw_usage_entries),
             finish_reason: Some(FinishReason::Stop),
@@ -2417,6 +2405,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             }),
             raw_usage: None,
             finish_reason: None,
@@ -2446,8 +2435,15 @@ mod tests {
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             content: vec![],
             usage: Some(Usage {
-                input_tokens: Some(100),
-                output_tokens: Some(50),
+                input_tokens: Some(0),
+                output_tokens: Some(0),
+                input_tokens_details: TensorzeroTokenDetails {
+                    tensorzero_cached_tokens: 100,
+                },
+                output_tokens_details: TensorzeroTokenDetails {
+                    tensorzero_cached_tokens: 50,
+                },
+                tensorzero_cache_hit: TensorzeroCacheHit::Yes,
             }),
             raw_usage: None,
             finish_reason: Some(FinishReason::Stop),
@@ -2493,6 +2489,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(30),
                 output_tokens: Some(20),
+                ..Default::default()
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: String::new(),
@@ -2578,6 +2575,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -2674,6 +2672,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -2752,6 +2751,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),

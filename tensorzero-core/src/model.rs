@@ -2869,6 +2869,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -3129,6 +3130,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");

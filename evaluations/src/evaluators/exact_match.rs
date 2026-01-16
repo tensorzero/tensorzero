@@ -121,6 +121,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
+                ..Default::default()
             },
             raw_usage: None,
             original_response: None,
@@ -140,6 +141,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
+                ..Default::default()
             },
             raw_usage: None,
             original_response: None,
@@ -228,6 +230,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
+                ..Default::default()
             },
             raw_usage: None,
             original_response: None,
@@ -248,6 +251,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
+                ..Default::default()
             },
             raw_usage: None,
             original_response: None,

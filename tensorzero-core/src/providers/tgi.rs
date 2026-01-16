@@ -677,6 +677,7 @@ impl From<TGIUsage> for Usage {
         Usage {
             input_tokens: Some(usage.prompt_tokens),
             output_tokens: Some(usage.completion_tokens),
+            ..Default::default()
         }
     }
 }

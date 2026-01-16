@@ -1297,10 +1297,11 @@ mod tests {
 
         let inference_result = result.unwrap();
         assert_eq!(
-            inference_result.usage_considering_cached(),
+            inference_result.aggregate_usage(),
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match inference_result {
@@ -1409,10 +1410,11 @@ mod tests {
 
         let inference_result = result.unwrap();
         assert_eq!(
-            inference_result.usage_considering_cached(),
+            inference_result.aggregate_usage(),
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match inference_result {
@@ -1626,10 +1628,11 @@ mod tests {
 
         let inference_result = result.unwrap();
         assert_eq!(
-            inference_result.usage_considering_cached(),
+            inference_result.aggregate_usage(),
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match inference_result {

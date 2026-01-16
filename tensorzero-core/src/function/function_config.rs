@@ -1879,6 +1879,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1928,7 +1929,7 @@ mod tests {
         assert!(logs_contain(
             "Failed to parse output from JSON function response"
         ));
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -1946,6 +1947,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1976,7 +1978,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -1999,6 +2001,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2029,7 +2032,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2055,6 +2058,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2085,7 +2089,7 @@ mod tests {
             .await
             .unwrap();
         assert!(logs_contain("JSON Schema validation failed"));
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2108,6 +2112,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2137,7 +2142,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2161,6 +2166,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(0),
+            ..Default::default()
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2190,7 +2196,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2232,6 +2238,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2262,7 +2269,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2279,6 +2286,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2309,7 +2317,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2334,6 +2342,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2364,7 +2373,7 @@ mod tests {
             .await
             .unwrap();
         assert!(logs_contain("JSON Schema validation failed"));
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2386,6 +2395,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2415,7 +2425,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
@@ -2444,6 +2454,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2474,7 +2485,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.usage_considering_cached(), usage);
+        assert_eq!(response.aggregate_usage(), usage);
         match response {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);

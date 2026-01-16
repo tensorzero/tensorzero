@@ -1100,6 +1100,7 @@ impl From<AnthropicUsage> for Usage {
         Usage {
             input_tokens: Some(value.input_tokens),
             output_tokens: Some(value.output_tokens),
+            ..Default::default()
         }
     }
 }

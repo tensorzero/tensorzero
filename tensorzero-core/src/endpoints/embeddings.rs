@@ -97,10 +97,9 @@ pub async fn embeddings(
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
         .await?;
-    let usage = response.usage_considering_cached();
     Ok(EmbeddingResponse {
         embeddings: response.embeddings,
-        usage,
+        usage: response.usage,
         model: params.model_name,
     })
 }

@@ -138,7 +138,7 @@ pub use streams::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
     UnknownChunk, collect_chunks,
 };
-pub use usage::{ApiType, RawUsageEntry, Usage};
+pub use usage::{ApiType, RawUsageEntry, TensorzeroCacheHit, TensorzeroTokenDetails, Usage};
 
 /*
  * Data flow in TensorZero
@@ -1340,23 +1340,6 @@ pub enum RequestMessagesOrBatch {
     BatchInput(Vec<StoredRequestMessage>),
 }
 
-impl ModelInferenceResponseWithMetadata {
-    /// We return the actual usage (meaning the number of tokens the user would be billed for)
-    /// in the HTTP response.
-    /// However, we store the number of tokens that would have been used in the database.
-    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
-    pub fn usage_considering_cached(&self) -> Usage {
-        if self.cached {
-            Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
-            }
-        } else {
-            self.usage
-        }
-    }
-}
-
 /* As a Variant might make use of multiple model inferences, we then combine
  * one or more ModelInferenceResults into a single InferenceResult (but we keep the original ModelInferenceResults around for storage).
  * In the non-streaming case, this InferenceResult is converted into an InferenceResponse and sent to the client.
@@ -1630,8 +1613,15 @@ impl ModelInferenceResponse {
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
-                input_tokens: cache_lookup.input_tokens,
-                output_tokens: cache_lookup.output_tokens,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
+                input_tokens_details: TensorzeroTokenDetails {
+                    tensorzero_cached_tokens: cache_lookup.input_tokens.unwrap_or(0),
+                },
+                output_tokens_details: TensorzeroTokenDetails {
+                    tensorzero_cached_tokens: cache_lookup.output_tokens.unwrap_or(0),
+                },
+                tensorzero_cache_hit: TensorzeroCacheHit::Yes,
             },
             provider_latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
@@ -1820,13 +1810,11 @@ impl InferenceResult {
         .await
     }
 
-    /// Aggregates the usage of all model inference results, considering cached results.
+    /// Aggregates the usage of all model inference results.
     /// If any of the values are None, the total usage is considered as None (via `sum_usage_strict`).
-    pub fn usage_considering_cached(&self) -> Usage {
+    pub fn aggregate_usage(&self) -> Usage {
         aggregate_usage_across_model_inferences(
-            self.model_inference_results()
-                .iter()
-                .map(ModelInferenceResponseWithMetadata::usage_considering_cached),
+            self.model_inference_results().iter().map(|r| r.usage),
         )
     }
 
@@ -2284,6 +2272,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            ..Default::default()
         };
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
@@ -3055,7 +3044,7 @@ mod tests {
         assert!(serde_json::from_value::<InputMessage>(input).is_err());
     }
 
-    /// Test that usage_considering_cached properly propagates None values
+    /// Test that aggregate_usage properly propagates None values
     /// If any of the model inference results have None for input_tokens or output_tokens,
     /// the aggregated result should also have None for those fields
     #[tokio::test]
@@ -3088,6 +3077,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3095,6 +3085,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3110,7 +3101,7 @@ mod tests {
         )
         .await;
         let result_all_some = InferenceResult::Chat(chat_result_all_some);
-        let usage_all_some = result_all_some.usage_considering_cached();
+        let usage_all_some = result_all_some.aggregate_usage();
         assert_eq!(usage_all_some.input_tokens, Some(25));
         assert_eq!(usage_all_some.output_tokens, Some(45));
 
@@ -3120,6 +3111,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3127,6 +3119,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3142,7 +3135,7 @@ mod tests {
         )
         .await;
         let result_input_none = InferenceResult::Chat(chat_result_input_none);
-        let usage_input_none = result_input_none.usage_considering_cached();
+        let usage_input_none = result_input_none.aggregate_usage();
         assert_eq!(usage_input_none.input_tokens, None);
         assert_eq!(usage_input_none.output_tokens, Some(45));
 
@@ -3152,6 +3145,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3159,6 +3153,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: None,
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3174,7 +3169,7 @@ mod tests {
         )
         .await;
         let result_output_none = InferenceResult::Chat(chat_result_output_none);
-        let usage_output_none = result_output_none.usage_considering_cached();
+        let usage_output_none = result_output_none.aggregate_usage();
         assert_eq!(usage_output_none.input_tokens, Some(25));
         assert_eq!(usage_output_none.output_tokens, None);
 
@@ -3184,6 +3179,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3191,6 +3187,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3206,7 +3203,7 @@ mod tests {
         )
         .await;
         let result_all_none = InferenceResult::Chat(chat_result_all_none);
-        let usage_all_none = result_all_none.usage_considering_cached();
+        let usage_all_none = result_all_none.aggregate_usage();
         assert_eq!(usage_all_none.input_tokens, None);
         assert_eq!(usage_all_none.output_tokens, None);
 
@@ -3215,8 +3212,15 @@ mod tests {
         let model_responses_mixed = vec![
             create_model_response(
                 Usage {
-                    input_tokens: Some(10),
-                    output_tokens: Some(20),
+                    input_tokens: Some(0),
+                    output_tokens: Some(0),
+                    input_tokens_details: TensorzeroTokenDetails {
+                        tensorzero_cached_tokens: 10,
+                    },
+                    output_tokens_details: TensorzeroTokenDetails {
+                        tensorzero_cached_tokens: 20,
+                    },
+                    tensorzero_cache_hit: TensorzeroCacheHit::Yes,
                 },
                 true,
             ), // This will be treated as 0/0 due to cached=true
@@ -3224,6 +3228,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3239,9 +3244,21 @@ mod tests {
         )
         .await;
         let result_mixed = InferenceResult::Chat(chat_result_mixed);
-        let usage_mixed = result_mixed.usage_considering_cached();
+        let usage_mixed = result_mixed.aggregate_usage();
         assert_eq!(usage_mixed.input_tokens, None); // None propagates
         assert_eq!(usage_mixed.output_tokens, Some(25)); // 0 (cached) + 25
+        assert_eq!(
+            usage_mixed.input_tokens_details.tensorzero_cached_tokens,
+            10
+        );
+        assert_eq!(
+            usage_mixed.output_tokens_details.tensorzero_cached_tokens,
+            20
+        );
+        assert_eq!(
+            usage_mixed.tensorzero_cache_hit,
+            TensorzeroCacheHit::Partial
+        );
     }
 
     #[test]
@@ -3298,6 +3315,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            ..Default::default()
         };
 
         // Create responses with different finish reasons and IDs

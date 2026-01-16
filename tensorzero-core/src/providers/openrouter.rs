@@ -1549,6 +1549,7 @@ impl From<OpenRouterUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            ..Default::default()
         }
     }
 }
@@ -2930,6 +2931,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             }),
             "expected usage to include provider raw_usage entries"
         );

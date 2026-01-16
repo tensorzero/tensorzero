@@ -250,6 +250,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             }),
             raw_usage: None,
             finish_reason: None,
@@ -345,6 +346,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(50),
+                ..Default::default()
             }),
             raw_usage: Some(vec![raw_usage_entry.clone()]),
             finish_reason: None,
@@ -398,6 +400,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(50),
+                ..Default::default()
             }),
             raw_usage: Some(vec![raw_usage_entry]),
             finish_reason: None,
@@ -434,6 +437,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                ..Default::default()
             }),
             raw_usage: None,
             finish_reason: None,
@@ -481,6 +485,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
+                ..Default::default()
             }),
             raw_usage: None,
             finish_reason: None,

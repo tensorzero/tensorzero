@@ -912,6 +912,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
+                    ..Default::default()
                 }),
                 raw_usage: None,
                 raw_response: ", world!\"}".to_string(),
@@ -944,6 +945,7 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
+                ..Default::default()
             },
             finish_reason: Some(FinishReason::Stop),
         };
@@ -998,10 +1000,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            ..Default::default()
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1048,15 +1052,17 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                ..Default::default()
             },
             finish_reason: Some(FinishReason::Stop),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
-            response.usage_considering_cached(),
+            response.aggregate_usage(),
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                ..Default::default()
             }
         );
         match response {
@@ -1089,6 +1095,7 @@ mod tests {
         let model_inference_usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            ..Default::default()
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1136,7 +1143,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
-        assert_eq!(result.usage_considering_cached(), model_inference_usage);
+        assert_eq!(result.aggregate_usage(), model_inference_usage);
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -1172,6 +1179,7 @@ mod tests {
         let model_inference_usage = Usage {
             input_tokens: Some(15),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1228,7 +1236,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
-        assert_eq!(result.usage_considering_cached(), model_inference_usage);
+        assert_eq!(result.aggregate_usage(), model_inference_usage);
         match result {
             InferenceResult::Chat(chat_response) => {
                 assert_eq!(chat_response.inference_id, inference_id);
@@ -1296,10 +1304,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            ..Default::default()
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1346,15 +1356,17 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                ..Default::default()
             },
             finish_reason: Some(FinishReason::Stop),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
-            response.usage_considering_cached(),
+            response.aggregate_usage(),
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                ..Default::default()
             }
         );
         match response {
@@ -1403,10 +1415,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            ..Default::default()
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let dynamic_output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
@@ -1462,15 +1476,17 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                ..Default::default()
             },
             finish_reason: Some(FinishReason::ToolCall),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
-            response.usage_considering_cached(),
+            response.aggregate_usage(),
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                ..Default::default()
             }
         );
         match response {
@@ -1596,6 +1612,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
+                    ..Default::default()
                 }),
                 raw_usage: None,
                 raw_response: ", world!\"}".to_string(),
@@ -1643,15 +1660,17 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
+                ..Default::default()
             },
             finish_reason: Some(FinishReason::Stop),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
-            result.usage_considering_cached(),
+            result.aggregate_usage(),
             Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
+                ..Default::default()
             }
         );
         let chat_result = match result {
@@ -1748,6 +1767,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    ..Default::default()
                 }),
                 raw_usage: None,
                 raw_response: "chunk2".to_string(),
@@ -1838,6 +1858,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
+                    ..Default::default()
                 }),
                 raw_usage: None,
                 raw_response: "chunk2".to_string(),
@@ -1919,6 +1940,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(5),
                     output_tokens: Some(10),
+                    ..Default::default()
                 }),
                 raw_usage: None,
                 raw_response: "chunk2".to_string(),
@@ -2004,6 +2026,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(15),
+                    ..Default::default()
                 }),
                 raw_usage: None,
                 raw_response: "chunk2".to_string(),
@@ -2074,6 +2097,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(5),
                 output_tokens: Some(5),
+                ..Default::default()
             }),
             raw_usage: None,
             raw_response: "chunk1".to_string(),
@@ -2194,6 +2218,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(30),
+                    ..Default::default()
                 }),
                 raw_usage: None,
                 raw_response: "chunk3".to_string(),
@@ -2275,6 +2300,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             }),
             raw_usage: None,
             raw_response: "raw response".to_string(),
@@ -2292,6 +2318,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));

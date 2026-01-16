@@ -1209,6 +1209,7 @@ impl From<GroqUsage> for Usage {
         Usage {
             input_tokens: Some(usage.prompt_tokens),
             output_tokens: Some(usage.completion_tokens),
+            ..Default::default()
         }
     }
 }
@@ -2566,6 +2567,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             }),
             "expected usage to include provider raw_usage entries"
         );

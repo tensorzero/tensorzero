@@ -150,6 +150,7 @@ async fn test_cache_write_and_read() {
         Usage {
             input_tokens: Some(10),
             output_tokens: Some(16),
+            ..Default::default()
         }
     );
     assert_eq!(*result.model_provider_name, *"test_provider");
@@ -168,6 +169,7 @@ async fn test_cache_write_and_read() {
         Usage {
             input_tokens: Some(10),
             output_tokens: Some(16),
+            ..Default::default()
         }
     );
     assert_eq!(
@@ -246,6 +248,7 @@ async fn test_cache_stream_write_and_read() {
             usage: Some(Usage {
                 input_tokens: Some(20),
                 output_tokens: Some(40),
+                ..Default::default()
             }),
             raw_usage: None,
             raw_response: "raw response".to_string(),
@@ -260,6 +263,7 @@ async fn test_cache_stream_write_and_read() {
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
+                ..Default::default()
             }),
             raw_usage: None,
             raw_response: "raw response 2".to_string(),
@@ -277,6 +281,7 @@ async fn test_cache_stream_write_and_read() {
         &Usage {
             input_tokens: Some(1),
             output_tokens: Some(2),
+            ..Default::default()
         },
         None,
     )
@@ -311,6 +316,7 @@ async fn test_cache_stream_write_and_read() {
                 &Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(40),
+                    ..Default::default()
                 })
             );
         } else {
@@ -319,6 +325,7 @@ async fn test_cache_stream_write_and_read() {
                 &Some(Usage {
                     input_tokens: Some(100),
                     output_tokens: Some(200),
+                    ..Default::default()
                 })
             );
         };
