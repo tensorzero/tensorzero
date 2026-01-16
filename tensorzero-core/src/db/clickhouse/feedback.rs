@@ -19,6 +19,7 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     experimentation::asymptotic_confidence_sequences::asymp_cs,
+    function::FunctionConfig,
 };
 
 use super::{
@@ -1099,9 +1100,10 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
     async fn query_metrics_with_feedback(
         &self,
         function_name: &str,
-        inference_table: &str,
+        function_config: &FunctionConfig,
         variant_name: Option<&str>,
     ) -> Result<Vec<MetricWithFeedback>, Error> {
+        let inference_table = function_config.table_name();
         let (query, params_owned) =
             build_metrics_with_feedback_query(function_name, inference_table, variant_name);
 
