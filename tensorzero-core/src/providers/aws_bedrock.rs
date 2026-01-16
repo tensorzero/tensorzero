@@ -8,6 +8,7 @@ use bytes::BytesMut;
 use futures::StreamExt;
 use futures::future::try_join_all;
 use reqwest::StatusCode;
+use secrecy::ExposeSecret;
 use serde::Serialize;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -134,12 +135,71 @@ impl AWSBedrockProvider {
         &self,
         dynamic_api_keys: &InferenceCredentials,
     ) -> Result<Credentials, Error> {
-        if let Some(creds) = &self.credentials {
-            // Use configured credentials (static or dynamic)
-            creds.resolve(dynamic_api_keys)
-        } else {
-            // Get fresh credentials from the SDK config
-            get_credentials(&self.sdk_config, PROVIDER_TYPE).await
+        match &self.credentials {
+            Some(AWSCredentials::Static {
+                access_key_id,
+                secret_access_key,
+                session_token,
+            }) => {
+                // Use static credentials directly
+                Ok(Credentials::new(
+                    access_key_id.clone(),
+                    secret_access_key.expose_secret().to_string(),
+                    session_token
+                        .as_ref()
+                        .map(|st| st.expose_secret().to_string()),
+                    None,
+                    "tensorzero",
+                ))
+            }
+            Some(AWSCredentials::Dynamic {
+                access_key_id_key,
+                secret_access_key_key,
+                session_token_key,
+            }) => {
+                // Resolve dynamic credentials from the request
+                let ak = dynamic_api_keys.get(access_key_id_key).ok_or_else(|| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "aws".to_string(),
+                        message: format!(
+                            "Dynamic `access_key_id` with key `{access_key_id_key}` is missing"
+                        ),
+                    })
+                })?;
+                let sk = dynamic_api_keys.get(secret_access_key_key).ok_or_else(|| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "aws".to_string(),
+                        message: format!(
+                            "Dynamic `secret_access_key` with key `{secret_access_key_key}` is missing"
+                        ),
+                    })
+                })?;
+                let st = session_token_key
+                    .as_ref()
+                    .map(|key| {
+                        dynamic_api_keys.get(key).ok_or_else(|| {
+                            Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: "aws".to_string(),
+                                message: format!(
+                                    "Dynamic `session_token` with key `{key}` is missing"
+                                ),
+                            })
+                        })
+                    })
+                    .transpose()?;
+
+                Ok(Credentials::new(
+                    ak.expose_secret().to_string(),
+                    sk.expose_secret().to_string(),
+                    st.map(|s| s.expose_secret().to_string()),
+                    None,
+                    "tensorzero",
+                ))
+            }
+            // For Sdk or None, get fresh credentials from the SDK config
+            Some(AWSCredentials::Sdk) | None => {
+                get_credentials(&self.sdk_config, PROVIDER_TYPE).await
+            }
         }
     }
 }
