@@ -63,3 +63,28 @@ CREATE INDEX idx_json_inferences_tags ON json_inferences USING GIN (tags);
 -- Create initial partitions for the next 7 days
 SELECT tensorzero_create_partitions('chat_inferences');
 SELECT tensorzero_create_partitions('json_inferences');
+
+-- Schedule pg_cron jobs for partition management (if pg_cron is available)
+DO $$
+BEGIN
+    -- Check if pg_cron extension is available
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+        -- Create future partitions daily at 00:05 UTC
+        PERFORM cron.schedule(
+            'tensorzero_create_inference_partitions',
+            '5 0 * * *',
+            $$SELECT tensorzero_create_partitions('chat_inferences'); SELECT tensorzero_create_partitions('json_inferences');$$
+        );
+
+        -- Drop old partitions daily at 00:30 UTC (only acts if retention is configured)
+        PERFORM cron.schedule(
+            'tensorzero_drop_old_inference_partitions',
+            '30 0 * * *',
+            $$SELECT tensorzero_drop_old_partitions('chat_inferences', 'inference_retention_days'); SELECT tensorzero_drop_old_partitions('json_inferences', 'inference_retention_days');$$
+        );
+
+        RAISE NOTICE 'pg_cron jobs scheduled for inference partition management';
+    ELSE
+        RAISE NOTICE 'pg_cron extension not available - partition management must be scheduled externally';
+    END IF;
+END $$;

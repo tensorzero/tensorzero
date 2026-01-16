@@ -38,7 +38,8 @@ $$ LANGUAGE plpgsql;
 
 -- Partition management: drop old partitions for a given table
 -- Called by pg_cron daily or manually
-CREATE OR REPLACE FUNCTION tensorzero_drop_old_partitions(p_table_name TEXT)
+-- p_retention_key: key in tensorzero_retention_config (e.g., 'inference_retention_days')
+CREATE OR REPLACE FUNCTION tensorzero_drop_old_partitions(p_table_name TEXT, p_retention_key TEXT)
 RETURNS void AS $$
 DECLARE
     retention_days INT;
@@ -48,10 +49,10 @@ DECLARE
 BEGIN
     SELECT value::INT INTO retention_days
     FROM tensorzero_retention_config
-    WHERE key = 'retention_days';
+    WHERE key = p_retention_key;
 
     IF retention_days IS NULL THEN
-        RAISE NOTICE 'retention_days not configured, skipping partition cleanup';
+        RAISE NOTICE '% not configured, skipping partition cleanup for %', p_retention_key, p_table_name;
         RETURN;
     END IF;
 
