@@ -16,7 +16,7 @@ use tensorzero_core::{
         Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
     },
     config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
-    endpoints::inference::InferenceResponse,
+    endpoints::{datasets::Datapoint, inference::InferenceResponse},
     error::{Error, ErrorDetails},
     inference::types::{Arguments, ContentBlockChatOutput, InputExt, Role, StoredInput, Template},
     optimization::gepa::GEPAConfig,
@@ -188,12 +188,17 @@ pub fn build_analyze_input(
     );
     map.insert("templates_map".to_string(), json!(templates_map));
 
+    // Strip thought signatures only from Chat types to avoid modifying legitimate JSON domain data
     let mut datapoint_value = to_value(&eval_info.datapoint)?;
-    strip_thought_signatures(&mut datapoint_value);
+    if matches!(eval_info.datapoint, Datapoint::Chat(_)) {
+        strip_thought_signatures(&mut datapoint_value);
+    }
     map.insert("datapoint".to_string(), datapoint_value);
 
     let mut output_value = json!(output);
-    strip_thought_signatures(&mut output_value);
+    if matches!(eval_info.response, InferenceResponse::Chat(_)) {
+        strip_thought_signatures(&mut output_value);
+    }
     map.insert("output".to_string(), output_value);
 
     map.insert("evaluation_scores".to_string(), json!(evaluation_scores));
@@ -303,7 +308,10 @@ async fn analyze_inference(
     // Conditionally include inference context based on config flag
     let inference = if gepa_config.include_inference_for_mutation {
         let mut output_value = serialize_inference_output(&eval_info.response)?;
-        strip_thought_signatures(&mut output_value);
+        // Only strip thought signatures from Chat responses to avoid modifying JSON domain data
+        if matches!(eval_info.response, InferenceResponse::Chat(_)) {
+            strip_thought_signatures(&mut output_value);
+        }
         Some(Inference {
             input: eval_info
                 .datapoint
