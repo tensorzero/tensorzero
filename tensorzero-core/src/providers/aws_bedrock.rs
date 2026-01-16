@@ -1,7 +1,4 @@
-//! AWS Bedrock provider using direct HTTP calls to the Converse API.
-//!
-//! This implementation calls the Bedrock Converse API directly via HTTP using reqwest,
-//! with SigV4 signing for authentication. It does not use aws_sdk_bedrockruntime.
+//! AWS Bedrock model provider using direct HTTP calls to the Converse API.
 
 use aws_credential_types::Credentials;
 use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
@@ -46,11 +43,12 @@ use crate::tool::{
     FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice as TensorZeroToolChoice,
 };
 use tensorzero_types_providers::aws_bedrock::{
-    self as types, ContentBlock as BedrockContentBlock, ContentBlockDelta, ContentBlockDeltaEvent,
-    ContentBlockStart, ContentBlockStartEvent, ConverseRequest, ConverseResponse, InferenceConfig,
-    Message, MessageStopEvent, MetadataEvent, ResponseContentBlock, ResponseReasoningContent, Role,
-    StopReason, SystemContentBlock, Tool, ToolChoice, ToolConfig, ToolInputSchema,
-    ToolResultContent, ToolSpec,
+    self as types, AdditionalModelRequestFields, ContentBlock as BedrockContentBlock,
+    ContentBlockDelta, ContentBlockDeltaEvent, ContentBlockStart, ContentBlockStartEvent,
+    ConverseRequest, ConverseResponse, InferenceConfig, Message, MessageStopEvent, MetadataEvent,
+    ResponseContentBlock, ResponseReasoningContent, Role, StopReason, SystemContentBlock,
+    ThinkingConfig, ThinkingType, Tool, ToolChoice, ToolConfig, ToolInputSchema, ToolResultContent,
+    ToolSpec,
 };
 use uuid::Uuid;
 
@@ -79,7 +77,6 @@ impl AWSBedrockProvider {
         region: Option<AWSRegion>,
         endpoint_url: Option<AWSEndpointUrl>,
         credentials: Option<AWSCredentials>,
-        _http_client: TensorzeroHttpClient,
     ) -> Result<Self, Error> {
         // Get the SDK config for credential loading
         let sdk_config = aws_common::config_with_region(PROVIDER_TYPE, static_region).await?;
@@ -216,40 +213,16 @@ impl InferenceProvider for AWSBedrockProvider {
         let credentials = self.get_request_credentials(dynamic_api_keys).await?;
         let region = self.get_region(dynamic_api_keys)?;
 
-        // Build headers - convert from http 0.2 to reqwest header types
-        let mut headers = reqwest::header::HeaderMap::new();
+        // Build headers (extra headers + required content-type for JSON body)
+        let mut headers = http_extra_headers;
         headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            reqwest::header::HeaderValue::from_static("application/json"),
+            http::header::CONTENT_TYPE,
+            http::header::HeaderValue::from_static("application/json"),
         );
         headers.insert(
-            reqwest::header::ACCEPT,
-            reqwest::header::HeaderValue::from_static("application/json"),
+            http::header::ACCEPT,
+            http::header::HeaderValue::from_static("application/json"),
         );
-        // Convert http 0.2 headers to reqwest headers
-        for (name, value) in &http_extra_headers {
-            let header_name = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes())
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: None,
-                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                        message: format!("Invalid header name: {e}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-            let header_value =
-                reqwest::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: None,
-                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                        message: format!("Invalid header value: {e}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-            headers.insert(header_name, header_value);
-        }
 
         // Sign the request
         let signed_headers = sign_request(
@@ -396,36 +369,12 @@ impl InferenceProvider for AWSBedrockProvider {
         let credentials = self.get_request_credentials(dynamic_api_keys).await?;
         let region = self.get_region(dynamic_api_keys)?;
 
-        // Build headers - convert from http 0.2 to reqwest header types
-        let mut headers = reqwest::header::HeaderMap::new();
+        // Build headers
+        let mut headers = http_extra_headers;
         headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            reqwest::header::HeaderValue::from_static("application/json"),
+            http::header::CONTENT_TYPE,
+            http::header::HeaderValue::from_static("application/json"),
         );
-        // Convert http 0.2 headers to reqwest headers
-        for (name, value) in &http_extra_headers {
-            let header_name = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes())
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: None,
-                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                        message: format!("Invalid header name: {e}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-            let header_value =
-                reqwest::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: None,
-                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                        message: format!("Invalid header value: {e}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-            headers.insert(header_name, header_value);
-        }
 
         // Sign the request
         let signed_headers = sign_request(
@@ -572,23 +521,8 @@ async fn build_converse_request(
         None
     };
 
-    // Build additional model request fields (for thinking, etc.)
-    let additional_model_request_fields = build_additional_fields(inference_params);
-
-    // Warn about unsupported parameters
-    if inference_params.reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking` for this provider."),
-        );
-    }
-    if inference_params.service_tier.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
-    }
-    if inference_params.verbosity.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
-    }
+    // Build additional model request fields (for thinking, etc.) and warn about unsupported params
+    let additional_model_request_fields = apply_inference_params(inference_params);
 
     Ok(ConverseRequest {
         model_id: model_id.to_string(),
@@ -600,15 +534,40 @@ async fn build_converse_request(
     })
 }
 
-/// Build additional model request fields (e.g., thinking configuration)
-fn build_additional_fields(params: &ChatCompletionInferenceParamsV2) -> Option<serde_json::Value> {
-    params.thinking_budget_tokens.map(|budget_tokens| {
-        serde_json::json!({
-            "thinking": {
-                "type": "enabled",
-                "budget_tokens": budget_tokens
-            }
-        })
+/// Apply inference params and build additional model request fields.
+/// Uses destructuring to ensure all params are handled when new ones are added.
+fn apply_inference_params(
+    inference_params: &ChatCompletionInferenceParamsV2,
+) -> Option<AdditionalModelRequestFields> {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        service_tier,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking` for this provider."),
+        );
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
+
+    // Build additional model request fields for thinking
+    thinking_budget_tokens.map(|budget_tokens| AdditionalModelRequestFields {
+        thinking: Some(ThinkingConfig {
+            thinking_type: ThinkingType::Enabled,
+            budget_tokens,
+        }),
     })
 }
 
@@ -1152,6 +1111,7 @@ fn process_stream_event(
             )))
         }
         Some("metadata") => {
+            // Parse into typed struct for structured usage
             let event: MetadataEvent = serde_json::from_slice(payload).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     raw_request: None,
@@ -1161,18 +1121,18 @@ fn process_stream_event(
                 })
             })?;
 
-            let raw_usage = Some(raw_usage_entries_from_value(
-                model_inference_id,
-                PROVIDER_TYPE,
-                ApiType::ChatCompletions,
-                serde_json::json!({
-                    "input_tokens": event.usage.input_tokens,
-                    "output_tokens": event.usage.output_tokens,
-                    "total_tokens": event.usage.total_tokens,
-                    "cache_read_input_tokens": event.usage.cache_read_input_tokens,
-                    "cache_write_input_tokens": event.usage.cache_write_input_tokens,
-                }),
-            ));
+            // Extract raw usage directly from the JSON payload
+            let raw_usage = serde_json::from_slice::<serde_json::Value>(payload)
+                .ok()
+                .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
+                .map(|usage_value| {
+                    raw_usage_entries_from_value(
+                        model_inference_id,
+                        PROVIDER_TYPE,
+                        ApiType::ChatCompletions,
+                        usage_value,
+                    )
+                });
 
             let usage = Some(Usage {
                 input_tokens: Some(event.usage.input_tokens as u32),
@@ -1210,7 +1170,6 @@ mod tests {
             None,
             None,
             None,
-            TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
         .unwrap();
@@ -1227,7 +1186,6 @@ mod tests {
             None,
             None,
             None,
-            TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
         .unwrap();
@@ -1242,16 +1200,9 @@ mod tests {
         // We use 'nextest' as our runner, so each test runs in its own process
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
-        let err = AWSBedrockProvider::new(
-            "test".to_string(),
-            None,
-            None,
-            None,
-            None,
-            TensorzeroHttpClient::new_testing().unwrap(),
-        )
-        .await
-        .expect_err("AWS Bedrock provider should fail when it cannot detect region");
+        let err = AWSBedrockProvider::new("test".to_string(), None, None, None, None)
+            .await
+            .expect_err("AWS Bedrock provider should fail when it cannot detect region");
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to determine AWS region."),
@@ -1268,7 +1219,6 @@ mod tests {
             None,
             None,
             None,
-            TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
         .unwrap();

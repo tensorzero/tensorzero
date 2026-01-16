@@ -28,7 +28,29 @@ pub struct ConverseRequest {
     pub tool_config: Option<ToolConfig>,
     /// Additional model-specific fields (e.g., thinking configuration)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub additional_model_request_fields: Option<serde_json::Value>,
+    pub additional_model_request_fields: Option<AdditionalModelRequestFields>,
+}
+
+/// Additional model-specific request fields
+#[derive(Debug, Serialize)]
+pub struct AdditionalModelRequestFields {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingConfig>,
+}
+
+/// Thinking/extended reasoning configuration
+#[derive(Debug, Serialize)]
+pub struct ThinkingConfig {
+    #[serde(rename = "type")]
+    pub thinking_type: ThinkingType,
+    pub budget_tokens: i32,
+}
+
+/// Thinking type
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThinkingType {
+    Enabled,
 }
 
 /// A conversation message

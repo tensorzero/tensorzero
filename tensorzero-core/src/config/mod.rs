@@ -1201,7 +1201,6 @@ impl Config {
                     &name,
                     &provider_types,
                     &provider_type_default_credentials,
-                    http_client.clone(),
                     relay_mode,
                 )
                 .await
@@ -1214,11 +1213,7 @@ impl Config {
         let loaded_embedding_models =
             try_join_all(embedding_models.into_iter().map(|(name, config)| async {
                 config
-                    .load(
-                        &provider_types,
-                        &provider_type_default_credentials,
-                        http_client.clone(),
-                    )
+                    .load(&provider_types, &provider_type_default_credentials)
                     .await
                     .map(|c| (name, c))
             }))
