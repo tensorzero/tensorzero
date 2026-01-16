@@ -13,8 +13,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConverseRequest {
-    /// The model ID (also in URL path, but required in body)
-    pub model_id: String,
     /// The conversation messages
     pub messages: Vec<Message>,
     /// System prompts

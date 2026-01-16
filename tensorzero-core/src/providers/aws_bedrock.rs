@@ -472,7 +472,7 @@ async fn prepare_request_body(
 ) -> Result<PreparedRequestBody, Error> {
     // Build the request body
     let mut converse_request =
-        build_converse_request(model_id, request, &request.inference_params_v2).await?;
+        build_converse_request(request, &request.inference_params_v2).await?;
 
     // Add JSON prefill for Claude models in JSON mode
     if needs_json_prefill(model_id, request) {
@@ -516,7 +516,6 @@ async fn prepare_request_body(
 
 /// Build a ConverseRequest from a ModelInferenceRequest
 async fn build_converse_request(
-    model_id: &str,
     request: &ModelInferenceRequest<'_>,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) -> Result<ConverseRequest, Error> {
@@ -567,7 +566,6 @@ async fn build_converse_request(
     let additional_model_request_fields = apply_inference_params(inference_params);
 
     Ok(ConverseRequest {
-        model_id: model_id.to_string(),
         messages,
         system,
         inference_config,
