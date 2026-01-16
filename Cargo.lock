@@ -325,7 +325,6 @@ dependencies = [
  "sqlx",
  "tensorzero-types",
  "thiserror 2.0.17",
- "tracing",
  "ts-rs",
  "url",
  "uuid",
@@ -370,11 +369,9 @@ dependencies = [
  "tensorzero",
  "tensorzero-core",
  "tensorzero-optimizers",
- "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tracing",
- "url",
  "uuid",
 ]
 
@@ -1873,7 +1870,6 @@ dependencies = [
  "durable-tools-spawn",
  "evaluations",
  "mockall",
- "moka",
  "schemars 1.2.0",
  "secrecy",
  "serde",
@@ -1884,7 +1880,6 @@ dependencies = [
  "tensorzero-optimizers",
  "thiserror 2.0.17",
  "tokio",
- "tokio-util",
  "url",
  "uuid",
 ]
@@ -1900,7 +1895,6 @@ dependencies = [
  "serde_json",
  "sqlx",
  "thiserror 2.0.17",
- "tokio",
  "uuid",
 ]
 
@@ -2002,17 +1996,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
-name = "erased-serde"
-version = "0.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89e8918065695684b2b0702da20382d5ae6065cf3327bc2d6436bd49a71ce9f3"
-dependencies = [
- "serde",
- "serde_core",
- "typeid",
-]
-
-[[package]]
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2040,13 +2023,10 @@ dependencies = [
  "anyhow",
  "async-trait",
  "clap",
- "durable",
  "futures",
  "indicatif",
- "rand 0.9.2",
  "serde",
  "serde_json",
- "sqlx",
  "tensorzero-core",
  "tokio",
  "tokio-util",
@@ -2389,13 +2369,10 @@ dependencies = [
 name = "gateway"
 version = "2026.1.2"
 dependencies = [
- "anyhow",
  "async-stream",
- "async-trait",
  "autopilot-worker",
  "axum",
  "brotli",
- "chrono",
  "clap",
  "durable-tools",
  "evaluations",
@@ -2421,7 +2398,6 @@ dependencies = [
  "tower-http",
  "tracing",
  "ts-rs",
- "url",
  "uuid",
  "zstd",
 ]
@@ -5433,18 +5409,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-untagged"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9faf48a4a2d2693be24c6289dbe26552776eb7737074e6722891fadbe6c5058"
-dependencies = [
- "erased-serde",
- "serde",
- "serde_core",
- "typeid",
-]
-
-[[package]]
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6245,7 +6209,6 @@ dependencies = [
  "schemars 1.2.0",
  "secrecy",
  "serde",
- "serde-untagged",
  "serde_json",
  "serde_path_to_error",
  "sha2",
@@ -6292,19 +6255,13 @@ dependencies = [
 name = "tensorzero-node"
 version = "2026.1.2"
 dependencies = [
- "evaluations",
  "napi",
  "napi-build",
  "napi-derive",
  "secrecy",
- "serde",
  "serde_json",
- "tensorzero",
  "tensorzero-auth",
  "tensorzero-core",
- "ts-rs",
- "url",
- "uuid",
 ]
 
 [[package]]
@@ -6363,7 +6320,6 @@ name = "tensorzero-types"
 version = "2026.1.2"
 dependencies = [
  "aws-smithy-types",
- "chrono",
  "infer",
  "mime 0.4.0-a.0",
  "object_store",
@@ -6376,7 +6332,6 @@ dependencies = [
  "tracing",
  "ts-rs",
  "url",
- "uuid",
 ]
 
 [[package]]
@@ -6947,12 +6902,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
 ]
-
-[[package]]
-name = "typeid"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
 
 [[package]]
 name = "typenum"
