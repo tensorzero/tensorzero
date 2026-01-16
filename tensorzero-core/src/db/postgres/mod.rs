@@ -11,6 +11,7 @@ use crate::error::{Error, ErrorDetails};
 use super::HealthCheckable;
 
 pub mod experimentation;
+pub mod inference_count;
 pub mod rate_limiting;
 
 const RUN_MIGRATIONS_COMMAND: &str = "Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres";
@@ -118,6 +119,58 @@ impl PostgresConnectionInfo {
                 ),
             }));
         }
+        Ok(())
+    }
+
+    /// Writes retention configuration to the `tensorzero.retention_config` table.
+    /// This is called on gateway startup to sync config from tensorzero.toml to Postgres.
+    pub async fn write_retention_config(
+        &self,
+        inference_retention_days: Option<u32>,
+    ) -> Result<(), Error> {
+        let Some(pool) = self.get_pool() else {
+            return Ok(());
+        };
+
+        match inference_retention_days {
+            Some(days) => {
+                sqlx::query(
+                    r"
+                    INSERT INTO tensorzero.retention_config (key, value, updated_at)
+                    VALUES ('inference_retention_days', $1, NOW())
+                    ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+                    ",
+                )
+                .bind(days.to_string())
+                .execute(pool)
+                .await
+                .map_err(|e| {
+                    Error::new(ErrorDetails::PostgresConnection {
+                        message: format!("Failed to write inference_retention_days config: {e}"),
+                    })
+                })?;
+                tracing::info!(
+                    inference_retention_days = days,
+                    "Configured inference retention policy"
+                );
+            }
+            None => {
+                sqlx::query(
+                    "DELETE FROM tensorzero.retention_config WHERE key = 'inference_retention_days'",
+                )
+                .execute(pool)
+                .await
+                .map_err(|e| {
+                    Error::new(ErrorDetails::PostgresConnection {
+                        message: format!("Failed to clear inference_retention_days config: {e}"),
+                    })
+                })?;
+                tracing::debug!(
+                    "Inference retention policy not configured (partitions retained indefinitely)"
+                );
+            }
+        }
+
         Ok(())
     }
 }

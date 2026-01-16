@@ -493,6 +493,10 @@ pub enum ErrorDetails {
         message: String,
     },
     NoFallbackVariantsRemaining,
+    /// Feature not yet implemented. Used for stubbed functionality during incremental migration.
+    NotImplemented {
+        message: String,
+    },
     Observability {
         message: String,
     },
@@ -716,6 +720,7 @@ impl ErrorDetails {
             ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
+            ErrorDetails::NotImplemented { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
@@ -872,6 +877,7 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
+            ErrorDetails::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1473,6 +1479,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::NoFallbackVariantsRemaining => {
                 write!(f, "No fallback variants remaining.")
+            }
+            ErrorDetails::NotImplemented { message } => {
+                write!(f, "Not implemented: {message}")
             }
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")

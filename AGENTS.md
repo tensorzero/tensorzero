@@ -26,6 +26,14 @@
 - Business logic layer will generate all data that TensorZero is responsible for (e.g. UUIDs for new datapoints, `staled_at` timestamps).
 - Database layer (ClickHouse and/or Postgres) will insert data as-is into the backing database, with the only exception of `updated_at` timestamps which we insert by calling native functions in the database.
 
+## For Postgres (sqlx)
+
+- **Do not use `format!` for SQL queries.** Use `sqlx::QueryBuilder` for dynamic queries.
+  - Use `.push()` for trusted SQL fragments (table names, SQL keywords).
+  - Use `.push_bind()` for user-provided values (prevents SQL injection, handles types).
+  - Use `.build_query_scalar()` for scalar results, `.build()` for row results.
+- For static queries, use `sqlx::query!` or `sqlx::query()` directly.
+
 # Python Dependencies
 
 We use `uv` to manage Python dependencies.
