@@ -351,6 +351,22 @@ type = "aws_bedrock"
 model_id = "us.deepseek.r1-v1:0"
 region = "us-east-1"
 
+[models.claude-haiku-4-5-aws-bedrock]
+routing = ["aws_bedrock"]
+
+[models.claude-haiku-4-5-aws-bedrock.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+region = "us-east-1"
+
+[models.nova-lite-v1]
+routing = ["aws_bedrock"]
+
+[models.nova-lite-v1.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.amazon.nova-lite-v1:0"
+region = "us-east-1"
+
 [models.qwen2p5-72b-instruct]
 routing = ["fireworks"]
 

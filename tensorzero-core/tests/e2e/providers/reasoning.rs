@@ -582,6 +582,11 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 }
 
 pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
+    // TODO (#5680): we disabled AWS tests on JSON functions + reasoning because the prefill breaks
+    if provider.variant_name == "aws-bedrock-thinking" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -802,10 +807,15 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     provider: E2ETestProvider,
 ) {
     // OpenAI O1 doesn't support streaming responses
-
     if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
+
+    // TODO (#5680): we disabled AWS tests on JSON functions + reasoning because the prefill breaks
+    if provider.variant_name == "aws-bedrock-thinking" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
