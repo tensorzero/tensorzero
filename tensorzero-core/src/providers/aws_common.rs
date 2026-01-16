@@ -1,7 +1,12 @@
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use aws_config::{Region, meta::region::RegionProviderChain};
 use aws_credential_types::Credentials;
+use aws_credential_types::provider::ProvideCredentials;
+use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
+use aws_sigv4::sign::v4;
+use aws_smithy_runtime_api::client::identity::Identity;
 use aws_smithy_runtime_api::client::interceptors::Intercept;
 use aws_smithy_runtime_api::client::interceptors::context::AfterDeserializationInterceptorContextRef;
 use aws_smithy_runtime_api::client::interceptors::context::BeforeTransmitInterceptorContextMut;
@@ -613,6 +618,124 @@ pub async fn config_with_region(
         .load()
         .await;
     Ok(config)
+}
+
+/// Get fresh credentials from the SDK config.
+/// This is used to handle credential rotation for long-running processes.
+pub async fn get_credentials(
+    config: &SdkConfig,
+    provider_type: &str,
+) -> Result<Credentials, Error> {
+    let provider = config.credentials_provider().ok_or_else(|| {
+        Error::new(ErrorDetails::InferenceClient {
+            raw_request: None,
+            raw_response: None,
+            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+            message: "No credentials provider configured".to_string(),
+            provider_type: provider_type.to_string(),
+        })
+    })?;
+
+    provider.provide_credentials().await.map_err(|e| {
+        Error::new(ErrorDetails::InferenceClient {
+            raw_request: None,
+            raw_response: None,
+            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+            message: format!("Failed to get AWS credentials: {e}"),
+            provider_type: provider_type.to_string(),
+        })
+    })
+}
+
+/// Sign an HTTP request using AWS SigV4.
+///
+/// This function signs the request in-place by adding the required AWS authentication headers.
+#[expect(clippy::too_many_arguments)]
+pub fn sign_request(
+    method: &str,
+    uri: &str,
+    headers: &reqwest::header::HeaderMap,
+    body: &[u8],
+    credentials: &Credentials,
+    region: &str,
+    service: &str,
+    provider_type: &str,
+) -> Result<reqwest::header::HeaderMap, Error> {
+    let identity: Identity = credentials.clone().into();
+
+    let signing_params = v4::SigningParams::builder()
+        .identity(&identity)
+        .region(region)
+        .name(service)
+        .time(SystemTime::now())
+        .settings(SigningSettings::default())
+        .build()
+        .map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                raw_request: None,
+                raw_response: None,
+                status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                message: format!("Failed to build signing params: {e}"),
+                provider_type: provider_type.to_string(),
+            })
+        })?;
+
+    let signable_request = SignableRequest::new(
+        method,
+        uri.to_string(),
+        headers
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or(""))),
+        SignableBody::Bytes(body),
+    )
+    .map_err(|e| {
+        Error::new(ErrorDetails::InferenceClient {
+            raw_request: None,
+            raw_response: None,
+            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+            message: format!("Failed to create signable request: {e}"),
+            provider_type: provider_type.to_string(),
+        })
+    })?;
+
+    let (signing_instructions, _signature) = sign(signable_request, &signing_params.into())
+        .map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                raw_request: None,
+                raw_response: None,
+                status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                message: format!("Failed to sign request: {e}"),
+                provider_type: provider_type.to_string(),
+            })
+        })?
+        .into_parts();
+
+    // Build a new header map with the signing headers
+    let mut signed_headers = headers.clone();
+    for (name, value) in signing_instructions.headers() {
+        let header_name =
+            reqwest::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: None,
+                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                    message: format!("Invalid header name from signing: {e}"),
+                    provider_type: provider_type.to_string(),
+                })
+            })?;
+        let header_value = reqwest::header::HeaderValue::from_str(value).map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                raw_request: None,
+                raw_response: None,
+                status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                message: format!("Invalid header value from signing: {e}"),
+                provider_type: provider_type.to_string(),
+            })
+        })?;
+        signed_headers.insert(header_name, header_value);
+    }
+
+    Ok(signed_headers)
 }
 
 #[derive(Debug)]

@@ -977,7 +977,6 @@ pub struct ModelProviderRequestInfo {
 #[serde(rename_all = "lowercase")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
-#[expect(clippy::large_enum_variant)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     #[serde(rename = "aws_bedrock")]
