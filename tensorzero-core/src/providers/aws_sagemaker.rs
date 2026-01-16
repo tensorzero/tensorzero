@@ -46,7 +46,7 @@ pub struct AWSSagemakerProvider {
     #[serde(skip)]
     endpoint_url: Option<AWSEndpointUrl>,
     #[serde(skip)]
-    credentials: Option<AWSCredentials>,
+    credentials: AWSCredentials,
 }
 
 impl AWSSagemakerProvider {
@@ -56,7 +56,7 @@ impl AWSSagemakerProvider {
         static_region: Option<Region>,
         region: Option<AWSRegion>,
         endpoint_url: Option<AWSEndpointUrl>,
-        credentials: Option<AWSCredentials>,
+        credentials: AWSCredentials,
     ) -> Result<Self, Error> {
         let config = aws_common::config_with_region(PROVIDER_TYPE, static_region).await?;
 
@@ -70,9 +70,7 @@ impl AWSSagemakerProvider {
         }
 
         // Apply static credentials at construction time
-        if let Some(ref creds) = credentials
-            && let Some(static_creds) = creds.get_static_credentials()
-        {
+        if let Some(static_creds) = credentials.get_static_credentials() {
             config_builder = config_builder.credentials_provider(static_creds);
         }
 
@@ -110,10 +108,8 @@ impl AWSSagemakerProvider {
             let url = endpoint_url.resolve(dynamic_api_keys)?;
             config = config.endpoint_url(url.as_str());
         }
-        if let Some(credentials) = &self.credentials
-            && credentials.is_dynamic()
-        {
-            let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
+        if self.credentials.is_dynamic() {
+            let resolved_credentials = self.credentials.resolve(dynamic_api_keys)?;
             config = config.credentials_provider(resolved_credentials);
         }
         Ok(config)

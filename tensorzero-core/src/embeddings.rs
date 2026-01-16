@@ -126,7 +126,6 @@ impl UninitializedEmbeddingModelConfig {
         self,
         provider_types: &ProviderTypesConfig,
         default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingModelConfig, Error> {
         // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
         // field via StoredEmbeddingModelConfig when loading from snapshot)
@@ -134,12 +133,7 @@ impl UninitializedEmbeddingModelConfig {
 
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
             let provider_config = config
-                .load(
-                    provider_types,
-                    name.clone(),
-                    default_credentials,
-                    http_client.clone(),
-                )
+                .load(provider_types, name.clone(), default_credentials)
                 .await?;
             Ok::<_, Error>((name, provider_config))
         }))
@@ -656,11 +650,10 @@ impl UninitializedEmbeddingProviderConfig {
         provider_types: &ProviderTypesConfig,
         provider_name: Arc<str>,
         default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingProviderInfo, Error> {
         let provider_config = self
             .config
-            .load(provider_types, default_credentials, http_client)
+            .load(provider_types, default_credentials)
             .await?;
         // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
         // field via StoredEmbeddingProviderConfig when loading from snapshot)
@@ -898,7 +891,6 @@ mod tests {
                 &ProviderTypesConfig::default(),
                 Arc::from("test_provider"),
                 &ProviderTypeDefaultCredentials::default(),
-                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();

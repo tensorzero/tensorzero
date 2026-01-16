@@ -20,6 +20,7 @@ members = [
     "internal/durable-tools-spawn",
     "internal/durable-tools",
     "internal/tensorzero-types",
+    "internal/tensorzero-types-providers",
     "internal/autopilot-worker",
 ]
 resolver = "2"

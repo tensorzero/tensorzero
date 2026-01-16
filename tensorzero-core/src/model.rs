@@ -107,7 +107,6 @@ impl UninitializedModelConfig {
         model_name: &str,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
         relay_mode: bool,
     ) -> Result<ModelConfig, Error> {
         let skip_relay = self.skip_relay.unwrap_or(false);
@@ -115,13 +114,10 @@ impl UninitializedModelConfig {
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
         let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
-            let http_client = http_client.clone();
             async move {
-                let load_future = provider.config.load(
-                    provider_types,
-                    provider_type_default_credentials,
-                    http_client,
-                );
+                let load_future = provider
+                    .config
+                    .load(provider_types, provider_type_default_credentials);
 
                 // In relay mode, don't run credential validation for providers,
                 // since requests to the parent model get redirected to the downstream gateway.
@@ -973,7 +969,6 @@ pub struct ModelProviderRequestInfo {
 #[serde(rename_all = "lowercase")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
-#[expect(clippy::large_enum_variant)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     #[serde(rename = "aws_bedrock")]
@@ -1064,7 +1059,7 @@ struct AWSProviderConfig {
     static_region: Option<Region>,
     region: AWSRegion,
     endpoint_url: Option<AWSEndpointUrl>,
-    credentials: Option<AWSCredentials>,
+    credentials: AWSCredentials,
 }
 
 /// Helper to process common AWS provider configuration.
@@ -1327,7 +1322,6 @@ impl UninitializedProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
     ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
@@ -1372,7 +1366,6 @@ impl UninitializedProviderConfig {
                         Some(aws_config.region),
                         aws_config.endpoint_url,
                         aws_config.credentials,
-                        http_client,
                     )
                     .await?,
                 )

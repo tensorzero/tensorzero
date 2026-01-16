@@ -64,6 +64,15 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "on"
 max_tokens = 500
 
+[functions.json_success.variants.aws-bedrock-thinking]
+type = "chat_completion"
+model = "claude-sonnet-4-5-20250929-thinking-aws-bedrock"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
 [functions.json_success.variants.aws-bedrock-implicit]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
