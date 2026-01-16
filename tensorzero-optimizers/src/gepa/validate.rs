@@ -8,7 +8,7 @@ use tensorzero_core::{
     config::Config,
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
-    function::FunctionConfig,
+    function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
     optimization::gepa::GEPAConfig,
     stored_inference::{RenderedSample, StoredOutput},
@@ -114,6 +114,56 @@ pub fn validate_gepa_config(
         }
     }
 
+    // Create filtered function config with only relevant variants
+    let filtered_function_config: Arc<FunctionConfig> = {
+        let variants_to_include: Vec<&String> =
+            if let Some(initial_variants) = &config.initial_variants {
+                initial_variants.iter().collect()
+            } else {
+                function_config
+                    .variants()
+                    .iter()
+                    .filter(|(_, info)| matches!(info.inner, VariantConfig::ChatCompletion(_)))
+                    .map(|(name, _)| name)
+                    .collect()
+            };
+
+        let filtered_variants: HashMap<String, Arc<VariantInfo>> = function_config
+            .variants()
+            .iter()
+            .filter(|(name, _)| variants_to_include.contains(name))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        match &**function_config {
+            FunctionConfig::Chat(chat_config) => {
+                Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+                    variants: filtered_variants,
+                    // Use defaults for non-cloneable fields - they're not critical for GEPA LLM context
+                    schemas: Default::default(),
+                    tools: chat_config.tools.clone(),
+                    tool_choice: chat_config.tool_choice.clone(),
+                    parallel_tool_calls: chat_config.parallel_tool_calls,
+                    description: chat_config.description.clone(),
+                    all_explicit_templates_names: Default::default(),
+                    experimentation: Default::default(),
+                }))
+            }
+            FunctionConfig::Json(json_config) => {
+                Arc::new(FunctionConfig::Json(FunctionConfigJson {
+                    variants: filtered_variants,
+                    // Use defaults for non-cloneable fields - they're not critical for GEPA LLM context
+                    schemas: Default::default(),
+                    output_schema: json_config.output_schema.clone(),
+                    json_mode_tool_call_config: json_config.json_mode_tool_call_config.clone(),
+                    description: json_config.description.clone(),
+                    all_explicit_template_names: Default::default(),
+                    experimentation: Default::default(),
+                }))
+            }
+        }
+    };
+
     // Validate tools referenced by function exist in config and extract them
     let function_tool_names: Vec<String> = match &**function_config {
         FunctionConfig::Chat(chat_config) => chat_config.tools.clone(),
@@ -143,7 +193,7 @@ pub fn validate_gepa_config(
     };
 
     Ok(FunctionContext {
-        function_config: function_config.clone(),
+        function_config: filtered_function_config,
         static_tools,
         evaluation_config: evaluation_config.clone(),
     })
@@ -675,6 +725,149 @@ mod tests {
     fn test_min_examples_constant() {
         // Verify the constant value is as expected
         assert_eq!(MIN_EXAMPLES, 4);
+    }
+
+    // ============================================================================
+    // Helper function for validate_gepa_config tests
+    // ============================================================================
+
+    /// Creates a Config with the specified function and evaluation for testing validate_gepa_config
+    fn create_config_with_function_and_evaluation(
+        function_name: &str,
+        evaluation_name: &str,
+        variants: HashMap<String, Arc<VariantInfo>>,
+    ) -> Config {
+        let mut config = Config::default();
+
+        // Add the function
+        config
+            .functions
+            .insert(function_name.to_string(), create_function_config(variants));
+
+        // Add the evaluation
+        config.evaluations.insert(
+            evaluation_name.to_string(),
+            Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
+                evaluators: HashMap::new(),
+                function_name: function_name.to_string(),
+                description: Some(evaluation_name.to_string()),
+            })),
+        );
+
+        config
+    }
+
+    // ============================================================================
+    // Unit tests for validate_gepa_config filtering
+    // ============================================================================
+
+    #[test]
+    fn test_validate_gepa_config_filters_variants_with_initial_variants() {
+        // Setup: function with variants v1, v2, v3
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_variant_info("openai::gpt-4", Some("Prompt 1")),
+        );
+        variants.insert(
+            "v2".to_string(),
+            create_variant_info("openai::gpt-4", Some("Prompt 2")),
+        );
+        variants.insert(
+            "v3".to_string(),
+            create_variant_info("openai::gpt-4", Some("Prompt 3")),
+        );
+
+        let tensorzero_config = create_config_with_function_and_evaluation(
+            "test_function",
+            "test_evaluation",
+            variants,
+        );
+
+        // Config: initial_variants = Some(["v1", "v3"])
+        let gepa_config = create_gepa_config(
+            "test_function",
+            Some(vec!["v1".to_string(), "v3".to_string()]),
+            None,
+        );
+
+        let result = validate_gepa_config(&gepa_config, &tensorzero_config);
+
+        // Assert: returned function_config.variants() contains only v1, v3
+        assert!(result.is_ok(), "validate_gepa_config should succeed");
+        let function_context = result.unwrap();
+        let filtered_variants = function_context.function_config.variants();
+
+        assert_eq!(
+            filtered_variants.len(),
+            2,
+            "Should contain only 2 variants (v1 and v3)"
+        );
+        assert!(
+            filtered_variants.contains_key("v1"),
+            "Should contain variant v1"
+        );
+        assert!(
+            filtered_variants.contains_key("v3"),
+            "Should contain variant v3"
+        );
+        assert!(
+            !filtered_variants.contains_key("v2"),
+            "Should NOT contain variant v2"
+        );
+    }
+
+    #[test]
+    fn test_validate_gepa_config_without_initial_variants_includes_all_chat_completion() {
+        // Setup: function with only ChatCompletion variants (the only type we can easily construct)
+        // This tests that when initial_variants is None, all ChatCompletion variants are included
+        let mut variants = HashMap::new();
+        variants.insert(
+            "chat_v1".to_string(),
+            create_variant_info("openai::gpt-4", Some("Prompt 1")),
+        );
+        variants.insert(
+            "chat_v2".to_string(),
+            create_variant_info("anthropic::claude-3-5-sonnet-20241022", Some("Prompt 2")),
+        );
+        variants.insert(
+            "chat_v3".to_string(),
+            create_variant_info("openai::gpt-3.5-turbo", Some("Prompt 3")),
+        );
+
+        let tensorzero_config = create_config_with_function_and_evaluation(
+            "test_function",
+            "test_evaluation",
+            variants,
+        );
+
+        // Config: initial_variants = None (use all ChatCompletion variants)
+        let gepa_config = create_gepa_config("test_function", None, None);
+
+        let result = validate_gepa_config(&gepa_config, &tensorzero_config);
+
+        // Assert: returned function_config.variants() contains all ChatCompletion variants
+        assert!(result.is_ok(), "validate_gepa_config should succeed");
+        let function_context = result.unwrap();
+        let filtered_variants = function_context.function_config.variants();
+
+        assert_eq!(
+            filtered_variants.len(),
+            3,
+            "Should contain all 3 ChatCompletion variants"
+        );
+        assert!(
+            filtered_variants.contains_key("chat_v1"),
+            "Should contain chat_v1"
+        );
+        assert!(
+            filtered_variants.contains_key("chat_v2"),
+            "Should contain chat_v2"
+        );
+        assert!(
+            filtered_variants.contains_key("chat_v3"),
+            "Should contain chat_v3"
+        );
     }
 
     // ============================================================================
