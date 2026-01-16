@@ -156,6 +156,12 @@ For example:
 docker compose run --rm gateway --create-api-key
 ```
 
+You can optionally set an expiration date and time for the new API key by providing the UTC timestamp as an argument, like so:
+
+```bash
+docker compose run --rm gateway --create-api-key --expiration "2025-12-20 23:00:00.000000 UTC"
+```
+
 <Warning>
 
 The API key is a secret and should be kept secure.
