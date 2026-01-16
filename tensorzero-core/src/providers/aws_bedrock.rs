@@ -158,48 +158,12 @@ impl InferenceProvider for AWSBedrockProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        // Build the request body
-        let mut converse_request =
-            build_converse_request(&self.model_id, request, &request.inference_params_v2).await?;
-
-        // Add JSON prefill for Claude models in JSON mode
-        if self.model_id.contains("claude")
-            && request.function_type == FunctionType::Json
-            && matches!(
-                request.json_mode,
-                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-            )
-        {
-            prefill_json_converse_request(&mut converse_request).await?;
-        }
-
-        // Serialize to JSON
-        let mut body_json = serde_json::to_value(&converse_request).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize request: {e}"),
-            })
-        })?;
-
-        // Inject extra body/headers
-        let http_extra_headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            &mut body_json,
-        )?;
-
-        // Sort for consistent ordering in tests
-        if cfg!(feature = "e2e_tests") {
-            body_json.sort_all_objects();
-        }
-
-        let raw_request = serde_json::to_string(&body_json).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize request: {e}"),
-            })
-        })?;
-        let body_bytes = raw_request.as_bytes();
+        // Prepare the request body
+        let PreparedRequestBody {
+            raw_request,
+            body_bytes,
+            http_extra_headers,
+        } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL
         let base_url = self.get_base_url(dynamic_api_keys)?;
@@ -229,7 +193,7 @@ impl InferenceProvider for AWSBedrockProvider {
             "POST",
             &url,
             &headers,
-            body_bytes,
+            &body_bytes,
             &credentials,
             region.as_ref(),
             "bedrock",
@@ -241,7 +205,7 @@ impl InferenceProvider for AWSBedrockProvider {
         let response = http_client
             .post(&url)
             .headers(signed_headers)
-            .body(body_bytes.to_vec())
+            .body(body_bytes)
             .send()
             .await
             .map_err(|e| {
@@ -292,11 +256,13 @@ impl InferenceProvider for AWSBedrockProvider {
             latency,
             raw_request,
             raw_response,
-            request.system.clone(),
-            request.messages.clone(),
-            &self.model_id,
-            &request.function_type,
-            request.json_mode,
+            ResponseContext {
+                system: request.system.clone(),
+                input_messages: request.messages.clone(),
+                model_id: &self.model_id,
+                function_type: &request.function_type,
+                json_mode: request.json_mode,
+            },
             model_inference_id,
         )
     }
@@ -314,48 +280,12 @@ impl InferenceProvider for AWSBedrockProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        // Build the request body
-        let mut converse_request =
-            build_converse_request(&self.model_id, request, &request.inference_params_v2).await?;
-
-        // Add JSON prefill for Claude models in JSON mode
-        if self.model_id.contains("claude")
-            && request.function_type == FunctionType::Json
-            && matches!(
-                request.json_mode,
-                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-            )
-        {
-            prefill_json_converse_request(&mut converse_request).await?;
-        }
-
-        // Serialize to JSON
-        let mut body_json = serde_json::to_value(&converse_request).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize request: {e}"),
-            })
-        })?;
-
-        // Inject extra body/headers
-        let http_extra_headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            &mut body_json,
-        )?;
-
-        // Sort for consistent ordering in tests
-        if cfg!(feature = "e2e_tests") {
-            body_json.sort_all_objects();
-        }
-
-        let raw_request = serde_json::to_string(&body_json).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize request: {e}"),
-            })
-        })?;
-        let body_bytes = raw_request.as_bytes();
+        // Prepare the request body
+        let PreparedRequestBody {
+            raw_request,
+            body_bytes,
+            http_extra_headers,
+        } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL for streaming endpoint
         let base_url = self.get_base_url(dynamic_api_keys)?;
@@ -381,7 +311,7 @@ impl InferenceProvider for AWSBedrockProvider {
             "POST",
             &url,
             &headers,
-            body_bytes,
+            &body_bytes,
             &credentials,
             region.as_ref(),
             "bedrock",
@@ -393,7 +323,7 @@ impl InferenceProvider for AWSBedrockProvider {
         let response = http_client
             .post(&url)
             .headers(signed_headers)
-            .body(body_bytes.to_vec())
+            .body(body_bytes)
             .send()
             .await
             .map_err(|e| {
@@ -430,13 +360,7 @@ impl InferenceProvider for AWSBedrockProvider {
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
 
         // Handle JSON prefill for streaming
-        if self.model_id.contains("claude")
-            && matches!(
-                request.json_mode,
-                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-            )
-            && matches!(request.function_type, FunctionType::Json)
-        {
+        if needs_json_prefill(&self.model_id, request) {
             prefill_json_chunk_response(chunk);
         }
 
@@ -450,7 +374,7 @@ impl InferenceProvider for AWSBedrockProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "AWS Bedrock".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -471,6 +395,64 @@ impl InferenceProvider for AWSBedrockProvider {
 // =============================================================================
 // Request Building
 // =============================================================================
+
+/// Prepared request body ready for signing and sending
+struct PreparedRequestBody {
+    raw_request: String,
+    body_bytes: Vec<u8>,
+    http_extra_headers: http::HeaderMap,
+}
+
+/// Prepare the request body: build converse request, apply JSON prefill, serialize, inject extras
+async fn prepare_request_body(
+    model_id: &str,
+    request: &ModelInferenceRequest<'_>,
+    model_provider: &ModelProvider,
+    model_name: &str,
+) -> Result<PreparedRequestBody, Error> {
+    // Build the request body
+    let mut converse_request =
+        build_converse_request(model_id, request, &request.inference_params_v2).await?;
+
+    // Add JSON prefill for Claude models in JSON mode
+    if needs_json_prefill(model_id, request) {
+        prefill_json_converse_request(&mut converse_request);
+    }
+
+    // Serialize to JSON
+    let mut body_json = serde_json::to_value(&converse_request).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize request: {e}"),
+        })
+    })?;
+
+    // Inject extra body/headers
+    let http_extra_headers = inject_extra_request_data(
+        &request.extra_body,
+        &request.extra_headers,
+        model_provider,
+        model_name,
+        &mut body_json,
+    )?;
+
+    // Sort for consistent ordering in tests
+    if cfg!(feature = "e2e_tests") {
+        body_json.sort_all_objects();
+    }
+
+    let raw_request = serde_json::to_string(&body_json).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize request: {e}"),
+        })
+    })?;
+    let body_bytes = raw_request.as_bytes().to_vec();
+
+    Ok(PreparedRequestBody {
+        raw_request,
+        body_bytes,
+        http_extra_headers,
+    })
+}
 
 /// Build a ConverseRequest from a ModelInferenceRequest
 async fn build_converse_request(
@@ -534,6 +516,25 @@ async fn build_converse_request(
     })
 }
 
+/// Check if JSON prefill is needed for Claude models
+fn needs_json_prefill(model_id: &str, request: &ModelInferenceRequest<'_>) -> bool {
+    needs_json_prefill_raw(model_id, &request.function_type, request.json_mode)
+}
+
+/// Check if JSON prefill is needed (raw parameter version)
+fn needs_json_prefill_raw(
+    model_id: &str,
+    function_type: &FunctionType,
+    json_mode: ModelInferenceRequestJsonMode,
+) -> bool {
+    model_id.contains("claude")
+        && matches!(function_type, FunctionType::Json)
+        && matches!(
+            json_mode,
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
+        )
+}
+
 /// Apply inference params and build additional model request fields.
 /// Uses destructuring to ensure all params are handled when new ones are added.
 fn apply_inference_params(
@@ -572,16 +573,13 @@ fn apply_inference_params(
 }
 
 /// Add JSON prefill message to the request
-async fn prefill_json_converse_request(request: &mut ConverseRequest) -> Result<(), Error> {
-    let prefill_message = convert_request_message(&RequestMessage {
-        role: TensorZeroRole::Assistant,
-        content: vec![ContentBlock::Text(Text {
+fn prefill_json_converse_request(request: &mut ConverseRequest) {
+    request.messages.push(Message {
+        role: Role::Assistant,
+        content: vec![BedrockContentBlock::Text(types::TextBlock {
             text: "Here is the JSON requested:\n{".to_string(),
         })],
-    })
-    .await?;
-    request.messages.push(prefill_message);
-    Ok(())
+    });
 }
 
 /// Convert a TensorZero RequestMessage to a Bedrock Message
@@ -723,11 +721,13 @@ fn convert_tool(tool_config: &FunctionToolConfig) -> Tool {
     }
 }
 
-/// Convert a TensorZero ToolChoice to a Bedrock ToolChoice
+/// Convert a TensorZero ToolChoice to a Bedrock ToolChoice.
+/// Note: ToolChoice::None is filtered out in build_converse_request before calling this function.
 fn convert_tool_choice(choice: TensorZeroToolChoice) -> ToolChoice {
     match choice {
-        TensorZeroToolChoice::None => ToolChoice::Auto(types::AutoToolChoice {}),
-        TensorZeroToolChoice::Auto => ToolChoice::Auto(types::AutoToolChoice {}),
+        TensorZeroToolChoice::Auto | TensorZeroToolChoice::None => {
+            ToolChoice::Auto(types::AutoToolChoice {})
+        }
         TensorZeroToolChoice::Required => ToolChoice::Any(types::AnyToolChoice {}),
         TensorZeroToolChoice::Specific(name) => {
             ToolChoice::Tool(types::SpecificToolChoice { name })
@@ -739,18 +739,22 @@ fn convert_tool_choice(choice: TensorZeroToolChoice) -> ToolChoice {
 // Response Conversion
 // =============================================================================
 
+/// Context needed for response conversion
+struct ResponseContext<'a> {
+    system: Option<String>,
+    input_messages: Vec<RequestMessage>,
+    model_id: &'a str,
+    function_type: &'a FunctionType,
+    json_mode: ModelInferenceRequestJsonMode,
+}
+
 /// Convert a ConverseResponse to a ProviderInferenceResponse
-#[expect(clippy::too_many_arguments)]
 fn convert_converse_response(
     response: ConverseResponse,
     latency: Latency,
     raw_request: String,
     raw_response: String,
-    system: Option<String>,
-    input_messages: Vec<RequestMessage>,
-    model_id: &str,
-    function_type: &FunctionType,
-    json_mode: ModelInferenceRequestJsonMode,
+    ctx: ResponseContext<'_>,
     model_inference_id: Uuid,
 ) -> Result<ProviderInferenceResponse, Error> {
     let message = response.output.message.ok_or_else(|| {
@@ -771,11 +775,7 @@ fn convert_converse_response(
         .collect::<Result<Vec<_>, _>>()?;
 
     // Apply JSON prefill adjustment
-    if model_id.contains("claude")
-        && *function_type == FunctionType::Json
-        && (json_mode == ModelInferenceRequestJsonMode::Strict
-            || json_mode == ModelInferenceRequestJsonMode::On)
-    {
+    if needs_json_prefill_raw(ctx.model_id, ctx.function_type, ctx.json_mode) {
         content = prefill_json_response(content)?;
     }
 
@@ -798,8 +798,8 @@ fn convert_converse_response(
     Ok(ProviderInferenceResponse::new(
         ProviderInferenceResponseArgs {
             output: content,
-            system,
-            input_messages,
+            system: ctx.system,
+            input_messages: ctx.input_messages,
             raw_request,
             raw_response,
             usage,
@@ -889,7 +889,7 @@ fn stream_bedrock<S>(
     bytes_stream: S,
     start_time: Instant,
     model_inference_id: Uuid,
-    _raw_request: String,
+    raw_request: String,
 ) -> ProviderInferenceResponseStreamInner
 where
     S: futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + Unpin + 'static,
@@ -904,7 +904,7 @@ where
             match chunk_result {
                 Err(e) => {
                     yield Err(ErrorDetails::InferenceServer {
-                        raw_request: None,
+                        raw_request: Some(raw_request.clone()),
                         raw_response: None,
                         message: format!("Error reading stream: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
@@ -946,7 +946,7 @@ where
                             }
                             Err(e) => {
                                 yield Err(ErrorDetails::InferenceServer {
-                                    raw_request: None,
+                                    raw_request: Some(raw_request.clone()),
                                     raw_response: None,
                                     message: format!("Error decoding event stream frame: {e}"),
                                     provider_type: PROVIDER_TYPE.to_string(),
@@ -958,6 +958,22 @@ where
                 }
             }
         }
+    })
+}
+
+/// Parse a stream event payload into a typed struct
+fn parse_stream_event<T: serde::de::DeserializeOwned>(
+    payload: &[u8],
+    event_name: &str,
+    raw_message: &str,
+) -> Result<T, Error> {
+    serde_json::from_slice(payload).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            raw_request: None,
+            raw_response: Some(raw_message.to_string()),
+            message: format!("Error parsing {event_name}: {e}"),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
     })
 }
 
@@ -977,14 +993,8 @@ fn process_stream_event(
             Ok(None)
         }
         Some("contentBlockStart") => {
-            let event: ContentBlockStartEvent = serde_json::from_slice(payload).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    raw_request: None,
-                    raw_response: Some(raw_message.clone()),
-                    message: format!("Error parsing contentBlockStart: {e}"),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            let event: ContentBlockStartEvent =
+                parse_stream_event(payload, "contentBlockStart", &raw_message)?;
 
             match event.start {
                 Some(ContentBlockStart::ToolUse { tool_use_id, name }) => {
@@ -1005,14 +1015,8 @@ fn process_stream_event(
             }
         }
         Some("contentBlockDelta") => {
-            let event: ContentBlockDeltaEvent = serde_json::from_slice(payload).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    raw_request: None,
-                    raw_response: Some(raw_message.clone()),
-                    message: format!("Error parsing contentBlockDelta: {e}"),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            let event: ContentBlockDeltaEvent =
+                parse_stream_event(payload, "contentBlockDelta", &raw_message)?;
 
             match event.delta {
                 Some(ContentBlockDelta::Text(text)) => {
@@ -1093,14 +1097,7 @@ fn process_stream_event(
         }
         Some("contentBlockStop") => Ok(None),
         Some("messageStop") => {
-            let event: MessageStopEvent = serde_json::from_slice(payload).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    raw_request: None,
-                    raw_response: Some(raw_message.clone()),
-                    message: format!("Error parsing messageStop: {e}"),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            let event: MessageStopEvent = parse_stream_event(payload, "messageStop", &raw_message)?;
 
             Ok(Some(ProviderInferenceResponseChunk::new(
                 vec![],
@@ -1112,14 +1109,7 @@ fn process_stream_event(
         }
         Some("metadata") => {
             // Parse into typed struct for structured usage
-            let event: MetadataEvent = serde_json::from_slice(payload).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    raw_request: None,
-                    raw_response: Some(raw_message.clone()),
-                    message: format!("Error parsing metadata: {e}"),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            let event: MetadataEvent = parse_stream_event(payload, "metadata", &raw_message)?;
 
             // Extract raw usage directly from the JSON payload
             let raw_usage = serde_json::from_slice::<serde_json::Value>(payload)
