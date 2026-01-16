@@ -192,11 +192,15 @@ fn validate_stored_output(stored_output: Option<&StoredOutput>) -> Result<(), St
                     }
                 }
                 // Check Thought block
+                // Destructure to cause compile error if new fields are added to Thought
                 ContentBlockChatOutput::Thought(thought) => {
-                    if thought.text.is_none()
-                        && thought.signature.is_none()
-                        && thought.summary.is_none()
-                    {
+                    let tensorzero_core::inference::types::Thought {
+                        text,
+                        signature,
+                        summary,
+                        provider_type: _,
+                    } = thought;
+                    if text.is_none() && signature.is_none() && summary.is_none() {
                         return Err(format!(
                             "stored_output[{content_idx}] Thought block has text, signature, and summary all as None"
                         ));
@@ -251,11 +255,15 @@ fn validate_stored_input_messages(
                     }
                 }
                 // Check Thought block
+                // Destructure to cause compile error if new fields are added to Thought
                 StoredInputMessageContent::Thought(thought) => {
-                    if thought.text.is_none()
-                        && thought.signature.is_none()
-                        && thought.summary.is_none()
-                    {
+                    let tensorzero_core::inference::types::Thought {
+                        text,
+                        signature,
+                        summary,
+                        provider_type: _,
+                    } = thought;
+                    if text.is_none() && signature.is_none() && summary.is_none() {
                         return Err(format!(
                             "stored_input.messages[{msg_idx}].content[{content_idx}] Thought block has text, signature, and summary all as None"
                         ));
