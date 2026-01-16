@@ -171,7 +171,7 @@ pub struct ReasoningContentBlock {
 
 /// Reasoning content variants
 #[derive(Debug, Serialize)]
-#[serde(untagged)]
+#[serde(rename_all = "camelCase")]
 pub enum ReasoningContent {
     ReasoningText(ReasoningText),
 }
