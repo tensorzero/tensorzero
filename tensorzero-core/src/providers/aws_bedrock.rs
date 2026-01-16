@@ -1078,14 +1078,23 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             })
         })?;
 
-        let raw_usage = aws_bedrock_usage_from_raw_response(&raw_response).map(|value| {
-            raw_usage_entries_from_value(
-                model_inference_id,
-                PROVIDER_TYPE,
-                ApiType::ChatCompletions,
-                value,
-            )
-        });
+        // Manually construct JSON to match streaming behavior. Even though we have access
+        // to raw_response JSON here, streaming cannot access raw JSON because the AWS SDK
+        // deserializes events internally. For consistency, we enumerate the same fields
+        // in both paths. If AWS adds new fields, both paths need manual updates.
+        // See: https://github.com/tensorzero/tensorzero/issues/5492
+        let raw_usage = Some(raw_usage_entries_from_value(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            serde_json::json!({
+                "input_tokens": aws_usage.input_tokens,
+                "output_tokens": aws_usage.output_tokens,
+                "total_tokens": aws_usage.total_tokens,
+                "cache_read_input_tokens": aws_usage.cache_read_input_tokens,
+                "cache_write_input_tokens": aws_usage.cache_write_input_tokens,
+            }),
+        ));
 
         let usage = Usage {
             input_tokens: Some(aws_usage.input_tokens as u32),
@@ -1127,12 +1136,6 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
             provider_type: PROVIDER_TYPE.to_string(),
         })
     })
-}
-
-fn aws_bedrock_usage_from_raw_response(raw_response: &str) -> Option<serde_json::Value> {
-    serde_json::from_str::<serde_json::Value>(raw_response)
-        .ok()
-        .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
 impl TryFrom<&FunctionToolConfig> for Tool {
