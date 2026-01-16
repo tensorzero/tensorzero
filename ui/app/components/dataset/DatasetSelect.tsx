@@ -141,7 +141,7 @@ export function DatasetSelect({
               <CommandEmpty>No datasets found</CommandEmpty>
               <ComboboxMenuItems
                 items={filteredItems}
-                selected={selected}
+                selectedValue={selected}
                 searchValue={searchValue}
                 onSelectItem={handleSelectItem}
                 showCreateOption={showCreateOption}

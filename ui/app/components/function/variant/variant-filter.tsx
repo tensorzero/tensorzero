@@ -157,7 +157,7 @@ function VariantFilterItem({
   return (
     <ComboboxItem
       focusOnHover
-      className="data-[active-item]:bg-accent data-[active-item]:text-accent-foreground relative flex h-8 cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1.5 select-none data-[active-item]:outline-none"
+      className="data-[active-item]:bg-menu-highlight data-[active-item]:text-menu-highlight-foreground relative flex h-8 cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1.5 select-none data-[active-item]:outline-none"
       value={value}
       onClick={() => onClick?.(value)}
     >

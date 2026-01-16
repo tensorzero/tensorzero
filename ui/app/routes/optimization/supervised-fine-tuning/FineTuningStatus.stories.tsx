@@ -91,7 +91,6 @@ export const Completed: Story = {
               type: "openai",
               model_name:
                 "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
-              api_base: null,
               timeouts: {
                 non_streaming: { total_ms: null },
                 streaming: { ttft_ms: null },
@@ -162,7 +161,6 @@ export const LongJobId: Story = {
               type: "openai",
               model_name:
                 "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
-              api_base: null,
               timeouts: {
                 non_streaming: { total_ms: null },
                 streaming: { ttft_ms: null },
