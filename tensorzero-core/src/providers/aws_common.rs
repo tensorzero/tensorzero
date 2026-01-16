@@ -274,13 +274,13 @@ pub enum AWSCredentials {
 
 impl AWSCredentials {
     /// Create AWSCredentials from flattened credential location fields.
-    /// Returns None if no credentials are specified (use SDK default).
+    /// Returns `Sdk` if no credentials are specified (uses SDK default credential chain).
     pub fn from_fields(
         access_key_id: Option<CredentialLocation>,
         secret_access_key: Option<CredentialLocation>,
         session_token: Option<CredentialLocation>,
         provider_type: &str,
-    ) -> Result<Option<Self>, Error> {
+    ) -> Result<Self, Error> {
         // Validate: both access_key_id and secret_access_key must be provided together
         match (access_key_id, secret_access_key) {
             (None, None) => {
@@ -292,7 +292,7 @@ impl AWSCredentials {
                         ),
                     }));
                 }
-                Ok(None)
+                Ok(AWSCredentials::Sdk)
             }
             (Some(_), None) => Err(Error::new(ErrorDetails::Config {
                 message: format!(
@@ -312,7 +312,6 @@ impl AWSCredentials {
                     session_token,
                     provider_type,
                 )
-                .map(Some)
             }
         }
     }
@@ -537,7 +536,7 @@ fn validate_aws_credential_location(
 /// This occurs when dynamic endpoint_url is configured with static or SDK credentials.
 pub fn warn_if_credential_exfiltration_risk(
     endpoint_url: &Option<AWSEndpointUrl>,
-    credentials: &Option<AWSCredentials>,
+    credentials: &AWSCredentials,
     provider_type: &str,
 ) {
     let has_dynamic_endpoint = endpoint_url
@@ -546,10 +545,7 @@ pub fn warn_if_credential_exfiltration_risk(
 
     // Warn if there are static or SDK credentials that could be exfiltrated via dynamic endpoint.
     // If credentials are also dynamic, there's no exfiltration risk (client controls all credentials).
-    // When credentials is None, the SDK default credential chain is used, which is also exfiltrable.
-    let has_exfiltrable_credentials = !credentials
-        .as_ref()
-        .is_some_and(|c| matches!(c, AWSCredentials::Dynamic { .. }));
+    let has_exfiltrable_credentials = !matches!(credentials, AWSCredentials::Dynamic { .. });
 
     if has_dynamic_endpoint && has_exfiltrable_credentials {
         tracing::warn!(
@@ -680,12 +676,25 @@ pub fn sign_request(
             })
         })?;
 
+    let header_pairs: Vec<(&str, &str)> = headers
+        .iter()
+        .map(|(k, v)| {
+            v.to_str().map(|v_str| (k.as_str(), v_str)).map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: None,
+                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                    message: format!("Invalid header value: {e}"),
+                    provider_type: provider_type.to_string(),
+                })
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
     let signable_request = SignableRequest::new(
         method,
         uri.to_string(),
-        headers
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or(""))),
+        header_pairs.into_iter(),
         SignableBody::Bytes(body),
     )
     .map_err(|e| {
@@ -1215,10 +1224,13 @@ mod tests {
     // ===== AWSCredentials::from_fields validation tests =====
 
     #[test]
-    fn test_aws_credentials_from_fields_none_returns_none() {
+    fn test_aws_credentials_from_fields_none_returns_sdk() {
         let result =
             AWSCredentials::from_fields(None, None, None, "test_provider").expect("should succeed");
-        assert!(result.is_none(), "No credentials should return None");
+        assert!(
+            matches!(result, AWSCredentials::Sdk),
+            "No credentials should return Sdk"
+        );
     }
 
     #[test]
@@ -1280,7 +1292,7 @@ mod tests {
 
     #[test]
     fn test_aws_credentials_from_fields_all_dynamic_succeeds() {
-        let result = AWSCredentials::from_fields(
+        let creds = AWSCredentials::from_fields(
             Some(CredentialLocation::Dynamic("ak".to_string())),
             Some(CredentialLocation::Dynamic("sk".to_string())),
             Some(CredentialLocation::Dynamic("st".to_string())),
@@ -1288,8 +1300,6 @@ mod tests {
         )
         .expect("should succeed");
 
-        assert!(result.is_some(), "Should return Some");
-        let creds = result.unwrap();
         assert!(
             matches!(creds, AWSCredentials::Dynamic { .. }),
             "Should be Dynamic credentials"
@@ -1298,7 +1308,7 @@ mod tests {
 
     #[test]
     fn test_aws_credentials_from_fields_all_sdk_succeeds() {
-        let result = AWSCredentials::from_fields(
+        let creds = AWSCredentials::from_fields(
             Some(CredentialLocation::Sdk),
             Some(CredentialLocation::Sdk),
             Some(CredentialLocation::Sdk),
@@ -1306,8 +1316,6 @@ mod tests {
         )
         .expect("should succeed");
 
-        assert!(result.is_some(), "Should return Some");
-        let creds = result.unwrap();
         assert!(
             matches!(creds, AWSCredentials::Sdk),
             "Should be Sdk credentials"
@@ -1374,28 +1382,25 @@ mod tests {
         // Dynamic endpoint with static creds - should warn (we can't verify tracing here,
         // but we verify the conditions)
         let dynamic_endpoint = Some(AWSEndpointUrl::Dynamic("ep".to_string()));
-        let static_creds = Some(AWSCredentials::Static {
+        let static_creds = AWSCredentials::Static {
             access_key_id: "ak".to_string(),
             secret_access_key: SecretString::new("sk".to_string().into()),
             session_token: None,
-        });
+        };
 
         // This should trigger warning internally (we can't verify without tracing subscriber)
         warn_if_credential_exfiltration_risk(&dynamic_endpoint, &static_creds, "test");
 
         // Dynamic endpoint with SDK creds - should warn
-        let sdk_creds = Some(AWSCredentials::Sdk);
+        let sdk_creds = AWSCredentials::Sdk;
         warn_if_credential_exfiltration_risk(&dynamic_endpoint, &sdk_creds, "test");
 
-        // Dynamic endpoint with None creds (defaults to SDK) - should warn
-        warn_if_credential_exfiltration_risk(&dynamic_endpoint, &None, "test");
-
         // Dynamic endpoint with dynamic creds - should NOT warn
-        let dynamic_creds = Some(AWSCredentials::Dynamic {
+        let dynamic_creds = AWSCredentials::Dynamic {
             access_key_id_key: "ak".to_string(),
             secret_access_key_key: "sk".to_string(),
             session_token_key: None,
-        });
+        };
         warn_if_credential_exfiltration_risk(&dynamic_endpoint, &dynamic_creds, "test");
 
         // Static endpoint with static creds - should NOT warn

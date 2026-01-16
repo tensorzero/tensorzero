@@ -1063,7 +1063,7 @@ struct AWSProviderConfig {
     static_region: Option<Region>,
     region: AWSRegion,
     endpoint_url: Option<AWSEndpointUrl>,
-    credentials: Option<AWSCredentials>,
+    credentials: AWSCredentials,
 }
 
 /// Helper to process common AWS provider configuration.

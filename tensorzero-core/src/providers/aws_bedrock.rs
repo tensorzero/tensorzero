@@ -68,7 +68,7 @@ pub struct AWSBedrockProvider {
     #[serde(skip)]
     endpoint_url: Option<AWSEndpointUrl>,
     #[serde(skip)]
-    credentials: Option<AWSCredentials>,
+    credentials: AWSCredentials,
 }
 
 impl AWSBedrockProvider {
@@ -77,7 +77,7 @@ impl AWSBedrockProvider {
         static_region: Option<Region>,
         region: Option<AWSRegion>,
         endpoint_url: Option<AWSEndpointUrl>,
-        credentials: Option<AWSCredentials>,
+        credentials: AWSCredentials,
     ) -> Result<Self, Error> {
         // Get the SDK config for credential loading
         let sdk_config = aws_common::config_with_region(PROVIDER_TYPE, static_region).await?;
@@ -136,11 +136,11 @@ impl AWSBedrockProvider {
         dynamic_api_keys: &InferenceCredentials,
     ) -> Result<Credentials, Error> {
         match &self.credentials {
-            Some(AWSCredentials::Static {
+            AWSCredentials::Static {
                 access_key_id,
                 secret_access_key,
                 session_token,
-            }) => {
+            } => {
                 // Use static credentials directly
                 Ok(Credentials::new(
                     access_key_id.clone(),
@@ -152,11 +152,11 @@ impl AWSBedrockProvider {
                     "tensorzero",
                 ))
             }
-            Some(AWSCredentials::Dynamic {
+            AWSCredentials::Dynamic {
                 access_key_id_key,
                 secret_access_key_key,
                 session_token_key,
-            }) => {
+            } => {
                 // Resolve dynamic credentials from the request
                 let ak = dynamic_api_keys.get(access_key_id_key).ok_or_else(|| {
                     Error::new(ErrorDetails::ApiKeyMissing {
@@ -196,10 +196,7 @@ impl AWSBedrockProvider {
                     "tensorzero",
                 ))
             }
-            // For Sdk or None, get fresh credentials from the SDK config
-            Some(AWSCredentials::Sdk) | None => {
-                get_credentials(&self.sdk_config, PROVIDER_TYPE).await
-            }
+            AWSCredentials::Sdk => get_credentials(&self.sdk_config, PROVIDER_TYPE).await,
         }
     }
 }
@@ -749,12 +746,12 @@ async fn convert_content_block_to_bedrock(
                 )))
             } else if thought.signature.is_some() {
                 tracing::warn!(
-                    "The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet."
+                    "The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks."
                 );
                 Ok(None)
             } else {
                 tracing::warn!(
-                    "Received a reasoning content block with neither text nor signature."
+                    "The gateway received a reasoning content block with neither text nor signature. This is unsupported, so we'll drop it."
                 );
                 Ok(None)
             }
@@ -983,6 +980,7 @@ where
                                     .map(|s| s.as_str().to_owned());
 
                                 if message_type.as_deref() == Some("exception") {
+                                    // See https://smithy.io/2.0/aws/amazon-eventstream.html for details on the AWS Smithy event stream format
                                     let exception_type = message.headers().iter()
                                         .find(|h| h.name().as_str() == ":exception-type")
                                         .and_then(|h| h.value().as_string().ok())
@@ -1241,7 +1239,7 @@ mod tests {
             Some(Region::new("uk-hogwarts-1")),
             None,
             None,
-            None,
+            AWSCredentials::Sdk,
         )
         .await
         .unwrap();
@@ -1257,7 +1255,7 @@ mod tests {
             Some(Region::new("uk-hogwarts-1")),
             None,
             None,
-            None,
+            AWSCredentials::Sdk,
         )
         .await
         .unwrap();
@@ -1272,9 +1270,10 @@ mod tests {
         // We use 'nextest' as our runner, so each test runs in its own process
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
-        let err = AWSBedrockProvider::new("test".to_string(), None, None, None, None)
-            .await
-            .expect_err("AWS Bedrock provider should fail when it cannot detect region");
+        let err =
+            AWSBedrockProvider::new("test".to_string(), None, None, None, AWSCredentials::Sdk)
+                .await
+                .expect_err("AWS Bedrock provider should fail when it cannot detect region");
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to determine AWS region."),
@@ -1290,7 +1289,7 @@ mod tests {
             Some(Region::new("me-shire-2")),
             None,
             None,
-            None,
+            AWSCredentials::Sdk,
         )
         .await
         .unwrap();
