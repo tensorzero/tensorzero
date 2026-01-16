@@ -66,7 +66,7 @@ async fn test_key_lifecycle(pool: PgPool) {
     let now = Utc::now();
 
     let new_first_key_info = check_key(&parsed_first_key, &pool).await.unwrap();
-    let AuthResult::Disabled(disabled_at) = new_first_key_info else {
+    let AuthResult::Disabled(disabled_at, _) = new_first_key_info else {
         panic!("Key should be disabled: {new_first_key_info:?}");
     };
     assert!(
@@ -315,7 +315,7 @@ async fn test_disable_key_workflow(pool: PgPool) {
 
     // Try to check the API key from the first step and verify it returns Disabled
     let check_result = check_key(&parsed_key, &pool).await.unwrap();
-    let AuthResult::Disabled(check_disabled_at) = check_result else {
+    let AuthResult::Disabled(check_disabled_at, _) = check_result else {
         panic!("Key should be disabled after calling disable_key: {check_result:?}");
     };
     assert_eq!(

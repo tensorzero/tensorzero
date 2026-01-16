@@ -22,7 +22,10 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::aws_common::{self, InterceptorAndRawBody, build_interceptor};
+use super::aws_common::{
+    self, AWSCredentials, AWSEndpointUrl, AWSRegion, InterceptorAndRawBody, build_interceptor,
+    warn_if_credential_exfiltration_risk,
+};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -58,6 +61,12 @@ pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
     client: aws_sdk_bedrockruntime::Client,
+    #[serde(skip)]
+    region: Option<AWSRegion>,
+    #[serde(skip)]
+    endpoint_url: Option<AWSEndpointUrl>,
+    #[serde(skip)]
+    credentials: Option<AWSCredentials>,
 }
 
 fn apply_inference_params(
@@ -172,21 +181,85 @@ fn number_from_i32(value: i32) -> Number {
 impl AWSBedrockProvider {
     pub async fn new(
         model_id: String,
-        region: Option<Region>,
+        static_region: Option<Region>,
+        region: Option<AWSRegion>,
+        endpoint_url: Option<AWSEndpointUrl>,
+        credentials: Option<AWSCredentials>,
         http_client: TensorzeroHttpClient,
     ) -> Result<Self, Error> {
-        let config = aws_sdk_bedrockruntime::config::Builder::from(
-            &aws_common::config_with_region(PROVIDER_TYPE, region).await?,
+        let mut config_builder = aws_sdk_bedrockruntime::config::Builder::from(
+            &aws_common::config_with_region(PROVIDER_TYPE, static_region).await?,
         )
-        .http_client(super::aws_http_client::Client::new(http_client))
-        .build();
-        let client = aws_sdk_bedrockruntime::Client::from_conf(config);
+        .http_client(super::aws_http_client::Client::new(http_client));
 
-        Ok(Self { model_id, client })
+        // Apply static endpoint URL at construction time
+        if let Some(ref ep) = endpoint_url
+            && let Some(url) = ep.get_static_url()
+        {
+            config_builder = config_builder.endpoint_url(url.as_str());
+        }
+
+        // Apply static credentials at construction time
+        if let Some(ref creds) = credentials
+            && let Some(static_creds) = creds.get_static_credentials()
+        {
+            config_builder = config_builder.credentials_provider(static_creds);
+        }
+
+        // Warn about potential credential exfiltration risk
+        warn_if_credential_exfiltration_risk(&endpoint_url, &credentials, PROVIDER_TYPE);
+
+        let client = aws_sdk_bedrockruntime::Client::from_conf(config_builder.build());
+
+        Ok(Self {
+            model_id,
+            client,
+            region,
+            endpoint_url,
+            credentials,
+        })
     }
 
     pub fn model_id(&self) -> &str {
         &self.model_id
+    }
+
+    /// Build a config override builder for dynamic region, endpoint, and/or credentials.
+    /// Returns None if no dynamic fields are configured.
+    fn build_dynamic_config_override(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<Option<aws_sdk_bedrockruntime::config::Builder>, Error> {
+        let has_dynamic_region = self.region.as_ref().is_some_and(|r| r.is_dynamic());
+        let has_dynamic_endpoint = matches!(&self.endpoint_url, Some(AWSEndpointUrl::Dynamic(_)));
+        let has_dynamic_credentials = self.credentials.as_ref().is_some_and(|c| c.is_dynamic());
+
+        if !has_dynamic_region && !has_dynamic_endpoint && !has_dynamic_credentials {
+            return Ok(None);
+        }
+
+        let mut override_builder = aws_sdk_bedrockruntime::config::Builder::new();
+
+        if let Some(region) = &self.region
+            && region.is_dynamic()
+        {
+            let resolved_region = region.resolve(dynamic_api_keys)?;
+            override_builder = override_builder.region(resolved_region);
+        }
+        if let Some(endpoint_url) = &self.endpoint_url
+            && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
+        {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
+            override_builder = override_builder.endpoint_url(url.as_str());
+        }
+        if let Some(credentials) = &self.credentials
+            && credentials.is_dynamic()
+        {
+            let resolved_credentials = credentials.resolve(dynamic_api_keys)?;
+            override_builder = override_builder.credentials_provider(resolved_credentials);
+        }
+
+        Ok(Some(override_builder))
     }
 }
 
@@ -202,7 +275,7 @@ impl InferenceProvider for AWSBedrockProvider {
         }: ModelProviderRequest<'a>,
         // We've already taken in this client when the provider was constructed
         _http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
@@ -295,11 +368,14 @@ impl InferenceProvider for AWSBedrockProvider {
         } = build_interceptor(request, model_provider, model_name.to_string());
 
         let start_time = Instant::now();
-        let output = bedrock_request
-            .customize()
-            .interceptor(interceptor)
-            .send()
-            .await
+        let customized = bedrock_request.customize().interceptor(interceptor);
+
+        let output =
+            if let Some(override_builder) = self.build_dynamic_config_override(dynamic_api_keys)? {
+                customized.config_override(override_builder).send().await
+            } else {
+                customized.send().await
+            }
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -345,7 +421,7 @@ impl InferenceProvider for AWSBedrockProvider {
         }: ModelProviderRequest<'a>,
         // We've already taken in this client when the provider was constructed
         _http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         // TODO (#55): add support for guardrails and additional fields
@@ -439,11 +515,14 @@ impl InferenceProvider for AWSBedrockProvider {
         } = build_interceptor(request, model_provider, model_name.to_string());
 
         let start_time = Instant::now();
-        let stream = bedrock_request
-            .customize()
-            .interceptor(interceptor)
-            .send()
-            .await
+        let customized = bedrock_request.customize().interceptor(interceptor);
+
+        let stream =
+            if let Some(override_builder) = self.build_dynamic_config_override(dynamic_api_keys)? {
+                customized.config_override(override_builder).send().await
+            } else {
+                customized.send().await
+            }
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -1214,6 +1293,9 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("uk-hogwarts-1")),
+            None,
+            None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1228,6 +1310,9 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("uk-hogwarts-1")),
+            None,
+            None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1246,10 +1331,13 @@ mod tests {
         let err = AWSBedrockProvider::new(
             "test".to_string(),
             None,
+            None,
+            None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
-        .expect_err("AWS bedrock provider should fail when it cannot detect region");
+        .expect_err("AWS Bedrock provider should fail when it cannot detect region");
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to determine AWS region."),
@@ -1263,6 +1351,9 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("me-shire-2")),
+            None,
+            None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await

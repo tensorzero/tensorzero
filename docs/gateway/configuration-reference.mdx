@@ -681,14 +681,54 @@ beta_structured_outputs = true
 
 <Accordion title='type: "aws_bedrock"'>
 
-##### `allow_auto_detect_region`
+##### `access_key_id`
 
-- **Type:** boolean
-- **Required:** no (default: `false`)
+- **Type:** string
+- **Required:** no
 
-Defines whether to automatically detect the AWS region to use with the SageMaker API.
-Under the hood, the gateway will use the AWS SDK to try to detect the region.
-Alternatively, you can specify the region manually with the `region` field (recommended).
+AWS access key ID for authentication. If not specified, uses AWS SDK default credential chain.
+
+The supported locations are:
+
+- `env::VAR_NAME` - read from environment variable at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `sdk` - use AWS SDK default credential chain
+
+When specified, `secret_access_key` must also be provided. Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
+##### `endpoint_url`
+
+- **Type:** string
+- **Required:** no
+
+Custom endpoint URL for the AWS Bedrock API. Useful for AWS PrivateLink, FIPS endpoints, or local testing (e.g., LocalStack).
+
+The supported locations are:
+
+- Static URLs (e.g., `"https://bedrock-runtime.us-east-1.amazonaws.com"`)
+- `env::VAR_NAME` - read from environment variable at startup
+- `path::/path/to/file` - read from file at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `none` - treat as unspecified
+
+See the [AWS Bedrock service endpoints documentation](https://docs.aws.amazon.com/general/latest/gr/bedrock.html) for available endpoints.
+
+```toml title="tensorzero.toml"
+[models.claude-3-haiku.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+region = "us-east-1"
+endpoint_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
+# or: endpoint_url = "env::BEDROCK_ENDPOINT_URL"
+# or: endpoint_url = "path::/etc/secrets/bedrock-endpoint"
+# or: endpoint_url = "dynamic::bedrock-endpoint-url"
+```
+
+<Warning>
+  When using `dynamic::` endpoints, untrusted clients can specify arbitrary
+  endpoints, potentially enabling credential exfiltration. Only use dynamic
+  endpoints when all clients are trusted.
+</Warning>
 
 ##### `model_id`
 
@@ -717,30 +757,76 @@ See the [AWS documentation on inference profiles](https://docs.aws.amazon.com/be
 ##### `region`
 
 - **Type:** string
-- **Required:** no (default: based on credentials if set, otherwise `us-east-1`)
+- **Required:** yes
 
 Defines the AWS region to use with the AWS Bedrock API.
+
+The supported locations are:
+
+- Static values (e.g., `"us-east-1"`)
+- `env::VAR_NAME` - read from environment variable at startup
+- `path::/path/to/file` - read from file at startup
+- `dynamic::key_name` - resolve at inference time from `credentials` field
+- `sdk` - use AWS SDK auto-detection (may slow down initialization in non-AWS environments)
 
 ```toml title="tensorzero.toml"
 [models.claude-3-haiku.providers.aws_bedrock]
 # ...
 type = "aws_bedrock"
 region = "us-east-2"
+# or: region = "env::AWS_BEDROCK_REGION"
+# or: region = "path::/etc/secrets/aws-region"
+# or: region = "dynamic::bedrock-region"
+# or: region = "sdk"  # auto-detect using AWS SDK
 # ...
 ```
+
+##### `secret_access_key`
+
+- **Type:** string
+- **Required:** no (required if `access_key_id` is specified)
+
+AWS secret access key for authentication.
+
+The supported locations are:
+
+- `env::VAR_NAME` - read from environment variable at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `sdk` - use AWS SDK default credential chain
+
+##### `session_token`
+
+- **Type:** string
+- **Required:** no
+
+AWS session token for temporary credentials (e.g., when using IAM roles or STS).
+
+The supported locations are:
+
+- `env::VAR_NAME` - read from environment variable at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `sdk` - use AWS SDK default credential chain
+
+Must use the same source type as `access_key_id` and `secret_access_key`.
 
 </Accordion>
 
 <Accordion title='type: "aws_sagemaker"'>
 
-##### `allow_auto_detect_region`
+##### `access_key_id`
 
-- **Type:** boolean
-- **Required:** no (default: `false`)
+- **Type:** string
+- **Required:** no
 
-Defines whether to automatically detect the AWS region to use with the SageMaker API.
-Under the hood, the gateway will use the AWS SDK to try to detect the region.
-Alternatively, you can specify the region manually with the `region` field (recommended).
+AWS access key ID for authentication. If not specified, uses AWS SDK default credential chain.
+
+The supported locations are:
+
+- `env::VAR_NAME` - read from environment variable at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `sdk` - use AWS SDK default credential chain
+
+When specified, `secret_access_key` must also be provided. Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
 
 ##### `endpoint_name`
 
@@ -748,6 +834,42 @@ Alternatively, you can specify the region manually with the `region` field (reco
 - **Required:** yes
 
 Defines the endpoint name to use with the AWS SageMaker API.
+
+##### `endpoint_url`
+
+- **Type:** string
+- **Required:** no
+
+Custom endpoint URL for the AWS SageMaker API. Useful for AWS PrivateLink, FIPS endpoints, or local testing (e.g., LocalStack).
+
+The supported locations are:
+
+- Static URLs (e.g., `"https://runtime.sagemaker.us-east-1.amazonaws.com"`)
+- `env::VAR_NAME` - read from environment variable at startup
+- `path::/path/to/file` - read from file at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `none` - treat as unspecified
+
+See the [AWS SageMaker service endpoints documentation](https://docs.aws.amazon.com/general/latest/gr/sagemaker.html) for available endpoints.
+
+```toml title="tensorzero.toml"
+[models.my-model.providers.aws_sagemaker]
+type = "aws_sagemaker"
+endpoint_name = "my-endpoint"
+model_name = "gemma3:1b"
+hosted_provider = "openai"
+region = "us-east-1"
+endpoint_url = "https://runtime.sagemaker.us-east-1.amazonaws.com"
+# or: endpoint_url = "env::SAGEMAKER_ENDPOINT_URL"
+# or: endpoint_url = "path::/etc/secrets/sagemaker-endpoint"
+# or: endpoint_url = "dynamic::sagemaker-endpoint-url"
+```
+
+<Warning>
+  When using `dynamic::` endpoints, untrusted clients can specify arbitrary
+  endpoints, potentially enabling credential exfiltration. Only use dynamic
+  endpoints when all clients are trusted.
+</Warning>
 
 ##### `hosted_provider`
 
@@ -790,17 +912,57 @@ model_name = "gemma3:1b"
 ##### `region`
 
 - **Type:** string
-- **Required:** no (default: based on credentials if set, otherwise `us-east-1`)
+- **Required:** yes
 
-Defines the AWS region to use with the AWS Bedrock API.
+Defines the AWS region to use with the AWS SageMaker API.
+
+The supported locations are:
+
+- Static values (e.g., `"us-east-1"`)
+- `env::VAR_NAME` - read from environment variable at startup
+- `path::/path/to/file` - read from file at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `sdk` - use AWS SDK auto-detection (may slow down initialization in non-AWS environments)
 
 ```toml title="tensorzero.toml"
 [models.claude-3-haiku.providers.aws_sagemaker]
 # ...
 type = "aws_sagemaker"
 region = "us-east-2"
+# or: region = "env::AWS_SAGEMAKER_REGION"
+# or: region = "path::/etc/secrets/aws-region"
+# or: region = "dynamic::sagemaker-region"
+# or: region = "sdk"  # auto-detect using AWS SDK
 # ...
 ```
+
+##### `secret_access_key`
+
+- **Type:** string
+- **Required:** no (required if `access_key_id` is specified)
+
+AWS secret access key for authentication.
+
+The supported locations are:
+
+- `env::VAR_NAME` - read from environment variable at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `sdk` - use AWS SDK default credential chain
+
+##### `session_token`
+
+- **Type:** string
+- **Required:** no
+
+AWS session token for temporary credentials (e.g., when using IAM roles or STS).
+
+The supported locations are:
+
+- `env::VAR_NAME` - read from environment variable at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+- `sdk` - use AWS SDK default credential chain
+
+Must use the same source type as `access_key_id` and `secret_access_key`.
 
 </Accordion>
 

@@ -110,6 +110,8 @@ fn build_mutate_input(
         .collect();
 
     // Serialize analyses to JSON
+    // Note: Thought signatures in inference outputs are already conditionally stripped
+    // in analyze_inference based on response type (Chat only, not Json)
     let analyses_json = serde_json::to_value(analyses).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to serialize analyses: {e}"),

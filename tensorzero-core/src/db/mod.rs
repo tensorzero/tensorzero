@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use feedback::FeedbackQueries;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::types::PgInterval;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -11,7 +10,6 @@ use mockall::automock;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
-use crate::rate_limiting::ActiveRateLimitKey;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
 pub mod clickhouse;
@@ -22,8 +20,12 @@ pub mod inference_count;
 pub mod inferences;
 pub mod model_inferences;
 pub mod postgres;
+pub mod rate_limiting;
 pub mod stored_datapoint;
 pub mod workflow_evaluation_queries;
+
+// For backcompat, re-export everything from the rate_limiting module
+pub use rate_limiting::*;
 
 #[async_trait]
 pub trait ClickHouseConnection:
@@ -139,58 +141,6 @@ pub struct TableBoundsWithCount {
 impl<T: SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync>
     ClickHouseConnection for T
 {
-}
-
-pub trait RateLimitQueries {
-    /// This function will fail if any of the requests individually fail.
-    /// It is an atomic operation so no tickets will be consumed if any request fails.
-    async fn consume_tickets(
-        &self,
-        requests: &[ConsumeTicketsRequest],
-    ) -> Result<Vec<ConsumeTicketsReceipt>, Error>;
-
-    async fn return_tickets(
-        &self,
-        requests: Vec<ReturnTicketsRequest>,
-    ) -> Result<Vec<ReturnTicketsReceipt>, Error>;
-
-    async fn get_balance(
-        &self,
-        key: &str,
-        capacity: u64,
-        refill_amount: u64,
-        refill_interval: PgInterval,
-    ) -> Result<u64, Error>;
-}
-
-#[derive(Debug)]
-pub struct ConsumeTicketsRequest {
-    pub key: ActiveRateLimitKey,
-    pub requested: u64,
-    pub capacity: u64,
-    pub refill_amount: u64,
-    pub refill_interval: PgInterval,
-}
-
-#[derive(Debug)]
-pub struct ConsumeTicketsReceipt {
-    pub key: ActiveRateLimitKey,
-    pub success: bool,
-    pub tickets_remaining: u64,
-    pub tickets_consumed: u64,
-}
-
-pub struct ReturnTicketsRequest {
-    pub key: ActiveRateLimitKey,
-    pub returned: u64,
-    pub capacity: u64,
-    pub refill_amount: u64,
-    pub refill_interval: PgInterval,
-}
-
-pub struct ReturnTicketsReceipt {
-    pub key: ActiveRateLimitKey,
-    pub balance: u64,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]

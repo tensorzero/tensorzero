@@ -30,10 +30,12 @@ use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
+use crate::providers::aws_common::{AWSCredentials, AWSEndpointUrl, AWSRegion};
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use aws_types::region::Region;
 
 use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
@@ -734,7 +736,6 @@ fn wrap_provider_stream(
         .clone()
         .map(std::borrow::Cow::into_owned);
     let otlp_config = clients.otlp_config.clone();
-    let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
     let span_clone = span.clone();
 
@@ -793,10 +794,7 @@ fn wrap_provider_stream(
                 }
             };
 
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, usage)
-                .await
-            {
+            if let Err(e) = ticket_borrow.return_tickets(usage).await {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
         }.instrument(span_clone.clone()));
@@ -975,6 +973,7 @@ pub struct ModelProviderRequestInfo {
 #[serde(rename_all = "lowercase")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
+#[expect(clippy::large_enum_variant)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     #[serde(rename = "aws_bedrock")]
@@ -1060,6 +1059,86 @@ impl ProviderConfig {
     }
 }
 
+/// Processed AWS provider configuration.
+struct AWSProviderConfig {
+    static_region: Option<Region>,
+    region: AWSRegion,
+    endpoint_url: Option<AWSEndpointUrl>,
+    credentials: Option<AWSCredentials>,
+}
+
+/// Helper to process common AWS provider configuration.
+fn build_aws_provider_config(
+    region: Option<CredentialLocationOrHardcoded>,
+    allow_auto_detect_region: bool,
+    endpoint_url: Option<CredentialLocationOrHardcoded>,
+    access_key_id: Option<CredentialLocation>,
+    secret_access_key: Option<CredentialLocation>,
+    session_token: Option<CredentialLocation>,
+    provider_type: &str,
+) -> Result<AWSProviderConfig, Error> {
+    // Emit deprecation warning if allow_auto_detect_region is used
+    if allow_auto_detect_region {
+        crate::utils::deprecation_warning(&format!(
+            "The `allow_auto_detect_region` field is deprecated for `{provider_type}`. \
+             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
+        ));
+    }
+
+    // Convert CredentialLocationOrHardcoded to AWSRegion
+    let aws_region = region
+        .map(|loc| AWSRegion::from_credential_location(loc, provider_type))
+        .transpose()?
+        .flatten();
+
+    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
+    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
+        Some(AWSRegion::Sdk)
+    } else {
+        aws_region
+    };
+
+    // Check if we have a region or need to error
+    let aws_region = aws_region.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "AWS {provider_type} provider requires a region. \
+                 Use `region = \"sdk\"` to enable auto-detection, \
+                 or specify a region like `region = \"us-east-1\"`."
+            ),
+        })
+    })?;
+
+    // For static regions, use at construction time.
+    // For SDK regions, pass None to use the default provider chain.
+    // For dynamic regions, use a fallback region for construction (will be overridden at request time).
+    let static_region = match &aws_region {
+        AWSRegion::Static(region) => Some(region.clone()),
+        AWSRegion::Sdk => None,
+        AWSRegion::Dynamic(_) => Some(Region::new("us-east-1")),
+    };
+
+    let endpoint_url = endpoint_url
+        .map(|loc| AWSEndpointUrl::from_credential_location(loc, provider_type))
+        .transpose()?
+        .flatten();
+
+    // Convert credential fields to AWSCredentials
+    let aws_credentials = AWSCredentials::from_fields(
+        access_key_id,
+        secret_access_key,
+        session_token,
+        provider_type,
+    )?;
+
+    Ok(AWSProviderConfig {
+        static_region,
+        region: aws_region,
+        endpoint_url,
+        credentials: aws_credentials,
+    })
+}
+
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -1072,7 +1151,7 @@ pub enum HostedProviderKind {
 }
 
 #[derive(ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[derive(Clone, Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
@@ -1092,19 +1171,39 @@ pub enum UninitializedProviderConfig {
     #[serde(rename = "aws_bedrock")]
     AWSBedrock {
         model_id: String,
-        region: Option<String>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        region: Option<CredentialLocationOrHardcoded>,
+        /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        endpoint_url: Option<CredentialLocationOrHardcoded>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        access_key_id: Option<CredentialLocation>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        secret_access_key: Option<CredentialLocation>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        session_token: Option<CredentialLocation>,
     },
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
     AWSSagemaker {
         endpoint_name: String,
         model_name: String,
-        region: Option<String>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        region: Option<CredentialLocationOrHardcoded>,
+        /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
         hosted_provider: HostedProviderKind,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        endpoint_url: Option<CredentialLocationOrHardcoded>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        access_key_id: Option<CredentialLocation>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        secret_access_key: Option<CredentialLocation>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        session_token: Option<CredentialLocation>,
     },
     Azure {
         deployment_id: String,
@@ -1251,14 +1350,31 @@ impl UninitializedProviderConfig {
                 model_id,
                 region,
                 allow_auto_detect_region,
+                endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
             } => {
-                let region = region.map(aws_types::region::Region::new);
-                if region.is_none() && !allow_auto_detect_region {
-                    return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
-                }
+                let aws_config = build_aws_provider_config(
+                    region,
+                    allow_auto_detect_region,
+                    endpoint_url,
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    "aws_bedrock",
+                )?;
 
                 ProviderConfig::AWSBedrock(
-                    AWSBedrockProvider::new(model_id, region, http_client).await?,
+                    AWSBedrockProvider::new(
+                        model_id,
+                        aws_config.static_region,
+                        Some(aws_config.region),
+                        aws_config.endpoint_url,
+                        aws_config.credentials,
+                        http_client,
+                    )
+                    .await?,
                 )
             }
             UninitializedProviderConfig::AWSSagemaker {
@@ -1267,11 +1383,20 @@ impl UninitializedProviderConfig {
                 allow_auto_detect_region,
                 model_name,
                 hosted_provider,
+                endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
             } => {
-                let region = region.map(aws_types::region::Region::new);
-                if region.is_none() && !allow_auto_detect_region {
-                    return Err(Error::new(ErrorDetails::Config { message: "AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
-                }
+                let aws_config = build_aws_provider_config(
+                    region,
+                    allow_auto_detect_region,
+                    endpoint_url,
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    "aws_sagemaker",
+                )?;
 
                 let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
                     match hosted_provider {
@@ -1304,16 +1429,24 @@ impl UninitializedProviderConfig {
                     };
 
                 ProviderConfig::AWSSagemaker(
-                    AWSSagemakerProvider::new(endpoint_name, self_hosted, region).await?,
+                    AWSSagemakerProvider::new(
+                        endpoint_name,
+                        self_hosted,
+                        aws_config.static_region,
+                        Some(aws_config.region),
+                        aws_config.endpoint_url,
+                        aws_config.credentials,
+                    )
+                    .await?,
                 )
             }
             UninitializedProviderConfig::Azure {
                 deployment_id,
-                endpoint,
+                endpoint: azure_endpoint,
                 api_key_location,
             } => ProviderConfig::Azure(AzureProvider::new(
                 deployment_id,
-                endpoint,
+                azure_endpoint,
                 AzureKind
                     .get_defaulted_credential(
                         api_key_location.as_ref(),
@@ -1641,12 +1774,8 @@ impl ModelProvider {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request.request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request.request)
             .await?;
         let res = match &self.config {
             ProviderConfig::Anthropic(provider) => {
@@ -1754,14 +1883,10 @@ impl ModelProvider {
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
-            let postgres_connection_info = clients.postgres_connection_info.clone();
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
                 async move {
-                    if let Err(e) = ticket_borrow
-                        .return_tickets(&postgres_connection_info, actual_resource_usage)
-                        .await
-                    {
+                    if let Err(e) = ticket_borrow.return_tickets(actual_resource_usage).await {
                         tracing::error!("Failed to return rate limit tickets: {}", e);
                     }
                 }
@@ -1779,12 +1904,8 @@ impl ModelProvider {
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request.request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request.request)
             .await?;
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
@@ -2124,7 +2245,8 @@ impl ModelProvider {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -2168,6 +2290,68 @@ impl CredentialLocationWithFallback {
         match self {
             CredentialLocationWithFallback::Single(_) => None,
             CredentialLocationWithFallback::WithFallback { fallback, .. } => Some(fallback),
+        }
+    }
+}
+
+/// Credential location that also allows hardcoded string values.
+/// Used for non-sensitive fields like AWS region and endpoint_url.
+#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
+pub enum CredentialLocationOrHardcoded {
+    /// Hardcoded value (e.g., region = "us-east-1")
+    Hardcoded(String),
+    /// Standard credential location (env::, dynamic::, sdk, etc.)
+    #[ts(type = "string")]
+    Location(CredentialLocation),
+}
+
+impl<'de> Deserialize<'de> for CredentialLocationOrHardcoded {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        // Try to parse as CredentialLocation first
+        if let Some(inner) = s.strip_prefix("env::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Env(inner.to_string()),
+            ))
+        } else if let Some(inner) = s.strip_prefix("path_from_env::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::PathFromEnv(inner.to_string()),
+            ))
+        } else if let Some(inner) = s.strip_prefix("dynamic::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Dynamic(inner.to_string()),
+            ))
+        } else if let Some(inner) = s.strip_prefix("path::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Path(inner.to_string()),
+            ))
+        } else if s == "sdk" {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Sdk,
+            ))
+        } else if s == "none" {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::None,
+            ))
+        } else {
+            // Treat as hardcoded value
+            Ok(CredentialLocationOrHardcoded::Hardcoded(s))
+        }
+    }
+}
+
+impl Serialize for CredentialLocationOrHardcoded {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            CredentialLocationOrHardcoded::Hardcoded(inner) => serializer.serialize_str(inner),
+            CredentialLocationOrHardcoded::Location(loc) => loc.serialize(serializer),
         }
     }
 }
@@ -2234,7 +2418,8 @@ impl<'de> Deserialize<'de> for CredentialLocation {
             Ok(CredentialLocation::None)
         } else {
             Err(serde::de::Error::custom(format!(
-                "Invalid ApiKeyLocation format: {s}"
+                "Invalid credential location format: `{s}`. \
+                 Use `env::VAR_NAME`, `path::FILE_PATH`, `dynamic::KEY_NAME`, or `sdk`."
             )))
         }
     }
@@ -2572,7 +2757,7 @@ mod tests {
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
             DummyCredentials,
         },
-        rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig},
+        rate_limiting::{RateLimitingConfig, RateLimitingManager, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
@@ -2620,7 +2805,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2753,7 +2938,10 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(tags.clone()),
-            rate_limiting_config: Arc::new(rate_limit_config.clone()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new(
+                Arc::new(rate_limit_config),
+                postgres_mock.clone(),
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2843,7 +3031,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2980,6 +3168,26 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            tags: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -2991,30 +3199,7 @@ mod tests {
                 },
             messages: _input,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3067,30 +3252,7 @@ mod tests {
             skip_relay: false,
         };
         let response = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await;
         assert!(response.is_err());
         let error = match response {
@@ -3180,6 +3342,26 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            tags: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -3191,30 +3373,7 @@ mod tests {
                 },
             messages: _,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3288,7 +3447,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3351,7 +3510,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3417,7 +3576,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3479,7 +3638,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3778,6 +3937,65 @@ mod tests {
         match with_fallback.fallback_location() {
             Some(CredentialLocation::Env(key)) => assert_eq!(key, "secondary"),
             _ => panic!("Expected Some(Env)"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_rejects_hardcoded_values() {
+        // CredentialLocation should reject hardcoded values (security requirement)
+        // Only CredentialLocationOrHardcoded should accept them
+        let json = r#""us-east-1""#;
+        let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "CredentialLocation should reject hardcoded values like 'us-east-1'"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Invalid credential location format"),
+            "Error message should mention invalid format, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_credential_location_or_hardcoded_accepts_hardcoded() {
+        // CredentialLocationOrHardcoded should accept hardcoded values
+        let json = r#""us-east-1""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        match result {
+            CredentialLocationOrHardcoded::Hardcoded(value) => {
+                assert_eq!(value, "us-east-1");
+            }
+            CredentialLocationOrHardcoded::Location(_) => panic!("Expected Hardcoded"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_or_hardcoded_accepts_env() {
+        // CredentialLocationOrHardcoded should also accept env:: prefixed values
+        let json = r#""env::AWS_REGION""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        #[expect(clippy::wildcard_enum_match_arm)]
+        match result {
+            CredentialLocationOrHardcoded::Location(CredentialLocation::Env(key)) => {
+                assert_eq!(key, "AWS_REGION");
+            }
+            _ => panic!("Expected Location(Env)"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_or_hardcoded_accepts_dynamic() {
+        // CredentialLocationOrHardcoded should accept dynamic:: prefixed values
+        let json = r#""dynamic::region_key""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        #[expect(clippy::wildcard_enum_match_arm)]
+        match result {
+            CredentialLocationOrHardcoded::Location(CredentialLocation::Dynamic(key)) => {
+                assert_eq!(key, "region_key");
+            }
+            _ => panic!("Expected Location(Dynamic)"),
         }
     }
 }
