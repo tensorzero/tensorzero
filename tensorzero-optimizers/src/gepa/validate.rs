@@ -114,7 +114,9 @@ pub fn validate_gepa_config(
         }
     }
 
-    // Create filtered function config with only relevant variants
+    // Create filtered function config with only relevant variants.
+    // This config is only used for serialization to show to the GEPA LLM for analysis/mutation,
+    // not for performing actual inference.
     let filtered_function_config: Arc<FunctionConfig> = {
         let variants_to_include: Vec<&String> =
             if let Some(initial_variants) = &config.initial_variants {
