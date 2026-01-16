@@ -28,7 +28,11 @@ use tensorzero_core::{
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
-use crate::gepa::{GEPAVariant, analyze::Analysis, validate::FunctionContext};
+use crate::gepa::{
+    GEPAVariant,
+    analyze::{Analysis, strip_thought_signatures},
+    validate::FunctionContext,
+};
 
 /// Helper struct to deserialize the JSON response that matches the output schema.
 /// The schema defines templates as an array of objects with name and content fields.
@@ -109,12 +113,13 @@ fn build_mutate_input(
         .map(|(name, config)| (name.clone(), config.path.data().to_string()))
         .collect();
 
-    // Serialize analyses to JSON
-    let analyses_json = serde_json::to_value(analyses).map_err(|e| {
+    // Serialize analyses to JSON and strip thought signatures
+    let mut analyses_json = serde_json::to_value(analyses).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to serialize analyses: {e}"),
         })
     })?;
+    strip_thought_signatures(&mut analyses_json);
 
     // Build the input with high-level objects that will be serialized in the template
     let mut map = Map::new();
