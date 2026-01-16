@@ -600,12 +600,8 @@ impl EmbeddingProviderInfo {
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request)
             .await?;
         let response_fut = self.inner.embed(
             request,
@@ -627,15 +623,11 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
-        let postgres_connection_info = clients.postgres_connection_info.clone();
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
             async move {
-                if let Err(e) = ticket_borrow
-                    .return_tickets(&postgres_connection_info, resource_usage)
-                    .await
-                {
+                if let Err(e) = ticket_borrow.return_tickets(resource_usage).await {
                     tracing::error!("Failed to return rate limit tickets: {}", e);
                 }
             }
@@ -799,6 +791,7 @@ mod tests {
         cache::{CacheEnabledMode, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         model_table::ProviderTypeDefaultCredentials,
+        rate_limiting::{RateLimitingManager, ScopeInfo},
     };
 
     use super::*;
@@ -852,10 +845,10 @@ mod tests {
                         enabled: CacheEnabledMode::Off,
                     },
                     tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
+                    rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: crate::rate_limiting::ScopeInfo {
+                    scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
                         api_key_public_id: None,
                     },
