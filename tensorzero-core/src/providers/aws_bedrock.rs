@@ -918,7 +918,31 @@ where
                     loop {
                         match decoder.decode_frame(&mut buffer) {
                             Ok(DecodedFrame::Complete(message)) => {
-                                // Extract event type from headers
+                                // Check for exception messages first (AWS Smithy event stream format)
+                                let message_type = message.headers().iter()
+                                    .find(|h| h.name().as_str() == ":message-type")
+                                    .and_then(|h| h.value().as_string().ok())
+                                    .map(|s| s.as_str().to_owned());
+
+                                if message_type.as_deref() == Some("exception") {
+                                    let exception_type = message.headers().iter()
+                                        .find(|h| h.name().as_str() == ":exception-type")
+                                        .and_then(|h| h.value().as_string().ok())
+                                        .map(|s| s.as_str().to_owned())
+                                        .unwrap_or_else(|| "unknown".to_string());
+
+                                    let error_message = String::from_utf8_lossy(message.payload()).to_string();
+
+                                    yield Err(ErrorDetails::InferenceServer {
+                                        raw_request: Some(raw_request.clone()),
+                                        raw_response: Some(error_message),
+                                        message: format!("AWS Bedrock streaming exception: {exception_type}"),
+                                        provider_type: PROVIDER_TYPE.to_string(),
+                                    }.into());
+                                    return;
+                                }
+
+                                // Extract event type from headers for normal events
                                 let event_type = message.headers().iter()
                                     .find(|h| h.name().as_str() == ":event-type")
                                     .and_then(|h| h.value().as_string().ok())
