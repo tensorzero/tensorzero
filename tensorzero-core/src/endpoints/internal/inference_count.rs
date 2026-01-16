@@ -14,6 +14,7 @@ use crate::db::inference_count::{
     GetFunctionThroughputByVariantParams, InferenceCountQueries, VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
+use crate::feature_flags::ENABLE_POSTGRES_READ;
 use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -130,15 +131,24 @@ pub async fn get_inference_count_handler(
     Path(function_name): Path<String>,
     Query(params): Query<InferenceCountQueryParams>,
 ) -> Result<Json<InferenceCountResponse>, Error> {
-    Ok(Json(
+    let response = if ENABLE_POSTGRES_READ.get() {
+        get_inference_count(
+            &app_state.config,
+            &app_state.postgres_connection_info,
+            &function_name,
+            params,
+        )
+        .await?
+    } else {
         get_inference_count(
             &app_state.config,
             &app_state.clickhouse_connection_info,
             &function_name,
             params,
         )
-        .await?,
-    ))
+        .await?
+    };
+    Ok(Json(response))
 }
 
 /// HTTP handler for the feedback stats endpoint
@@ -156,7 +166,16 @@ pub async fn get_inference_with_feedback_count_handler(
     Path((function_name, metric_name)): Path<(String, String)>,
     Query(params): Query<InferenceWithFeedbackCountQueryParams>,
 ) -> Result<Json<InferenceWithFeedbackCountResponse>, Error> {
-    Ok(Json(
+    let response = if ENABLE_POSTGRES_READ.get() {
+        get_inference_with_feedback_count(
+            &app_state.config,
+            &app_state.postgres_connection_info,
+            function_name,
+            metric_name,
+            params,
+        )
+        .await?
+    } else {
         get_inference_with_feedback_count(
             &app_state.config,
             &app_state.clickhouse_connection_info,
@@ -164,8 +183,9 @@ pub async fn get_inference_with_feedback_count_handler(
             metric_name,
             params,
         )
-        .await?,
-    ))
+        .await?
+    };
+    Ok(Json(response))
 }
 
 /// Core business logic for getting inference count
@@ -296,13 +316,23 @@ pub async fn get_function_throughput_by_variant_handler(
     Path(function_name): Path<String>,
     Query(params): Query<FunctionThroughputByVariantQueryParams>,
 ) -> Result<Json<GetFunctionThroughputByVariantResponse>, Error> {
-    let response = get_function_throughput_by_variant(
-        &state.config,
-        &state.clickhouse_connection_info,
-        &function_name,
-        params,
-    )
-    .await?;
+    let response = if ENABLE_POSTGRES_READ.get() {
+        get_function_throughput_by_variant(
+            &state.config,
+            &state.postgres_connection_info,
+            &function_name,
+            params,
+        )
+        .await?
+    } else {
+        get_function_throughput_by_variant(
+            &state.config,
+            &state.clickhouse_connection_info,
+            &function_name,
+            params,
+        )
+        .await?
+    };
     Ok(Json(response))
 }
 
@@ -334,7 +364,11 @@ pub async fn get_function_throughput_by_variant(
 pub async fn list_functions_with_inference_count_handler(
     State(state): State<AppStateData>,
 ) -> Result<Json<ListFunctionsWithInferenceCountResponse>, Error> {
-    let response = list_functions_with_inference_count(&state.clickhouse_connection_info).await?;
+    let response = if ENABLE_POSTGRES_READ.get() {
+        list_functions_with_inference_count(&state.postgres_connection_info).await?
+    } else {
+        list_functions_with_inference_count(&state.clickhouse_connection_info).await?
+    };
     Ok(Json(response))
 }
 
@@ -623,5 +657,67 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.inference_count, 10);
+    }
+
+    // Tests for ENABLE_POSTGRES_READ flag dispatch
+    // Note: The business logic functions take `&impl InferenceCountQueries` and are database-agnostic.
+    // The flag only affects which connection the handlers pass to the business logic.
+    // These tests verify the Postgres implementation can be invoked through the same interface.
+
+    #[tokio::test]
+    async fn test_get_inference_count_with_postgres_disabled_returns_error() {
+        // When Postgres is disabled, calling the Postgres implementation should return an error
+        use crate::db::postgres::PostgresConnectionInfo;
+
+        let config_str = r#"
+            [functions.test_function]
+            type = "chat"
+
+            [functions.test_function.variants.test_variant]
+            type = "chat_completion"
+            model = "openai::gpt-4"
+        "#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_str.as_bytes()).unwrap();
+
+        let config = Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+            false,
+        )
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let params = InferenceCountQueryParams {
+            variant_name: None,
+            group_by: None,
+        };
+
+        let result = get_inference_count(&config, &postgres, "test_function", params).await;
+
+        assert!(
+            result.is_err(),
+            "Should return error when Postgres is disabled"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("disabled"),
+            "Error should indicate database is disabled: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_functions_with_postgres_disabled_returns_error() {
+        use crate::db::postgres::PostgresConnectionInfo;
+
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let result = list_functions_with_inference_count(&postgres).await;
+
+        assert!(
+            result.is_err(),
+            "Should return error when Postgres is disabled"
+        );
     }
 }
