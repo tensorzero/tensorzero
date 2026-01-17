@@ -400,7 +400,10 @@ async fn health_check_handler(
         .unwrap())
 }
 
-async fn run_health_server(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn run_health_server(
+    port: u16,
+    task_tracker: tokio_util::task::TaskTracker,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use hyper::server::conn::http1;
     use tokio::net::TcpListener;
 
@@ -412,9 +415,9 @@ async fn run_health_server(port: u16) -> Result<(), Box<dyn std::error::Error + 
         let (stream, _) = listener.accept().await?;
         let io = hyper_util::rt::TokioIo::new(stream);
 
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::task::spawn(async move {
+        // Spawn each health connection handler on the provided TaskTracker so
+        // we can track background tasks and await them during shutdown.
+        task_tracker.spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .serve_connection(io, service_fn(health_check_handler))
                 .await
@@ -446,10 +449,12 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
 
     // Start health check server
     let health_port = args.health_port;
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(async move {
-        if let Err(e) = run_health_server(health_port).await {
+    // Spawn the health check server on a TaskTracker so its background tasks are tracked
+    // and can be awaited as part of shutdown.
+    let health_tasks = tokio_util::task::TaskTracker::new();
+    let health_tasks_for_server = health_tasks.clone();
+    health_tasks.spawn(async move {
+        if let Err(e) = run_health_server(health_port, health_tasks_for_server).await {
             tracing::error!("Health check server failed: {:?}", e);
         }
     });
