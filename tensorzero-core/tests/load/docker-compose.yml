@@ -20,5 +20,22 @@ services:
       start_interval: 1s
       timeout: 1s
 
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: tensorzero
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
 volumes:
   clickhouse-data:
+  postgres-data:
