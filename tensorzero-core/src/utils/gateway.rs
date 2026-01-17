@@ -489,6 +489,11 @@ pub async fn setup_postgres(
         }
     };
 
+    // Write retention config to Postgres (syncs tensorzero.toml -> database)
+    postgres_connection_info
+        .write_retention_config(config.postgres.inference_retention_days)
+        .await?;
+
     Ok(postgres_connection_info)
 }
 
@@ -896,6 +901,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(false),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -914,6 +920,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(false),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -937,6 +944,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: None,
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -955,6 +963,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(true),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -973,6 +982,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(true),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -989,6 +999,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(false),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             rate_limiting: Default::default(),
             ..Default::default()

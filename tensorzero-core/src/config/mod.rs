@@ -2258,6 +2258,10 @@ pub struct PostgresConfig {
     pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
+    /// Retention period in days for inference tables (chat_inferences, json_inferences).
+    /// If set, old partitions beyond this age will be dropped by pg_cron.
+    /// If not set, partitions are retained indefinitely.
+    pub inference_retention_days: Option<u32>,
 }
 
 fn default_connection_pool_size() -> u32 {
@@ -2269,6 +2273,7 @@ impl Default for PostgresConfig {
         Self {
             enabled: None,
             connection_pool_size: 20,
+            inference_retention_days: None,
         }
     }
 }
