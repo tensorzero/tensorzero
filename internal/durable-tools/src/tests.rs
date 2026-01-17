@@ -94,7 +94,7 @@ impl TaskTool for EchoTaskTool {
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         Ok(EchoOutput {
             echoed: llm_params.message,
@@ -125,7 +125,7 @@ impl TaskTool for DefaultTimeoutTaskTool {
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         Ok(EchoOutput {
             echoed: llm_params.message,

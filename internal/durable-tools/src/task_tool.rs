@@ -65,10 +65,10 @@ use crate::tool_metadata::ToolMetadata;
 ///     async fn execute(
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         _side_info: <Self as ToolMetadata>::SideInfo,
-///         ctx: &mut ToolContext<'_>,
+///         ctx: &ToolContext,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Call other tools
-///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null)).await?;
+///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null), Default::default()).await?;
 ///
 ///         // Use checkpointed steps
 ///         let analysis = ctx
@@ -125,7 +125,7 @@ use crate::tool_metadata::ToolMetadata;
 ///     async fn execute(
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         side_info: <Self as ToolMetadata>::SideInfo,
-///         ctx: &mut ToolContext<'_>,
+///         ctx: &ToolContext,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Use llm_params.query (from LLM)
 ///         // Use side_info.api_token (hidden from LLM)
@@ -138,18 +138,17 @@ pub trait TaskTool: ToolMetadata {
     /// Execute the tool logic.
     ///
     /// This is called by the durable worker when the tool is invoked.
-    /// The context is passed by mutable reference to allow wrapper types
-    /// to perform additional checkpointed operations after execution.
+    /// The context uses interior mutability, so only a shared reference is needed.
     ///
     /// # Arguments
     ///
     /// * `llm_params` - Parameters provided by the LLM
     /// * `side_info` - Side information provided at spawn time (hidden from LLM)
-    /// * `ctx` - The tool execution context
+    /// * `ctx` - The tool execution context (Clone + Send, can be shared with embedded runtimes)
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &ToolContext,
     ) -> ToolExecResult<<Self as ToolMetadata>::Output>;
 }
 
@@ -185,11 +184,12 @@ impl<T: TaskTool> Task<ToolAppState> for TaskToolAdapter<T> {
 
     async fn run(
         wrapped: Self::Params,
-        mut task_ctx: TaskContext<ToolAppState>,
+        task_ctx: TaskContext<ToolAppState>,
         app_ctx: ToolAppState,
     ) -> TaskResult<Self::Output> {
-        let mut tool_ctx = ToolContext::new(&mut task_ctx, &app_ctx, wrapped.episode_id);
-        T::execute(wrapped.llm_params, wrapped.side_info, &mut tool_ctx)
+        // ToolContext now takes ownership of task_ctx and app_ctx
+        let tool_ctx = ToolContext::new(task_ctx, app_ctx, wrapped.episode_id);
+        T::execute(wrapped.llm_params, wrapped.side_info, &tool_ctx)
             .await
             .map_err(Into::into)
     }

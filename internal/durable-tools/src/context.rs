@@ -6,13 +6,13 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{ClientInferenceParams, InferenceResponse};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::error::{NonControlToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
-use tokio::sync::RwLockReadGuard;
 
 /// Handle returned by `spawn_tool`, can be joined later with `join_tool`.
 ///
@@ -70,52 +70,62 @@ impl ToolAppState {
     }
 }
 
-/// Context provided to `TaskTool` execution.
-///
-/// Wraps durable's `TaskContext` and provides access to the application context
-/// along with helper methods for calling other tools and checkpointing operations.
-pub struct ToolContext<'a> {
-    task_ctx: &'a mut TaskContext<ToolAppState>,
-    app_state: &'a ToolAppState,
+/// Internal state for `ToolContext`, protected by a mutex.
+struct ToolContextInner {
+    task_ctx: TaskContext<ToolAppState>,
+    app_state: ToolAppState,
     episode_id: Uuid,
     /// Counter for generating unique tool call identifiers.
     tool_call_counter: u32,
 }
 
-impl<'a> ToolContext<'a> {
+/// Context provided to `TaskTool` execution.
+///
+/// Wraps durable's `TaskContext` and provides access to the application context
+/// along with helper methods for calling other tools and checkpointing operations.
+///
+/// This type is `Clone` and uses interior mutability via `Arc<Mutex<...>>`,
+/// allowing it to be shared across async boundaries (e.g., with embedded runtimes).
+#[derive(Clone)]
+pub struct ToolContext {
+    inner: Arc<Mutex<ToolContextInner>>,
+}
+
+impl ToolContext {
     /// Create a new tool context.
+    ///
+    /// Takes ownership of the `TaskContext` and `ToolAppState`.
     pub fn new(
-        task_ctx: &'a mut TaskContext<ToolAppState>,
-        app_ctx: &'a ToolAppState,
+        task_ctx: TaskContext<ToolAppState>,
+        app_state: ToolAppState,
         episode_id: Uuid,
     ) -> Self {
         Self {
-            task_ctx,
-            app_state: app_ctx,
-            episode_id,
-            tool_call_counter: 0,
+            inner: Arc::new(Mutex::new(ToolContextInner {
+                task_ctx,
+                app_state,
+                episode_id,
+                tool_call_counter: 0,
+            })),
         }
     }
 
-    /// Get the next tool call ID (increments counter).
-    fn next_tool_call_id(&mut self) -> u32 {
-        self.tool_call_counter += 1;
-        self.tool_call_counter
-    }
-
     /// Get the task ID (useful as an idempotency key base).
-    pub fn task_id(&self) -> Uuid {
-        self.task_ctx.task_id
+    pub async fn task_id(&self) -> Uuid {
+        let inner = self.inner.lock().await;
+        inner.task_ctx.task_id
     }
 
     /// Get the episode ID for this tool execution.
-    pub fn episode_id(&self) -> Uuid {
-        self.episode_id
+    pub async fn episode_id(&self) -> Uuid {
+        let inner = self.inner.lock().await;
+        inner.episode_id
     }
 
-    /// Get a reference to the database pool.
-    pub fn pool(&self) -> &PgPool {
-        &self.app_state.pool
+    /// Get a clone of the database pool.
+    pub async fn pool(&self) -> PgPool {
+        let inner = self.inner.lock().await;
+        inner.app_state.pool.clone()
     }
 
     /// Get the inference client for direct access to all client operations.
@@ -134,32 +144,29 @@ impl<'a> ToolContext<'a> {
     ///         .map_err(|e| anyhow::anyhow!("{e}"))
     /// }).await?;
     /// ```
-    pub fn client(&self) -> Arc<dyn TensorZeroClient> {
-        self.app_state.t0_client.clone()
+    pub async fn client(&self) -> Arc<dyn TensorZeroClient> {
+        let inner = self.inner.lock().await;
+        inner.app_state.t0_client.clone()
     }
 
-    /// Get a read lock on the tool registry.
+    /// Get a reference to the tool registry.
     ///
     /// Use this to iterate over tools and convert them to TensorZero tool definitions.
+    /// The caller is responsible for acquiring the read lock.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let registry = ctx.registry().await;
-    /// let tools: Result<Vec<Tool>, _> = registry.iter()
+    /// let registry = ctx.tool_registry().await;
+    /// let guard = registry.read().await;
+    /// let tools: Result<Vec<Tool>, _> = guard.iter()
     ///     .filter(|t| !t.is_durable())
     ///     .map(Tool::try_from)
     ///     .collect();
     /// ```
-    pub async fn registry_read_lock(&self) -> RwLockReadGuard<'_, ToolRegistry> {
-        self.app_state.tool_registry.read().await
-    }
-
-    /// Get mutable access to the underlying durable `TaskContext`.
-    ///
-    /// Use this for advanced operations not exposed by `ToolContext`.
-    pub fn task_ctx(&mut self) -> &mut TaskContext<ToolAppState> {
-        self.task_ctx
+    pub async fn tool_registry(&self) -> Arc<tokio::sync::RwLock<ToolRegistry>> {
+        let inner = self.inner.lock().await;
+        inner.app_state.tool_registry.clone()
     }
 
     /// Execute a checkpointed step.
@@ -172,7 +179,7 @@ impl<'a> ToolContext<'a> {
     ///
     /// Returns an error if the step execution fails.
     pub async fn step<T, P, Fut>(
-        &mut self,
+        &self,
         base_name: &str,
         params: P,
         f: fn(P, ToolAppState) -> Fut,
@@ -182,7 +189,9 @@ impl<'a> ToolContext<'a> {
         T: Serialize + DeserializeOwned + Send,
         Fut: std::future::Future<Output = anyhow::Result<T>> + Send,
     {
-        self.task_ctx
+        let mut inner = self.inner.lock().await;
+        inner
+            .task_ctx
             .step(base_name, params, f)
             .await
             .map_err(Into::into)
@@ -206,7 +215,7 @@ impl<'a> ToolContext<'a> {
     ///
     /// Returns an error if the tool is not found or execution fails.
     pub async fn call_tool(
-        &mut self,
+        &self,
         tool_name: &str,
         llm_params: JsonValue,
         side_info: JsonValue,
@@ -249,14 +258,16 @@ impl<'a> ToolContext<'a> {
     ///
     /// Returns an error if the tool is not found or spawning fails.
     pub async fn spawn_tool(
-        &mut self,
+        &self,
         tool_name: &str,
         llm_params: JsonValue,
         side_info: JsonValue,
         options: SpawnOptions,
     ) -> ToolResult<ToolHandle> {
+        let mut inner = self.inner.lock().await;
+
         let is_durable = {
-            let registry = self.app_state.tool_registry.read().await;
+            let registry = inner.app_state.tool_registry.read().await;
             // Validate params before spawning
             registry.validate_params(tool_name, &llm_params, &side_info)?;
             registry
@@ -268,23 +279,64 @@ impl<'a> ToolContext<'a> {
 
         if is_durable {
             // TaskTool: spawn as subtask
-            let call_id = self.next_tool_call_id();
+            inner.tool_call_counter += 1;
+            let call_id = inner.tool_call_counter;
+            let episode_id = inner.episode_id;
+
             let wrapped_params = TaskToolParams {
                 llm_params,
                 side_info,
-                episode_id: self.episode_id,
+                episode_id,
             };
             let wrapped_params = serde_json::to_value(wrapped_params)?;
             let spawn_name = format!("spawn:{tool_name}:{call_id}");
-            let handle: TaskHandle<JsonValue> = self
-                .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params, options)
+            let handle: TaskHandle<JsonValue> = inner
+                .task_ctx
+                .spawn_by_name(&spawn_name, tool_name, wrapped_params, options)
                 .await?;
             Ok(ToolHandle::Async(handle))
         } else {
             // SimpleTool: execute immediately (still checkpointed via step)
-            let result = self
-                .call_simple_tool(tool_name, llm_params, side_info)
+            inner.tool_call_counter += 1;
+            let call_id = inner.tool_call_counter;
+            let task_id = inner.task_ctx.task_id;
+
+            let step_name = format!("simple:{tool_name}:{call_id}");
+
+            // Clone what we need for the step closure
+            let tool_name = tool_name.to_string();
+
+            let result: JsonValue = inner
+                .task_ctx
+                .step(
+                    &step_name,
+                    (tool_name.clone(), task_id, call_id, llm_params, side_info),
+                    |(tool_name, task_id, call_id, llm_params, side_info), state| async move {
+                        // Create SimpleToolContext
+                        let simple_ctx = SimpleToolContext::new(&state.pool, &state.t0_client);
+
+                        // Generate idempotency key using task_id and call_id
+                        let idempotency_key = format!("{task_id}:{tool_name}:{call_id}");
+
+                        // Get the simple tool from registry
+                        let simple_tool = {
+                            state
+                                .tool_registry
+                                .read()
+                                .await
+                                .get_simple_tool(&tool_name)
+                                .ok_or_else(|| NonControlToolError::ToolNotFound {
+                                    name: tool_name.clone(),
+                                })?
+                        };
+
+                        simple_tool
+                            .execute_erased(llm_params, side_info, simple_ctx, &idempotency_key)
+                            .await
+                    },
+                )
                 .await?;
+
             Ok(ToolHandle::Sync(result))
         }
     }
@@ -297,76 +349,14 @@ impl<'a> ToolContext<'a> {
     /// # Errors
     ///
     /// Returns an error if joining fails or the tool execution failed.
-    pub async fn join_tool(&mut self, handle: ToolHandle) -> ToolResult<JsonValue> {
+    pub async fn join_tool(&self, handle: ToolHandle) -> ToolResult<JsonValue> {
         match handle {
-            ToolHandle::Async(h) => self.task_ctx.join(h).await.map_err(Into::into),
+            ToolHandle::Async(h) => {
+                let mut inner = self.inner.lock().await;
+                inner.task_ctx.join(h).await.map_err(Into::into)
+            }
             ToolHandle::Sync(result) => Ok(result),
         }
-    }
-
-    /// Spawn a subtask by task name (for dynamic tool invocation).
-    ///
-    /// This delegates to durable's `TaskContext::spawn_by_name` which handles
-    /// checkpointing and uses the queue name configured on the durable client.
-    async fn spawn_subtask_by_name<T: DeserializeOwned>(
-        &mut self,
-        name: &str,
-        task_name: &str,
-        params: JsonValue,
-        options: SpawnOptions,
-    ) -> ToolResult<TaskHandle<T>> {
-        let handle: TaskHandle<T> = self
-            .task_ctx
-            .spawn_by_name(name, task_name, params, options)
-            .await?;
-        Ok(handle)
-    }
-
-    /// Call a `SimpleTool` (executes within a checkpointed step).
-    async fn call_simple_tool(
-        &mut self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        side_info: JsonValue,
-    ) -> ToolResult<JsonValue> {
-        // Get a unique ID for this tool call to ensure each invocation
-        // gets a unique idempotency key, even when calling the same tool multiple times.
-        let call_id = self.next_tool_call_id();
-        let task_id = self.task_id();
-
-        let step_name = format!("simple:{tool_name}:{call_id}");
-
-        // Clone what we need for the step closure
-        let tool_name = tool_name.to_string();
-
-        self.step(
-            &step_name,
-            (tool_name, task_id, call_id, llm_params, side_info),
-            |(tool_name, task_id, call_id, llm_params, side_info), state| async move {
-                // Create SimpleToolContext
-                let simple_ctx = SimpleToolContext::new(&state.pool, &state.t0_client);
-
-                // Generate idempotency key using task_id and call_id
-                let idempotency_key = format!("{task_id}:{tool_name}:{call_id}");
-
-                // Get the simple tool from registry
-                let simple_tool = {
-                    state
-                        .tool_registry
-                        .read()
-                        .await
-                        .get_simple_tool(&tool_name)
-                        .ok_or_else(|| NonControlToolError::ToolNotFound {
-                            name: tool_name.clone(),
-                        })?
-                };
-
-                simple_tool
-                    .execute_erased(llm_params, side_info, simple_ctx, &idempotency_key)
-                    .await
-            },
-        )
-        .await
     }
 
     /// Sleep for a duration (durable - survives restarts).
@@ -374,8 +364,10 @@ impl<'a> ToolContext<'a> {
     /// # Errors
     ///
     /// Returns an error if the sleep operation fails.
-    pub async fn sleep_for(&mut self, name: &str, duration: Duration) -> ToolResult<()> {
-        self.task_ctx
+    pub async fn sleep_for(&self, name: &str, duration: Duration) -> ToolResult<()> {
+        let mut inner = self.inner.lock().await;
+        inner
+            .task_ctx
             .sleep_for(name, duration)
             .await
             .map_err(Into::into)
@@ -387,11 +379,13 @@ impl<'a> ToolContext<'a> {
     ///
     /// Returns an error if waiting for the event fails or times out.
     pub async fn await_event<T: DeserializeOwned>(
-        &mut self,
+        &self,
         event_name: &str,
         timeout: Option<Duration>,
     ) -> ToolResult<T> {
-        self.task_ctx
+        let mut inner = self.inner.lock().await;
+        inner
+            .task_ctx
             .await_event(event_name, timeout)
             .await
             .map_err(Into::into)
@@ -403,7 +397,9 @@ impl<'a> ToolContext<'a> {
     ///
     /// Returns an error if emitting the event fails.
     pub async fn emit_event<T: Serialize>(&self, event_name: &str, payload: &T) -> ToolResult<()> {
-        self.task_ctx
+        let inner = self.inner.lock().await;
+        inner
+            .task_ctx
             .emit_event(event_name, payload)
             .await
             .map_err(Into::into)
@@ -414,8 +410,9 @@ impl<'a> ToolContext<'a> {
     /// # Errors
     ///
     /// Returns an error if generating the random value fails.
-    pub async fn rand(&mut self) -> ToolResult<f64> {
-        self.task_ctx.rand().await.map_err(Into::into)
+    pub async fn rand(&self) -> ToolResult<f64> {
+        let mut inner = self.inner.lock().await;
+        inner.task_ctx.rand().await.map_err(Into::into)
     }
 
     /// Get the current time as a durable checkpoint.
@@ -423,8 +420,9 @@ impl<'a> ToolContext<'a> {
     /// # Errors
     ///
     /// Returns an error if getting the current time fails.
-    pub async fn now(&mut self) -> ToolResult<DateTime<Utc>> {
-        self.task_ctx.now().await.map_err(Into::into)
+    pub async fn now(&self) -> ToolResult<DateTime<Utc>> {
+        let mut inner = self.inner.lock().await;
+        inner.task_ctx.now().await.map_err(Into::into)
     }
 
     /// Generate a durable UUID v7.
@@ -432,8 +430,9 @@ impl<'a> ToolContext<'a> {
     /// # Errors
     ///
     /// Returns an error if generating the UUID fails.
-    pub async fn uuid7(&mut self) -> ToolResult<Uuid> {
-        self.task_ctx.uuid7().await.map_err(Into::into)
+    pub async fn uuid7(&self) -> ToolResult<Uuid> {
+        let mut inner = self.inner.lock().await;
+        inner.task_ctx.uuid7().await.map_err(Into::into)
     }
 
     /// Call TensorZero inference with full parameter control.
@@ -454,10 +453,7 @@ impl<'a> ToolContext<'a> {
     /// # Errors
     ///
     /// Returns an error if the inference call fails.
-    pub async fn inference(
-        &mut self,
-        params: ClientInferenceParams,
-    ) -> ToolResult<InferenceResponse> {
+    pub async fn inference(&self, params: ClientInferenceParams) -> ToolResult<InferenceResponse> {
         let step_name = format!(
             "inference:{}",
             params
@@ -467,14 +463,18 @@ impl<'a> ToolContext<'a> {
                 .unwrap_or("unknown")
         );
 
-        self.step(&step_name, params, |params, state| async move {
-            state
-                .t0_client
-                .inference(params)
-                .await
-                .map_err(|e| anyhow::anyhow!("{e}"))
-        })
-        .await
+        let mut inner = self.inner.lock().await;
+        inner
+            .task_ctx
+            .step(&step_name, params, |params, state| async move {
+                state
+                    .t0_client
+                    .inference(params)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("{e}"))
+            })
+            .await
+            .map_err(Into::into)
     }
 }
 

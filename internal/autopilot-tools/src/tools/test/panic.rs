@@ -42,7 +42,7 @@ impl TaskTool for PanicTool {
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         std::panic::panic_any(llm_params.panic_message);
     }

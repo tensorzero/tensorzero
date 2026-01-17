@@ -55,7 +55,7 @@ impl TaskTool for FlakyTool {
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         if llm_params.fail_on_attempt > 0
             && llm_params.attempt_number % llm_params.fail_on_attempt == 0

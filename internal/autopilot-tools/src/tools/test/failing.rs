@@ -42,7 +42,7 @@ impl TaskTool for FailingTool {
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         Err(AutopilotToolError::test_error(llm_params.error_message).into())
     }

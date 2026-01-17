@@ -46,11 +46,11 @@ impl TaskTool for EchoTool {
     async fn execute(
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         Ok(EchoOutput {
             echoed: llm_params.message,
-            task_id: ctx.task_id().to_string(),
+            task_id: ctx.task_id().await.to_string(),
         })
     }
 }
