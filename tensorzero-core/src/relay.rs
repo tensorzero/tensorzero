@@ -527,6 +527,7 @@ impl TensorzeroRelay {
             otlp_traces_extra_attributes: HashMap::new(),
             otlp_traces_extra_resources: HashMap::new(),
             include_original_response: false,
+            include_raw_response: false,
             include_raw_usage: clients.include_raw_usage,
             api_key,
         };

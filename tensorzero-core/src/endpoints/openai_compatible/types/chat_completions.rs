@@ -153,8 +153,11 @@ pub struct OpenAICompatibleParams {
     pub tensorzero_params: Option<InferenceParams>,
     #[serde(default, rename = "tensorzero::include_raw_usage")]
     pub tensorzero_include_raw_usage: bool,
+    /// DEPRECATED: Use `tensorzero::include_raw_response` instead.
     #[serde(default, rename = "tensorzero::include_original_response")]
     pub tensorzero_include_original_response: bool,
+    #[serde(default, rename = "tensorzero::include_raw_response")]
+    pub tensorzero_include_raw_response: bool,
     #[serde(flatten)]
     pub unknown_fields: HashMap<String, Value>,
 }
@@ -213,8 +216,11 @@ pub struct OpenAICompatibleResponse {
     pub usage: OpenAICompatibleUsage,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
+    /// DEPRECATED: Use `tensorzero_raw_response` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_raw_response: Option<String>,
 }
 
 // ============================================================================
@@ -445,6 +451,7 @@ impl Params {
             tags: openai_compatible_params.tensorzero_tags,
             include_original_response: openai_compatible_params
                 .tensorzero_include_original_response,
+            include_raw_response: openai_compatible_params.tensorzero_include_raw_response,
             include_raw_usage: openai_compatible_params.tensorzero_include_raw_usage,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
@@ -694,6 +701,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     usage: response.usage.into(),
                     tensorzero_raw_usage: response.raw_usage,
                     tensorzero_original_response: response.original_response,
+                    tensorzero_raw_response: response.raw_response,
                     episode_id: response.episode_id.to_string(),
                 }
             }
@@ -716,6 +724,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 usage: response.usage.into(),
                 tensorzero_raw_usage: response.raw_usage,
                 tensorzero_original_response: response.original_response,
+                tensorzero_raw_response: response.raw_response,
                 episode_id: response.episode_id.to_string(),
             },
         }

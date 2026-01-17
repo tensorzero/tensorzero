@@ -1080,6 +1080,8 @@ pub async fn write_completed_batch_inference<'a>(
             episode_id,
             variant_name.to_string(),
             false, // batch inference does not support include_raw_usage (#5452)
+            false, // batch inference does not support include_original_response
+            false, // batch inference does not support include_raw_response
         );
         inferences.push(inference_response);
         let metadata = InferenceDatabaseInsertMetadata {
@@ -1413,6 +1415,7 @@ impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             // This is currently unsupported in the batch API
             original_response: None,
+            raw_response: None,
             finish_reason: value.finish_reason,
         })
     }
@@ -1451,6 +1454,7 @@ impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             // This is currently unsupported in the batch API
             original_response: None,
+            raw_response: None,
             finish_reason: value.finish_reason,
         })
     }
