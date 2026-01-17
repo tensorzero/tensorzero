@@ -116,7 +116,7 @@ const navigation: NavigationSection[] = [
       },
       {
         title: "Workflow Evaluations",
-        url: "/workflow_evaluations",
+        url: "/workflow-evaluations",
         icon: SequenceChecks,
       },
     ],

@@ -81,11 +81,11 @@ export function toEvaluationDatapointUrl(
 // ============================================================================
 
 export function toWorkflowEvaluationRunUrl(runId: string): string {
-  return `/workflow_evaluations/runs/${encodeURIComponent(runId)}`;
+  return `/workflow-evaluations/runs/${encodeURIComponent(runId)}`;
 }
 
 export function toWorkflowEvaluationProjectUrl(projectName: string): string {
-  return `/workflow_evaluations/projects/${encodeURIComponent(projectName)}`;
+  return `/workflow-evaluations/projects/${encodeURIComponent(projectName)}`;
 }
 
 // ============================================================================
