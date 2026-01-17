@@ -39,11 +39,11 @@ impl ToolMetadata for FlakyTool {
     type Output = FlakyToolOutput;
     type LlmParams = FlakyToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("flaky")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Fails when attempt_number % fail_on_attempt == 0. Used for testing deterministic failures.",
         )
@@ -53,6 +53,7 @@ impl ToolMetadata for FlakyTool {
 #[async_trait]
 impl TaskTool for FlakyTool {
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &ToolContext,

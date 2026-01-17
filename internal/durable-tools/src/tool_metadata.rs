@@ -33,11 +33,11 @@ use crate::ToolResult;
 ///     type Output = String;
 ///     type LlmParams = MyToolParams;
 ///
-///     fn name() -> Cow<'static, str> {
+///     fn name(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("my_tool")
 ///     }
 ///
-///     fn description() -> Cow<'static, str> {
+///     fn description(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("A tool that does something")
 ///     }
 ///     // parameters_schema() is automatically derived from LlmParams
@@ -54,12 +54,12 @@ pub trait ToolMetadata: Send + Sync + 'static {
     /// Unique name for this tool.
     ///
     /// This is used for registration, invocation, and as an identifier in the LLM.
-    fn name() -> Cow<'static, str>;
+    fn name(&self) -> Cow<'static, str>;
 
     /// Human-readable description of what this tool does.
     ///
     /// Used for generating LLM function definitions.
-    fn description() -> Cow<'static, str>;
+    fn description(&self) -> Cow<'static, str>;
 
     /// The LLM-visible parameter type.
     ///
@@ -75,14 +75,14 @@ pub trait ToolMetadata: Send + Sync + 'static {
     ///
     /// By default, this is derived from the `LlmParams` type using `schemars`.
     /// Override this if you need custom schema generation.
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         Ok(SchemaGenerator::default().into_root_schema_for::<Self::LlmParams>())
     }
 
     /// Execution timeout for this tool.
     ///
     /// Defaults to 60 seconds. Override this for tools with different requirements.
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(60)
     }
 }

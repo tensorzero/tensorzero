@@ -31,18 +31,18 @@ impl ToolMetadata for GetLatestFeedbackByMetricTool {
     type Output = LatestFeedbackIdByMetricResponse;
     type LlmParams = GetLatestFeedbackByMetricToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("get_latest_feedback_by_metric")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Get the latest feedback ID for each metric for a given target (inference). \
              Returns a map from metric name to feedback ID.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Get the latest feedback ID for each metric for a target inference.",
@@ -68,6 +68,7 @@ impl ToolMetadata for GetLatestFeedbackByMetricTool {
 #[async_trait]
 impl SimpleTool for GetLatestFeedbackByMetricTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,

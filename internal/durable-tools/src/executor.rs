@@ -103,7 +103,7 @@ impl ToolExecutor {
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
     /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    pub async fn register_task_tool<T: TaskTool>(&self) -> Result<&Self, ToolError> {
+    pub async fn register_task_tool<T: TaskTool + Default>(&self) -> Result<&Self, ToolError> {
         // Register with tool registry
         {
             let mut registry = self.registry.write().await;
@@ -142,7 +142,7 @@ impl ToolExecutor {
     /// # Errors
     ///
     /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool<T: TaskTool>(
+    pub async fn spawn_tool<T: TaskTool + Default>(
         &self,
         llm_params: T::LlmParams,
         side_info: T::SideInfo,
@@ -217,7 +217,7 @@ impl ToolExecutor {
         options: SpawnOptions,
     ) -> anyhow::Result<SpawnResult>
     where
-        T: TaskTool,
+        T: TaskTool + Default,
         E: Executor<'e, Database = Postgres>,
     {
         let wrapped = TaskToolParams {

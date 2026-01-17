@@ -32,11 +32,11 @@ impl ToolMetadata for EchoTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("echo")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Echoes back the input message. Used for testing the autopilot worker.")
     }
 }
@@ -44,6 +44,7 @@ impl ToolMetadata for EchoTool {
 #[async_trait]
 impl TaskTool for EchoTool {
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
         ctx: &ToolContext,

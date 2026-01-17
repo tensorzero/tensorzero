@@ -26,11 +26,11 @@ impl ToolMetadata for FailingTool {
     type Output = ();
     type LlmParams = FailingToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("failing")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Always returns an error with the specified message. Used for testing error propagation.",
         )
@@ -40,6 +40,7 @@ impl ToolMetadata for FailingTool {
 #[async_trait]
 impl TaskTool for FailingTool {
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &ToolContext,

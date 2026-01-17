@@ -52,11 +52,11 @@ use crate::tool_metadata::ToolMetadata;
 ///     type Output = SearchResult;
 ///     type LlmParams = SearchParams;
 ///
-///     fn name() -> Cow<'static, str> {
+///     fn name(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("search")
 ///     }
 ///
-///     fn description() -> Cow<'static, str> {
+///     fn description(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("Search the web")
 ///     }
 ///     // parameters_schema() is automatically derived from LlmParams
@@ -65,6 +65,7 @@ use crate::tool_metadata::ToolMetadata;
 /// #[async_trait]
 /// impl SimpleTool for SearchTool {
 ///     async fn execute(
+///         &self,
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         _side_info: <Self as ToolMetadata>::SideInfo,
 ///         ctx: SimpleToolContext<'_>,
@@ -87,6 +88,7 @@ pub trait SimpleTool: ToolMetadata {
     /// * `ctx` - The simple tool context (provides database access)
     /// * `idempotency_key` - A unique key for this execution (use for external API calls)
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: Self::SideInfo,
         ctx: SimpleToolContext<'_>,
