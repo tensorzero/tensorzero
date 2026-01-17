@@ -34,8 +34,11 @@ pub struct OpenAICompatibleResponseChunk {
     pub usage: Option<OpenAICompatibleUsage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
+    /// DEPRECATED: Use `tensorzero_raw_chunk` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_original_chunk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_raw_chunk: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -63,6 +66,7 @@ pub struct OpenAICompatibleDelta {
     pub tool_calls: Option<Vec<OpenAICompatibleToolCallChunk>>,
 }
 
+#[expect(clippy::too_many_arguments)]
 pub fn convert_inference_response_chunk_to_openai_compatible(
     chunk: InferenceResponseChunk,
     tool_id_to_index: &mut HashMap<String, usize>,
@@ -71,6 +75,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
     include_usage: bool,
     include_raw_usage: bool,
     include_original_response: bool,
+    include_raw_response: bool,
 ) -> Vec<OpenAICompatibleResponseChunk> {
     // OpenAI includes "assistant" role in the first chunk but not in subsequent chunks
     let role = if is_first_chunk {
@@ -88,8 +93,14 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 None
             };
             let tensorzero_raw_usage = if include_raw_usage { c.raw_usage } else { None };
+            // Compute chunk fields based on which request flags were set
             let tensorzero_original_chunk = if include_original_response {
-                c.original_chunk
+                c.original_chunk.clone()
+            } else {
+                None
+            };
+            let tensorzero_raw_chunk = if include_raw_response {
+                c.raw_chunk.or(c.original_chunk)
             } else {
                 None
             };
@@ -114,6 +125,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 usage,
                 tensorzero_raw_usage,
                 tensorzero_original_chunk,
+                tensorzero_raw_chunk,
             }
         }
         InferenceResponseChunk::Json(c) => {
@@ -123,8 +135,14 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 None
             };
             let tensorzero_raw_usage = if include_raw_usage { c.raw_usage } else { None };
+            // Compute chunk fields based on which request flags were set
             let tensorzero_original_chunk = if include_original_response {
-                c.original_chunk
+                c.original_chunk.clone()
+            } else {
+                None
+            };
+            let tensorzero_raw_chunk = if include_raw_response {
+                c.raw_chunk.or(c.original_chunk)
             } else {
                 None
             };
@@ -149,6 +167,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 usage,
                 tensorzero_raw_usage,
                 tensorzero_original_chunk,
+                tensorzero_raw_chunk,
             }
         }
     };
@@ -210,6 +229,7 @@ pub fn prepare_serialized_openai_compatible_events(
     include_usage: bool,
     include_raw_usage: bool,
     include_original_response: bool,
+    include_raw_response: bool,
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         let mut tool_id_to_index = HashMap::new();
@@ -230,6 +250,7 @@ pub fn prepare_serialized_openai_compatible_events(
                 include_usage,
                 include_raw_usage,
                 include_original_response,
+                include_raw_response,
             );
             is_first_chunk = false;
 
@@ -271,6 +292,7 @@ mod tests {
             raw_usage: None,
             finish_reason: None,
             original_chunk: None,
+            raw_chunk: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -282,6 +304,7 @@ mod tests {
             true,  // include_usage
             false, // include_raw_usage
             false, // include_original_response
+            false, // include_raw_response
         );
 
         assert_eq!(result.len(), 1, "should produce one chunk");
@@ -324,6 +347,7 @@ mod tests {
             raw_usage: None,
             finish_reason: None,
             original_chunk: None,
+            raw_chunk: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -335,6 +359,7 @@ mod tests {
             true,  // include_usage
             false, // include_raw_usage
             false, // include_original_response
+            false, // include_raw_response
         );
 
         assert_eq!(result.len(), 1, "should produce one chunk");
@@ -368,6 +393,7 @@ mod tests {
             raw_usage: Some(vec![raw_usage_entry.clone()]),
             finish_reason: None,
             original_chunk: None,
+            raw_chunk: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -379,6 +405,7 @@ mod tests {
             true,  // include_usage
             true,  // include_raw_usage
             false, // include_original_response
+            false, // include_raw_response
         );
 
         assert_eq!(result.len(), 1, "should produce one chunk");
@@ -422,6 +449,7 @@ mod tests {
             raw_usage: Some(vec![raw_usage_entry]),
             finish_reason: None,
             original_chunk: None,
+            raw_chunk: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -433,6 +461,7 @@ mod tests {
             true,  // include_usage
             false, // include_raw_usage
             false, // include_original_response
+            false, // include_raw_response
         );
 
         assert_eq!(result.len(), 1, "should produce one chunk");
@@ -459,6 +488,7 @@ mod tests {
             raw_usage: None,
             finish_reason: None,
             original_chunk: None,
+            raw_chunk: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -470,6 +500,7 @@ mod tests {
             true,  // include_usage
             false, // include_raw_usage
             false, // include_original_response
+            false, // include_raw_response
         );
 
         assert_eq!(result.len(), 1, "should produce one chunk");
@@ -507,6 +538,7 @@ mod tests {
             raw_usage: None,
             finish_reason: None,
             original_chunk: None,
+            raw_chunk: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -518,6 +550,7 @@ mod tests {
             false, // include_usage = false
             false, // include_raw_usage
             false, // include_original_response
+            false, // include_raw_response
         );
 
         assert_eq!(result.len(), 1, "should produce one chunk");
@@ -546,6 +579,7 @@ mod tests {
             raw_usage: None,
             finish_reason: None,
             original_chunk: Some(raw_response.clone()),
+            raw_chunk: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -557,6 +591,7 @@ mod tests {
             false, // include_usage
             false, // include_raw_usage
             true,  // include_original_response
+            false, // include_raw_response
         );
 
         assert_eq!(result.len(), 1, "should produce one chunk");
@@ -590,6 +625,7 @@ mod tests {
             raw_usage: None,
             finish_reason: None,
             original_chunk: Some(raw_response),
+            raw_chunk: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -601,6 +637,7 @@ mod tests {
             false, // include_usage
             false, // include_raw_usage
             false, // include_original_response
+            false, // include_raw_response
         );
 
         assert_eq!(result.len(), 1, "should produce one chunk");
@@ -626,6 +663,7 @@ mod tests {
             raw_usage: None,
             finish_reason: None,
             original_chunk: Some(raw_response.clone()),
+            raw_chunk: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -637,6 +675,7 @@ mod tests {
             false, // include_usage
             false, // include_raw_usage
             true,  // include_original_response
+            false, // include_raw_response
         );
 
         assert_eq!(result.len(), 1, "should produce one chunk");

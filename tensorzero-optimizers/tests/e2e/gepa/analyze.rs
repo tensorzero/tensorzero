@@ -358,6 +358,7 @@ pub fn create_test_evaluation_info(
         usage: Usage::default(),
         raw_usage: None,
         original_response: None,
+        raw_response: None,
         finish_reason: Some(FinishReason::Stop),
     });
 
@@ -863,6 +864,7 @@ async fn test_analyze_input_format_scenarios() {
                 usage: tensorzero_core::inference::types::Usage::default(),
                 raw_usage: None,
                 original_response: None,
+                raw_response: None,
                 finish_reason: Some(tensorzero_core::inference::types::FinishReason::Stop),
             },
         );
