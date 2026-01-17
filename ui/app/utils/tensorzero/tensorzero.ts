@@ -37,6 +37,7 @@ import type {
   FeedbackRow,
   FunctionInferenceCount,
   GetDatapointCountResponse,
+  GetDatapointCountsByFunctionResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
   GetDemonstrationFeedbackResponse,
@@ -576,6 +577,24 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetDatapointCountResponse;
+  }
+
+  /**
+   * Fetches datapoint counts grouped by function for a dataset.
+   * @param datasetName - The name of the dataset to get counts for
+   * @returns A promise that resolves with the datapoint counts by function, ordered by count DESC
+   * @throws Error if the request fails
+   */
+  async getDatapointCountsByFunction(
+    datasetName: string,
+  ): Promise<GetDatapointCountsByFunctionResponse> {
+    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoint_counts_by_function`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetDatapointCountsByFunctionResponse;
   }
 
   async getObject(storagePath: ZodStoragePath): Promise<string> {
