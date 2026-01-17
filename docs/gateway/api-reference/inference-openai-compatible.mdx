@@ -295,6 +295,15 @@ Intelligence-Level: AGI
 
 </Accordion>
 
+#### `tensorzero::include_original_response`
+
+- **Type:** boolean
+- **Required:** no
+
+If `true`, the original response from the model provider will be included in the response in the `tensorzero_original_response` field as a string.
+
+See `tensorzero_original_response` in the [response](#response) section for more details.
+
 #### `tensorzero::include_raw_usage`
 
 - **Type:** boolean
@@ -869,6 +878,12 @@ Contains token usage information for the request and response, with the followin
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
 
+#### `tensorzero_original_response`
+
+- **Type:** string (optional, only when `tensorzero::include_original_response` is `true`)
+
+The original response from the model provider as a JSON string.
+
 #### `tensorzero_raw_usage`
 
 - **Type:** array (optional, only when `tensorzero::include_raw_usage` is `true`)
@@ -945,6 +960,12 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
+
+#### `tensorzero_original_chunk`
+
+- **Type:** string (optional, only when `tensorzero::include_original_response` is `true`)
+
+The original chunk from the model provider as a JSON string.
 
 #### `tensorzero_raw_usage`
 
