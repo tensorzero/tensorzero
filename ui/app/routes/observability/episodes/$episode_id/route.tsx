@@ -6,6 +6,7 @@ import {
   data,
   isRouteErrorResponse,
   useNavigate,
+  useParams,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
@@ -27,6 +28,11 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
+import {
+  PageErrorContainer,
+  PageErrorStack,
+} from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertTriangle } from "lucide-react";
 import type {
   StoredInference,
   FeedbackRow,
@@ -426,29 +432,28 @@ export default function EpisodeDetailPage({
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const params = useParams<{ episode_id: string }>();
   logger.error(error);
 
+  let message: string;
   if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
+    message = error.data ?? `${error.status} ${error.statusText}`;
   } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
+    message = error.message;
   } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
+    message = "Failed to load episode";
   }
+
+  return (
+    <PageLayout>
+      <PageHeader label="Episode" name={params.episode_id} />
+      <PageErrorContainer>
+        <PageErrorStack
+          icon={AlertTriangle}
+          title="Error loading episode"
+          description={message}
+        />
+      </PageErrorContainer>
+    </PageLayout>
+  );
 }
