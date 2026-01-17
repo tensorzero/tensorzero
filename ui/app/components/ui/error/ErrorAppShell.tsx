@@ -13,6 +13,11 @@ interface ErrorAppShellProps {
 
 /**
  * Renders the app shell (sidebar + content area) for error states.
+ * Used when the root loader fails but we still want to show the app frame.
+ *
+ * @param content - Content to render inside ContentLayout (e.g., PageNotFound)
+ * @param overlay - Content to render as an overlay on top (e.g., ErrorDialog)
+ * @param loaderData - Loader data to pass to providers for context (config, read-only, etc.)
  */
 export function ErrorAppShell({
   content,

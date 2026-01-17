@@ -1,6 +1,7 @@
 import type { Datapoint, DatapointFilter } from "~/types/tensorzero";
 import {
   Table,
+  TableAsyncErrorState,
   TableBody,
   TableCell,
   TableHead,
@@ -18,8 +19,8 @@ import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter, Trash } from "lucide-react";
-import { Suspense, use, useState, useEffect } from "react";
-import { useFetcher, useNavigate, useLocation } from "react-router";
+import { Suspense, useState, useEffect } from "react";
+import { Await, useFetcher, useNavigate, useLocation } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -78,17 +79,17 @@ function SkeletonRows() {
   );
 }
 
-// Resolves promise and renders table rows
+// Renders table rows from resolved data
 function TableBodyContent({
   data,
   dataset_name,
   onDeleteClick,
 }: {
-  data: Promise<DatasetRowsData>;
+  data: DatasetRowsData;
   dataset_name: string;
   onDeleteClick: (row: Datapoint) => void;
 }) {
-  const { rows } = use(data);
+  const { rows } = data;
 
   if (rows.length === 0) {
     return <TableEmptyState message="No datapoints found" />;
@@ -144,17 +145,17 @@ function TableBodyContent({
   );
 }
 
-// Resolves promise and renders pagination
+// Renders pagination from resolved data
 function PaginationContent({
   data,
   limit,
   offset,
 }: {
-  data: Promise<DatasetRowsData>;
+  data: DatasetRowsData;
   limit: number;
   offset: number;
 }) {
-  const { hasMore } = use(data);
+  const { hasMore } = data;
   const navigate = useNavigate();
 
   const handleNextPage = () => {
@@ -309,30 +310,40 @@ export default function DatasetRowTable({
         </TableHeader>
         <TableBody>
           <Suspense key={location.key} fallback={<SkeletonRows />}>
-            <TableBodyContent
-              data={data}
-              dataset_name={dataset_name}
-              onDeleteClick={(row) => {
-                setDatapointToDelete(row);
-                setDeleteDialogOpen(true);
-              }}
-            />
+            <Await
+              resolve={data}
+              errorElement={
+                <TableAsyncErrorState
+                  colSpan={6}
+                  defaultMessage="Failed to load datapoints"
+                />
+              }
+            >
+              {(resolvedData) => (
+                <TableBodyContent
+                  data={resolvedData}
+                  dataset_name={dataset_name}
+                  onDeleteClick={(row) => {
+                    setDatapointToDelete(row);
+                    setDeleteDialogOpen(true);
+                  }}
+                />
+              )}
+            </Await>
           </Suspense>
         </TableBody>
       </Table>
 
-      <Suspense
-        key={location.key}
-        fallback={
-          <PageButtons
-            onPreviousPage={() => {}}
-            onNextPage={() => {}}
-            disablePrevious
-            disableNext
-          />
-        }
-      >
-        <PaginationContent data={data} limit={limit} offset={offset} />
+      <Suspense key={location.key} fallback={<PageButtons disabled />}>
+        <Await resolve={data} errorElement={<PageButtons disabled />}>
+          {(resolvedData) => (
+            <PaginationContent
+              data={resolvedData}
+              limit={limit}
+              offset={offset}
+            />
+          )}
+        </Await>
       </Suspense>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

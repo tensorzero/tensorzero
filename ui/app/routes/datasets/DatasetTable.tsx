@@ -7,13 +7,21 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
+import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import type { DatasetMetadata } from "~/types/tensorzero";
 import { Link, useFetcher, useLocation } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { toDatasetUrl } from "~/utils/urls";
 import { Button } from "~/components/ui/button";
-import { Trash, ChevronUp, ChevronDown, Search } from "lucide-react";
-import { Suspense, use, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  Trash,
+  ChevronUp,
+  ChevronDown,
+  Search,
+} from "lucide-react";
+import { Suspense, useMemo, useState } from "react";
+import { Await, useAsyncError } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   useReactTable,
@@ -39,19 +47,25 @@ import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 const columnHelper = createColumnHelper<DatasetMetadata>();
 
+function DatasetTableHeaders() {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead>Dataset Name</TableHead>
+        <TableHead>Datapoint Count</TableHead>
+        <TableHead>Last Updated</TableHead>
+        <TableHead />
+      </TableRow>
+    </TableHeader>
+  );
+}
+
 // Skeleton table for loading state
 function SkeletonTable() {
   return (
     <>
       <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Dataset Name</TableHead>
-            <TableHead>Datapoint Count</TableHead>
-            <TableHead>Last Updated</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
+        <DatasetTableHeaders />
         <TableBody>
           {Array.from({ length: 15 }).map((_, i) => (
             <TableRow key={i}>
@@ -69,28 +83,48 @@ function SkeletonTable() {
           ))}
         </TableBody>
       </Table>
-      <PageButtons
-        onPreviousPage={() => {}}
-        onNextPage={() => {}}
-        disablePrevious
-        disableNext
-      />
+      <PageButtons disabled />
     </>
   );
 }
 
-// Table content that resolves promise and renders
+// Error state for failed data load
+function TableErrorState() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load datasets";
+
+  return (
+    <>
+      <Table>
+        <DatasetTableHeaders />
+        <TableBody>
+          <TableRow>
+            <TableCell colSpan={4}>
+              <TableErrorNotice
+                icon={AlertCircle}
+                title="Error loading data"
+                description={message}
+              />
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <PageButtons disabled />
+    </>
+  );
+}
+
+// Table content that renders resolved data
 function DatasetTableContent({
-  data,
+  datasets,
   globalFilter,
   onDeleteClick,
 }: {
-  data: Promise<DatasetMetadata[]>;
+  datasets: DatasetMetadata[];
   globalFilter: string;
   onDeleteClick: (datasetName: string) => void;
 }) {
-  const datasets = use(data);
-
   const [sorting, setSorting] = useState<SortingState>([]);
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -261,14 +295,18 @@ export default function DatasetTable({
         </div>
       </div>
       <Suspense key={location.key} fallback={<SkeletonTable />}>
-        <DatasetTableContent
-          data={data}
-          globalFilter={globalFilter}
-          onDeleteClick={(name) => {
-            setDatasetToDelete(name);
-            setDeleteDialogOpen(true);
-          }}
-        />
+        <Await resolve={data} errorElement={<TableErrorState />}>
+          {(datasets) => (
+            <DatasetTableContent
+              datasets={datasets}
+              globalFilter={globalFilter}
+              onDeleteClick={(name) => {
+                setDatasetToDelete(name);
+                setDeleteDialogOpen(true);
+              }}
+            />
+          )}
+        </Await>
       </Suspense>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

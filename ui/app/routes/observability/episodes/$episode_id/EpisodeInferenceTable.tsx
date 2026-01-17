@@ -1,5 +1,6 @@
 import {
   Table,
+  TableAsyncErrorState,
   TableBody,
   TableCell,
   TableHead,
@@ -17,8 +18,8 @@ import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
 import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSheet";
 import { Button } from "~/components/ui/button";
 import { Eye } from "lucide-react";
-import { Suspense, use } from "react";
-import { useLocation } from "react-router";
+import { Suspense } from "react";
+import { useLocation, Await } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import type { InferencesData } from "./route";
 
@@ -48,14 +49,14 @@ function SkeletonRows() {
   );
 }
 
-function TableBodyContent({
+function TableRows({
   data,
   onOpenSheet,
 }: {
-  data: Promise<InferencesData>;
+  data: InferencesData;
   onOpenSheet: (inferenceId: string) => void;
 }) {
-  const { inferences } = use(data);
+  const { inferences } = data;
 
   if (inferences.length === 0) {
     return <TableEmptyState message="No inferences found" />;
@@ -136,7 +137,19 @@ export default function EpisodeInferenceTable({
         </TableHeader>
         <TableBody>
           <Suspense key={location.key} fallback={<SkeletonRows />}>
-            <TableBodyContent data={data} onOpenSheet={onOpenSheet} />
+            <Await
+              resolve={data}
+              errorElement={
+                <TableAsyncErrorState
+                  colSpan={5}
+                  defaultMessage="Failed to load inferences"
+                />
+              }
+            >
+              {(resolvedData) => (
+                <TableRows data={resolvedData} onOpenSheet={onOpenSheet} />
+              )}
+            </Await>
           </Suspense>
         </TableBody>
       </Table>

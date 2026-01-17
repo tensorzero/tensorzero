@@ -115,7 +115,15 @@ export function PageErrorContainer({
   );
 }
 
-interface PageErrorStackProps {
+export function TableErrorContainer({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <div className="flex justify-center py-16">{children}</div>;
+}
+
+interface ErrorNoticeProps {
   icon: LucideIcon;
   title: string;
   description: string;
@@ -123,12 +131,12 @@ interface PageErrorStackProps {
   muted?: boolean;
 }
 
-export function PageErrorStack({
+export function ErrorNotice({
   icon: Icon,
   title,
   description,
   muted = false,
-}: PageErrorStackProps) {
+}: ErrorNoticeProps) {
   return (
     <div className="flex w-[26rem] max-w-full flex-col items-center px-8 py-10 text-center">
       <Icon
@@ -142,5 +150,29 @@ export function PageErrorStack({
         {description}
       </p>
     </div>
+  );
+}
+
+/**
+ * Convenience wrapper: ErrorNotice inside PageErrorContainer.
+ * Use for full-page error states.
+ */
+export function PageErrorNotice(props: ErrorNoticeProps) {
+  return (
+    <PageErrorContainer>
+      <ErrorNotice {...props} />
+    </PageErrorContainer>
+  );
+}
+
+/**
+ * Convenience wrapper: ErrorNotice inside TableErrorContainer.
+ * Use for inline table error states (inside TableCell).
+ */
+export function TableErrorNotice(props: ErrorNoticeProps) {
+  return (
+    <TableErrorContainer>
+      <ErrorNotice {...props} />
+    </TableErrorContainer>
   );
 }

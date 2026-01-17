@@ -33,6 +33,69 @@ test.describe("Error Boundaries", () => {
     });
   });
 
+  test.describe("Resource Not Found (Layout Boundaries)", () => {
+    test("should show error for non-existent inference", async ({ page }) => {
+      // Navigate to an inference ID that doesn't exist
+      await page.goto(
+        "/observability/inferences/00000000-0000-0000-0000-000000000000",
+      );
+
+      // Should show an error (caught by layout boundary)
+      // PageErrorContent shows "Error {status}" format for resource 404s
+      await expect(
+        page.getByRole("heading", { name: "Error 404" }),
+      ).toBeVisible();
+
+      // Sidebar should remain functional
+      await expect(
+        page.getByRole("link", { name: "Inferences" }).first(),
+      ).toBeVisible();
+    });
+
+    test("should show error for non-existent episode", async ({ page }) => {
+      await page.goto(
+        "/observability/episodes/00000000-0000-0000-0000-000000000000",
+      );
+
+      // Should show an error (caught by layout boundary)
+      // PageErrorContent shows "Error {status}" format for resource 404s
+      await expect(
+        page.getByRole("heading", { name: "Error 404" }),
+      ).toBeVisible();
+
+      // Sidebar should remain functional
+      await expect(
+        page.getByRole("link", { name: "Episodes" }).first(),
+      ).toBeVisible();
+    });
+
+    test("should show error for non-existent dataset", async ({ page }) => {
+      await page.goto("/datasets/this-dataset-does-not-exist-xyz");
+
+      // Should show an error (caught by layout boundary)
+      await expect(page.getByRole("heading", { name: "Error" })).toBeVisible();
+
+      // Sidebar should remain functional
+      await expect(
+        page.getByRole("link", { name: "Datasets" }).first(),
+      ).toBeVisible();
+    });
+
+    test("should show error for non-existent function", async ({ page }) => {
+      await page.goto("/observability/functions/this_function_does_not_exist");
+
+      // Should show an error (caught by layout boundary)
+      await expect(
+        page.getByRole("heading", { name: "Error 404" }),
+      ).toBeVisible();
+
+      // Sidebar should remain functional
+      await expect(
+        page.getByRole("link", { name: "Functions" }).first(),
+      ).toBeVisible();
+    });
+  });
+
   test.describe("Navigation Recovery", () => {
     test("should recover from error state when navigating to valid page", async ({
       page,
