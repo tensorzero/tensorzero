@@ -169,6 +169,7 @@ pub fn create_mock_chat_response(text: &str) -> InferenceResponse {
         },
         raw_usage: None,
         original_response: None,
+        raw_response: None,
         finish_reason: None,
     })
 }

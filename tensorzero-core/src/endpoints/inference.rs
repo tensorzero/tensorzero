@@ -120,11 +120,17 @@ pub struct Params {
     pub cache_options: CacheParamsOptions,
     #[serde(default, skip_serializing)]
     pub credentials: InferenceCredentials,
+    /// DEPRECATED: Use `include_raw_response` instead.
     /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.
     /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
     /// if the fuser/judge model failed
     #[serde(default)]
     pub include_original_response: bool,
+    /// If `true`, add a `raw_response` field to the response, containing the raw string response from the model.
+    /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `raw_response`
+    /// if the fuser/judge model failed
+    #[serde(default)]
+    pub include_raw_response: bool,
     /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
     #[serde(default)]
     pub include_raw_usage: bool,
@@ -162,6 +168,7 @@ struct InferenceMetadata {
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
     pub include_original_response: bool,
+    pub include_raw_response: bool,
     pub include_raw_usage: bool,
     pub model_inference_id: Uuid,
 }
@@ -319,6 +326,13 @@ pub async fn inference(
     for (tag_key, tag_value) in &params.tags {
         span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
     }
+
+    if params.include_original_response {
+        tracing::warn!(
+            "The `include_original_response` parameter is deprecated. Use `include_raw_response` instead."
+        );
+    }
+
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     let inference_id = Uuid::now_v7();
@@ -481,6 +495,7 @@ pub async fn inference(
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
+            include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
         })
         .await?;
@@ -538,6 +553,7 @@ pub async fn inference(
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
+            include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
         })
         .await;
@@ -596,6 +612,7 @@ struct InferVariantArgs<'a> {
     extra_body: &'a UnfilteredInferenceExtraBody,
     extra_headers: &'a UnfilteredInferenceExtraHeaders,
     include_original_response: bool,
+    include_raw_response: bool,
     include_raw_usage: bool,
 }
 
@@ -623,6 +640,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         extra_body,
         extra_headers,
         include_original_response,
+        include_raw_response,
         include_raw_usage,
     } = args;
 
@@ -692,6 +710,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             json_mode: model_used_info.inference_params.chat_completion.json_mode,
             extra_headers,
             include_original_response,
+            include_raw_response,
             include_raw_usage,
             fetch_and_encode_input_files_before_inference: config
                 .gateway
@@ -722,7 +741,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             )
             .await;
 
-        let mut result = result?;
+        let result = result?;
 
         if !dryrun {
             // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
@@ -770,12 +789,14 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             }
         }
 
-        if !include_original_response {
-            result.set_original_response(None);
-        }
-
-        let response =
-            InferenceResponse::new(result, episode_id, variant_name.clone(), include_raw_usage);
+        let response = InferenceResponse::new(
+            result,
+            episode_id,
+            variant_name.clone(),
+            include_raw_usage,
+            include_original_response,
+            include_raw_response,
+        );
 
         Ok(InferenceOutput::NonStreaming(response))
     }
@@ -1035,6 +1056,7 @@ fn create_stream(
                 extra_headers,
                 fetch_and_encode_input_files_before_inference,
                 include_original_response: _,
+                include_raw_response: _,
                 include_raw_usage: _,
                 model_inference_id,
             } = metadata;
@@ -1198,6 +1220,7 @@ fn prepare_response_chunk(
         metadata.variant_name.clone(),
         metadata.cached,
         metadata.include_original_response,
+        metadata.include_raw_response,
         metadata.json_mode,
         metadata.include_raw_usage,
     )
@@ -1313,8 +1336,11 @@ pub struct ChatInferenceResponse {
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// DEPRECATED: Use `raw_response` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
 }
@@ -1330,8 +1356,11 @@ pub struct JsonInferenceResponse {
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// DEPRECATED: Use `raw_response` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
 }
@@ -1342,6 +1371,8 @@ impl InferenceResponse {
         episode_id: Uuid,
         variant_name: String,
         include_raw_usage: bool,
+        include_original_response: bool,
+        include_raw_response: bool,
     ) -> Self {
         let usage = inference_result.usage_considering_cached();
 
@@ -1360,19 +1391,34 @@ impl InferenceResponse {
         };
 
         match inference_result {
-            InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
-                inference_id: result.inference_id,
-                episode_id,
-                variant_name,
-                content: result.content,
-                usage,
-                raw_usage: raw_usage.clone(),
-                original_response: result.original_response,
-                finish_reason: result.finish_reason,
-            }),
+            InferenceResult::Chat(result) => {
+                // Populate response fields based on which request flags were set
+                let (original_response, raw_response) = Self::compute_response_fields(
+                    result.original_response,
+                    include_original_response,
+                    include_raw_response,
+                );
+                InferenceResponse::Chat(ChatInferenceResponse {
+                    inference_id: result.inference_id,
+                    episode_id,
+                    variant_name,
+                    content: result.content,
+                    usage,
+                    raw_usage: raw_usage.clone(),
+                    original_response,
+                    raw_response,
+                    finish_reason: result.finish_reason,
+                })
+            }
             InferenceResult::Json(result) => {
                 let InternalJsonInferenceOutput { raw, parsed, .. } = result.output;
                 let output = JsonInferenceOutput { raw, parsed };
+                // Populate response fields based on which request flags were set
+                let (original_response, raw_response) = Self::compute_response_fields(
+                    result.original_response,
+                    include_original_response,
+                    include_raw_response,
+                );
                 InferenceResponse::Json(JsonInferenceResponse {
                     inference_id: result.inference_id,
                     episode_id,
@@ -1380,10 +1426,26 @@ impl InferenceResponse {
                     output,
                     usage,
                     raw_usage,
-                    original_response: result.original_response,
+                    original_response,
+                    raw_response,
                     finish_reason: result.finish_reason,
                 })
             }
+        }
+    }
+
+    /// Helper to compute original_response and raw_response fields based on request flags.
+    /// If both flags are true, both fields get the same value (cloned).
+    fn compute_response_fields(
+        source: Option<String>,
+        include_original: bool,
+        include_raw: bool,
+    ) -> (Option<String>, Option<String>) {
+        match (include_original, include_raw, source) {
+            (true, true, Some(val)) => (Some(val.clone()), Some(val)),
+            (true, false, val) => (val, None),
+            (false, true, val) => (None, val),
+            (false, false, _) | (_, _, None) => (None, None),
         }
     }
 
@@ -1476,8 +1538,11 @@ pub struct ChatInferenceResponseChunk {
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
+    /// DEPRECATED: Use `raw_chunk` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_chunk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_chunk: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1492,8 +1557,11 @@ pub struct JsonInferenceResponseChunk {
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
+    /// DEPRECATED: Use `raw_chunk` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_chunk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_chunk: Option<String>,
 }
 
 impl InferenceResponseChunk {
@@ -1505,6 +1573,7 @@ impl InferenceResponseChunk {
         variant_name: String,
         cached: bool,
         include_original_response: bool,
+        include_raw_response: bool,
         json_mode: Option<JsonMode>,
         include_raw_usage: bool,
     ) -> Self {
@@ -1549,6 +1618,13 @@ impl InferenceResponseChunk {
                     result.content
                 };
 
+                // Compute chunk fields based on request flags
+                let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
+                    result.raw_response,
+                    include_original_response,
+                    include_raw_response,
+                );
+
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
                     inference_id,
                     episode_id,
@@ -1559,10 +1635,18 @@ impl InferenceResponseChunk {
                     usage,
                     raw_usage,
                     finish_reason: result.finish_reason,
-                    original_chunk: include_original_response.then_some(result.raw_response),
+                    original_chunk,
+                    raw_chunk,
                 })
             }
             InferenceResultChunk::Json(result) => {
+                // Compute chunk fields based on request flags
+                let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
+                    result.raw_response,
+                    include_original_response,
+                    include_raw_response,
+                );
+
                 InferenceResponseChunk::Json(JsonInferenceResponseChunk {
                     inference_id,
                     episode_id,
@@ -1573,9 +1657,25 @@ impl InferenceResponseChunk {
                     usage,
                     raw_usage,
                     finish_reason: result.finish_reason,
-                    original_chunk: include_original_response.then_some(result.raw_response),
+                    original_chunk,
+                    raw_chunk,
                 })
             }
+        }
+    }
+
+    /// Helper to compute original_chunk and raw_chunk fields based on request flags.
+    /// If both flags are true, both fields get the same value (cloned).
+    fn compute_chunk_fields(
+        source: String,
+        include_original: bool,
+        include_raw: bool,
+    ) -> (Option<String>, Option<String>) {
+        match (include_original, include_raw) {
+            (true, true) => (Some(source.clone()), Some(source)),
+            (true, false) => (Some(source), None),
+            (false, true) => (None, Some(source)),
+            (false, false) => (None, None),
         }
     }
 
@@ -1864,6 +1964,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
+            include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
         };
@@ -1921,6 +2022,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
+            include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
         };
@@ -2314,6 +2416,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
+            include_raw_response: false,
             include_raw_usage: true,
             model_inference_id: Uuid::now_v7(),
         }

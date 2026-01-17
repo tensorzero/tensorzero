@@ -124,6 +124,7 @@ mod tests {
             },
             raw_usage: None,
             original_response: None,
+            raw_response: None,
             finish_reason: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
@@ -143,6 +144,7 @@ mod tests {
             },
             raw_usage: None,
             original_response: None,
+            raw_response: None,
             finish_reason: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
@@ -231,6 +233,7 @@ mod tests {
             },
             raw_usage: None,
             original_response: None,
+            raw_response: None,
             finish_reason: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
@@ -251,6 +254,7 @@ mod tests {
             },
             raw_usage: None,
             original_response: None,
+            raw_response: None,
             finish_reason: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
