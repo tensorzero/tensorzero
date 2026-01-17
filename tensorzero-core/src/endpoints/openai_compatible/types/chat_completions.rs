@@ -153,6 +153,8 @@ pub struct OpenAICompatibleParams {
     pub tensorzero_params: Option<InferenceParams>,
     #[serde(default, rename = "tensorzero::include_raw_usage")]
     pub tensorzero_include_raw_usage: bool,
+    #[serde(default, rename = "tensorzero::include_original_response")]
+    pub tensorzero_include_original_response: bool,
     #[serde(flatten)]
     pub unknown_fields: HashMap<String, Value>,
 }
@@ -211,6 +213,8 @@ pub struct OpenAICompatibleResponse {
     pub usage: OpenAICompatibleUsage,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_original_response: Option<String>,
 }
 
 // ============================================================================
@@ -439,8 +443,8 @@ impl Params {
             // For now, we don't support internal inference for OpenAI compatible endpoint
             internal: false,
             tags: openai_compatible_params.tensorzero_tags,
-            // OpenAI compatible endpoint does not support 'include_original_response'
-            include_original_response: false,
+            include_original_response: openai_compatible_params
+                .tensorzero_include_original_response,
             include_raw_usage: openai_compatible_params.tensorzero_include_raw_usage,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
@@ -689,6 +693,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
                     tensorzero_raw_usage: response.raw_usage,
+                    tensorzero_original_response: response.original_response,
                     episode_id: response.episode_id.to_string(),
                 }
             }
@@ -710,6 +715,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 object: "chat.completion".to_string(),
                 usage: response.usage.into(),
                 tensorzero_raw_usage: response.raw_usage,
+                tensorzero_original_response: response.original_response,
                 episode_id: response.episode_id.to_string(),
             },
         }
