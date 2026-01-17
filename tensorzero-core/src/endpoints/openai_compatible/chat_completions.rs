@@ -126,8 +126,11 @@ pub async fn chat_completions_handler(
 
     match response {
         InferenceOutput::NonStreaming(response) => {
-            let openai_compatible_response =
-                OpenAICompatibleResponse::from((response, response_model_prefix));
+            let openai_compatible_response = OpenAICompatibleResponse::from((
+                response,
+                response_model_prefix,
+                include_original_response,
+            ));
             Ok(Json(openai_compatible_response).into_response())
         }
         InferenceOutput::Streaming(stream) => {

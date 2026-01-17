@@ -669,11 +669,22 @@ pub fn convert_openai_message_content(
     }
 }
 
-impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
-    fn from((inference_response, response_model_prefix): (InferenceResponse, String)) -> Self {
+impl From<(InferenceResponse, String, bool)> for OpenAICompatibleResponse {
+    fn from(
+        (inference_response, response_model_prefix, include_original_response): (
+            InferenceResponse,
+            String,
+            bool,
+        ),
+    ) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
                 let (content, tool_calls) = process_chat_content(response.content);
+                let tensorzero_original_response = if include_original_response {
+                    response.original_response
+                } else {
+                    None
+                };
 
                 OpenAICompatibleResponse {
                     id: response.inference_id.to_string(),
@@ -693,31 +704,39 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
                     tensorzero_raw_usage: response.raw_usage,
-                    tensorzero_original_response: response.original_response,
+                    tensorzero_original_response,
                     episode_id: response.episode_id.to_string(),
                 }
             }
-            InferenceResponse::Json(response) => OpenAICompatibleResponse {
-                id: response.inference_id.to_string(),
-                choices: vec![OpenAICompatibleChoice {
-                    index: 0,
-                    finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
-                    message: OpenAICompatibleResponseMessage {
-                        content: response.output.raw,
-                        tool_calls: None,
-                        role: "assistant".to_string(),
-                    },
-                }],
-                created: current_timestamp() as u32,
-                model: format!("{response_model_prefix}{}", response.variant_name),
-                system_fingerprint: String::new(),
-                service_tier: None,
-                object: "chat.completion".to_string(),
-                usage: response.usage.into(),
-                tensorzero_raw_usage: response.raw_usage,
-                tensorzero_original_response: response.original_response,
-                episode_id: response.episode_id.to_string(),
-            },
+            InferenceResponse::Json(response) => {
+                let tensorzero_original_response = if include_original_response {
+                    response.original_response
+                } else {
+                    None
+                };
+
+                OpenAICompatibleResponse {
+                    id: response.inference_id.to_string(),
+                    choices: vec![OpenAICompatibleChoice {
+                        index: 0,
+                        finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
+                        message: OpenAICompatibleResponseMessage {
+                            content: response.output.raw,
+                            tool_calls: None,
+                            role: "assistant".to_string(),
+                        },
+                    }],
+                    created: current_timestamp() as u32,
+                    model: format!("{response_model_prefix}{}", response.variant_name),
+                    system_fingerprint: String::new(),
+                    service_tier: None,
+                    object: "chat.completion".to_string(),
+                    usage: response.usage.into(),
+                    tensorzero_raw_usage: response.raw_usage,
+                    tensorzero_original_response,
+                    episode_id: response.episode_id.to_string(),
+                }
+            }
         }
     }
 }
