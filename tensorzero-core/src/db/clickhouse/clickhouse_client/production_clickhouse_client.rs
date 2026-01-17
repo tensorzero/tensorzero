@@ -457,10 +457,8 @@ impl ClickHouseClient for ProductionClickHouseClient {
             })
         })?;
         let on_cluster_name = self.get_on_cluster_name();
-        let query = format!(
-            "CREATE DATABASE IF NOT EXISTS {}{on_cluster_name}",
-            self.database
-        );
+        let query =
+            format!("CREATE DATABASE IF NOT EXISTS {{db_name:Identifier}}{on_cluster_name}",);
         // In order to create the database, we need to remove the database query parameter from the URL
         // Otherwise, ClickHouse will throw an error
         let mut base_url = database_url.clone();
@@ -472,6 +470,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .clear()
             .extend_pairs(query_pairs)
             .finish();
+        base_url
+            .query_pairs_mut()
+            .append_pair("param_db_name", &self.database);
 
         let response = self
             .client
