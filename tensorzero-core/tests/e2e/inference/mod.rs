@@ -1828,6 +1828,80 @@ async fn e2e_test_inference_original_response_non_stream() {
 }
 
 #[tokio::test]
+async fn e2e_test_inference_raw_response_non_stream() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": false,
+        "include_raw_response": true,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    // raw_response should be an array of RawResponseEntry objects
+    let raw_response = response_json
+        .get("raw_response")
+        .expect("raw_response field should exist");
+    let raw_response_array = raw_response
+        .as_array()
+        .expect("raw_response should be an array");
+
+    // For a single inference, there should be exactly 1 entry
+    assert_eq!(
+        raw_response_array.len(),
+        1,
+        "Expected exactly 1 raw_response entry for single inference"
+    );
+
+    let entry = &raw_response_array[0];
+
+    // Check that entry has required fields
+    let model_inference_id = entry
+        .get("model_inference_id")
+        .expect("entry should have model_inference_id");
+    assert!(
+        model_inference_id.is_string(),
+        "model_inference_id should be a string (UUID)"
+    );
+    // Verify it's a valid UUID
+    Uuid::parse_str(model_inference_id.as_str().unwrap())
+        .expect("model_inference_id should be a valid UUID");
+
+    let provider_type = entry
+        .get("provider_type")
+        .expect("entry should have provider_type");
+    // provider_type is the provider name from the config, e.g., [models.test.providers.good]
+    assert_eq!(
+        provider_type, "good",
+        "provider_type should be 'good' (the provider name in the config)"
+    );
+
+    let data = entry.get("data").expect("entry should have data field");
+    assert_eq!(
+        data, DUMMY_INFER_RESPONSE_RAW,
+        "data should contain the raw response from the provider"
+    );
+}
+
+#[tokio::test]
 async fn test_gateway_template_base_path() {
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(&format!(
         r#"
@@ -2210,6 +2284,249 @@ fn check_dummy_model_span(
             "rate_limiting_consume_tickets",
             "rate_limiting_return_tickets"
         ])
+    );
+}
+
+#[tokio::test]
+async fn test_raw_response_best_of_n() {
+    // Test that include_raw_response returns an array with entries for all model inferences
+    // For best-of-n with 2 candidates + 1 evaluator, we expect 3 model inferences
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(
+        r#"
+[functions.best_of_n]
+type = "chat"
+[functions.best_of_n.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "dummy::good"
+[functions.best_of_n.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "dummy::alternate"
+[functions.best_of_n.variants.best_of_n_variant]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant1"]
+[functions.best_of_n.variants.best_of_n_variant.evaluator]
+model = "dummy::best_of_n_0"
+    "#,
+    )
+    .await;
+
+    let params = ClientInferenceParams {
+        function_name: Some("best_of_n".to_string()),
+        input: Input {
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::Text(Text {
+                    text: "Please write me a sentence about Megumin making an explosion."
+                        .to_string(),
+                })],
+            }],
+            ..Default::default()
+        },
+        include_raw_response: true,
+        ..Default::default()
+    };
+
+    let response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = response else {
+        panic!("Expected non-streaming chat response, got {response:?}");
+    };
+
+    // Verify raw_response is present and is an array
+    let raw_response = response
+        .raw_response
+        .expect("raw_response should be present when include_raw_response is true");
+
+    // For best-of-n with 2 candidates + 1 evaluator, we expect 3 model inferences
+    assert_eq!(
+        raw_response.len(),
+        3,
+        "Expected 3 raw_response entries for best-of-n with 2 candidates + 1 evaluator"
+    );
+
+    // Verify each entry has the required fields
+    let mut provider_types = std::collections::HashSet::new();
+    for entry in &raw_response {
+        // Verify model_inference_id is a valid UUID
+        assert!(
+            !entry.model_inference_id.is_nil(),
+            "model_inference_id should be a valid UUID"
+        );
+
+        // Collect provider types
+        provider_types.insert(entry.provider_type.clone());
+
+        // Verify data is not empty
+        assert!(!entry.data.is_empty(), "data field should not be empty");
+    }
+
+    // All should be from dummy provider type
+    // For shorthand model names like "dummy::good", the provider_type is "dummy"
+    assert_eq!(
+        provider_types,
+        std::collections::HashSet::from(["dummy".to_string()]),
+        "All entries should be from dummy provider, got: {provider_types:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_raw_response_mixture_of_n() {
+    // Test that include_raw_response returns an array with entries for all model inferences
+    // For mixture-of-n with 2 candidates + 1 fuser, we expect 3 model inferences
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(
+        r#"
+[functions.mixture_of_n]
+type = "chat"
+[functions.mixture_of_n.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "dummy::good"
+[functions.mixture_of_n.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "dummy::alternate"
+[functions.mixture_of_n.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant1"]
+[functions.mixture_of_n.variants.mixture_of_n_variant.fuser]
+model = "dummy::good"
+    "#,
+    )
+    .await;
+
+    let params = ClientInferenceParams {
+        function_name: Some("mixture_of_n".to_string()),
+        input: Input {
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::Text(Text {
+                    text: "Please write me a sentence about Megumin making an explosion."
+                        .to_string(),
+                })],
+            }],
+            ..Default::default()
+        },
+        include_raw_response: true,
+        ..Default::default()
+    };
+
+    let response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = response else {
+        panic!("Expected non-streaming chat response, got {response:?}");
+    };
+
+    // Verify raw_response is present and is an array
+    let raw_response = response
+        .raw_response
+        .expect("raw_response should be present when include_raw_response is true");
+
+    // For mixture-of-n with 2 candidates + 1 fuser, we expect 3 model inferences
+    assert_eq!(
+        raw_response.len(),
+        3,
+        "Expected 3 raw_response entries for mixture-of-n with 2 candidates + 1 fuser"
+    );
+
+    // Verify each entry has the required fields
+    for entry in &raw_response {
+        // Verify model_inference_id is a valid UUID
+        assert!(
+            !entry.model_inference_id.is_nil(),
+            "model_inference_id should be a valid UUID"
+        );
+
+        // Verify provider_type is "dummy"
+        // For shorthand model names like "dummy::good", the provider_type is "dummy"
+        assert_eq!(
+            entry.provider_type, "dummy",
+            "provider_type should be 'dummy', got: {}",
+            entry.provider_type
+        );
+
+        // Verify data is not empty
+        assert!(!entry.data.is_empty(), "data field should not be empty");
+    }
+}
+
+#[tokio::test]
+async fn e2e_test_inference_raw_response_streaming() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+        "include_raw_response": true,
+    });
+
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut chunks = vec![];
+    let mut found_done_chunk = false;
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    found_done_chunk = true;
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+    assert!(found_done_chunk, "Should have received [DONE] message");
+
+    // For a single inference, raw_chunk should appear in streaming chunks
+    let mut found_raw_chunk = false;
+    for (i, chunk) in chunks.iter().enumerate() {
+        let chunk_json: Value = serde_json::from_str(chunk).unwrap();
+
+        // Check for raw_chunk field - it should be present in most chunks except possibly the last usage chunk
+        if let Some(raw_chunk) = chunk_json.get("raw_chunk") {
+            found_raw_chunk = true;
+            // raw_chunk should be a string containing the raw provider response chunk
+            assert!(
+                raw_chunk.is_string(),
+                "raw_chunk should be a string, got: {raw_chunk:?}"
+            );
+        }
+
+        // For single inference streaming, raw_response (the array) should NOT be present
+        // (it's only for previous model inferences in multi-inference scenarios)
+        if i == 0 {
+            // In the first chunk, we might have raw_response if there are previous inferences
+            // but for single inference there should be none
+            let raw_response = chunk_json.get("raw_response");
+            assert!(
+                raw_response
+                    .and_then(|v| v.as_array())
+                    .is_none_or(|a| a.is_empty()),
+                "raw_response array should not be present for single inference streaming"
+            );
+        }
+    }
+
+    assert!(
+        found_raw_chunk,
+        "Should have found at least one chunk with raw_chunk field"
     );
 }
 
