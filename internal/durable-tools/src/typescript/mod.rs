@@ -79,8 +79,13 @@ mod pool;
 mod runtime;
 mod tool;
 mod transpile;
+mod type_checker;
 
 pub use error::TypeScriptToolError;
 pub use pool::JsRuntimePool;
 pub use tool::{TypeScriptTool, TypeScriptToolBuilder, TypeScriptToolInstance};
 pub use transpile::transpile_typescript;
+pub use type_checker::{
+    CTX_TYPE_DEFINITIONS, DiagnosticSeverity, SubprocessTypeChecker, TypeCheckDiagnostic,
+    TypeCheckResult, TypeChecker, default_type_checker,
+};

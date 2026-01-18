@@ -878,7 +878,13 @@ async fn rust_task_tool_calls_typescript_which_calls_rust(pool: PgPool) -> sqlx:
         .unwrap();
 
     // Wait for task completion with timeout
-    let task_row = wait_for_task_completion(&pool, &queue_name, spawn_result.task_id, Duration::from_secs(15)).await;
+    let task_row = wait_for_task_completion(
+        &pool,
+        &queue_name,
+        spawn_result.task_id,
+        Duration::from_secs(15),
+    )
+    .await;
     worker.shutdown().await;
 
     // If task failed, print the failure reason for debugging

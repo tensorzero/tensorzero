@@ -10,6 +10,9 @@ use serde_json::Value as JsonValue;
 
 use super::error::TypeScriptToolError;
 use super::transpile::transpile_typescript;
+use super::type_checker::{
+    CTX_TYPE_DEFINITIONS, TypeCheckResult, TypeChecker, default_type_checker,
+};
 use crate::ToolContext;
 use crate::error::{NonControlToolError, ToolResult};
 use crate::task_tool::TaskTool;
@@ -71,6 +74,7 @@ pub struct TypeScriptToolBuilder {
     typescript_code: Option<String>,
     parameters_schema: Option<JsonValue>,
     timeout: Duration,
+    type_checker: Option<Arc<dyn TypeChecker>>,
 }
 
 impl TypeScriptToolBuilder {
@@ -82,6 +86,7 @@ impl TypeScriptToolBuilder {
             typescript_code: None,
             parameters_schema: None,
             timeout: Duration::from_secs(60),
+            type_checker: None,
         }
     }
 
@@ -110,6 +115,16 @@ impl TypeScriptToolBuilder {
     #[must_use]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    /// Set a custom type checker to use for `build_checked()`.
+    ///
+    /// If not set, `build_checked()` will attempt to use `tsc` or `deno check`
+    /// if available in the PATH.
+    #[must_use]
+    pub fn type_checker(mut self, checker: Arc<dyn TypeChecker>) -> Self {
+        self.type_checker = Some(checker);
         self
     }
 
@@ -147,6 +162,65 @@ impl TypeScriptToolBuilder {
             parameters_schema,
             timeout: self.timeout,
         })
+    }
+
+    /// Build the TypeScript tool with type checking.
+    ///
+    /// This performs type checking using `tsc` or `deno check` (if available)
+    /// before transpiling the code. If type checking fails, an error is returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `typescript_code` was not provided
+    /// - No type checker is available (neither `tsc` nor `deno` in PATH)
+    /// - TypeScript type checking fails
+    /// - TypeScript transpilation fails
+    pub async fn build_checked(self) -> Result<TypeScriptTool, TypeScriptToolError> {
+        let (tool, result) = self.build_with_diagnostics().await?;
+
+        if !result.success {
+            return Err(TypeScriptToolError::TypeCheck(result.format_diagnostics()));
+        }
+
+        Ok(tool)
+    }
+
+    /// Build the TypeScript tool with type checking, returning diagnostics.
+    ///
+    /// This performs type checking and returns both the built tool and the
+    /// type check diagnostics. This is useful when you want to inspect
+    /// warnings even if type checking succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `typescript_code` was not provided
+    /// - No type checker is available (neither `tsc` nor `deno` in PATH)
+    /// - TypeScript transpilation fails
+    ///
+    /// Note: Type errors are returned in the `TypeCheckResult`, not as an error.
+    pub async fn build_with_diagnostics(
+        self,
+    ) -> Result<(TypeScriptTool, TypeCheckResult), TypeScriptToolError> {
+        let typescript_code = self.typescript_code.as_ref().ok_or_else(|| {
+            TypeScriptToolError::InvalidTool("typescript_code is required".into())
+        })?;
+
+        // Get the type checker
+        let checker = self.type_checker.clone().or_else(default_type_checker).ok_or_else(|| {
+            TypeScriptToolError::TypeCheck(
+                "No type checker available. Install `tsc` (TypeScript) or `deno` to enable type checking.".into()
+            )
+        })?;
+
+        // Run type checking
+        let result = checker.check(typescript_code, CTX_TYPE_DEFINITIONS).await?;
+
+        // Build the tool (this handles transpilation)
+        let tool = self.build()?;
+
+        Ok((tool, result))
     }
 }
 

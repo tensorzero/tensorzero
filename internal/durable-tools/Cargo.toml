@@ -9,7 +9,7 @@ workspace = true
 
 [features]
 default = []
-typescript = ["deno_core", "deno_ast", "deno_error", "crossbeam-channel"]
+typescript = ["deno_core", "deno_ast", "deno_error", "crossbeam-channel", "tempfile", "regex"]
 
 [dependencies]
 durable-tools-spawn.workspace = true
@@ -38,6 +38,8 @@ deno_core = { version = "0.376", optional = true }
 deno_ast = { version = "0.52", features = ["transpiling"], optional = true }
 deno_error = { version = "0.7", optional = true }
 crossbeam-channel = { version = "0.5", optional = true }
+tempfile = { version = "3", optional = true }
+regex = { version = "1", optional = true }
 
 [dev-dependencies]
 mockall = "0.14"

@@ -36,6 +36,10 @@ pub enum TypeScriptToolError {
     /// Channel receive failed.
     #[error("Channel receive failed: {0}")]
     ChannelReceive(String),
+
+    /// TypeScript type checking failed.
+    #[error("TypeScript type checking failed:\n{0}")]
+    TypeCheck(String),
 }
 
 impl From<serde_json::Error> for TypeScriptToolError {
