@@ -248,6 +248,12 @@ pub async fn inject_extra_request_data_and_send_with_headers(
         &mut body,
     )
     .map_err(|e| (e, None))?;
+    // DEBUG: Log the extra headers being injected (names only, not values which may contain secrets)
+    let header_names: Vec<_> = headers.keys().map(|k| k.as_str()).collect();
+    tracing::info!(
+        "[EXTRA_HEADERS_DEBUG] injecting header names: {:?}",
+        header_names
+    );
     let raw_request = body.to_string();
     let response = builder
         .body(raw_request.clone())

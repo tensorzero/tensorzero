@@ -793,6 +793,9 @@ impl<'a> Embedding {
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::extra_headers::{
+        ExtraHeader, ExtraHeaderKind, ExtraHeadersConfig,
+    };
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
@@ -920,10 +923,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_provider_config_with_extra_header() {
-        use crate::inference::types::extra_headers::{
-            ExtraHeader, ExtraHeaderKind, ExtraHeadersConfig,
-        };
-
         let replacement = ExtraHeader {
             name: "test".to_string(),
             kind: ExtraHeaderKind::Value("header".to_string()),

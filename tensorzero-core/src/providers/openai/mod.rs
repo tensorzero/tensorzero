@@ -946,6 +946,29 @@ impl EmbeddingProvider for OpenAIProvider {
             })
         })?;
 
+        // DEBUG: Log if we have an API key and what extra_headers we're using (names only, not values)
+        let extra_header_names: Vec<_> = model_provider_data
+            .extra_headers
+            .as_ref()
+            .map(|h| h.data.iter().map(|eh| eh.name.as_str()).collect())
+            .unwrap_or_default();
+        // Check if Authorization header has the expected test value
+        let auth_has_test_value = model_provider_data
+            .extra_headers
+            .as_ref()
+            .and_then(|h| {
+                h.data.iter().find(|eh| eh.name.eq_ignore_ascii_case("authorization"))
+            })
+            .is_some_and(|eh| {
+                matches!(&eh.kind, crate::inference::types::extra_headers::ExtraHeaderKind::Value(v) if v == "Bearer invalid_openai_auth")
+            });
+        tracing::info!(
+            "[EXTRA_HEADERS_DEBUG] OpenAI embed: api_key_present={}, extra_header_names={:?}, auth_has_test_value={}",
+            api_key.is_some(),
+            extra_header_names,
+            auth_has_test_value
+        );
+
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
             &FullExtraBodyConfig::default(), // No overrides supported
