@@ -14,208 +14,47 @@ use durable::MIGRATOR;
 use durable::SpawnOptions;
 use durable::WorkerOptions;
 use durable_tools::{
-    ErasedSimpleTool, NonControlToolError, SimpleTool, SimpleToolContext, TaskTool,
-    TensorZeroClient, TensorZeroClientError, ToolContext, ToolExecutor, ToolMetadata, ToolResult,
+    ErasedSimpleTool, MockTensorZeroClient, NonControlToolError, SimpleTool, SimpleToolContext,
+    TaskTool, TensorZeroClient, TensorZeroClientError, ToolContext, ToolExecutor, ToolMetadata,
+    ToolResult,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tensorzero::{
-    ActionInput, ClientInferenceParams, GetConfigResponse, InferenceResponse, Input, InputMessage,
-    InputMessageContent, Role, Tool, Usage, WriteConfigRequest, WriteConfigResponse,
+    ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
+    Usage,
 };
-use tensorzero_core::config::snapshot::SnapshotHash;
-use tensorzero_core::db::feedback::FeedbackByVariant;
-use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
-use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
-use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 // ============================================================================
-// Mock TensorZero Client
+// Mock TensorZero Client Helpers
 // ============================================================================
 
-/// A mock TensorZero client that returns configurable responses.
-struct MockTensorZeroClient {
-    response: Option<InferenceResponse>,
+/// Create a mock that returns an error for inference calls.
+fn mock_client_error_on_call() -> MockTensorZeroClient {
+    let mut mock = MockTensorZeroClient::new();
+    mock.expect_inference()
+        .returning(|_| Box::pin(async { Err(TensorZeroClientError::StreamingNotSupported) }));
+    mock
 }
 
-impl MockTensorZeroClient {
-    /// Create a mock that returns an error (for tests that don't use inference).
-    fn error_on_call() -> Self {
-        Self { response: None }
-    }
-
-    /// Create a mock that returns the given response.
-    fn with_response(response: InferenceResponse) -> Self {
-        Self {
-            response: Some(response),
-        }
-    }
-}
-
-#[async_trait]
-impl TensorZeroClient for MockTensorZeroClient {
-    async fn inference(
-        &self,
-        _params: ClientInferenceParams,
-    ) -> Result<InferenceResponse, TensorZeroClientError> {
-        self.response
-            .clone()
-            .ok_or(TensorZeroClientError::StreamingNotSupported)
-    }
-
-    async fn feedback(
-        &self,
-        _params: tensorzero::FeedbackParams,
-    ) -> Result<tensorzero::FeedbackResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn create_autopilot_event(
-        &self,
-        _session_id: Uuid,
-        _request: durable_tools::CreateEventGatewayRequest,
-    ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn list_autopilot_events(
-        &self,
-        _session_id: Uuid,
-        _params: durable_tools::ListEventsParams,
-    ) -> Result<durable_tools::ListEventsResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn list_autopilot_sessions(
-        &self,
-        _params: durable_tools::ListSessionsParams,
-    ) -> Result<durable_tools::ListSessionsResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn action(
-        &self,
-        _snapshot_hash: SnapshotHash,
-        _input: ActionInput,
-    ) -> Result<InferenceResponse, TensorZeroClientError> {
-        // Mock just returns the same response as inference() for simplicity
-        self.response
-            .clone()
-            .ok_or(TensorZeroClientError::StreamingNotSupported)
-    }
-
-    async fn get_config_snapshot(
-        &self,
-        _hash: Option<String>,
-    ) -> Result<GetConfigResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn write_config(
-        &self,
-        _request: WriteConfigRequest,
-    ) -> Result<WriteConfigResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn create_datapoints(
-        &self,
-        _dataset_name: String,
-        _datapoints: Vec<tensorzero::CreateDatapointRequest>,
-    ) -> Result<tensorzero::CreateDatapointsResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn create_datapoints_from_inferences(
-        &self,
-        _dataset_name: String,
-        _params: tensorzero::CreateDatapointsFromInferenceRequestParams,
-    ) -> Result<tensorzero::CreateDatapointsResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn list_datapoints(
-        &self,
-        _dataset_name: String,
-        _request: tensorzero::ListDatapointsRequest,
-    ) -> Result<tensorzero::GetDatapointsResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn get_datapoints(
-        &self,
-        _dataset_name: Option<String>,
-        _ids: Vec<Uuid>,
-    ) -> Result<tensorzero::GetDatapointsResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn update_datapoints(
-        &self,
-        _dataset_name: String,
-        _datapoints: Vec<tensorzero::UpdateDatapointRequest>,
-    ) -> Result<tensorzero::UpdateDatapointsResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn delete_datapoints(
-        &self,
-        _dataset_name: String,
-        _ids: Vec<Uuid>,
-    ) -> Result<tensorzero::DeleteDatapointsResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn list_inferences(
-        &self,
-        _request: tensorzero::ListInferencesRequest,
-    ) -> Result<tensorzero::GetInferencesResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn launch_optimization_workflow(
-        &self,
-        _params: LaunchOptimizationWorkflowParams,
-    ) -> Result<OptimizationJobHandle, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn poll_optimization(
-        &self,
-        _job_handle: &OptimizationJobHandle,
-    ) -> Result<OptimizationJobInfo, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn get_latest_feedback_id_by_metric(
-        &self,
-        _target_id: Uuid,
-    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn get_feedback_by_variant(
-        &self,
-        _metric_name: String,
-        _function_name: String,
-        _variant_names: Option<Vec<String>>,
-    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
-        Err(TensorZeroClientError::AutopilotUnavailable)
-    }
-
-    async fn run_evaluation(
-        &self,
-        _params: durable_tools::RunEvaluationParams,
-    ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::NotSupported(
-            "run_evaluation not supported in mock client".to_string(),
-        ))
-    }
+/// Create a mock that returns the given response for inference/action calls.
+fn mock_client_with_response(response: InferenceResponse) -> MockTensorZeroClient {
+    let mut mock = MockTensorZeroClient::new();
+    let response_clone = response.clone();
+    mock.expect_inference().returning(move |_| {
+        let r = response.clone();
+        Box::pin(async move { Ok(r) })
+    });
+    mock.expect_action().returning(move |_, _| {
+        let r = response_clone.clone();
+        Box::pin(async move { Ok(r) })
+    });
+    mock
 }
 
 /// Create a mock chat inference response with the given text content.
@@ -466,7 +305,7 @@ impl TaskTool for InferenceTaskTool {
 async fn execute_erased_deserializes_and_serializes_correctly(pool: PgPool) -> sqlx::Result<()> {
     let tool = EchoSimpleTool;
 
-    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
     let ctx = SimpleToolContext::new(&pool, &t0_client);
     let llm_params = serde_json::json!({"message": "hello"});
     // Unit type () deserializes from null, not {}
@@ -485,7 +324,7 @@ async fn execute_erased_deserializes_and_serializes_correctly(pool: PgPool) -> s
 async fn execute_erased_returns_error_on_invalid_params(pool: PgPool) -> sqlx::Result<()> {
     let tool = EchoSimpleTool;
 
-    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
     let ctx = SimpleToolContext::new(&pool, &t0_client);
     // Missing required "message" field
     let llm_params = serde_json::json!({"wrong_field": "hello"});
@@ -505,7 +344,7 @@ async fn execute_erased_returns_error_on_invalid_params(pool: PgPool) -> sqlx::R
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<()> {
-    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
     let executor = ToolExecutor::builder()
         .pool(pool)
         .queue_name(format!("test_queue_{}", Uuid::now_v7()))
@@ -539,7 +378,7 @@ async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<(
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
-    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
     let executor = ToolExecutor::builder()
         .pool(pool)
@@ -579,7 +418,7 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
-    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
     let executor = ToolExecutor::builder()
         .pool(pool)
@@ -724,7 +563,7 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
     CAPTURED_KEYS.lock().await.clear();
 
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
-    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
     let executor = ToolExecutor::builder()
         .pool(pool)
@@ -807,8 +646,7 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn simple_tool_calls_inference_successfully(pool: PgPool) -> sqlx::Result<()> {
     let mock_response = create_mock_chat_response("Hello from TensorZero!");
-    let t0_client: Arc<dyn TensorZeroClient> =
-        Arc::new(MockTensorZeroClient::with_response(mock_response));
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_response(mock_response));
 
     let tool = InferenceSimpleTool;
     let ctx = SimpleToolContext::new(&pool, &t0_client);
@@ -827,7 +665,7 @@ async fn simple_tool_calls_inference_successfully(pool: PgPool) -> sqlx::Result<
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn simple_tool_propagates_inference_error(pool: PgPool) -> sqlx::Result<()> {
     // Mock returns error when response is None
-    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
     let tool = InferenceSimpleTool;
     let ctx = SimpleToolContext::new(&pool, &t0_client);
@@ -845,8 +683,7 @@ async fn simple_tool_propagates_inference_error(pool: PgPool) -> sqlx::Result<()
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Result<()> {
     let mock_response = create_mock_chat_response("Response from TaskTool!");
-    let t0_client: Arc<dyn TensorZeroClient> =
-        Arc::new(MockTensorZeroClient::with_response(mock_response));
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_response(mock_response));
 
     let executor = ToolExecutor::builder()
         .pool(pool)
@@ -881,8 +718,7 @@ async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Resul
 async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
     let mock_response = create_mock_chat_response("Spawned response!");
-    let t0_client: Arc<dyn TensorZeroClient> =
-        Arc::new(MockTensorZeroClient::with_response(mock_response));
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_response(mock_response));
 
     let executor = ToolExecutor::builder()
         .pool(pool)
