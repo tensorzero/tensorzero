@@ -1,20 +1,16 @@
 //! AWS SageMaker model provider using direct HTTP calls.
 
-use aws_credential_types::Credentials;
 use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
-use aws_types::SdkConfig;
 use aws_types::region::Region;
 use bytes::BytesMut;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
-use reqwest::StatusCode;
-use secrecy::ExposeSecret;
 use serde::Serialize;
 use std::time::Instant;
 
 use super::aws_common::{
-    self, AWSCredentials, AWSEndpointUrl, AWSRegion, get_credentials, sign_request,
-    warn_if_credential_exfiltration_risk,
+    AWSCredentials, AWSEndpointUrl, AWSProviderConfig, AWSRegion, check_eventstream_exception,
+    sign_request,
 };
 use super::helpers::inject_extra_request_data;
 use crate::cache::ModelProviderRequest;
@@ -40,15 +36,9 @@ const PROVIDER_TYPE: &str = "aws_sagemaker";
 pub struct AWSSagemakerProvider {
     endpoint_name: String,
     #[serde(skip)]
-    sdk_config: SdkConfig,
+    config: AWSProviderConfig,
     #[serde(skip)] // TODO: add a way to Serialize the WrappedProvider
     pub hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
-    #[serde(skip)]
-    region: Option<AWSRegion>,
-    #[serde(skip)]
-    endpoint_url: Option<AWSEndpointUrl>,
-    #[serde(skip)]
-    credentials: AWSCredentials,
 }
 
 impl AWSSagemakerProvider {
@@ -60,121 +50,33 @@ impl AWSSagemakerProvider {
         endpoint_url: Option<AWSEndpointUrl>,
         credentials: AWSCredentials,
     ) -> Result<Self, Error> {
-        // Get the SDK config for credential loading
-        let sdk_config = aws_common::config_with_region(PROVIDER_TYPE, static_region).await?;
-
-        // Warn about potential credential exfiltration risk
-        warn_if_credential_exfiltration_risk(&endpoint_url, &credentials, PROVIDER_TYPE);
-
-        Ok(Self {
-            endpoint_name,
-            sdk_config,
-            hosted_provider,
+        let config = AWSProviderConfig::new(
+            static_region,
             region,
             endpoint_url,
             credentials,
+            PROVIDER_TYPE,
+        )
+        .await?;
+
+        Ok(Self {
+            endpoint_name,
+            config,
+            hosted_provider,
         })
     }
 
     /// Get the base URL for the SageMaker Runtime API.
     fn get_base_url(&self, dynamic_api_keys: &InferenceCredentials) -> Result<String, Error> {
-        if let Some(endpoint_url) = &self.endpoint_url {
+        if let Some(endpoint_url) = &self.config.endpoint_url {
             let url = endpoint_url.resolve(dynamic_api_keys)?;
             Ok(url.to_string().trim_end_matches('/').to_string())
         } else {
-            let region = self.get_region(dynamic_api_keys)?;
+            let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
             Ok(format!(
                 "https://runtime.sagemaker.{}.amazonaws.com",
                 region.as_ref()
             ))
-        }
-    }
-
-    /// Get the region for this request.
-    fn get_region(&self, dynamic_api_keys: &InferenceCredentials) -> Result<Region, Error> {
-        if let Some(region) = &self.region {
-            region.resolve(dynamic_api_keys)
-        } else {
-            // Use the region from the SDK config
-            self.sdk_config.region().cloned().ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceClient {
-                    raw_request: None,
-                    raw_response: None,
-                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message: "No region configured".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })
-        }
-    }
-
-    /// Get credentials for this request.
-    async fn get_request_credentials(
-        &self,
-        dynamic_api_keys: &InferenceCredentials,
-    ) -> Result<Credentials, Error> {
-        match &self.credentials {
-            AWSCredentials::Static {
-                access_key_id,
-                secret_access_key,
-                session_token,
-            } => {
-                // Use static credentials directly
-                Ok(Credentials::new(
-                    access_key_id.clone(),
-                    secret_access_key.expose_secret().to_string(),
-                    session_token
-                        .as_ref()
-                        .map(|st| st.expose_secret().to_string()),
-                    None,
-                    "tensorzero",
-                ))
-            }
-            AWSCredentials::Dynamic {
-                access_key_id_key,
-                secret_access_key_key,
-                session_token_key,
-            } => {
-                // Resolve dynamic credentials from the request
-                let ak = dynamic_api_keys.get(access_key_id_key).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "aws".to_string(),
-                        message: format!(
-                            "Dynamic `access_key_id` with key `{access_key_id_key}` is missing"
-                        ),
-                    })
-                })?;
-                let sk = dynamic_api_keys.get(secret_access_key_key).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "aws".to_string(),
-                        message: format!(
-                            "Dynamic `secret_access_key` with key `{secret_access_key_key}` is missing"
-                        ),
-                    })
-                })?;
-                let st = session_token_key
-                    .as_ref()
-                    .map(|key| {
-                        dynamic_api_keys.get(key).ok_or_else(|| {
-                            Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: "aws".to_string(),
-                                message: format!(
-                                    "Dynamic `session_token` with key `{key}` is missing"
-                                ),
-                            })
-                        })
-                    })
-                    .transpose()?;
-
-                Ok(Credentials::new(
-                    ak.expose_secret().to_string(),
-                    sk.expose_secret().to_string(),
-                    st.map(|s| s.expose_secret().to_string()),
-                    None,
-                    "tensorzero",
-                ))
-            }
-            AWSCredentials::Sdk => get_credentials(&self.sdk_config, PROVIDER_TYPE).await,
         }
     }
 }
@@ -221,8 +123,11 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
 
         // Get credentials and region
-        let credentials = self.get_request_credentials(dynamic_api_keys).await?;
-        let region = self.get_region(dynamic_api_keys)?;
+        let credentials = self
+            .config
+            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+            .await?;
+        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
         // Build headers
         let mut headers = http_extra_headers;
@@ -340,8 +245,11 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
 
         // Get credentials and region
-        let credentials = self.get_request_credentials(dynamic_api_keys).await?;
-        let region = self.get_region(dynamic_api_keys)?;
+        let credentials = self
+            .config
+            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+            .await?;
+        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
         // Build headers
         let mut headers = http_extra_headers;
@@ -421,21 +329,8 @@ impl InferenceProvider for AWSSagemakerProvider {
                         loop {
                             match decoder.decode_frame(&mut buffer) {
                                 Ok(DecodedFrame::Complete(message)) => {
-                                    // Check for exception messages
-                                    let message_type = message.headers().iter()
-                                        .find(|h| h.name().as_str() == ":message-type")
-                                        .and_then(|h| h.value().as_string().ok())
-                                        .map(|s| s.as_str().to_owned());
-
-                                    if message_type.as_deref() == Some("exception") {
-                                        let exception_type = message.headers().iter()
-                                            .find(|h| h.name().as_str() == ":exception-type")
-                                            .and_then(|h| h.value().as_string().ok())
-                                            .map(|s| s.as_str().to_owned())
-                                            .unwrap_or_else(|| "unknown".to_string());
-
-                                        let error_message = String::from_utf8_lossy(message.payload()).to_string();
-
+                                    // Check for exception messages using shared helper
+                                    if let Some((exception_type, error_message)) = check_eventstream_exception(&message) {
                                         yield Err(TensorZeroEventError::TensorZero(Error::new(
                                             ErrorDetails::InferenceServer {
                                                 message: format!("AWS Sagemaker streaming exception: {exception_type}"),

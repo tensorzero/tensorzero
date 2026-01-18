@@ -7,6 +7,7 @@ use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, si
 use aws_sigv4::sign::v4;
 use aws_smithy_runtime_api::client::identity::Identity;
 use aws_smithy_runtime_api::client::stalled_stream_protection::StalledStreamProtectionConfig;
+use aws_smithy_types::event_stream::{Header, Message};
 use aws_types::SdkConfig;
 use reqwest::StatusCode;
 use secrecy::{ExposeSecret, SecretString};
@@ -601,6 +602,147 @@ pub async fn config_with_region(
     Ok(config)
 }
 
+/// Common configuration for AWS providers (Bedrock, SageMaker).
+///
+/// This struct holds the shared configuration fields and provides common
+/// methods for region and credential resolution.
+#[derive(Debug)]
+pub struct AWSProviderConfig {
+    pub sdk_config: SdkConfig,
+    pub region: Option<AWSRegion>,
+    pub endpoint_url: Option<AWSEndpointUrl>,
+    pub credentials: AWSCredentials,
+}
+
+impl AWSProviderConfig {
+    /// Create a new AWS provider config.
+    pub async fn new(
+        static_region: Option<Region>,
+        region: Option<AWSRegion>,
+        endpoint_url: Option<AWSEndpointUrl>,
+        credentials: AWSCredentials,
+        provider_type: &str,
+    ) -> Result<Self, Error> {
+        let sdk_config = config_with_region(provider_type, static_region).await?;
+        warn_if_credential_exfiltration_risk(&endpoint_url, &credentials, provider_type);
+        Ok(Self {
+            sdk_config,
+            region,
+            endpoint_url,
+            credentials,
+        })
+    }
+
+    /// Get the region for this request.
+    pub fn get_region(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        provider_type: &str,
+    ) -> Result<Region, Error> {
+        if let Some(region) = &self.region {
+            region.resolve(dynamic_api_keys)
+        } else {
+            self.sdk_config.region().cloned().ok_or_else(|| {
+                Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: None,
+                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                    message: "No region configured".to_string(),
+                    provider_type: provider_type.to_string(),
+                })
+            })
+        }
+    }
+
+    /// Get credentials for this request.
+    pub async fn get_request_credentials(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        provider_type: &str,
+    ) -> Result<Credentials, Error> {
+        resolve_request_credentials(
+            &self.credentials,
+            &self.sdk_config,
+            dynamic_api_keys,
+            provider_type,
+        )
+        .await
+    }
+}
+
+/// Resolve credentials for an AWS request.
+///
+/// Handles static, dynamic, and SDK credential types. This is the shared
+/// implementation used by both Bedrock and SageMaker providers.
+pub async fn resolve_request_credentials(
+    credentials: &AWSCredentials,
+    sdk_config: &SdkConfig,
+    dynamic_api_keys: &InferenceCredentials,
+    provider_type: &str,
+) -> Result<Credentials, Error> {
+    match credentials {
+        AWSCredentials::Static {
+            access_key_id,
+            secret_access_key,
+            session_token,
+        } => {
+            // Use static credentials directly
+            Ok(Credentials::new(
+                access_key_id.clone(),
+                secret_access_key.expose_secret().to_string(),
+                session_token
+                    .as_ref()
+                    .map(|st| st.expose_secret().to_string()),
+                None,
+                "tensorzero",
+            ))
+        }
+        AWSCredentials::Dynamic {
+            access_key_id_key,
+            secret_access_key_key,
+            session_token_key,
+        } => {
+            // Resolve dynamic credentials from the request
+            let ak = dynamic_api_keys.get(access_key_id_key).ok_or_else(|| {
+                Error::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: "aws".to_string(),
+                    message: format!(
+                        "Dynamic `access_key_id` with key `{access_key_id_key}` is missing"
+                    ),
+                })
+            })?;
+            let sk = dynamic_api_keys.get(secret_access_key_key).ok_or_else(|| {
+                Error::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: "aws".to_string(),
+                    message: format!(
+                        "Dynamic `secret_access_key` with key `{secret_access_key_key}` is missing"
+                    ),
+                })
+            })?;
+            let st = session_token_key
+                .as_ref()
+                .map(|key| {
+                    dynamic_api_keys.get(key).ok_or_else(|| {
+                        Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: "aws".to_string(),
+                            message: format!("Dynamic `session_token` with key `{key}` is missing"),
+                        })
+                    })
+                })
+                .transpose()?;
+
+            Ok(Credentials::new(
+                ak.expose_secret().to_string(),
+                sk.expose_secret().to_string(),
+                st.map(|s| s.expose_secret().to_string()),
+                None,
+                "tensorzero",
+            ))
+        }
+        AWSCredentials::Sdk => get_credentials(sdk_config, provider_type).await,
+    }
+}
+
 /// Get fresh credentials from the SDK config.
 /// This is used to handle credential rotation for long-running processes.
 pub async fn get_credentials(
@@ -736,6 +878,41 @@ pub fn sign_request(
     }
 
     Ok(signed_headers)
+}
+
+/// Check if a Smithy EventStream message is an exception.
+///
+/// AWS Smithy event streams can contain exception messages indicated by the
+/// `:message-type` header being set to "exception". This function checks for
+/// such exceptions and extracts the exception type and error message.
+///
+/// Returns `Some((exception_type, error_message))` if the message is an exception,
+/// `None` otherwise.
+///
+/// See https://smithy.io/2.0/aws/amazon-eventstream.html for details on the format.
+pub fn check_eventstream_exception(message: &Message) -> Option<(String, String)> {
+    let message_type = message
+        .headers()
+        .iter()
+        .find(|h: &&Header| h.name().as_str() == ":message-type")
+        .and_then(|h: &Header| h.value().as_string().ok())
+        .map(|s: &aws_smithy_types::str_bytes::StrBytes| s.as_str().to_owned());
+
+    if message_type.as_deref() != Some("exception") {
+        return None;
+    }
+
+    let exception_type = message
+        .headers()
+        .iter()
+        .find(|h: &&Header| h.name().as_str() == ":exception-type")
+        .and_then(|h: &Header| h.value().as_string().ok())
+        .map(|s: &aws_smithy_types::str_bytes::StrBytes| s.as_str().to_owned())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let error_message = String::from_utf8_lossy(message.payload()).to_string();
+
+    Some((exception_type, error_message))
 }
 
 #[cfg(test)]
