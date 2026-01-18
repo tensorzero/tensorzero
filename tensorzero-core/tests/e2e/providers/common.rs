@@ -560,6 +560,14 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_reasoning_output_tokens() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_with_provider(provider).await;
+            }
+        }
+
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
