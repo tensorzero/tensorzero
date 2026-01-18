@@ -456,7 +456,10 @@ impl ToolExecutorBuilder {
                     .map(|p| p.get())
                     .unwrap_or(4)
             });
-            let js_runtime_pool = Arc::new(JsRuntimePool::new(num_workers, tokio::runtime::Handle::current()));
+            let js_runtime_pool = Arc::new(JsRuntimePool::new(
+                num_workers,
+                tokio::runtime::Handle::current(),
+            ));
             ToolAppState::new(pool.clone(), registry.clone(), t0_client, js_runtime_pool)
         };
 

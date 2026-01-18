@@ -525,7 +525,10 @@ impl ToolContext {
     ///
     /// This version always returns an error because the TypeScript feature is not enabled.
     #[cfg(not(feature = "typescript"))]
-    #[expect(clippy::unused_async, reason = "Async signature for consistency with typescript feature")]
+    #[expect(
+        clippy::unused_async,
+        reason = "Async signature for consistency with typescript feature"
+    )]
     pub async fn js_runtime_pool(&self) -> ToolResult<()> {
         Err(NonControlToolError::Internal {
             message: "TypeScript feature is not enabled".to_string(),

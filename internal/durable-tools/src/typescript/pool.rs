@@ -9,7 +9,7 @@
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use crossbeam_channel::{bounded, Sender};
+use crossbeam_channel::{Sender, bounded};
 use deno_core::PollEventLoopOptions;
 use serde_json::Value as JsonValue;
 use tokio::runtime::Handle;
@@ -156,10 +156,10 @@ impl JsRuntimePool {
     ) -> Result<JsonValue, TypeScriptToolError> {
         let (result_sender, result_receiver) = oneshot::channel();
 
-        let params_json =
-            serde_json::to_string(&params).map_err(|e| TypeScriptToolError::Serialization(e.to_string()))?;
-        let side_info_json =
-            serde_json::to_string(&side_info).map_err(|e| TypeScriptToolError::Serialization(e.to_string()))?;
+        let params_json = serde_json::to_string(&params)
+            .map_err(|e| TypeScriptToolError::Serialization(e.to_string()))?;
+        let side_info_json = serde_json::to_string(&side_info)
+            .map_err(|e| TypeScriptToolError::Serialization(e.to_string()))?;
 
         self.work_sender
             .send(WorkItem {
@@ -178,7 +178,8 @@ impl JsRuntimePool {
             .map_err(|_| TypeScriptToolError::WorkerPanicked)?
             .map_err(TypeScriptToolError::Execution)?;
 
-        serde_json::from_str(&result_str).map_err(|e| TypeScriptToolError::Serialization(e.to_string()))
+        serde_json::from_str(&result_str)
+            .map_err(|e| TypeScriptToolError::Serialization(e.to_string()))
     }
 
     /// Get the number of workers in the pool.
@@ -194,11 +195,7 @@ impl JsRuntimePool {
 /// 2. Wraps the user code to call the tool's run function
 /// 3. Executes the code and runs the event loop
 /// 4. Extracts and returns the result
-fn execute_on_runtime(
-    runtime: &mut deno_core::JsRuntime,
-    tokio_handle: &Handle,
-    work: WorkItem,
-) {
+fn execute_on_runtime(runtime: &mut deno_core::JsRuntime, tokio_handle: &Handle, work: WorkItem) {
     // Update the runtime context for this execution
     update_runtime_context(runtime, work.ctx, work.task_id, work.episode_id);
 

@@ -8,6 +8,9 @@ use super::error::TypeScriptToolError;
 
 /// Transpile TypeScript code to JavaScript.
 ///
+/// The transpiled code converts ESM `export default` to `globalThis.default`
+/// assignment so it can be executed as a script (not a module) in the Deno runtime.
+///
 /// # Errors
 ///
 /// Returns `TypeScriptToolError::Transpile` if the TypeScript code has syntax errors
@@ -34,7 +37,25 @@ pub fn transpile_typescript(code: &str) -> Result<String, TypeScriptToolError> {
         )
         .map_err(|e| TypeScriptToolError::Transpile(e.to_string()))?;
 
-    Ok(transpiled.into_source().text)
+    let js_code = transpiled.into_source().text;
+
+    // Convert ESM `export default` to `globalThis.default` assignment.
+    // This is necessary because we execute the code as a script, not a module.
+    // The ESM syntax `export default X` is not valid in script context.
+    // Note: deno_ast's ModuleKind::Cjs doesn't actually transform the syntax,
+    // it only affects import resolution, so we need to do this manually.
+    let js_code = convert_esm_default_export(&js_code);
+
+    Ok(js_code)
+}
+
+/// Convert ESM `export default` syntax to `globalThis.default` assignment.
+///
+/// This handles the common patterns:
+/// - `export default { ... };` → `globalThis.default = { ... };`
+/// - `export default X;` → `globalThis.default = X;`
+fn convert_esm_default_export(code: &str) -> String {
+    code.replace("export default ", "globalThis.default = ")
 }
 
 #[cfg(test)]
@@ -51,9 +72,21 @@ mod tests {
         let js_code = transpile_typescript(ts_code).expect("Transpilation should succeed");
 
         // Should not contain TypeScript type annotations
-        assert!(!js_code.contains(": number"));
+        assert!(
+            !js_code.contains(": number"),
+            "Type annotations should be stripped"
+        );
         // Should contain the actual code
-        assert!(js_code.contains("42"));
+        assert!(js_code.contains("42"), "Literal values should be preserved");
+        // Should convert ESM export to globalThis assignment for script execution
+        assert!(
+            js_code.contains("globalThis.default ="),
+            "ESM export should be converted to globalThis.default"
+        );
+        assert!(
+            !js_code.contains("export default"),
+            "ESM export syntax should be removed"
+        );
     }
 
     #[test]

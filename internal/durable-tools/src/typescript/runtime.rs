@@ -1,6 +1,6 @@
 //! JsRuntime setup with the typescript-tool extension.
 
-use deno_core::{extension, JsRuntime, RuntimeOptions};
+use deno_core::{JsRuntime, RuntimeOptions, extension};
 use uuid::Uuid;
 
 use super::ops::EpisodeId;

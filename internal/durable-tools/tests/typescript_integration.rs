@@ -20,7 +20,10 @@ use durable::MIGRATOR;
 use durable::SpawnOptions;
 use durable::WorkerOptions;
 use durable_tools::typescript::{TypeScriptTool, TypeScriptToolInstance};
-use durable_tools::{SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient, ToolContext, ToolExecutor, ToolMetadata, ToolResult};
+use durable_tools::{
+    SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient, ToolContext, ToolExecutor,
+    ToolMetadata, ToolResult,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -56,7 +59,11 @@ async fn get_task_row(pool: &PgPool, queue_name: &str, task_id: uuid::Uuid) -> T
 }
 
 /// Helper to query run failure reason from the database.
-async fn get_run_failure(pool: &PgPool, queue_name: &str, run_id: uuid::Uuid) -> Option<serde_json::Value> {
+async fn get_run_failure(
+    pool: &PgPool,
+    queue_name: &str,
+    run_id: uuid::Uuid,
+) -> Option<serde_json::Value> {
     let query = AssertSqlSafe(format!(
         r#"SELECT failure_reason FROM durable."r_{queue_name}" WHERE run_id = $1"#
     ));
@@ -209,6 +216,72 @@ impl TaskTool for RustCallsTypeScriptTool {
             .to_string();
 
         Ok(GreetOutput { greeting })
+    }
+}
+
+// ============================================================================
+// Test Fixtures - Rust TaskTool that calls TypeScript which calls Rust
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+struct ChainedAddParams {
+    x: i32,
+    y: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct ChainedAddOutput {
+    original_x: i32,
+    original_y: i32,
+    sum: i32,
+}
+
+/// A `TaskTool` that calls a TypeScript tool, which in turn calls a Rust SimpleTool.
+/// This tests the full chain: Rust TaskTool → TypeScript → Rust SimpleTool.
+#[derive(Default, Clone)]
+struct RustCallsTsCallsRustTool;
+
+impl ToolMetadata for RustCallsTsCallsRustTool {
+    type SideInfo = ();
+    type Output = ChainedAddOutput;
+    type LlmParams = ChainedAddParams;
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("rust_calls_ts_calls_rust")
+    }
+
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed("Calls a TypeScript tool that calls a Rust tool")
+    }
+
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(60)
+    }
+}
+
+#[async_trait]
+impl TaskTool for RustCallsTsCallsRustTool {
+    async fn execute(
+        &self,
+        llm_params: <Self as ToolMetadata>::LlmParams,
+        _side_info: Self::SideInfo,
+        ctx: &ToolContext,
+    ) -> ToolResult<Self::Output> {
+        // Call the TypeScript tool that calls the Rust add tool
+        let result = ctx
+            .call_tool(
+                "ts_calls_rust",
+                json!({"x": llm_params.x, "y": llm_params.y}),
+                json!(null),
+                SpawnOptions::default(),
+            )
+            .await?;
+
+        Ok(ChainedAddOutput {
+            original_x: result["original_x"].as_i64().unwrap_or(0) as i32,
+            original_y: result["original_y"].as_i64().unwrap_or(0) as i32,
+            sum: result["sum_from_rust"].as_i64().unwrap_or(0) as i32,
+        })
     }
 }
 
@@ -454,20 +527,31 @@ async fn typescript_tool_executes_and_returns_result(pool: PgPool) -> sqlx::Resu
         .unwrap();
 
     // Wait for task completion with timeout
-    let task_row = wait_for_task_completion(&pool, &queue_name, spawn_result.task_id, Duration::from_secs(10)).await;
+    let task_row = wait_for_task_completion(
+        &pool,
+        &queue_name,
+        spawn_result.task_id,
+        Duration::from_secs(10),
+    )
+    .await;
     worker.shutdown().await;
 
     // If task failed, print the failure reason for debugging
-    if task_row.state == "failed" {
-        if let Some(run_id) = task_row.last_attempt_run {
-            let failure = get_run_failure(&pool, &queue_name, run_id).await;
-            panic!("Task failed with failure_reason: {:?}", failure);
-        }
+    if task_row.state == "failed"
+        && let Some(run_id) = task_row.last_attempt_run
+    {
+        let failure = get_run_failure(&pool, &queue_name, run_id).await;
+        panic!("Task failed with failure_reason: {failure:?}");
     }
 
-    assert_eq!(task_row.state, "completed", "Task should be completed, got: {:?}", task_row);
+    assert_eq!(
+        task_row.state, "completed",
+        "Task should be completed, got: {task_row:?}"
+    );
 
-    let result = task_row.completed_payload.expect("Task should have a result");
+    let result = task_row
+        .completed_payload
+        .expect("Task should have a result");
     assert_eq!(
         result["echoed"], "Hello from TypeScript!",
         "TypeScript tool should echo the message"
@@ -531,12 +615,23 @@ async fn rust_task_tool_can_call_typescript_tool(pool: PgPool) -> sqlx::Result<(
         .unwrap();
 
     // Wait for task completion with timeout
-    let task_row = wait_for_task_completion(&pool, &queue_name, spawn_result.task_id, Duration::from_secs(10)).await;
+    let task_row = wait_for_task_completion(
+        &pool,
+        &queue_name,
+        spawn_result.task_id,
+        Duration::from_secs(10),
+    )
+    .await;
     worker.shutdown().await;
 
-    assert_eq!(task_row.state, "completed", "Task should be completed, got: {:?}", task_row);
+    assert_eq!(
+        task_row.state, "completed",
+        "Task should be completed, got: {task_row:?}"
+    );
 
-    let result = task_row.completed_payload.expect("Task should have a result");
+    let result = task_row
+        .completed_payload
+        .expect("Task should have a result");
     assert_eq!(
         result["greeting"], "Hello, World!",
         "Rust tool should receive greeting from TypeScript tool"
@@ -598,12 +693,23 @@ async fn typescript_tool_can_call_rust_simple_tool(pool: PgPool) -> sqlx::Result
         .unwrap();
 
     // Wait for task completion with timeout
-    let task_row = wait_for_task_completion(&pool, &queue_name, spawn_result.task_id, Duration::from_secs(10)).await;
+    let task_row = wait_for_task_completion(
+        &pool,
+        &queue_name,
+        spawn_result.task_id,
+        Duration::from_secs(10),
+    )
+    .await;
     worker.shutdown().await;
 
-    assert_eq!(task_row.state, "completed", "Task should be completed, got: {:?}", task_row);
+    assert_eq!(
+        task_row.state, "completed",
+        "Task should be completed, got: {task_row:?}"
+    );
 
-    let result = task_row.completed_payload.expect("Task should have a result");
+    let result = task_row
+        .completed_payload
+        .expect("Task should have a result");
     assert_eq!(result["original_x"], 10);
     assert_eq!(result["original_y"], 32);
     assert_eq!(
@@ -708,6 +814,103 @@ async fn typescript_tool_instance_implements_clone(pool: PgPool) -> sqlx::Result
         .register_task_tool_instance(ts_tool)
         .await
         .expect("Failed to register TypeScript tool");
+
+    Ok(())
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn rust_task_tool_calls_typescript_which_calls_rust(pool: PgPool) -> sqlx::Result<()> {
+    let queue_name = format!("ts_chain_{}", Uuid::now_v7());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::new());
+    let executor = ToolExecutor::builder()
+        .pool(pool.clone())
+        .queue_name(&queue_name)
+        .t0_client(t0_client)
+        .build()
+        .await
+        .expect("Failed to build executor");
+
+    executor
+        .durable()
+        .create_queue(None)
+        .await
+        .expect("Failed to create queue");
+
+    // Register Rust SimpleTool (the innermost tool in the chain)
+    executor
+        .register_simple_tool::<AddSimpleTool>()
+        .await
+        .expect("Failed to register Rust SimpleTool");
+
+    // Register TypeScript tool that calls the Rust SimpleTool
+    let ts_tool = create_ts_calls_rust_tool();
+    executor
+        .register_task_tool_instance(ts_tool)
+        .await
+        .expect("Failed to register TypeScript tool");
+
+    // Register Rust TaskTool that calls the TypeScript tool (outermost in the chain)
+    executor
+        .register_task_tool::<RustCallsTsCallsRustTool>()
+        .await
+        .expect("Failed to register Rust TaskTool");
+
+    // Spawn the outermost Rust tool (which calls TypeScript, which calls Rust)
+    let episode_id = Uuid::now_v7();
+    let spawn_result = executor
+        .spawn_tool::<RustCallsTsCallsRustTool>(
+            ChainedAddParams { x: 100, y: 23 },
+            (),
+            episode_id,
+            SpawnOptions::default(),
+        )
+        .await
+        .expect("Failed to spawn Rust tool");
+
+    // Start worker
+    let worker = executor
+        .start_worker(WorkerOptions {
+            poll_interval: Duration::from_millis(50),
+            claim_timeout: Duration::from_secs(30),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Wait for task completion with timeout
+    let task_row = wait_for_task_completion(&pool, &queue_name, spawn_result.task_id, Duration::from_secs(15)).await;
+    worker.shutdown().await;
+
+    // If task failed, print the failure reason for debugging
+    if task_row.state == "failed"
+        && let Some(run_id) = task_row.last_attempt_run
+    {
+        let failure = get_run_failure(&pool, &queue_name, run_id).await;
+        panic!("Task failed with failure_reason: {failure:?}");
+    }
+
+    assert_eq!(
+        task_row.state, "completed",
+        "Task should be completed, got: {task_row:?}"
+    );
+
+    let result = task_row
+        .completed_payload
+        .expect("Task should have a result");
+
+    // Verify the full chain worked: Rust → TypeScript → Rust → result
+    assert_eq!(
+        result["original_x"], 100,
+        "Should preserve original x through the chain"
+    );
+    assert_eq!(
+        result["original_y"], 23,
+        "Should preserve original y through the chain"
+    );
+    assert_eq!(
+        result["sum"], 123,
+        "Rust TaskTool should receive sum computed by Rust SimpleTool via TypeScript"
+    );
 
     Ok(())
 }
