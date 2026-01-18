@@ -555,6 +555,29 @@ impl AWSProviderConfig {
         }
     }
 
+    /// Get the base URL for an AWS service.
+    ///
+    /// If `endpoint_url` is configured, resolves and returns it.
+    /// Otherwise, constructs the URL using the region and service subdomain.
+    pub fn get_base_url(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        service_subdomain: &str,
+        provider_type: &str,
+    ) -> Result<String, Error> {
+        if let Some(endpoint_url) = &self.endpoint_url {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
+            Ok(url.to_string().trim_end_matches('/').to_string())
+        } else {
+            let region = self.get_region(dynamic_api_keys, provider_type)?;
+            Ok(format!(
+                "https://{}.{}.amazonaws.com",
+                service_subdomain,
+                region.as_ref()
+            ))
+        }
+    }
+
     /// Get credentials for this request.
     pub async fn get_request_credentials(
         &self,

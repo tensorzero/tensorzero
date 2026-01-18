@@ -85,20 +85,6 @@ impl AWSBedrockProvider {
     pub fn model_id(&self) -> &str {
         &self.model_id
     }
-
-    /// Get the base URL for the Bedrock API.
-    fn get_base_url(&self, dynamic_api_keys: &InferenceCredentials) -> Result<String, Error> {
-        if let Some(endpoint_url) = &self.config.endpoint_url {
-            let url = endpoint_url.resolve(dynamic_api_keys)?;
-            Ok(url.to_string().trim_end_matches('/').to_string())
-        } else {
-            let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
-            Ok(format!(
-                "https://bedrock-runtime.{}.amazonaws.com",
-                region.as_ref()
-            ))
-        }
-    }
 }
 
 impl InferenceProvider for AWSBedrockProvider {
@@ -123,7 +109,9 @@ impl InferenceProvider for AWSBedrockProvider {
         } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "bedrock-runtime", PROVIDER_TYPE)?;
         let url = format!(
             "{}/model/{}/converse",
             base_url,
@@ -204,7 +192,9 @@ impl InferenceProvider for AWSBedrockProvider {
         } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL for streaming endpoint
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "bedrock-runtime", PROVIDER_TYPE)?;
         let url = format!(
             "{}/model/{}/converse-stream",
             base_url,

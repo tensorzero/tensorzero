@@ -65,20 +65,51 @@ impl AWSSagemakerProvider {
             hosted_provider,
         })
     }
+}
 
-    /// Get the base URL for the SageMaker Runtime API.
-    fn get_base_url(&self, dynamic_api_keys: &InferenceCredentials) -> Result<String, Error> {
-        if let Some(endpoint_url) = &self.config.endpoint_url {
-            let url = endpoint_url.resolve(dynamic_api_keys)?;
-            Ok(url.to_string().trim_end_matches('/').to_string())
-        } else {
-            let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
-            Ok(format!(
-                "https://runtime.sagemaker.{}.amazonaws.com",
-                region.as_ref()
-            ))
-        }
+/// Prepared request body ready for signing and sending
+struct PreparedSagemakerRequest {
+    raw_request: String,
+    body_bytes: Vec<u8>,
+    http_extra_headers: http::HeaderMap,
+}
+
+/// Prepare the request body: build request using hosted provider, serialize, inject extras
+async fn prepare_sagemaker_request<'a>(
+    request: ModelProviderRequest<'a>,
+    model_provider: &'a ModelProvider,
+    hosted_provider: &'a (dyn WrappedProvider + Send + Sync),
+) -> Result<PreparedSagemakerRequest, Error> {
+    // Build request body using WrappedProvider
+    let request_body = hosted_provider.make_body(request).await?;
+
+    // Inject extra body/headers
+    let mut body_json = request_body;
+    let http_extra_headers = inject_extra_request_data(
+        &request.request.extra_body,
+        &request.request.extra_headers,
+        model_provider,
+        request.model_name,
+        &mut body_json,
+    )?;
+
+    // Sort for consistent ordering in tests
+    if cfg!(feature = "e2e_tests") {
+        body_json.sort_all_objects();
     }
+
+    let raw_request = serde_json::to_string(&body_json).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize request: {e}"),
+        })
+    })?;
+    let body_bytes = raw_request.as_bytes().to_vec();
+
+    Ok(PreparedSagemakerRequest {
+        raw_request,
+        body_bytes,
+        http_extra_headers,
+    })
 }
 
 impl InferenceProvider for AWSSagemakerProvider {
@@ -89,33 +120,23 @@ impl InferenceProvider for AWSSagemakerProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        // Build request body using WrappedProvider
-        let request_body = self.hosted_provider.make_body(request).await?;
+        // Save references we need later (these are all Copy or references)
+        let inner_request = request.request;
+        let model_name = request.model_name;
+        let provider_name = request.provider_name;
+        let model_inference_id = request.model_inference_id;
 
-        // Inject extra body/headers
-        let mut body_json = request_body;
-        let http_extra_headers = inject_extra_request_data(
-            &request.request.extra_body,
-            &request.request.extra_headers,
-            model_provider,
-            request.model_name,
-            &mut body_json,
-        )?;
-
-        // Sort for consistent ordering in tests
-        if cfg!(feature = "e2e_tests") {
-            body_json.sort_all_objects();
-        }
-
-        let raw_request = serde_json::to_string(&body_json).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize request: {e}"),
-            })
-        })?;
-        let body_bytes = raw_request.as_bytes().to_vec();
+        // Prepare the request body
+        let PreparedSagemakerRequest {
+            raw_request,
+            body_bytes,
+            http_extra_headers,
+        } = prepare_sagemaker_request(request, model_provider, &*self.hosted_provider).await?;
 
         // Build URL
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "runtime.sagemaker", PROVIDER_TYPE)?;
         let url = format!(
             "{}/endpoints/{}/invocations",
             base_url,
@@ -150,13 +171,13 @@ impl InferenceProvider for AWSSagemakerProvider {
 
         // Parse response using WrappedProvider
         self.hosted_provider.parse_response(
-            request.request,
+            inner_request,
             raw_request,
             raw_response,
             latency,
-            request.model_name,
-            request.provider_name,
-            request.model_inference_id,
+            model_name,
+            provider_name,
+            model_inference_id,
         )
     }
 
@@ -167,33 +188,20 @@ impl InferenceProvider for AWSSagemakerProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        // Build request body using WrappedProvider
-        let request_body = self.hosted_provider.make_body(request).await?;
+        // Save references we need later
+        let model_inference_id = request.model_inference_id;
 
-        // Inject extra body/headers
-        let mut body_json = request_body;
-        let http_extra_headers = inject_extra_request_data(
-            &request.request.extra_body,
-            &request.request.extra_headers,
-            model_provider,
-            request.model_name,
-            &mut body_json,
-        )?;
-
-        // Sort for consistent ordering in tests
-        if cfg!(feature = "e2e_tests") {
-            body_json.sort_all_objects();
-        }
-
-        let raw_request = serde_json::to_string(&body_json).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize request: {e}"),
-            })
-        })?;
-        let body_bytes = raw_request.as_bytes().to_vec();
+        // Prepare the request body
+        let PreparedSagemakerRequest {
+            raw_request,
+            body_bytes,
+            http_extra_headers,
+        } = prepare_sagemaker_request(request, model_provider, &*self.hosted_provider).await?;
 
         // Build URL for streaming endpoint
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "runtime.sagemaker", PROVIDER_TYPE)?;
         let url = format!(
             "{}/endpoints/{}/invocations-response-stream",
             base_url,
@@ -358,7 +366,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                 Box::pin(event_stream),
                 start_time.into(),
                 &raw_request,
-                request.model_inference_id,
+                model_inference_id,
             )
             .peekable();
 
