@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::usage::RawUsageEntry;
+use crate::inference::types::usage::{RawResponseEntry, RawUsageEntry};
 use crate::inference::types::{ContentBlockChunk, FinishReason, current_timestamp};
 
 use crate::endpoints::inference::{InferenceResponseChunk, InferenceStream};
@@ -34,6 +34,10 @@ pub struct OpenAICompatibleResponseChunk {
     pub usage: Option<OpenAICompatibleUsage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw responses from previous model inferences (e.g., best-of-n candidates).
+    /// Emitted in the first chunk of a streaming response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_raw_response: Option<Vec<RawResponseEntry>>,
     /// DEPRECATED (#5697 / 2026.4+): Use `tensorzero_raw_chunk` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_original_chunk: Option<String>,
@@ -93,6 +97,11 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 None
             };
             let tensorzero_raw_usage = if include_raw_usage { c.raw_usage } else { None };
+            let tensorzero_raw_response = if include_raw_response {
+                c.raw_response
+            } else {
+                None
+            };
             // Compute chunk fields based on which request flags were set
             let tensorzero_original_chunk = if include_original_response {
                 c.original_chunk.clone()
@@ -124,6 +133,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 object: "chat.completion.chunk".to_string(),
                 usage,
                 tensorzero_raw_usage,
+                tensorzero_raw_response: tensorzero_raw_response.clone(),
                 tensorzero_original_chunk,
                 tensorzero_raw_chunk,
             }
@@ -135,6 +145,11 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 None
             };
             let tensorzero_raw_usage = if include_raw_usage { c.raw_usage } else { None };
+            let tensorzero_raw_response = if include_raw_response {
+                c.raw_response
+            } else {
+                None
+            };
             // Compute chunk fields based on which request flags were set
             let tensorzero_original_chunk = if include_original_response {
                 c.original_chunk.clone()
@@ -166,6 +181,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                 object: "chat.completion.chunk".to_string(),
                 usage,
                 tensorzero_raw_usage,
+                tensorzero_raw_response,
                 tensorzero_original_chunk,
                 tensorzero_raw_chunk,
             }
@@ -293,6 +309,7 @@ mod tests {
             finish_reason: None,
             original_chunk: None,
             raw_chunk: None,
+            raw_response: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -348,6 +365,7 @@ mod tests {
             finish_reason: None,
             original_chunk: None,
             raw_chunk: None,
+            raw_response: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -394,6 +412,7 @@ mod tests {
             finish_reason: None,
             original_chunk: None,
             raw_chunk: None,
+            raw_response: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -450,6 +469,7 @@ mod tests {
             finish_reason: None,
             original_chunk: None,
             raw_chunk: None,
+            raw_response: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -489,6 +509,7 @@ mod tests {
             finish_reason: None,
             original_chunk: None,
             raw_chunk: None,
+            raw_response: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -539,6 +560,7 @@ mod tests {
             finish_reason: None,
             original_chunk: None,
             raw_chunk: None,
+            raw_response: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -580,6 +602,7 @@ mod tests {
             finish_reason: None,
             original_chunk: Some(raw_response.clone()),
             raw_chunk: None,
+            raw_response: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -626,6 +649,7 @@ mod tests {
             finish_reason: None,
             original_chunk: Some(raw_response),
             raw_chunk: None,
+            raw_response: None,
         });
 
         let mut tool_id_to_index = HashMap::new();
@@ -664,6 +688,7 @@ mod tests {
             finish_reason: None,
             original_chunk: Some(raw_response.clone()),
             raw_chunk: None,
+            raw_response: None,
         });
 
         let mut tool_id_to_index = HashMap::new();

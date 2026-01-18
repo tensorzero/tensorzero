@@ -138,7 +138,7 @@ pub use streams::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
     UnknownChunk, collect_chunks,
 };
-pub use usage::{ApiType, RawUsageEntry, Usage};
+pub use usage::{ApiType, RawResponseEntry, RawUsageEntry, Usage};
 
 /*
  * Data flow in TensorZero

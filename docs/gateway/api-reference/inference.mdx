@@ -391,7 +391,7 @@ See below for more details.
 - **Type:** boolean
 - **Required:** no
 
-If `true`, the raw response from the model will be included in the response in the `raw_response` field as a string.
+If `true`, the raw responses from all model inferences will be included in the response in the `raw_response` field as an array.
 
 See `raw_response` in the [response](#response) section for more details.
 
@@ -951,16 +951,15 @@ The ID assigned to the inference.
 
 ##### `raw_response`
 
-- **Type:** string (optional)
+- **Type:** array (optional, only when `include_raw_response` is `true`)
 
-The raw response from the model provider (only available when `include_raw_response` is `true`).
+An array of raw provider-specific response data from all model inferences. Each entry contains:
 
-The returned data depends on the variant type:
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `data`: The raw response string from the provider.
 
-- `chat_completion`: raw response from the inference to the `model`
-- `experimental_best_of_n_sampling`: raw response from the inference to the `evaluator`
-- `experimental_mixture_of_n_sampling`: raw response from the inference to the `fuser`
-- `experimental_dynamic_in_context_learning`: raw response from the inference to the `model`
+For complex variants like `experimental_best_of_n_sampling`, this includes raw responses from all candidate inferences as well as the evaluator/fuser inference.
 
 ##### `variant_name`
 
@@ -1088,16 +1087,15 @@ The ID of the episode associated with the inference.
 
 ##### `raw_response`
 
-- **Type:** string (optional)
+- **Type:** array (optional, only when `include_raw_response` is `true`)
 
-The raw response from the model provider (only available when `include_raw_response` is `true`).
+An array of raw provider-specific response data from all model inferences. Each entry contains:
 
-The returned data depends on the variant type:
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `data`: The raw response string from the provider.
 
-- `chat_completion`: raw response from the inference to the `model`
-- `experimental_best_of_n_sampling`: raw response from the inference to the `evaluator`
-- `experimental_mixture_of_n_sampling`: raw response from the inference to the `fuser`
-- `experimental_dynamic_in_context_learning`: raw response from the inference to the `model`
+For complex variants like `experimental_best_of_n_sampling`, this includes raw responses from all candidate inferences as well as the evaluator/fuser inference.
 
 ##### `output`
 

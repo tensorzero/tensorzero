@@ -438,10 +438,11 @@ fn make_stream_from_non_stream(
             Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: content_blocks,
                 provider_latency,
-                raw_response: chat.original_response.unwrap_or_default(),
+                raw_chunk: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
                 usage,
                 raw_usage: raw_usage_entries.clone(),
+                raw_response: None, // Not used for fused stream chunks
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -449,8 +450,9 @@ fn make_stream_from_non_stream(
             thought: None,
             usage,
             raw_usage: raw_usage_entries,
+            raw_response: None, // Not used for fused stream chunks
             provider_latency,
-            raw_response: json.original_response.unwrap_or_default(),
+            raw_chunk: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
         })),
     };
@@ -1830,8 +1832,9 @@ mod tests {
                     output_tokens: Some(20),
                 }),
                 raw_usage: None,
+                raw_response: None,
                 provider_latency: None,
-                raw_response: "My raw response".to_string(),
+                raw_chunk: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),
             })),]
         );

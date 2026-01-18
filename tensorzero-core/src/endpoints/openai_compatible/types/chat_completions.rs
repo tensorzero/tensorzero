@@ -30,7 +30,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::types::chat_completion_inference_params::ServiceTier;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
-use crate::inference::types::usage::RawUsageEntry;
+use crate::inference::types::usage::{RawResponseEntry, RawUsageEntry};
 use crate::inference::types::{
     Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage, InputMessageContent,
     RawText, Role, System, Template, Text, current_timestamp,
@@ -220,7 +220,7 @@ pub struct OpenAICompatibleResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tensorzero_raw_response: Option<String>,
+    pub tensorzero_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 // ============================================================================

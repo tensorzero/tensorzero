@@ -49,8 +49,8 @@ use crate::inference::types::{
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
     InferenceResultChunk, InferenceResultStream, Input, InputExt, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
-    ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, ResolvedInput, TextChunk,
-    Usage, collect_chunks,
+    ModelInferenceResponseWithMetadata, RawResponseEntry, RawUsageEntry, RequestMessage,
+    ResolvedInput, TextChunk, Usage, collect_chunks,
 };
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -931,6 +931,46 @@ fn create_previous_raw_usage_chunk(
     Some(chunk)
 }
 
+/// Creates an artificial chunk containing `raw_response` entries from previous model inferences (e.g. best-of-N candidates).
+/// Returns `None` if `include_raw_response` is false or there are no non-cached entries.
+fn create_previous_raw_response_chunk(
+    metadata: &InferenceMetadata,
+    function: &FunctionConfig,
+) -> Option<InferenceResultChunk> {
+    if !metadata.include_raw_response {
+        return None;
+    }
+
+    // Filter out cached model inferences and collect raw response entries
+    let entries: Vec<RawResponseEntry> = metadata
+        .previous_model_inference_results
+        .iter()
+        .filter(|r| !r.cached)
+        .map(|r| RawResponseEntry {
+            model_inference_id: r.id,
+            provider_type: r.model_provider_name.to_string(),
+            data: r.raw_response.clone(),
+        })
+        .collect();
+
+    if entries.is_empty() {
+        return None;
+    }
+
+    let raw_response = Some(entries);
+    let chunk = match function {
+        FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            raw_response,
+            ..Default::default()
+        }),
+        FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw_response,
+            ..Default::default()
+        }),
+    };
+    Some(chunk)
+}
+
 /// Transform the response(s) from the model providers for our inference APIs.
 ///
 /// NB: After this function, the stream is then further processed by:
@@ -949,6 +989,12 @@ fn create_stream(
 
         // If previous model inferences (e.g. best-of-N candidates) had `raw_usage`, emit them immediately in an artificial chunk.
         if let Some(chunk) = create_previous_raw_usage_chunk(&metadata, &function) {
+            buffer.push(chunk.clone());
+            yield Ok(prepare_response_chunk(&metadata, chunk));
+        }
+
+        // If previous model inferences (e.g. best-of-N candidates) had `raw_response`, emit them immediately in an artificial chunk.
+        if let Some(chunk) = create_previous_raw_response_chunk(&metadata, &function) {
             buffer.push(chunk.clone());
             yield Ok(prepare_response_chunk(&metadata, chunk));
         }
@@ -1168,14 +1214,21 @@ fn should_stream_chunk_in_create_stream(
                 finish_reason,
                 // Only stream if `include_raw_usage` is enabled
                 raw_usage,
+                // Only stream if `include_raw_response` is enabled
+                raw_response,
                 // We already handled `include_original_response` above
-                raw_response: _,
+                raw_chunk: _,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
             } = c;
 
             // We want to stream the chunk if `raw_usage` is relevant
             if include_raw_usage && raw_usage.as_ref().is_some_and(|x| !x.is_empty()) {
+                return true;
+            }
+
+            // We want to stream the chunk if `raw_response` is relevant
+            if include_raw_response && raw_response.as_ref().is_some_and(|x| !x.is_empty()) {
                 return true;
             }
 
@@ -1190,8 +1243,10 @@ fn should_stream_chunk_in_create_stream(
                 finish_reason,
                 // Only stream if `include_raw_usage` is enabled
                 raw_usage,
+                // Only stream if `include_raw_response` is enabled
+                raw_response,
                 // We already handled `include_original_response` above
-                raw_response: _,
+                raw_chunk: _,
                 // We never actually stream this field, so we don't need it
                 thought: _,
                 // We don't care about streaming the following fields in isolation
@@ -1200,6 +1255,11 @@ fn should_stream_chunk_in_create_stream(
 
             // We want to stream the chunk if `raw_usage` is relevant
             if include_raw_usage && raw_usage.as_ref().is_some_and(|x| !x.is_empty()) {
+                return true;
+            }
+
+            // We want to stream the chunk if `raw_response` is relevant
+            if include_raw_response && raw_response.as_ref().is_some_and(|x| !x.is_empty()) {
                 return true;
             }
 
@@ -1338,10 +1398,12 @@ pub struct ChatInferenceResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     /// DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
+    #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
+    #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_response: Option<String>,
+    pub raw_response: Option<Vec<RawResponseEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
 }
@@ -1358,10 +1420,12 @@ pub struct JsonInferenceResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     /// DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
+    #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
+    #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_response: Option<String>,
+    pub raw_response: Option<Vec<RawResponseEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
 }
@@ -1391,14 +1455,32 @@ impl InferenceResponse {
             None
         };
 
+        // Build raw_response if requested
+        // Returns Some(entries) if requested (even if empty when all cached), None if not requested
+        let raw_response = if include_raw_response {
+            let entries: Vec<RawResponseEntry> = inference_result
+                .model_inference_results()
+                .iter()
+                .filter(|r| !r.cached) // Exclude TensorZero cache hits
+                .map(|r| RawResponseEntry {
+                    model_inference_id: r.id,
+                    provider_type: r.model_provider_name.to_string(),
+                    data: r.raw_response.clone(),
+                })
+                .collect();
+            Some(entries)
+        } else {
+            None
+        };
+
         match inference_result {
             InferenceResult::Chat(result) => {
-                // Populate response fields based on which request flags were set
-                let (original_response, raw_response) = Self::compute_response_fields(
-                    result.original_response,
-                    include_original_response,
-                    include_raw_response,
-                );
+                // Populate original_response if deprecated flag was set
+                let original_response = if include_original_response {
+                    result.original_response
+                } else {
+                    None
+                };
                 InferenceResponse::Chat(ChatInferenceResponse {
                     inference_id: result.inference_id,
                     episode_id,
@@ -1407,19 +1489,19 @@ impl InferenceResponse {
                     usage,
                     raw_usage: raw_usage.clone(),
                     original_response,
-                    raw_response,
+                    raw_response: raw_response.clone(),
                     finish_reason: result.finish_reason,
                 })
             }
             InferenceResult::Json(result) => {
                 let InternalJsonInferenceOutput { raw, parsed, .. } = result.output;
                 let output = JsonInferenceOutput { raw, parsed };
-                // Populate response fields based on which request flags were set
-                let (original_response, raw_response) = Self::compute_response_fields(
-                    result.original_response,
-                    include_original_response,
-                    include_raw_response,
-                );
+                // Populate original_response if deprecated flag was set
+                let original_response = if include_original_response {
+                    result.original_response
+                } else {
+                    None
+                };
                 InferenceResponse::Json(JsonInferenceResponse {
                     inference_id: result.inference_id,
                     episode_id,
@@ -1432,21 +1514,6 @@ impl InferenceResponse {
                     finish_reason: result.finish_reason,
                 })
             }
-        }
-    }
-
-    /// Helper to compute original_response and raw_response fields based on request flags.
-    /// If both flags are true, both fields get the same value (cloned).
-    fn compute_response_fields(
-        source: Option<String>,
-        include_original: bool,
-        include_raw: bool,
-    ) -> (Option<String>, Option<String>) {
-        match (include_original, include_raw, source) {
-            (true, true, Some(val)) => (Some(val.clone()), Some(val)),
-            (true, false, val) => (val, None),
-            (false, true, val) => (None, val),
-            (false, false, _) | (_, _, None) => (None, None),
         }
     }
 
@@ -1537,6 +1604,10 @@ pub struct ChatInferenceResponseChunk {
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw responses from previous model inferences (e.g., best-of-n candidates).
+    /// Emitted in the first chunk of a streaming response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<Vec<RawResponseEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
     /// DEPRECATED (#5697 / 2026.4+): Use `raw_chunk` instead.
@@ -1556,6 +1627,10 @@ pub struct JsonInferenceResponseChunk {
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw responses from previous model inferences (e.g., best-of-n candidates).
+    /// Emitted in the first chunk of a streaming response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<Vec<RawResponseEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
     /// DEPRECATED (#5697 / 2026.4+): Use `raw_chunk` instead.
@@ -1597,6 +1672,14 @@ impl InferenceResponseChunk {
             None
         };
 
+        // Pass through raw_response if include_raw_response is set
+        // This is populated by create_previous_raw_response_chunk for artificial chunks
+        let raw_response = if include_raw_response {
+            inference_result.raw_response().cloned()
+        } else {
+            None
+        };
+
         match inference_result {
             InferenceResultChunk::Chat(result) => {
                 // For chat functions with json_mode="tool", convert tool call chunks to text chunks
@@ -1621,7 +1704,7 @@ impl InferenceResponseChunk {
 
                 // Compute chunk fields based on request flags
                 let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
-                    result.raw_response,
+                    result.raw_chunk,
                     include_original_response,
                     include_raw_response,
                 );
@@ -1635,6 +1718,7 @@ impl InferenceResponseChunk {
                     // so set it to zero if the result is cached
                     usage,
                     raw_usage,
+                    raw_response: raw_response.clone(),
                     finish_reason: result.finish_reason,
                     original_chunk,
                     raw_chunk,
@@ -1643,7 +1727,7 @@ impl InferenceResponseChunk {
             InferenceResultChunk::Json(result) => {
                 // Compute chunk fields based on request flags
                 let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
-                    result.raw_response,
+                    result.raw_chunk,
                     include_original_response,
                     include_raw_response,
                 );
@@ -1657,6 +1741,7 @@ impl InferenceResponseChunk {
                     // so set it to zero if the result is cached
                     usage,
                     raw_usage,
+                    raw_response,
                     finish_reason: result.finish_reason,
                     original_chunk,
                     raw_chunk,
@@ -1932,8 +2017,9 @@ mod tests {
             content: content.clone(),
             usage: None,
             raw_usage: None,
+            raw_response: None,
             finish_reason: Some(FinishReason::Stop),
-            raw_response: String::new(),
+            raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
         });
         let raw_request = "raw request".to_string();
@@ -1991,7 +2077,8 @@ mod tests {
             thought: Some("Thought 1".to_string()),
             usage: None,
             raw_usage: None,
-            raw_response: String::new(),
+            raw_response: None,
+            raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
         });
@@ -2446,8 +2533,9 @@ mod tests {
                 output_tokens: Some(20),
             }),
             raw_usage: Some(raw_usage_entries.clone()),
+            raw_response: None,
             finish_reason: Some(FinishReason::Stop),
-            raw_response: String::new(),
+            raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
         });
 
@@ -2496,8 +2584,9 @@ mod tests {
                 output_tokens: Some(20),
             }),
             raw_usage: Some(raw_usage_entries),
+            raw_response: None,
             finish_reason: Some(FinishReason::Stop),
-            raw_response: String::new(),
+            raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
         });
 
@@ -2530,8 +2619,9 @@ mod tests {
                 output_tokens: Some(20),
             }),
             raw_usage: None,
+            raw_response: None,
             finish_reason: None,
-            raw_response: String::new(),
+            raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(50)),
         });
 
@@ -2561,8 +2651,9 @@ mod tests {
                 output_tokens: Some(50),
             }),
             raw_usage: None,
+            raw_response: None,
             finish_reason: Some(FinishReason::Stop),
-            raw_response: String::new(),
+            raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
         });
 
@@ -2606,7 +2697,8 @@ mod tests {
                 output_tokens: Some(20),
             }),
             raw_usage: Some(raw_usage_entries),
-            raw_response: String::new(),
+            raw_response: None,
+            raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
         });
@@ -2640,8 +2732,9 @@ mod tests {
             })],
             usage: None,
             raw_usage: None,
+            raw_response: None,
             finish_reason: None,
-            raw_response: String::new(),
+            raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(50)),
         });
 
