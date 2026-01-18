@@ -953,7 +953,6 @@ mod tests {
                 &ProviderTypesConfig::default(),
                 Arc::from("test_provider"),
                 &ProviderTypeDefaultCredentials::default(),
-                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
