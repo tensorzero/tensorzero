@@ -100,7 +100,7 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
+        reasoning_inference: reasoning_providers.clone(),
         reasoning_usage_inference: reasoning_providers,
         embeddings: vec![],
         inference_params_inference: providers.clone(),
