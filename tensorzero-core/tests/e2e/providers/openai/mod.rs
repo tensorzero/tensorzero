@@ -258,11 +258,37 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
+    let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "openai-gpt-5-mini".to_string(),
+        model_name: "gpt-5-mini-responses".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let reasoning_usage_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-gpt-5-mini".to_string(),
+            model_name: "gpt-5-mini-responses".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-gpt-5-mini-chat".to_string(),
+            model_name: "openai::gpt-5-mini".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
+        reasoning_inference: reasoning_providers,
+        reasoning_usage_inference: reasoning_usage_providers,
         embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
