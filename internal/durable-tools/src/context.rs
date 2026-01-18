@@ -14,6 +14,9 @@ use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
 
+#[cfg(feature = "typescript")]
+use crate::typescript::JsRuntimePool;
+
 /// Handle returned by `spawn_tool`, can be joined later with `join_tool`.
 ///
 /// This enum allows a uniform API for both `TaskTool` and `SimpleTool`:
@@ -41,10 +44,14 @@ pub struct ToolAppState {
     tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
     /// TensorZero client for calling inference and autopilot operations.
     t0_client: Arc<dyn TensorZeroClient>,
+    /// JsRuntime pool for TypeScript tool execution (only with `typescript` feature).
+    #[cfg(feature = "typescript")]
+    js_runtime_pool: Arc<JsRuntimePool>,
 }
 
 impl ToolAppState {
-    /// Create a new application state.
+    /// Create a new application state (without TypeScript support).
+    #[cfg(not(feature = "typescript"))]
     pub fn new(
         pool: PgPool,
         tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
@@ -54,6 +61,22 @@ impl ToolAppState {
             pool,
             tool_registry,
             t0_client,
+        }
+    }
+
+    /// Create a new application state (with TypeScript support).
+    #[cfg(feature = "typescript")]
+    pub fn new(
+        pool: PgPool,
+        tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
+        t0_client: Arc<dyn TensorZeroClient>,
+        js_runtime_pool: Arc<JsRuntimePool>,
+    ) -> Self {
+        Self {
+            pool,
+            tool_registry,
+            t0_client,
+            js_runtime_pool,
         }
     }
 
@@ -67,6 +90,14 @@ impl ToolAppState {
     /// This provides access to inference, autopilot events, and other client operations.
     pub fn t0_client(&self) -> &Arc<dyn TensorZeroClient> {
         &self.t0_client
+    }
+
+    /// Get a reference to the JsRuntime pool.
+    ///
+    /// Only available when the `typescript` feature is enabled.
+    #[cfg(feature = "typescript")]
+    pub fn js_runtime_pool(&self) -> &Arc<JsRuntimePool> {
+        &self.js_runtime_pool
     }
 }
 
@@ -475,6 +506,31 @@ impl ToolContext {
             })
             .await
             .map_err(Into::into)
+    }
+
+    /// Get the JsRuntime pool for TypeScript tool execution.
+    ///
+    /// Only available when the `typescript` feature is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the TypeScript feature is not enabled.
+    #[cfg(feature = "typescript")]
+    pub async fn js_runtime_pool(&self) -> ToolResult<Arc<JsRuntimePool>> {
+        let inner = self.inner.lock().await;
+        Ok(inner.app_state.js_runtime_pool.clone())
+    }
+
+    /// Get the JsRuntime pool for TypeScript tool execution.
+    ///
+    /// This version always returns an error because the TypeScript feature is not enabled.
+    #[cfg(not(feature = "typescript"))]
+    #[expect(clippy::unused_async, reason = "Async signature for consistency with typescript feature")]
+    pub async fn js_runtime_pool(&self) -> ToolResult<()> {
+        Err(NonControlToolError::Internal {
+            message: "TypeScript feature is not enabled".to_string(),
+        }
+        .into())
     }
 }
 
