@@ -13,7 +13,7 @@ use tokio::time::Instant;
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::aws_common::{
     AWSCredentials, AWSEndpointUrl, AWSProviderConfig, AWSRegion, check_eventstream_exception,
-    sign_request,
+    send_aws_request, sign_request,
 };
 use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use crate::cache::ModelProviderRequest;
@@ -137,68 +137,24 @@ impl InferenceProvider for AWSBedrockProvider {
             .await?;
         let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
-        // Build headers (extra headers + required content-type for JSON body)
-        let mut headers = http_extra_headers;
-        headers.insert(
-            http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/json"),
-        );
-        headers.insert(
-            http::header::ACCEPT,
-            http::header::HeaderValue::from_static("application/json"),
-        );
-
-        // Sign the request
-        let signed_headers = sign_request(
-            "POST",
+        // Send signed request
+        let aws_response = send_aws_request(
+            http_client,
             &url,
-            &headers,
-            &body_bytes,
+            http_extra_headers,
+            body_bytes,
             &credentials,
             region.as_ref(),
             "bedrock",
             PROVIDER_TYPE,
-        )?;
-
-        // Send request
-        let start_time = Instant::now();
-        let response = http_client
-            .post(&url)
-            .headers(signed_headers)
-            .body(body_bytes)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error sending request to AWS Bedrock: {e}"),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            &raw_request,
+        )
+        .await?;
 
         let latency = Latency::NonStreaming {
-            response_time: start_time.elapsed(),
+            response_time: aws_response.response_time,
         };
-
-        let status = response.status();
-        let raw_response = response.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error reading response from AWS Bedrock: {e}"),
-                raw_request: Some(raw_request.clone()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        if !status.is_success() {
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: format!("AWS Bedrock returned error status {status}: {raw_response}"),
-                raw_request: Some(raw_request),
-                raw_response: Some(raw_response),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }));
-        }
+        let raw_response = aws_response.raw_response;
 
         // Parse response
         let response: ConverseResponse = serde_json::from_str(&raw_response).map_err(|e| {

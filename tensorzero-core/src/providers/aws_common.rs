@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use aws_config::{Region, meta::region::RegionProviderChain};
 use aws_credential_types::Credentials;
@@ -16,6 +16,7 @@ use url::Url;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
+    http::TensorzeroHttpClient,
     model::{CredentialLocation, CredentialLocationOrHardcoded},
 };
 
@@ -100,14 +101,6 @@ impl AWSEndpointUrl {
                 }
                 CredentialLocation::None => Ok(None),
             },
-        }
-    }
-
-    /// Get static URL if available (for use at construction time).
-    pub fn get_static_url(&self) -> Option<&Url> {
-        match self {
-            AWSEndpointUrl::Static(url) => Some(url),
-            AWSEndpointUrl::Dynamic(_) => None,
         }
     }
 
@@ -202,19 +195,6 @@ impl AWSRegion {
                 CredentialLocation::None => Ok(None),
             },
         }
-    }
-
-    /// Get static region if available (for use at construction time).
-    pub fn get_static_region(&self) -> Option<&Region> {
-        match self {
-            AWSRegion::Static(region) => Some(region),
-            AWSRegion::Dynamic(_) | AWSRegion::Sdk => None,
-        }
-    }
-
-    /// Returns true if this region requires dynamic resolution at request time.
-    pub fn is_dynamic(&self) -> bool {
-        matches!(self, AWSRegion::Dynamic(_))
     }
 
     /// Resolve region at runtime (for dynamic regions).
@@ -399,97 +379,6 @@ impl AWSCredentials {
                     message: format!(
                         "`access_key_id` and `secret_access_key` must use the same source type (both `env::`, both `dynamic::`, or both `sdk`) for `{provider_type}`."
                     ),
-                }))
-            }
-        }
-    }
-
-    /// Get static credentials if available (for use at construction time).
-    pub fn get_static_credentials(&self) -> Option<Credentials> {
-        match self {
-            AWSCredentials::Static {
-                access_key_id,
-                secret_access_key,
-                session_token,
-            } => Some(Credentials::new(
-                access_key_id.clone(),
-                secret_access_key.expose_secret().to_string(),
-                session_token
-                    .as_ref()
-                    .map(|st| st.expose_secret().to_string()),
-                None, // expiration
-                "tensorzero",
-            )),
-            AWSCredentials::Dynamic { .. } | AWSCredentials::Sdk => None,
-        }
-    }
-
-    /// Returns true if this credential requires dynamic resolution at request time.
-    pub fn is_dynamic(&self) -> bool {
-        matches!(self, AWSCredentials::Dynamic { .. })
-    }
-
-    /// Resolve credentials at runtime (for dynamic credentials).
-    pub fn resolve(&self, credentials: &InferenceCredentials) -> Result<Credentials, Error> {
-        match self {
-            AWSCredentials::Static {
-                access_key_id,
-                secret_access_key,
-                session_token,
-            } => Ok(Credentials::new(
-                access_key_id.clone(),
-                secret_access_key.expose_secret().to_string(),
-                session_token
-                    .as_ref()
-                    .map(|st| st.expose_secret().to_string()),
-                None,
-                "tensorzero",
-            )),
-            AWSCredentials::Dynamic {
-                access_key_id_key,
-                secret_access_key_key,
-                session_token_key,
-            } => {
-                let ak = credentials.get(access_key_id_key).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "aws".to_string(),
-                        message: format!(
-                            "Dynamic `access_key_id` with key `{access_key_id_key}` is missing"
-                        ),
-                    })
-                })?;
-                let sk = credentials.get(secret_access_key_key).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "aws".to_string(),
-                        message: format!("Dynamic `secret_access_key` with key `{secret_access_key_key}` is missing"),
-                    })
-                })?;
-                let st = session_token_key
-                    .as_ref()
-                    .map(|key| {
-                        credentials.get(key).ok_or_else(|| {
-                            Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: "aws".to_string(),
-                                message: format!(
-                                    "Dynamic `session_token` with key `{key}` is missing"
-                                ),
-                            })
-                        })
-                    })
-                    .transpose()?;
-
-                Ok(Credentials::new(
-                    ak.expose_secret().to_string(),
-                    sk.expose_secret().to_string(),
-                    st.map(|s| s.expose_secret().to_string()),
-                    None,
-                    "tensorzero",
-                ))
-            }
-            AWSCredentials::Sdk => {
-                // This should not be called at runtime - Sdk credentials are resolved at construction time
-                Err(Error::new(ErrorDetails::InternalError {
-                    message: "AWSCredentials::Sdk should be resolved at construction time, not at request time".to_string(),
                 }))
             }
         }
@@ -892,6 +781,94 @@ pub fn sign_request(
     Ok(signed_headers)
 }
 
+/// Response from sending an AWS request.
+pub struct AwsRequestResponse {
+    pub raw_response: String,
+    pub response_time: Duration,
+}
+
+/// Send a signed AWS HTTP request and handle common error patterns.
+///
+/// This handles: header setup, request signing, sending, reading response,
+/// and status validation. Returns the raw response text on success.
+#[expect(clippy::too_many_arguments)]
+pub async fn send_aws_request(
+    http_client: &TensorzeroHttpClient,
+    url: &str,
+    extra_headers: http::HeaderMap,
+    body_bytes: Vec<u8>,
+    credentials: &Credentials,
+    region: &str,
+    service: &str,
+    provider_type: &str,
+    raw_request: &str,
+) -> Result<AwsRequestResponse, Error> {
+    // Build headers with content-type and accept
+    let mut headers = extra_headers;
+    headers.insert(
+        http::header::CONTENT_TYPE,
+        http::header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        http::header::ACCEPT,
+        http::header::HeaderValue::from_static("application/json"),
+    );
+
+    // Sign the request
+    let signed_headers = sign_request(
+        "POST",
+        url,
+        &headers,
+        &body_bytes,
+        credentials,
+        region,
+        service,
+        provider_type,
+    )?;
+
+    // Send request
+    let start_time = Instant::now();
+    let response = http_client
+        .post(url)
+        .headers(signed_headers)
+        .body(body_bytes)
+        .send()
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error sending request to AWS {service}: {e}"),
+                raw_request: Some(raw_request.to_string()),
+                raw_response: None,
+                provider_type: provider_type.to_string(),
+            })
+        })?;
+
+    let response_time = start_time.elapsed();
+    let status = response.status();
+    let raw_response = response.text().await.map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!("Error reading response from AWS {service}: {e}"),
+            raw_request: Some(raw_request.to_string()),
+            raw_response: None,
+            provider_type: provider_type.to_string(),
+        })
+    })?;
+
+    if !status.is_success() {
+        return Err(Error::new(ErrorDetails::InferenceServer {
+            message: format!("AWS {service} returned error status {status}: {raw_response}"),
+            raw_request: Some(raw_request.to_string()),
+            raw_response: Some(raw_response),
+            provider_type: provider_type.to_string(),
+        }));
+    }
+
+    Ok(AwsRequestResponse {
+        raw_response,
+        response_time,
+    })
+}
+
 /// Check if a Smithy EventStream message is an exception.
 ///
 /// AWS Smithy event streams can contain exception messages indicated by the
@@ -1060,18 +1037,21 @@ mod tests {
         );
     }
 
-    // ===== AWSCredentials::resolve tests =====
+    // ===== resolve_request_credentials tests =====
 
-    #[test]
-    fn test_aws_credentials_resolve_static() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_static() {
         let creds = AWSCredentials::Static {
             access_key_id: "AKIATEST".to_string(),
             secret_access_key: SecretString::new("secretkey".to_string().into()),
             session_token: None,
         };
-        let credentials = make_credentials(HashMap::new());
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::new());
 
-        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
+            .await
+            .expect("resolve should succeed");
         assert_eq!(
             result.access_key_id(),
             "AKIATEST",
@@ -1079,16 +1059,19 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_static_with_session_token() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_static_with_session_token() {
         let creds = AWSCredentials::Static {
             access_key_id: "AKIATEST".to_string(),
             secret_access_key: SecretString::new("secretkey".to_string().into()),
             session_token: Some(SecretString::new("mysessiontoken".to_string().into())),
         };
-        let credentials = make_credentials(HashMap::new());
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::new());
 
-        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
+            .await
+            .expect("resolve should succeed");
         assert_eq!(
             result.session_token(),
             Some("mysessiontoken"),
@@ -1096,19 +1079,22 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_found() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_found() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: None,
         };
-        let credentials = make_credentials(HashMap::from([
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::from([
             ("aws_access_key", "AKIADYNAMIC"),
             ("aws_secret_key", "dynamicsecret"),
         ]));
 
-        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
+            .await
+            .expect("resolve should succeed");
         assert_eq!(
             result.access_key_id(),
             "AKIADYNAMIC",
@@ -1121,20 +1107,23 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_with_session_token() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_with_session_token() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: Some("aws_session_token".to_string()),
         };
-        let credentials = make_credentials(HashMap::from([
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::from([
             ("aws_access_key", "AKIADYNAMIC"),
             ("aws_secret_key", "dynamicsecret"),
             ("aws_session_token", "dynamicsession"),
         ]));
 
-        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
+            .await
+            .expect("resolve should succeed");
         assert_eq!(
             result.session_token(),
             Some("dynamicsession"),
@@ -1142,16 +1131,19 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_missing_access_key() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_missing_access_key() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "missing_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: None,
         };
-        let credentials = make_credentials(HashMap::from([("aws_secret_key", "dynamicsecret")]));
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys =
+            make_credentials(HashMap::from([("aws_secret_key", "dynamicsecret")]));
 
-        let result = creds.resolve(&credentials);
+        let result =
+            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
         assert!(
             result.is_err(),
             "Should error when access_key_id is missing"
@@ -1163,16 +1155,18 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_missing_secret_key() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_missing_secret_key() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "missing_secret_key".to_string(),
             session_token_key: None,
         };
-        let credentials = make_credentials(HashMap::from([("aws_access_key", "AKIADYNAMIC")]));
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::from([("aws_access_key", "AKIADYNAMIC")]));
 
-        let result = creds.resolve(&credentials);
+        let result =
+            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
         assert!(
             result.is_err(),
             "Should error when secret_access_key is missing"
@@ -1184,19 +1178,21 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_missing_session_token() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_missing_session_token() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: Some("missing_session".to_string()),
         };
-        let credentials = make_credentials(HashMap::from([
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::from([
             ("aws_access_key", "AKIADYNAMIC"),
             ("aws_secret_key", "dynamicsecret"),
         ]));
 
-        let result = creds.resolve(&credentials);
+        let result =
+            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
         assert!(
             result.is_err(),
             "Should error when session_token is missing"
@@ -1208,20 +1204,22 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_sdk_errors() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_sdk_no_provider() {
         let creds = AWSCredentials::Sdk;
-        let credentials = make_credentials(HashMap::new());
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::new());
 
-        let result = creds.resolve(&credentials);
+        let result =
+            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
         assert!(
             result.is_err(),
-            "Sdk credentials should error when resolved at runtime"
+            "Sdk credentials should error when no credentials provider is configured"
         );
         let err = result.unwrap_err();
         assert!(
-            err.to_string().contains("construction time"),
-            "Error should explain Sdk is resolved at construction: {err}"
+            err.to_string().contains("No credentials provider"),
+            "Error should explain no provider is configured: {err}"
         );
     }
 
@@ -1415,52 +1413,6 @@ mod tests {
 
         // No endpoint - should NOT warn
         warn_if_credential_exfiltration_risk(&None, &static_creds, "test");
-    }
-
-    // ===== AWSRegion::is_dynamic tests =====
-
-    #[test]
-    fn test_aws_region_is_dynamic() {
-        assert!(
-            AWSRegion::Dynamic("key".to_string()).is_dynamic(),
-            "Dynamic region should return true"
-        );
-        assert!(
-            !AWSRegion::Static(Region::new("us-east-1")).is_dynamic(),
-            "Static region should return false"
-        );
-        assert!(
-            !AWSRegion::Sdk.is_dynamic(),
-            "Sdk region should return false"
-        );
-    }
-
-    // ===== AWSCredentials::is_dynamic tests =====
-
-    #[test]
-    fn test_aws_credentials_is_dynamic() {
-        assert!(
-            AWSCredentials::Dynamic {
-                access_key_id_key: "ak".to_string(),
-                secret_access_key_key: "sk".to_string(),
-                session_token_key: None,
-            }
-            .is_dynamic(),
-            "Dynamic credentials should return true"
-        );
-        assert!(
-            !AWSCredentials::Static {
-                access_key_id: "ak".to_string(),
-                secret_access_key: SecretString::new("sk".to_string().into()),
-                session_token: None,
-            }
-            .is_dynamic(),
-            "Static credentials should return false"
-        );
-        assert!(
-            !AWSCredentials::Sdk.is_dynamic(),
-            "Sdk credentials should return false"
-        );
     }
 
     // ===== AWSProviderConfig::get_region tests =====
