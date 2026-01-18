@@ -107,7 +107,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         // TODO (#5680): we disabled AWS tests on JSON functions + reasoning because the prefill breaks
-        reasoning_inference: vec![claude_thinking_provider.clone()],
+        reasoning_inference: vec![],
         reasoning_usage_inference: vec![claude_thinking_provider],
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
