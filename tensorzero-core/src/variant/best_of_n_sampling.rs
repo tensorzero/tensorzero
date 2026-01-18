@@ -23,7 +23,7 @@ use crate::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceResponseWithMetadata, RequestMessage, Role,
     System, batch::StartBatchModelInferenceWithMetadata,
 };
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::model::ModelTable;
 use crate::tool::create_json_mode_tool_call_config_with_allowed_tools;
 use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
@@ -35,6 +35,7 @@ use crate::{
     function::FunctionConfig,
     inference::types::{InferenceResult, InferenceResultStream},
     minijinja_util::TemplateConfig,
+    relay::TensorzeroRelay,
     variant::chat_completion::ChatCompletionConfig,
 };
 
@@ -141,9 +142,9 @@ impl UninitializedBestOfNSamplingConfig {
 const IMPLICIT_TOOL_NAME: &str = "respond";
 
 lazy_static! {
-    static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
+    static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchema = {
         #[expect(clippy::expect_used)]
-        StaticJSONSchema::from_value(json!({
+        JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "thinking": { "type": "string" },
@@ -242,6 +243,7 @@ impl Variant for BestOfNSamplingConfig {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
@@ -258,6 +260,7 @@ impl Variant for BestOfNSamplingConfig {
                 function_name,
                 candidate,
                 global_outbound_http_timeout,
+                relay,
             ))
             .await
             .map_err(|e| {
@@ -278,6 +281,7 @@ impl Variant for BestOfNSamplingConfig {
                 function_name,
                 variant_name,
                 global_outbound_http_timeout,
+                relay,
             )
             .await?;
         Ok(())
@@ -516,11 +520,14 @@ async fn inner_select_best_candidate<'a>(
         // Return the selected index and None for the model inference result
         return Ok((Some(selected_index), None));
     }
-    let model_config = models.get(evaluator.inner.model()).await?.ok_or_else(|| {
-        Error::new(ErrorDetails::UnknownModel {
-            name: evaluator.inner.model().to_string(),
-        })
-    })?;
+    let model_config = models
+        .get(evaluator.inner.model(), clients.relay.as_ref())
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: evaluator.inner.model().to_string(),
+            })
+        })?;
     let model_inference_response = evaluator
         .inner
         .retries()
@@ -847,18 +854,19 @@ mod tests {
         model::{ModelConfig, ModelProvider, ProviderConfig},
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
+        rate_limiting::RateLimitingManager,
     };
 
     use super::*;
 
-    #[test]
-    fn test_static_schema() {
+    #[tokio::test]
+    async fn test_static_schema() {
         // Also covers the fact that the lazy schema works
         let instance = json!({
             "thinking": "I am thinking",
             "answer_choice": 0
         });
-        let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance);
+        let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance).await;
         assert!(result.is_ok());
     }
 
@@ -866,7 +874,7 @@ mod tests {
     async fn test_prepare_system_message() {
         let templates = get_test_template_config().await;
 
-        let system_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let system_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "assistant_name": {
@@ -1054,7 +1062,6 @@ mod tests {
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1074,6 +1081,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1091,7 +1099,6 @@ mod tests {
 
         let model_inference_response2 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1111,6 +1118,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1147,7 +1155,6 @@ mod tests {
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1167,6 +1174,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1183,7 +1191,6 @@ mod tests {
 
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec![
                 "{\"response\": \"Malformed JSON response\""
                     .to_string()
@@ -1207,6 +1214,7 @@ mod tests {
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::ToolCall),
             cached: false,
+            raw_usage: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1259,7 +1267,6 @@ mod tests {
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 0".to_string().into()],
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
@@ -1279,6 +1286,7 @@ mod tests {
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1296,7 +1304,6 @@ mod tests {
 
         let model_inference_response1 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1316,6 +1323,7 @@ mod tests {
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
+            raw_usage: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1372,7 +1380,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1380,6 +1388,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let input = LazyResolvedInput {
             system: None,

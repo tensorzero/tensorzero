@@ -94,7 +94,7 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Docker [→](https://docs.docker.com/get-docker/)
 - Install `uv` [→](https://docs.astral.sh/uv/)
 - Install Python (3.9+) (e.g. `uv python install 3.9` + )
-- Install Node.js (we use v24.12.0) and `npm` [→](https://nodejs.org/en)
+- Install Node.js (we use v24.13.0) and `npm` [→](https://nodejs.org/en)
 - Install pnpm `npm install -g pnpm@10` [→](https://pnpm.io/installation)
 
 **macOS users:** If you see Rust build errors about missing dynamic libraries for Python, set up a Python virtual environment at `tensorzero/.venv` (e.g. `uv venv` from the `tensorzero` directory)
@@ -200,7 +200,6 @@ To set it up, follow these steps from the `ui` directory:
 
    ```bash
    TENSORZERO_GATEWAY_URL="http://localhost:3000"
-   TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
 
    # Optional: add provider credentials for optimization workflows
    OPENAI_API_KEY="..."
@@ -218,6 +217,7 @@ This file uses a different configuration that mandates credentials for image fet
 
 ### Advanced
 
+- To test batch and optimization workflows without real provider APIs, spin up the `mock-provider-api` and set `TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://localhost:3030` when running the gateway.
 - If your code affects the serialization of stored data, batch tests might fail because they'll rely on an older serialization of the request. In such cases, you might need to clear the database and re-run the tests. The TensorZero Team can clean up the cache by running `TRUNCATE TABLE tensorzero_e2e_tests.BatchModelInference; TRUNCATE TABLE tensorzero_e2e_tests.BatchRequest;` in the ClickHouse Cloud cluster `dev-tensorzero-e2e-tests`.
 
 ---

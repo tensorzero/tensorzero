@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
@@ -58,8 +59,9 @@ pub struct UpdateDatapointsRequest {
 }
 
 /// A tagged request to update a single datapoint in a dataset.
-#[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, TensorZeroDeserialize, JsonSchema, ts_rs::TS)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 #[export_schema]
 pub enum UpdateDatapointRequest {

@@ -1,11 +1,11 @@
 import type { Route } from "./+types/route";
+import type { EvaluationResultRow } from "~/types/tensorzero";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   getEvaluationResults,
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import type { ParsedEvaluationResult } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable, type SelectedRowData } from "./EvaluationTable";
 import {
   PageHeader,
@@ -32,7 +32,7 @@ import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
 import { ActionBar } from "~/components/layout/ActionBar";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { DatasetSelect } from "~/components/dataset/DatasetSelect";
 import { useFetcher } from "react-router";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
@@ -83,7 +83,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .then((response) => response.run_infos);
 
   // Create placeholder promises for results and statistics that will be used conditionally
-  let resultsPromise: Promise<ParsedEvaluationResult[]>;
+  let resultsPromise: Promise<EvaluationResultRow[]>;
   if (selected_evaluation_run_ids_array.length > 0) {
     // If there is a freshly inserted feedback, ClickHouse may take some time to
     // update the evaluation results as it is eventually consistent.
@@ -91,7 +91,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     resultsPromise = newFeedbackId
       ? pollForEvaluationResults(
           params.evaluation_name,
-          function_name,
           selected_evaluation_run_ids_array,
           newFeedbackId,
           limit,
@@ -99,7 +98,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         )
       : getEvaluationResults(
           params.evaluation_name,
-          function_name,
           selected_evaluation_run_ids_array,
           limit,
           offset,
@@ -355,19 +353,17 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
       <PageHeader label="Evaluation" name={evaluation_name}>
         <BasicInfo evaluation_config={evaluation_config} />
         <ActionBar>
-          <DatasetSelector
+          <DatasetSelect
             selected={selectedDataset}
             onSelect={handleDatasetSelect}
             functionName={function_name}
+            allowCreation
             disabled={isReadOnly || selectedRows.size === 0}
-            label={
+            placeholder={
               selectedRows.size > 0
                 ? `Add ${selectedRows.size} selected ${selectedRows.size === 1 ? "inference" : "inferences"} to dataset`
                 : "Add selected inferences to dataset"
             }
-            buttonProps={{
-              size: "sm",
-            }}
           />
         </ActionBar>
       </PageHeader>

@@ -8,7 +8,7 @@ Why?
   [Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/anthropic),
   [AWS Bedrock](https://www.tensorzero.com/docs/gateway/guides/providers/aws-bedrock),
   [AWS SageMaker](https://www.tensorzero.com/docs/gateway/guides/providers/aws-sagemaker),
-  [Azure OpenAI Service](https://www.tensorzero.com/docs/gateway/guides/providers/azure),
+  [Azure](https://www.tensorzero.com/docs/gateway/guides/providers/azure),
   [DeepSeek](https://www.tensorzero.com/docs/gateway/guides/providers/deepseek),
   [Fireworks](https://www.tensorzero.com/docs/gateway/guides/providers/fireworks),
   [GCP Vertex AI Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic),
@@ -30,7 +30,7 @@ Why?
 ### Prerequisites
 
 1. Install Docker.
-2. Install Node 24.12.0.
+2. Install Node 24.13.0.
 3. Generate credentials for the providers you want to use (e.g. `ANTHROPIC_API_KEY`).
 
 ### Setup

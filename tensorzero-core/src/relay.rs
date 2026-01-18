@@ -41,6 +41,7 @@ use crate::{
     tool::{DynamicToolParams, FunctionTool, Tool, ToolCall, ToolCallWrapper, ToolConfigRef},
     variant::JsonMode,
 };
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub enum RelayCredentials {
@@ -230,17 +231,18 @@ impl TensorzeroRelay {
                     let raw_chunk = serde_json::to_string(&chunk).unwrap_or_default();
                     match chunk {
                         InferenceResponseChunk::Chat(c) => {
-                            Ok(ProviderInferenceResponseChunk::new(
+                            Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
                                 c.content,
                                 c.usage,
                                 // TODO - get the original chunk as a string
                                 raw_chunk,
                                 start_time.elapsed(),
                                 c.finish_reason,
+                                c.raw_usage,
                             ))
                         }
                         InferenceResponseChunk::Json(c) => {
-                            Ok(ProviderInferenceResponseChunk::new(
+                            Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
                                 vec![ContentBlockChunk::Text(TextChunk {
                                     id: "0".to_string(),
                                     text: c.raw,
@@ -250,6 +252,7 @@ impl TensorzeroRelay {
                                 raw_chunk,
                                 start_time.elapsed(),
                                 c.finish_reason,
+                                c.raw_usage,
                             ))
                         }
                     }
@@ -297,6 +300,8 @@ impl TensorzeroRelay {
 
         let usage = non_streaming.usage().to_owned();
         let finish_reason = non_streaming.finish_reason();
+        // Extract raw_usage from downstream response for passthrough
+        let raw_usage_entries = non_streaming.raw_usage().cloned();
 
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
@@ -333,8 +338,10 @@ impl TensorzeroRelay {
                 raw_request: http_data.raw_request,
                 raw_response: http_data.raw_response.unwrap_or_default(),
                 usage,
-                latency,
+                raw_usage: raw_usage_entries,
+                provider_latency: latency,
                 finish_reason,
+                id: Uuid::now_v7(),
             },
         ))
     }
@@ -508,9 +515,19 @@ impl TensorzeroRelay {
             internal_dynamic_variant_config: None,
             episode_id: None,
             dryrun: None,
-            tags: (*clients.tags).clone(),
+            // Filter out internal tags (those starting with "tensorzero::") before forwarding
+            // to the downstream gateway, as they will be rejected by tag validation
+            tags: clients
+                .tags
+                .iter()
+                .filter(|(k, _)| !k.starts_with("tensorzero::"))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
             otlp_traces_extra_headers: HashMap::new(),
+            otlp_traces_extra_attributes: HashMap::new(),
+            otlp_traces_extra_resources: HashMap::new(),
             include_original_response: false,
+            include_raw_usage: clients.include_raw_usage,
             api_key,
         };
         Ok(res)

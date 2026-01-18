@@ -11,33 +11,39 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use durable::MIGRATOR;
+use durable::SpawnOptions;
 use durable::WorkerOptions;
 use durable_tools::{
-    ErasedSimpleTool, InferenceClient, InferenceError, SimpleTool, SimpleToolContext, TaskTool,
-    ToolContext, ToolExecutor, ToolMetadata, ToolResult,
+    ErasedSimpleTool, NonControlToolError, SimpleTool, SimpleToolContext, TaskTool,
+    TensorZeroClient, TensorZeroClientError, ToolContext, ToolExecutor, ToolMetadata, ToolResult,
 };
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tensorzero::{
-    ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
-    Usage,
+    ActionInput, ClientInferenceParams, GetConfigResponse, InferenceResponse, Input, InputMessage,
+    InputMessageContent, Role, Tool, Usage, WriteConfigRequest, WriteConfigResponse,
 };
+use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::feedback::FeedbackByVariant;
+use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
+use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
+use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 // ============================================================================
-// Mock Inference Client
+// Mock TensorZero Client
 // ============================================================================
 
-/// A mock inference client that returns configurable responses.
-struct MockInferenceClient {
+/// A mock TensorZero client that returns configurable responses.
+struct MockTensorZeroClient {
     response: Option<InferenceResponse>,
 }
 
-impl MockInferenceClient {
+impl MockTensorZeroClient {
     /// Create a mock that returns an error (for tests that don't use inference).
     fn error_on_call() -> Self {
         Self { response: None }
@@ -52,37 +58,163 @@ impl MockInferenceClient {
 }
 
 #[async_trait]
-impl InferenceClient for MockInferenceClient {
+impl TensorZeroClient for MockTensorZeroClient {
     async fn inference(
         &self,
         _params: ClientInferenceParams,
-    ) -> Result<InferenceResponse, InferenceError> {
+    ) -> Result<InferenceResponse, TensorZeroClientError> {
         self.response
             .clone()
-            .ok_or(InferenceError::StreamingNotSupported)
+            .ok_or(TensorZeroClientError::StreamingNotSupported)
+    }
+
+    async fn feedback(
+        &self,
+        _params: tensorzero::FeedbackParams,
+    ) -> Result<tensorzero::FeedbackResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn create_autopilot_event(
         &self,
         _session_id: Uuid,
-        _request: durable_tools::CreateEventRequest,
-    ) -> Result<durable_tools::CreateEventResponse, InferenceError> {
-        Err(InferenceError::AutopilotUnavailable)
+        _request: durable_tools::CreateEventGatewayRequest,
+    ) -> Result<durable_tools::CreateEventResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn list_autopilot_events(
         &self,
         _session_id: Uuid,
         _params: durable_tools::ListEventsParams,
-    ) -> Result<durable_tools::ListEventsResponse, InferenceError> {
-        Err(InferenceError::AutopilotUnavailable)
+    ) -> Result<durable_tools::ListEventsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
     async fn list_autopilot_sessions(
         &self,
         _params: durable_tools::ListSessionsParams,
-    ) -> Result<durable_tools::ListSessionsResponse, InferenceError> {
-        Err(InferenceError::AutopilotUnavailable)
+    ) -> Result<durable_tools::ListSessionsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn action(
+        &self,
+        _snapshot_hash: SnapshotHash,
+        _input: ActionInput,
+    ) -> Result<InferenceResponse, TensorZeroClientError> {
+        // Mock just returns the same response as inference() for simplicity
+        self.response
+            .clone()
+            .ok_or(TensorZeroClientError::StreamingNotSupported)
+    }
+
+    async fn get_config_snapshot(
+        &self,
+        _hash: Option<String>,
+    ) -> Result<GetConfigResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn write_config(
+        &self,
+        _request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn create_datapoints(
+        &self,
+        _dataset_name: String,
+        _datapoints: Vec<tensorzero::CreateDatapointRequest>,
+    ) -> Result<tensorzero::CreateDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn create_datapoints_from_inferences(
+        &self,
+        _dataset_name: String,
+        _params: tensorzero::CreateDatapointsFromInferenceRequestParams,
+    ) -> Result<tensorzero::CreateDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn list_datapoints(
+        &self,
+        _dataset_name: String,
+        _request: tensorzero::ListDatapointsRequest,
+    ) -> Result<tensorzero::GetDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn get_datapoints(
+        &self,
+        _dataset_name: Option<String>,
+        _ids: Vec<Uuid>,
+    ) -> Result<tensorzero::GetDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn update_datapoints(
+        &self,
+        _dataset_name: String,
+        _datapoints: Vec<tensorzero::UpdateDatapointRequest>,
+    ) -> Result<tensorzero::UpdateDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn delete_datapoints(
+        &self,
+        _dataset_name: String,
+        _ids: Vec<Uuid>,
+    ) -> Result<tensorzero::DeleteDatapointsResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn list_inferences(
+        &self,
+        _request: tensorzero::ListInferencesRequest,
+    ) -> Result<tensorzero::GetInferencesResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn launch_optimization_workflow(
+        &self,
+        _params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn poll_optimization(
+        &self,
+        _job_handle: &OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn get_latest_feedback_id_by_metric(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn get_feedback_by_variant(
+        &self,
+        _metric_name: String,
+        _function_name: String,
+        _variant_names: Option<Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
+    async fn run_evaluation(
+        &self,
+        _params: durable_tools::RunEvaluationParams,
+    ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "run_evaluation not supported in mock client".to_string(),
+        ))
     }
 }
 
@@ -99,6 +231,7 @@ fn create_mock_chat_response(text: &str) -> InferenceResponse {
             input_tokens: Some(10),
             output_tokens: Some(5),
         },
+        raw_usage: None,
         original_response: None,
         finish_reason: None,
     })
@@ -123,6 +256,10 @@ struct EchoOutput {
 struct EchoSimpleTool;
 
 impl ToolMetadata for EchoSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_simple")
     }
@@ -131,12 +268,6 @@ impl ToolMetadata for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
@@ -144,9 +275,6 @@ impl ToolMetadata for EchoSimpleTool {
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -163,6 +291,10 @@ impl SimpleTool for EchoSimpleTool {
 struct EchoTaskTool;
 
 impl ToolMetadata for EchoTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_task")
     }
@@ -171,12 +303,6 @@ impl ToolMetadata for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
@@ -184,9 +310,6 @@ impl ToolMetadata for EchoTaskTool {
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -231,6 +354,10 @@ fn extract_text_from_response(response: &InferenceResponse) -> String {
 struct InferenceSimpleTool;
 
 impl ToolMetadata for InferenceSimpleTool {
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
+    type LlmParams = InferencePromptParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("inference_simple")
     }
@@ -239,12 +366,6 @@ impl ToolMetadata for InferenceSimpleTool {
         Cow::Borrowed("Calls inference and returns the response")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(InferencePromptParams))
-    }
-
-    type LlmParams = InferencePromptParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(30)
     }
@@ -252,9 +373,6 @@ impl ToolMetadata for InferenceSimpleTool {
 
 #[async_trait]
 impl SimpleTool for InferenceSimpleTool {
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -277,10 +395,12 @@ impl SimpleTool for InferenceSimpleTool {
             ..Default::default()
         };
 
-        let response = ctx
-            .inference(inference_params)
-            .await
-            .map_err(|e| anyhow::anyhow!("Inference failed: {e}"))?;
+        let response = ctx.inference(inference_params).await.map_err(|e| {
+            NonControlToolError::User {
+                message: format!("Inference failed: {e}"),
+                error_data: serde_json::json!({"kind": "InferenceError", "message": e.to_string()}),
+            }
+        })?;
         let text = extract_text_from_response(&response);
 
         Ok(InferenceToolOutput { response: text })
@@ -291,6 +411,10 @@ impl SimpleTool for InferenceSimpleTool {
 struct InferenceTaskTool;
 
 impl ToolMetadata for InferenceTaskTool {
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
+    type LlmParams = InferencePromptParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("inference_task")
     }
@@ -299,12 +423,6 @@ impl ToolMetadata for InferenceTaskTool {
         Cow::Borrowed("Calls inference (durable) and returns the response")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(InferencePromptParams))
-    }
-
-    type LlmParams = InferencePromptParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
@@ -312,9 +430,6 @@ impl ToolMetadata for InferenceTaskTool {
 
 #[async_trait]
 impl TaskTool for InferenceTaskTool {
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -351,8 +466,8 @@ impl TaskTool for InferenceTaskTool {
 async fn execute_erased_deserializes_and_serializes_correctly(pool: PgPool) -> sqlx::Result<()> {
     let tool = EchoSimpleTool;
 
-    let inference_client: Arc<dyn InferenceClient> = Arc::new(MockInferenceClient::error_on_call());
-    let ctx = SimpleToolContext::new(&pool, &inference_client);
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
     let llm_params = serde_json::json!({"message": "hello"});
     // Unit type () deserializes from null, not {}
     let side_info = serde_json::json!(null);
@@ -370,8 +485,8 @@ async fn execute_erased_deserializes_and_serializes_correctly(pool: PgPool) -> s
 async fn execute_erased_returns_error_on_invalid_params(pool: PgPool) -> sqlx::Result<()> {
     let tool = EchoSimpleTool;
 
-    let inference_client: Arc<dyn InferenceClient> = Arc::new(MockInferenceClient::error_on_call());
-    let ctx = SimpleToolContext::new(&pool, &inference_client);
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
     // Missing required "message" field
     let llm_params = serde_json::json!({"wrong_field": "hello"});
     let side_info = serde_json::json!(null);
@@ -390,11 +505,11 @@ async fn execute_erased_returns_error_on_invalid_params(pool: PgPool) -> sqlx::R
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<()> {
-    let inference_client: Arc<dyn InferenceClient> = Arc::new(MockInferenceClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
     let executor = ToolExecutor::builder()
         .pool(pool)
         .queue_name(format!("test_queue_{}", Uuid::now_v7()))
-        .inference_client(inference_client)
+        .t0_client(t0_client)
         .build()
         .await
         .expect("Failed to build executor");
@@ -424,12 +539,12 @@ async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<(
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
-    let inference_client: Arc<dyn InferenceClient> = Arc::new(MockInferenceClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
 
     let executor = ToolExecutor::builder()
         .pool(pool)
         .queue_name(&queue_name)
-        .inference_client(inference_client)
+        .t0_client(t0_client)
         .build()
         .await
         .expect("Failed to build executor");
@@ -451,6 +566,7 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
             },
             (), // No side info
             episode_id,
+            SpawnOptions::default(),
         )
         .await;
 
@@ -463,12 +579,12 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
-    let inference_client: Arc<dyn InferenceClient> = Arc::new(MockInferenceClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
 
     let executor = ToolExecutor::builder()
         .pool(pool)
         .queue_name(&queue_name)
-        .inference_client(inference_client)
+        .t0_client(t0_client)
         .build()
         .await
         .expect("Failed to build executor");
@@ -487,6 +603,7 @@ async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
         .spawn_tool_by_name(
             "echo_task",
             serde_json::json!({"message": "dynamic call"}),
+            serde_json::json!(null),
             episode_id,
         )
         .await;
@@ -514,6 +631,10 @@ static CAPTURED_KEYS: std::sync::LazyLock<Arc<Mutex<Vec<String>>>> =
 struct KeyCapturingSimpleTool;
 
 impl ToolMetadata for KeyCapturingSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("key_capturing_tool")
     }
@@ -521,19 +642,10 @@ impl ToolMetadata for KeyCapturingSimpleTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Captures idempotency keys for testing")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
 }
 
 #[async_trait]
 impl SimpleTool for KeyCapturingSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -553,6 +665,10 @@ impl SimpleTool for KeyCapturingSimpleTool {
 struct MultiCallTaskTool;
 
 impl ToolMetadata for MultiCallTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("multi_call_task")
     }
@@ -560,19 +676,10 @@ impl ToolMetadata for MultiCallTaskTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Calls a SimpleTool multiple times")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
 }
 
 #[async_trait]
 impl TaskTool for MultiCallTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         _llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -582,18 +689,24 @@ impl TaskTool for MultiCallTaskTool {
         ctx.call_tool(
             "key_capturing_tool",
             serde_json::json!({"message": "first"}),
+            serde_json::json!(null),
+            SpawnOptions::default(),
         )
         .await?;
 
         ctx.call_tool(
             "key_capturing_tool",
             serde_json::json!({"message": "second"}),
+            serde_json::json!(null),
+            SpawnOptions::default(),
         )
         .await?;
 
         ctx.call_tool(
             "key_capturing_tool",
             serde_json::json!({"message": "third"}),
+            serde_json::json!(null),
+            SpawnOptions::default(),
         )
         .await?;
 
@@ -611,12 +724,12 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
     CAPTURED_KEYS.lock().await.clear();
 
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
-    let inference_client: Arc<dyn InferenceClient> = Arc::new(MockInferenceClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
 
     let executor = ToolExecutor::builder()
         .pool(pool)
         .queue_name(&queue_name)
-        .inference_client(inference_client)
+        .t0_client(t0_client)
         .build()
         .await
         .expect("Failed to build executor");
@@ -646,6 +759,7 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
             },
             (),
             episode_id,
+            SpawnOptions::default(),
         )
         .await
         .expect("Failed to spawn task");
@@ -653,11 +767,12 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
     // Start a worker to execute the task
     let worker = executor
         .start_worker(WorkerOptions {
-            poll_interval: 0.05,
-            claim_timeout: 30,
+            poll_interval: Duration::from_millis(50),
+            claim_timeout: Duration::from_secs(30),
             ..Default::default()
         })
-        .await;
+        .await
+        .unwrap();
 
     // Wait for task to complete
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -692,11 +807,11 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn simple_tool_calls_inference_successfully(pool: PgPool) -> sqlx::Result<()> {
     let mock_response = create_mock_chat_response("Hello from TensorZero!");
-    let inference_client: Arc<dyn InferenceClient> =
-        Arc::new(MockInferenceClient::with_response(mock_response));
+    let t0_client: Arc<dyn TensorZeroClient> =
+        Arc::new(MockTensorZeroClient::with_response(mock_response));
 
     let tool = InferenceSimpleTool;
-    let ctx = SimpleToolContext::new(&pool, &inference_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
     let llm_params = serde_json::json!({"prompt": "Say hello"});
     let side_info = serde_json::json!(null);
 
@@ -712,10 +827,10 @@ async fn simple_tool_calls_inference_successfully(pool: PgPool) -> sqlx::Result<
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn simple_tool_propagates_inference_error(pool: PgPool) -> sqlx::Result<()> {
     // Mock returns error when response is None
-    let inference_client: Arc<dyn InferenceClient> = Arc::new(MockInferenceClient::error_on_call());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(MockTensorZeroClient::error_on_call());
 
     let tool = InferenceSimpleTool;
-    let ctx = SimpleToolContext::new(&pool, &inference_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
     let llm_params = serde_json::json!({"prompt": "This will fail"});
     let side_info = serde_json::json!(null);
 
@@ -730,13 +845,13 @@ async fn simple_tool_propagates_inference_error(pool: PgPool) -> sqlx::Result<()
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Result<()> {
     let mock_response = create_mock_chat_response("Response from TaskTool!");
-    let inference_client: Arc<dyn InferenceClient> =
-        Arc::new(MockInferenceClient::with_response(mock_response));
+    let t0_client: Arc<dyn TensorZeroClient> =
+        Arc::new(MockTensorZeroClient::with_response(mock_response));
 
     let executor = ToolExecutor::builder()
         .pool(pool)
         .queue_name(format!("test_queue_{}", Uuid::now_v7()))
-        .inference_client(inference_client)
+        .t0_client(t0_client)
         .build()
         .await
         .expect("Failed to build executor");
@@ -766,13 +881,13 @@ async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Resul
 async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
     let mock_response = create_mock_chat_response("Spawned response!");
-    let inference_client: Arc<dyn InferenceClient> =
-        Arc::new(MockInferenceClient::with_response(mock_response));
+    let t0_client: Arc<dyn TensorZeroClient> =
+        Arc::new(MockTensorZeroClient::with_response(mock_response));
 
     let executor = ToolExecutor::builder()
         .pool(pool)
         .queue_name(&queue_name)
-        .inference_client(inference_client)
+        .t0_client(t0_client)
         .build()
         .await
         .expect("Failed to build executor");
@@ -797,6 +912,7 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
             },
             (), // No side info
             episode_id,
+            SpawnOptions::default(),
         )
         .await;
 

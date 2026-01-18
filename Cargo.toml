@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "tensorzero-core",
-    "tensorzero-core/tests/mock-inference-provider",
+    "tensorzero-core/tests/mock-provider-api",
     "tensorzero-core/tests/load/rate-limit-load-test",
     "tensorzero-core/tests/load/feedback",
     "gateway",
@@ -16,16 +16,17 @@ members = [
     "internal/tensorzero-unsafe-helpers",
     "internal/minijinja-utils",
     "internal/autopilot-client",
-    "internal/durable-tools-spawn",
     "internal/autopilot-tools",
+    "internal/durable-tools-spawn",
     "internal/durable-tools",
     "internal/tensorzero-types",
+    "internal/tensorzero-types-providers",
     "internal/autopilot-worker",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2025.12.5"
+version = "2026.1.2"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -42,7 +43,7 @@ serde_path_to_error = "0.1.17"
 uuid = { version = "1.19.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
-toml = { version = "0.9.8", features = ["preserve_order"] }
+toml = { version = "0.9.11", features = ["preserve_order"] }
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 async-trait = "0.1.89"
@@ -67,10 +68,9 @@ minijinja = { version = "2.14.0", features = [
     "builtins",
     "unstable_machinery",
 ] }
-url = "2.5.4"
+url = { version = "2.5.8", features = ["serde"] }
 google-cloud-auth = "1.3.0"
-serde-untagged = "0.1.8"
-object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
+object_store = { version = "0.13.0", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
 ts-rs = { version = "11.1.0", features = [
     "serde-compat",
@@ -104,9 +104,9 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"
-blake3 = "1.8.2"
+blake3 = "1.8.3"
 moka = { version = "0.12.10", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "6984ee936b8315ead4199cc66646bfaf0c76e134" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "75bde52f2a40d1fabd72443ddcf26e1342e28b56" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
@@ -150,6 +150,10 @@ explicit_into_iter_loop = "deny"
 cloned_instead_of_copied = "deny"
 inefficient_to_string = "deny"
 assigning_clones = "deny"
+stable_sort_primitive = "deny"
+ref_option = "deny"
+unnecessary_literal_bound = "deny"
+unused_async = "deny"
 
 # The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
 default_trait_access = "allow"

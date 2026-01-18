@@ -13,6 +13,7 @@ use crate::{
     utils::gateway::{AppState, AppStateData},
 };
 use aws_smithy_types::base64;
+use object_store::ObjectStoreExt;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "e2e_tests", derive(PartialEq))]

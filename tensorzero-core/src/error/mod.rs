@@ -17,7 +17,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
-use crate::db::clickhouse::migration_manager::get_run_migrations_command;
+use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
@@ -171,7 +171,7 @@ impl Error {
 }
 
 // Expect for derive Serialize
-#[expect(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref, clippy::ref_option)]
 fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -290,7 +290,13 @@ pub enum ErrorDetails {
     DynamicEndpointNotFound {
         key_name: String,
     },
+    DynamicRegionNotFound {
+        key_name: String,
+    },
     DynamicJsonSchema {
+        message: String,
+    },
+    EvaluationRun {
         message: String,
     },
     DynamicTemplateLoad {
@@ -646,6 +652,8 @@ impl ErrorDetails {
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicRegionNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::EvaluationRun { .. } => tracing::Level::ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => tracing::Level::ERROR,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
@@ -791,8 +799,10 @@ impl ErrorDetails {
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::EvaluationRun { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::DynamicRegionNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
@@ -1082,10 +1092,9 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error running ClickHouse migration {id}: {message}")
             }
             ErrorDetails::ClickHouseMigrationsDisabled => {
-                let run_migrations_command: String = get_run_migrations_command();
                 write!(
                     f,
-                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`"
+                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. {RUN_MIGRATIONS_COMMAND}"
                 )
             }
             ErrorDetails::ClickHouseQuery { message } => {
@@ -1133,8 +1142,14 @@ impl std::fmt::Display for ErrorDetails {
                     "Error in compiling client-provided JSON schema: {message}"
                 )
             }
+            ErrorDetails::EvaluationRun { message } => {
+                write!(f, "Evaluation run error: {message}")
+            }
             ErrorDetails::DynamicEndpointNotFound { key_name } => {
                 write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
+            }
+            ErrorDetails::DynamicRegionNotFound { key_name } => {
+                write!(f, "Dynamic region '{key_name}' not found in credentials")
             }
             ErrorDetails::DynamicTemplateLoad { internal } => match internal {
                 AnalysisError::ParseError(err) => {
@@ -1714,9 +1729,19 @@ impl From<autopilot_client::AutopilotError> for Error {
                 message: format!("Invalid URL: {e}"),
                 status_code: None,
             }),
+            autopilot_client::AutopilotError::Spawn(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Spawn error: {e}"),
+                status_code: None,
+            }),
             autopilot_client::AutopilotError::MissingConfig(field) => {
                 Self::new(ErrorDetails::Autopilot {
                     message: format!("Missing config: {field}"),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::ToolCallNotFound(id) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Tool call not found: {id}"),
                     status_code: None,
                 })
             }

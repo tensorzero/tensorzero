@@ -1,6 +1,6 @@
 use moka::sync::Cache;
 use tracing::{Metadata, Subscriber};
-use tracing_subscriber::Layer;
+use tracing_subscriber::{Layer, registry::LookupSpan};
 
 /// A tracing layer that tracks active spans, which can be used to detect leaked spans.
 /// Currently, we only use this in e2e tests, since we haven't evaluated the performance impact.
@@ -40,23 +40,27 @@ struct CapturedSpanData {
     // We can use these fields if we want to filter out any spans before printing them
     #[expect(dead_code)]
     metadata: &'static Metadata<'static>,
-    #[expect(dead_code)]
-    parent: Option<tracing::span::Id>,
 }
 
-impl<S: Subscriber> Layer<S> for SpanLeakDetector {
+impl<S: Subscriber> Layer<S> for SpanLeakDetector
+where
+    for<'lookup> S: LookupSpan<'lookup>,
+{
     fn on_new_span(
         &self,
         attrs: &tracing::span::Attributes<'_>,
         id: &tracing::span::Id,
-        _ctx: tracing_subscriber::layer::Context<'_, S>,
+        ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
+        let parent_id_name = ctx
+            .span(id)
+            .and_then(|span| span.parent())
+            .map(|parent| (parent.id(), parent.name()));
         self.spans.insert(
             id.clone(),
             CapturedSpanData {
-                debug_string: format!("{attrs:?}"),
+                debug_string: format!("{attrs:?} (dynamic_parent: {parent_id_name:?})"),
                 metadata: attrs.metadata(),
-                parent: attrs.parent().cloned(),
             },
         );
     }

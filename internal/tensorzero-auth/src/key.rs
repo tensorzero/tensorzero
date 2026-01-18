@@ -9,6 +9,8 @@ use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::postgres::KeyInfo;
+
 /// A parsed TensorZero API key, with the long key hashed.
 /// This does not contain the original long key
 #[derive(Debug)]
@@ -127,7 +129,10 @@ pub enum TensorZeroAuthError {
     #[error("Migration error: {message}")]
     Migration { message: String },
     #[error("Error performing authentication: {message}")]
-    Middleware { message: String },
+    Middleware {
+        message: String,
+        key_info: Option<Box<KeyInfo>>,
+    },
 }
 
 impl From<sqlx::Error> for TensorZeroAuthError {

@@ -1,0 +1,2 @@
+[gateway.relay]
+gateway_url = "http://relay-gateway:3000"

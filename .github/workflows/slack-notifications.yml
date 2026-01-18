@@ -27,8 +27,9 @@ jobs:
     steps:
       - name: Check if user should be skipped
         id: check-skip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          SKIP_USERS="${{ vars.SLACK_NOTIFICATION_SKIP_USERS }}"
           ACTOR="${{ github.actor }}"
 
           # Check if user is a bot (ends with [bot], case insensitive)
@@ -39,24 +40,15 @@ jobs:
             exit 0
           fi
 
-          if [ -z "$SKIP_USERS" ]; then
+          # Check if user is a member of the organization
+          MEMBER=$((gh api "orgs/tensorzero/members/$ACTOR" && echo 1) || echo 0)
+          if [ "$MEMBER" = "0" ]; then
             echo "should_skip=false" >> $GITHUB_OUTPUT
-            exit 0
+            echo "Sending notification for non-member: $ACTOR"
+          else
+            echo "should_skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping notification for organization member: $ACTOR"
           fi
-
-          # Convert comma-separated list to array and check if actor is in the list (case insensitive)
-          IFS=',' read -ra SKIP_ARRAY <<< "$SKIP_USERS"
-          for skip_user in "${SKIP_ARRAY[@]}"; do
-            # Trim whitespace and convert to lowercase
-            skip_user=$(echo "$skip_user" | xargs | tr '[:upper:]' '[:lower:]')
-            if [ "$skip_user" = "$ACTOR_LOWER" ]; then
-              echo "should_skip=true" >> $GITHUB_OUTPUT
-              echo "Skipping notification for user: $ACTOR"
-              exit 0
-            fi
-          done
-
-          echo "should_skip=false" >> $GITHUB_OUTPUT
 
       - name: Build payload for new issue notification
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issues' && github.event.action == 'opened'

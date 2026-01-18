@@ -28,6 +28,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
 import { applyPaginationLogic } from "~/utils/pagination";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -150,15 +151,40 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
       },
     );
   }
-  const variant_info = function_config.variants[variant_name];
+  let variant_info = function_config.variants[variant_name];
   if (!variant_info) {
-    throw new Response(
-      "Variant not found. This likely means there is data in ClickHouse from an old TensorZero config.",
-      {
-        status: 404,
-        statusText: "Not Found",
-      },
-    );
+    if (function_name === DEFAULT_FUNCTION) {
+      // For default function, create synthetic variant config
+      variant_info = {
+        inner: {
+          type: "chat_completion",
+          model: variant_name,
+          weight: null,
+          templates: {},
+          temperature: null,
+          top_p: null,
+          max_tokens: null,
+          presence_penalty: null,
+          frequency_penalty: null,
+          seed: null,
+          stop_sequences: null,
+          json_mode: null,
+          retries: { num_retries: 0, max_delay_s: 0 },
+        },
+        timeouts: {
+          non_streaming: { total_ms: null },
+          streaming: { ttft_ms: null },
+        },
+      };
+    } else {
+      throw new Response(
+        "Variant not found. This likely means there is data in ClickHouse from an old TensorZero config.",
+        {
+          status: 404,
+          statusText: "Not Found",
+        },
+      );
+    }
   }
 
   const topInference = inferences.length > 0 ? inferences[0] : null;

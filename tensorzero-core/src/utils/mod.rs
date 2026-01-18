@@ -8,6 +8,7 @@ use crate::error::ErrorDetails;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 
 pub mod gateway;
+pub mod mock;
 pub mod retries;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod testing;
@@ -47,7 +48,7 @@ pub async fn unbounded_recursion_wrapper<R: Send + 'static>(
 /// All deprecation warnings should be emitted using this function,
 /// so that we can detect unintentional use of deprecated behavior in our e2e tests.
 pub fn deprecation_warning(message: &str) {
-    tracing::warn!("Deprecation warning: {message}");
+    tracing::warn!("Deprecation Warning: {message}");
 }
 
 /// Spawns a background task that does not interact with gateway shutdown -

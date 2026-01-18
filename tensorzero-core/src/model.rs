@@ -15,6 +15,7 @@ use tracing::{Level, Span, span};
 use tracing_futures::{Instrument, Instrumented};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
+use uuid::Uuid;
 
 use crate::cache::{
     CacheData, CacheValidationInfo, ModelProviderRequest, NonStreamingCacheData,
@@ -27,11 +28,14 @@ use crate::config::{
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
+use crate::providers::aws_common::{AWSCredentials, AWSEndpointUrl, AWSRegion};
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use aws_types::region::Region;
 
 use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
@@ -41,9 +45,8 @@ use crate::inference::types::batch::{
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
-    ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
+    ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
-    current_timestamp,
 };
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
@@ -57,6 +60,7 @@ use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
 use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
+use crate::utils::mock::get_mock_provider_api_base;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -103,7 +107,6 @@ impl UninitializedModelConfig {
         model_name: &str,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
         relay_mode: bool,
     ) -> Result<ModelConfig, Error> {
         let skip_relay = self.skip_relay.unwrap_or(false);
@@ -111,13 +114,10 @@ impl UninitializedModelConfig {
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
         let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
-            let http_client = http_client.clone();
             async move {
-                let load_future = provider.config.load(
-                    provider_types,
-                    provider_type_default_credentials,
-                    http_client,
-                );
+                let load_future = provider
+                    .config
+                    .load(provider_types, provider_type_default_credentials);
 
                 // In relay mode, don't run credential validation for providers,
                 // since requests to the parent model get redirected to the downstream gateway.
@@ -162,12 +162,14 @@ pub struct StreamResponse {
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
     pub cached: bool,
+    pub model_inference_id: Uuid,
 }
 
 impl StreamResponse {
     pub fn from_cache(
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
+        model_inference_id: Uuid,
     ) -> Self {
         let chunks = cache_lookup.output.chunks;
         let chunks_len = chunks.len();
@@ -180,13 +182,13 @@ impl StreamResponse {
                         raw_response: c.raw_response,
                         // We intentionally don't cache and re-use these values from the original
                         // request:
-                        // The new result was 'created' now
-                        created: current_timestamp(),
                         // Use the real usage (so that the `ModelInference` row we write is accurate)
                         // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
                         usage: c.usage,
+                        // raw_usage is not cached
+                        raw_usage: None,
                         // We didn't make any network calls to the model provider, so the latency is 0
-                        latency: Duration::from_secs(0),
+                        provider_latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {
@@ -205,6 +207,7 @@ impl StreamResponse {
             raw_request: cache_lookup.raw_request,
             model_provider_name,
             cached: true,
+            model_inference_id,
         }
     }
 }
@@ -220,8 +223,8 @@ impl ModelConfig {
     /// Checks if an Unknown content block should be filtered out based on model_name and provider_name.
     /// Returns true if the block should be filtered (removed), false if it should be kept.
     fn should_filter_unknown_block(
-        block_model_name: &Option<String>,
-        block_provider_name: &Option<String>,
+        block_model_name: Option<&String>,
+        block_provider_name: Option<&String>,
         target_model_name: &str,
         target_provider_name: &str,
     ) -> bool {
@@ -254,8 +257,8 @@ impl ModelConfig {
                     provider_name: block_provider_name,
                     data: _,
                 }) => Self::should_filter_unknown_block(
-                    block_model_name,
-                    block_provider_name,
+                    block_model_name.as_ref(),
+                    block_provider_name.as_ref(),
                     model_name,
                     provider_name,
                 ),
@@ -285,8 +288,8 @@ impl ModelConfig {
                                 data: _,
                             }) => {
                                 if Self::should_filter_unknown_block(
-                                    block_model_name,
-                                    block_provider_name,
+                                    block_model_name.as_ref(),
+                                    block_provider_name.as_ref(),
                                     model_name,
                                     provider_name,
                                 ) {
@@ -417,8 +420,7 @@ impl ModelConfig {
             clients,
             stream,
             write_to_cache,
-        )
-        .await?
+        )?
         .instrument(span);
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
@@ -434,6 +436,7 @@ impl ModelConfig {
                 raw_request,
                 model_provider_name: model_provider_request.provider_name.into(),
                 cached: false,
+                model_inference_id: model_provider_request.model_inference_id,
             },
             messages: model_provider_request.request.messages.clone(),
         })
@@ -480,6 +483,7 @@ impl ModelConfig {
                     model_name,
                     provider_name,
                     otlp_config: &clients.otlp_config,
+                    model_inference_id: Uuid::now_v7(),
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
 
@@ -592,6 +596,7 @@ impl ModelConfig {
                         raw_request,
                         model_provider_name: "tensorzero::relay".into(),
                         cached: false,
+                        model_inference_id: Uuid::now_v7(),
                     },
                     messages: request.messages.clone(),
                 });
@@ -608,6 +613,7 @@ impl ModelConfig {
                     model_name,
                     provider_name,
                     otlp_config: &clients.otlp_config,
+                    model_inference_id: Uuid::now_v7(),
                 };
 
                 // This future includes a call to `peek_first_chunk`, so applying
@@ -706,7 +712,7 @@ impl ModelConfig {
 /// us to wrap the underlying stream.
 ///
 /// Note - this function is *not* called in relay mode
-async fn wrap_provider_stream(
+fn wrap_provider_stream(
     raw_request: String,
     model_request: ModelProviderRequest<'_>,
     ticket_borrow: TicketBorrows,
@@ -726,25 +732,22 @@ async fn wrap_provider_stream(
         .clone()
         .map(std::borrow::Cow::into_owned);
     let otlp_config = clients.otlp_config.clone();
-    let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
     let span_clone = span.clone();
+
+    // Collect usage objects for later use (e.g. rate limiting)
+    let mut usages: Vec<Usage> = vec![];
+
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
-        // `total_usage` is `None` until we receive a chunk with usage information
-        let mut total_usage: Option<Usage> = None;
+
+        // IMPORTANT: We should NOT modify chunks here, as they'll be re-processed downstream (e.g. `create_stream`).
         while let Some(chunk) = stream.next().await {
-            if let Ok(chunk) = chunk.as_ref()
-                && let Some(chunk_usage) = &chunk.usage {
-                    // `total_usage` will be `None` if this is the first chunk with usage information....
-                    if total_usage.is_none() {
-                        // ... so initialize it to zero ...
-                        total_usage = Some(Usage::zero());
-                    }
-                    // ...and then add the chunk usage to it (handling `None` fields)
-                    if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
-                }
+            if let Ok(chunk) = chunk.as_ref() && let Some(chunk_usage) = chunk.usage.as_ref() {
+                usages.push(*chunk_usage);
+            }
+
             // We can skip cloning the chunk if we know we're not going to write to the cache
             if write_to_cache && !errored {
                 match chunk.as_ref() {
@@ -767,13 +770,12 @@ async fn wrap_provider_stream(
             yield chunk;
         }
 
-        // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
-        let total_usage = total_usage.unwrap_or_default();
+        let aggregated_usage = aggregate_usage_from_single_streaming_model_inference(usages);
 
-        otlp_config.apply_usage_to_model_provider_span(&span_clone, &total_usage);
+        otlp_config.apply_usage_to_model_provider_span(&span_clone, &aggregated_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            let usage = match (total_usage.total_tokens(), errored) {
+            let usage = match (aggregated_usage.total_tokens(), errored) {
                 (Some(tokens), false) => {
                     RateLimitResourceUsage::Exact {
                         model_inferences: 1,
@@ -783,19 +785,15 @@ async fn wrap_provider_stream(
                 _ => {
                     RateLimitResourceUsage::UnderEstimate {
                         model_inferences: 1,
-                        tokens: total_usage.total_tokens().unwrap_or(0) as u64,
+                        tokens: aggregated_usage.total_tokens().unwrap_or(0) as u64,
                     }
                 }
             };
 
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, usage)
-                .await
-            {
+            if let Err(e) = ticket_borrow.return_tickets(usage).await {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
         }.instrument(span_clone.clone()));
-
 
         if write_to_cache && !errored {
             let _ = start_cache_write_streaming(
@@ -803,7 +801,7 @@ async fn wrap_provider_stream(
                 cache_key,
                 buffer,
                 &raw_request,
-                &total_usage,
+                &aggregated_usage,
                 tool_config
             );
         }
@@ -877,6 +875,11 @@ impl ModelProvider {
 
     /// The name to report in the OTEL `gen_ai.system` attribute
     fn genai_system_name(&self) -> &'static str {
+        self.provider_type()
+    }
+
+    /// The provider type string (e.g., "openai", "anthropic")
+    pub fn provider_type(&self) -> &'static str {
         match &self.config {
             ProviderConfig::Anthropic(_) => "anthropic",
             ProviderConfig::AWSBedrock(_) => "aws_bedrock",
@@ -899,6 +902,18 @@ impl ModelProvider {
             ProviderConfig::DeepSeek(_) => "deepseek",
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(_) => "dummy",
+        }
+    }
+
+    /// The API type used by this provider (e.g., ChatCompletions, Responses)
+    pub fn api_type(&self) -> ApiType {
+        match &self.config {
+            ProviderConfig::OpenAI(provider) => match provider.api_type() {
+                OpenAIAPIType::ChatCompletions => ApiType::ChatCompletions,
+                OpenAIAPIType::Responses => ApiType::Responses,
+            },
+            // All other providers use ChatCompletions API
+            _ => ApiType::ChatCompletions,
         }
     }
 
@@ -1039,6 +1054,86 @@ impl ProviderConfig {
     }
 }
 
+/// Processed AWS provider configuration.
+struct AWSProviderConfig {
+    static_region: Option<Region>,
+    region: AWSRegion,
+    endpoint_url: Option<AWSEndpointUrl>,
+    credentials: AWSCredentials,
+}
+
+/// Helper to process common AWS provider configuration.
+fn build_aws_provider_config(
+    region: Option<CredentialLocationOrHardcoded>,
+    allow_auto_detect_region: bool,
+    endpoint_url: Option<CredentialLocationOrHardcoded>,
+    access_key_id: Option<CredentialLocation>,
+    secret_access_key: Option<CredentialLocation>,
+    session_token: Option<CredentialLocation>,
+    provider_type: &str,
+) -> Result<AWSProviderConfig, Error> {
+    // Emit deprecation warning if allow_auto_detect_region is used
+    if allow_auto_detect_region {
+        crate::utils::deprecation_warning(&format!(
+            "The `allow_auto_detect_region` field is deprecated for `{provider_type}`. \
+             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
+        ));
+    }
+
+    // Convert CredentialLocationOrHardcoded to AWSRegion
+    let aws_region = region
+        .map(|loc| AWSRegion::from_credential_location(loc, provider_type))
+        .transpose()?
+        .flatten();
+
+    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
+    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
+        Some(AWSRegion::Sdk)
+    } else {
+        aws_region
+    };
+
+    // Check if we have a region or need to error
+    let aws_region = aws_region.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "AWS {provider_type} provider requires a region. \
+                 Use `region = \"sdk\"` to enable auto-detection, \
+                 or specify a region like `region = \"us-east-1\"`."
+            ),
+        })
+    })?;
+
+    // For static regions, use at construction time.
+    // For SDK regions, pass None to use the default provider chain.
+    // For dynamic regions, use a fallback region for construction (will be overridden at request time).
+    let static_region = match &aws_region {
+        AWSRegion::Static(region) => Some(region.clone()),
+        AWSRegion::Sdk => None,
+        AWSRegion::Dynamic(_) => Some(Region::new("us-east-1")),
+    };
+
+    let endpoint_url = endpoint_url
+        .map(|loc| AWSEndpointUrl::from_credential_location(loc, provider_type))
+        .transpose()?
+        .flatten();
+
+    // Convert credential fields to AWSCredentials
+    let aws_credentials = AWSCredentials::from_fields(
+        access_key_id,
+        secret_access_key,
+        session_token,
+        provider_type,
+    )?;
+
+    Ok(AWSProviderConfig {
+        static_region,
+        region: aws_region,
+        endpoint_url,
+        credentials: aws_credentials,
+    })
+}
+
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -1051,7 +1146,7 @@ pub enum HostedProviderKind {
 }
 
 #[derive(ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[derive(Clone, Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
@@ -1071,19 +1166,39 @@ pub enum UninitializedProviderConfig {
     #[serde(rename = "aws_bedrock")]
     AWSBedrock {
         model_id: String,
-        region: Option<String>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        region: Option<CredentialLocationOrHardcoded>,
+        /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        endpoint_url: Option<CredentialLocationOrHardcoded>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        access_key_id: Option<CredentialLocation>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        secret_access_key: Option<CredentialLocation>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        session_token: Option<CredentialLocation>,
     },
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
     AWSSagemaker {
         endpoint_name: String,
         model_name: String,
-        region: Option<String>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        region: Option<CredentialLocationOrHardcoded>,
+        /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
         hosted_provider: HostedProviderKind,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        endpoint_url: Option<CredentialLocationOrHardcoded>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        access_key_id: Option<CredentialLocation>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        secret_access_key: Option<CredentialLocation>,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        session_token: Option<CredentialLocation>,
     },
     Azure {
         deployment_id: String,
@@ -1207,7 +1322,6 @@ impl UninitializedProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
     ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
@@ -1230,14 +1344,30 @@ impl UninitializedProviderConfig {
                 model_id,
                 region,
                 allow_auto_detect_region,
+                endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
             } => {
-                let region = region.map(aws_types::region::Region::new);
-                if region.is_none() && !allow_auto_detect_region {
-                    return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
-                }
+                let aws_config = build_aws_provider_config(
+                    region,
+                    allow_auto_detect_region,
+                    endpoint_url,
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    "aws_bedrock",
+                )?;
 
                 ProviderConfig::AWSBedrock(
-                    AWSBedrockProvider::new(model_id, region, http_client).await?,
+                    AWSBedrockProvider::new(
+                        model_id,
+                        aws_config.static_region,
+                        Some(aws_config.region),
+                        aws_config.endpoint_url,
+                        aws_config.credentials,
+                    )
+                    .await?,
                 )
             }
             UninitializedProviderConfig::AWSSagemaker {
@@ -1246,11 +1376,20 @@ impl UninitializedProviderConfig {
                 allow_auto_detect_region,
                 model_name,
                 hosted_provider,
+                endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
             } => {
-                let region = region.map(aws_types::region::Region::new);
-                if region.is_none() && !allow_auto_detect_region {
-                    return Err(Error::new(ErrorDetails::Config { message: "AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
-                }
+                let aws_config = build_aws_provider_config(
+                    region,
+                    allow_auto_detect_region,
+                    endpoint_url,
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    "aws_sagemaker",
+                )?;
 
                 let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
                     match hosted_provider {
@@ -1283,16 +1422,24 @@ impl UninitializedProviderConfig {
                     };
 
                 ProviderConfig::AWSSagemaker(
-                    AWSSagemakerProvider::new(endpoint_name, self_hosted, region).await?,
+                    AWSSagemakerProvider::new(
+                        endpoint_name,
+                        self_hosted,
+                        aws_config.static_region,
+                        Some(aws_config.region),
+                        aws_config.endpoint_url,
+                        aws_config.credentials,
+                    )
+                    .await?,
                 )
             }
             UninitializedProviderConfig::Azure {
                 deployment_id,
-                endpoint,
+                endpoint: azure_endpoint,
                 api_key_location,
             } => ProviderConfig::Azure(AzureProvider::new(
                 deployment_id,
-                endpoint,
+                azure_endpoint,
                 AzureKind
                     .get_defaulted_credential(
                         api_key_location.as_ref(),
@@ -1405,13 +1552,8 @@ impl UninitializedProviderConfig {
                 include_encrypted_reasoning,
                 provider_tools,
             } => {
-                // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
-                #[cfg(feature = "e2e_tests")]
-                let api_base = provider_types
-                    .openai
-                    .batch_inference_api_base
-                    .clone()
-                    .or(api_base);
+                // Use mock API base for testing if set, otherwise defer to the API base set
+                let api_base = get_mock_provider_api_base("openai").or(api_base);
 
                 ProviderConfig::OpenAI(OpenAIProvider::new(
                     model_name,
@@ -1625,12 +1767,8 @@ impl ModelProvider {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request.request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request.request)
             .await?;
         let res = match &self.config {
             ProviderConfig::Anthropic(provider) => {
@@ -1738,14 +1876,10 @@ impl ModelProvider {
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
-            let postgres_connection_info = clients.postgres_connection_info.clone();
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
                 async move {
-                    if let Err(e) = ticket_borrow
-                        .return_tickets(&postgres_connection_info, actual_resource_usage)
-                        .await
-                    {
+                    if let Err(e) = ticket_borrow.return_tickets(actual_resource_usage).await {
                         tracing::error!("Failed to return rate limit tickets: {}", e);
                     }
                 }
@@ -1763,12 +1897,8 @@ impl ModelProvider {
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request.request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request.request)
             .await?;
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
@@ -2108,7 +2238,8 @@ impl ModelProvider {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -2152,6 +2283,68 @@ impl CredentialLocationWithFallback {
         match self {
             CredentialLocationWithFallback::Single(_) => None,
             CredentialLocationWithFallback::WithFallback { fallback, .. } => Some(fallback),
+        }
+    }
+}
+
+/// Credential location that also allows hardcoded string values.
+/// Used for non-sensitive fields like AWS region and endpoint_url.
+#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
+pub enum CredentialLocationOrHardcoded {
+    /// Hardcoded value (e.g., region = "us-east-1")
+    Hardcoded(String),
+    /// Standard credential location (env::, dynamic::, sdk, etc.)
+    #[ts(type = "string")]
+    Location(CredentialLocation),
+}
+
+impl<'de> Deserialize<'de> for CredentialLocationOrHardcoded {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        // Try to parse as CredentialLocation first
+        if let Some(inner) = s.strip_prefix("env::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Env(inner.to_string()),
+            ))
+        } else if let Some(inner) = s.strip_prefix("path_from_env::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::PathFromEnv(inner.to_string()),
+            ))
+        } else if let Some(inner) = s.strip_prefix("dynamic::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Dynamic(inner.to_string()),
+            ))
+        } else if let Some(inner) = s.strip_prefix("path::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Path(inner.to_string()),
+            ))
+        } else if s == "sdk" {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Sdk,
+            ))
+        } else if s == "none" {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::None,
+            ))
+        } else {
+            // Treat as hardcoded value
+            Ok(CredentialLocationOrHardcoded::Hardcoded(s))
+        }
+    }
+}
+
+impl Serialize for CredentialLocationOrHardcoded {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            CredentialLocationOrHardcoded::Hardcoded(inner) => serializer.serialize_str(inner),
+            CredentialLocationOrHardcoded::Location(loc) => loc.serialize(serializer),
         }
     }
 }
@@ -2218,7 +2411,8 @@ impl<'de> Deserialize<'de> for CredentialLocation {
             Ok(CredentialLocation::None)
         } else {
             Err(serde::de::Error::custom(format!(
-                "Invalid ApiKeyLocation format: {s}"
+                "Invalid credential location format: `{s}`. \
+                 Use `env::VAR_NAME`, `path::FILE_PATH`, `dynamic::KEY_NAME`, or `sdk`."
             )))
         }
     }
@@ -2556,7 +2750,7 @@ mod tests {
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
             DummyCredentials,
         },
-        rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig},
+        rate_limiting::{RateLimitingConfig, RateLimitingManager, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
@@ -2604,7 +2798,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2612,6 +2806,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         // Try inferring the good model only
@@ -2736,7 +2931,10 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(tags.clone()),
-            rate_limiting_config: Arc::new(rate_limit_config.clone()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new(
+                Arc::new(rate_limit_config),
+                postgres_mock.clone(),
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2744,6 +2942,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -2761,6 +2960,7 @@ mod tests {
             model_name: "test",
             provider_name: "test_provider",
             otlp_config: &Default::default(),
+            model_inference_id: Uuid::now_v7(),
         };
 
         // Should fail with RateLimitMissingMaxTokens
@@ -2788,6 +2988,7 @@ mod tests {
             model_name: "test",
             provider_name: "test_provider",
             otlp_config: &Default::default(),
+            model_inference_id: Uuid::now_v7(),
         };
 
         let result = provider
@@ -2823,7 +3024,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2831,6 +3032,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2959,6 +3161,26 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            tags: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -2966,32 +3188,11 @@ mod tests {
                     raw_request,
                     model_provider_name,
                     cached: _,
+                    model_inference_id: _,
                 },
             messages: _input,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3044,29 +3245,7 @@ mod tests {
             skip_relay: false,
         };
         let response = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await;
         assert!(response.is_err());
         let error = match response {
@@ -3156,6 +3335,26 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            tags: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -3163,32 +3362,11 @@ mod tests {
                     raw_request,
                     model_provider_name,
                     cached: _,
+                    model_inference_id: _,
                 },
             messages: _,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3262,7 +3440,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3270,6 +3448,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3324,7 +3503,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3332,6 +3511,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3389,7 +3569,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3397,6 +3577,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3450,7 +3631,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3458,6 +3639,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3477,7 +3659,7 @@ mod tests {
         // Shorthand models are not added to the model table
         assert_eq!(model_table.static_model_len(), 0);
         let model_config = model_table
-            .get("dummy::gpt-4o")
+            .get("dummy::gpt-4o", None)
             .await
             .unwrap()
             .expect("Missing dummy model");
@@ -3748,6 +3930,65 @@ mod tests {
         match with_fallback.fallback_location() {
             Some(CredentialLocation::Env(key)) => assert_eq!(key, "secondary"),
             _ => panic!("Expected Some(Env)"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_rejects_hardcoded_values() {
+        // CredentialLocation should reject hardcoded values (security requirement)
+        // Only CredentialLocationOrHardcoded should accept them
+        let json = r#""us-east-1""#;
+        let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "CredentialLocation should reject hardcoded values like 'us-east-1'"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Invalid credential location format"),
+            "Error message should mention invalid format, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_credential_location_or_hardcoded_accepts_hardcoded() {
+        // CredentialLocationOrHardcoded should accept hardcoded values
+        let json = r#""us-east-1""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        match result {
+            CredentialLocationOrHardcoded::Hardcoded(value) => {
+                assert_eq!(value, "us-east-1");
+            }
+            CredentialLocationOrHardcoded::Location(_) => panic!("Expected Hardcoded"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_or_hardcoded_accepts_env() {
+        // CredentialLocationOrHardcoded should also accept env:: prefixed values
+        let json = r#""env::AWS_REGION""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        #[expect(clippy::wildcard_enum_match_arm)]
+        match result {
+            CredentialLocationOrHardcoded::Location(CredentialLocation::Env(key)) => {
+                assert_eq!(key, "AWS_REGION");
+            }
+            _ => panic!("Expected Location(Env)"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_or_hardcoded_accepts_dynamic() {
+        // CredentialLocationOrHardcoded should accept dynamic:: prefixed values
+        let json = r#""dynamic::region_key""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        #[expect(clippy::wildcard_enum_match_arm)]
+        match result {
+            CredentialLocationOrHardcoded::Location(CredentialLocation::Dynamic(key)) => {
+                assert_eq!(key, "region_key");
+            }
+            _ => panic!("Expected Location(Dynamic)"),
         }
     }
 }

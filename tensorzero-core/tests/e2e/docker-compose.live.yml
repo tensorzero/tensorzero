@@ -7,21 +7,6 @@ volumes:
   shared-tmpdir:
 
 services:
-  mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG}
-    build:
-      context: ../../../
-      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
-    environment:
-      RUST_LOG: debug
-      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
-    volumes:
-      # Mount GCP JWT key file for GCS access (needed for batch inference)
-      # Can be overridden with GCP_CREDENTIALS_PATH env var
-      - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
-    ports:
-      - "3030:3030"
-
   provider-proxy:
     image: tensorzero/provider-proxy:${TENSORZERO_COMMIT_TAG}
     build:
@@ -34,12 +19,15 @@ services:
     volumes:
       # Mount cache directory for downloading cache files separately
       - ../../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache
+    # Cache mode can be overridden via PROVIDER_PROXY_CACHE_MODE environment variable.
+    # Options: read-old-write-new (default), read-only, read-write
+    # See: https://github.com/tensorzero/tensorzero/issues/5380
     command:
       [
         "--cache-path",
         "/app/ci/provider-proxy-cache",
         "--mode",
-        "read-old-write-new",
+        "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
       ]
     healthcheck:
       test:
@@ -66,7 +54,6 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       TENSORZERO_MINIO_URL: http://minio:9000/
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
-      TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
@@ -75,8 +62,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
-      AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
       AZURE_OPENAI_EASTUS2_API_KEY: ${AZURE_OPENAI_EASTUS2_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
       AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-}
@@ -112,7 +98,7 @@ services:
       # Mount the UI fixtures directory because we depend on some of those templates
       - ../../../ui/fixtures:/app/ui/fixtures:ro
       # Mount GCP JWT key file
-      - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
+      - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:
@@ -162,7 +148,7 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
+    # Keep this running to make `check-docker-compose.sh` detect that all containers are healthy
     command:
       ["bash", "-c", "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests"]
     healthcheck:
@@ -185,7 +171,6 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
       TENSORZERO_MINIO_URL: http://minio:9000
-      TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
       TENSORZERO_TEMPO_URL: http://tempo:3200
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
@@ -196,8 +181,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
-      AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
       AZURE_OPENAI_EASTUS2_API_KEY: ${AZURE_OPENAI_EASTUS2_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
       AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-}
@@ -227,8 +211,10 @@ services:
       XAI_API_KEY: ${XAI_API_KEY:-}
       # Buildkite analytics
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
+      # Flaky tests to skip (nextest filter expression, e.g. "test(hyperbolic)|test(tgi)")
+      CARGO_NEXTEST_FLAKY_TESTS: ${CARGO_NEXTEST_FLAKY_TESTS:-}
     volumes:
-      - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
+      - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
       - ./config:/app/tensorzero-core/tests/e2e/config:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
@@ -243,8 +229,6 @@ services:
       postgres:
         condition: service_healthy
       gateway-postgres-migrations:
-        condition: service_healthy
-      mock-inference-provider:
         condition: service_healthy
       provider-proxy:
         condition: service_healthy

@@ -1,7 +1,10 @@
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::Latency;
 use crate::inference::{InferenceProvider, WrappedProvider};
-use crate::providers::aws_common::{InterceptorAndRawBody, build_interceptor};
+use crate::providers::aws_common::{
+    AWSCredentials, AWSEndpointUrl, AWSRegion, InterceptorAndRawBody, build_interceptor,
+    warn_if_credential_exfiltration_risk,
+};
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
@@ -38,23 +41,78 @@ pub struct AWSSagemakerProvider {
     pub hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
     #[serde(skip)]
     base_config: aws_sdk_sagemakerruntime::config::Builder,
+    #[serde(skip)]
+    region: Option<AWSRegion>,
+    #[serde(skip)]
+    endpoint_url: Option<AWSEndpointUrl>,
+    #[serde(skip)]
+    credentials: AWSCredentials,
 }
 
 impl AWSSagemakerProvider {
     pub async fn new(
         endpoint_name: String,
         hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
-        region: Option<Region>,
+        static_region: Option<Region>,
+        region: Option<AWSRegion>,
+        endpoint_url: Option<AWSEndpointUrl>,
+        credentials: AWSCredentials,
     ) -> Result<Self, Error> {
-        let config = aws_common::config_with_region(PROVIDER_TYPE, region).await?;
-        let client = aws_sdk_sagemakerruntime::Client::new(&config);
+        let config = aws_common::config_with_region(PROVIDER_TYPE, static_region).await?;
+
+        let mut config_builder = aws_sdk_sagemakerruntime::config::Builder::from(&config);
+
+        // Apply static endpoint URL at construction time
+        if let Some(ref ep) = endpoint_url
+            && let Some(url) = ep.get_static_url()
+        {
+            config_builder = config_builder.endpoint_url(url.as_str());
+        }
+
+        // Apply static credentials at construction time
+        if let Some(static_creds) = credentials.get_static_credentials() {
+            config_builder = config_builder.credentials_provider(static_creds);
+        }
+
+        // Warn about potential credential exfiltration risk
+        warn_if_credential_exfiltration_risk(&endpoint_url, &credentials, PROVIDER_TYPE);
+
+        let client = aws_sdk_sagemakerruntime::Client::from_conf(config_builder.clone().build());
 
         Ok(Self {
             endpoint_name,
             client,
             hosted_provider,
-            base_config: aws_sdk_sagemakerruntime::config::Builder::from(&config),
+            base_config: config_builder,
+            region,
+            endpoint_url,
+            credentials,
         })
+    }
+
+    /// Apply dynamic region, endpoint URL, and/or credentials to a config builder.
+    fn apply_dynamic_overrides(
+        &self,
+        mut config: aws_sdk_sagemakerruntime::config::Builder,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<aws_sdk_sagemakerruntime::config::Builder, Error> {
+        if let Some(region) = &self.region
+            && region.is_dynamic()
+        {
+            let resolved_region = region.resolve(dynamic_api_keys)?;
+            config = config.region(resolved_region);
+        }
+        if let Some(endpoint_url) = &self.endpoint_url
+            && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
+        {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
+            config = config.endpoint_url(url.as_str());
+        }
+        if self.credentials.is_dynamic() {
+            let resolved_credentials = self.credentials.resolve(dynamic_api_keys)?;
+            config = config.credentials_provider(resolved_credentials);
+        }
+        Ok(config)
     }
 }
 
@@ -63,7 +121,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         &'a self,
         request: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = self.hosted_provider.make_body(request).await?;
@@ -80,11 +138,12 @@ impl InferenceProvider for AWSSagemakerProvider {
         // Use our custom `reqwest::Client` when making requests to Sagemaker.
         // This ensures that our HTTP proxy (TENSORZERO_E2E_PROXY) is used
         // here when it's enabled.
-
         let new_config = self
             .base_config
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
+        let new_config = self.apply_dynamic_overrides(new_config, dynamic_api_keys)?;
+
         let start_time = Instant::now();
         let res = self
             .client
@@ -137,6 +196,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             latency,
             request.model_name,
             request.provider_name,
+            request.model_inference_id,
         )
     }
 
@@ -144,7 +204,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         &'a self,
         request: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = self.hosted_provider.make_body(request).await?;
@@ -164,6 +224,8 @@ impl InferenceProvider for AWSSagemakerProvider {
             .base_config
             .clone()
             .http_client(super::aws_http_client::Client::new(http_client.clone()));
+        let new_config = self.apply_dynamic_overrides(new_config, dynamic_api_keys)?;
+
         let start_time = Instant::now();
         let res = self
             .client
@@ -245,10 +307,10 @@ impl InferenceProvider for AWSSagemakerProvider {
                 Ok(msg) => Ok(reqwest_eventsource::Event::Message(msg)),
                 Err(e) => match e {
                     EventStreamError::Utf8(err) => Err(TensorZeroEventError::EventSource(
-                        reqwest_eventsource::Error::Utf8(err),
+                        Box::new(reqwest_eventsource::Error::Utf8(err)),
                     )),
                     EventStreamError::Parser(err) => Err(TensorZeroEventError::EventSource(
-                        reqwest_eventsource::Error::Parser(err),
+                        Box::new(reqwest_eventsource::Error::Parser(err)),
                     )),
                     EventStreamError::Transport(err) => Err(err),
                 },
@@ -256,7 +318,12 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
         let stream = self
             .hosted_provider
-            .stream_events(Box::pin(event_stream), start_time.into(), &raw_request)
+            .stream_events(
+                Box::pin(event_stream),
+                start_time.into(),
+                &raw_request,
+                request.model_inference_id,
+            )
             .peekable();
         Ok((stream, raw_request))
     }

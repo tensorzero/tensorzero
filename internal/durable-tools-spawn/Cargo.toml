@@ -9,7 +9,6 @@ workspace = true
 
 [dependencies]
 durable.workspace = true
-tokio.workspace = true
 async-trait = "0.1"
 serde.workspace = true
 serde_json.workspace = true

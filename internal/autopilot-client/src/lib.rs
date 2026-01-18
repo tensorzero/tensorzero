@@ -15,7 +15,9 @@
 //! // Create a client
 //! let client = AutopilotClient::builder()
 //!     .api_key("your-api-key")
-//!     .build()?;
+//!     .spawn_database_url("postgres://localhost:5432/tensorzero")
+//!     .build()
+//!     .await?;
 //!
 //! // Create a new session by sending an event with a nil session ID
 //! let response = client.create_event(
@@ -42,13 +44,16 @@ mod client;
 mod error;
 mod types;
 
-pub use client::{AutopilotClient, AutopilotClientBuilder, DEFAULT_BASE_URL};
+pub use client::{
+    AutopilotClient, AutopilotClientBuilder, DEFAULT_BASE_URL, DEFAULT_SPAWN_QUEUE_NAME,
+};
 pub use error::AutopilotError;
 pub use types::{
-    Base64File, CreateEventRequest, CreateEventResponse, ErrorDetail, ErrorResponse, Event,
-    EventPayload, File, InputMessage, InputMessageContent, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, ObjectStoragePointer, RawText, Role, Session,
-    StatusUpdate, StreamEventsParams, Template, Text, Thought, ToolCall, ToolCallAuthorization,
-    ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper, ToolOutcome, ToolResult,
-    Unknown, UrlFile,
+    AutopilotSideInfo, AutopilotStatus, AutopilotToolCall, AutopilotToolResult, Base64File,
+    CreateEventRequest, CreateEventResponse, ErrorDetail, ErrorResponse, Event, EventPayload, File,
+    InputMessage, InputMessageContent, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    ListSessionsResponse, ObjectStoragePointer, OptimizationWorkflowSideInfo, RawText, Role,
+    Session, StatusUpdate, StreamEventsParams, StreamUpdate, Template, Text, Thought,
+    ToolCallAuthorization, ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper,
+    ToolOutcome, Unknown, UrlFile,
 };

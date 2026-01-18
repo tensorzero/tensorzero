@@ -12,8 +12,8 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use evaluations::{
-    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
-    run_evaluation_core_streaming,
+    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationFunctionConfig,
+    EvaluationFunctionConfigTable, EvaluationVariant, run_evaluation_core_streaming,
 };
 use futures::StreamExt;
 use pyo3::{
@@ -39,7 +39,7 @@ use tensorzero_core::{
         pyo3_helpers::{
             JSON_DUMPS, JSON_LOADS, deserialize_from_pyobj, deserialize_from_rendered_sample,
             deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
-            tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class,
+            tensorzero_error,
         },
     },
     optimization::{
@@ -69,8 +69,8 @@ use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
     ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
     InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
-    Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    ListInferencesParams, OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference,
+    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -85,10 +85,12 @@ use crate::gil_helpers::{DropInTokio, tokio_block_on_without_gil};
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Make sure that we can load our error classes, so that we don't trigger
+    // Eagerly load the exceptions, so that we don't trigger
     // a nested exception when calling `convert_error` below
-    let _ = tensorzero_error_class(m.py())?;
-    let _ = tensorzero_core_error_class(m.py())?;
+    let _ = m.py().get_type::<tensorzero_error::TensorZeroError>();
+    let _ = m
+        .py()
+        .get_type::<tensorzero_error::TensorZeroInternalError>();
     // Otel is disabled for now in the Python client until we decide how it should be configured
     // We might have produced an error when trying to construct the (not yet enabled) OTEL layer,
     // which will just get ignored here. The HTTP gateway will handle that error, as that's
@@ -305,7 +307,7 @@ const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -330,7 +332,10 @@ impl BaseTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        include_raw_usage: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
+        otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
@@ -356,7 +361,10 @@ impl BaseTensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            include_raw_usage.unwrap_or(false),
             otlp_traces_extra_headers,
+            otlp_traces_extra_attributes,
+            otlp_traces_extra_resources,
             internal_dynamic_variant_config,
         )?;
         serialize_to_dict(this.py(), params)
@@ -429,7 +437,10 @@ impl BaseTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: bool,
+        include_raw_usage: bool,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
+        otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
@@ -536,10 +547,13 @@ impl BaseTensorZeroGateway {
             cache_options: cache_options.unwrap_or_default(),
             output_schema,
             include_original_response,
+            include_raw_usage,
             extra_body,
             extra_headers,
             internal_dynamic_variant_config,
             otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
+            otlp_traces_extra_attributes: otlp_traces_extra_attributes.unwrap_or_default(),
+            otlp_traces_extra_resources: otlp_traces_extra_resources.unwrap_or_default(),
             api_key: None,
         })
     }
@@ -609,10 +623,9 @@ impl TensorZeroGateway {
         let client = match client_res {
             Ok(client) => client,
             Err(e) => {
-                return Err(tensorzero_core_error(
-                    cls.py(),
-                    &format!("Failed to construct TensorZero client: {e:?}"),
-                )?);
+                return Err(tensorzero_error::TensorZeroInternalError::new_err(format!(
+                    "Failed to construct TensorZero client: {e:?}"
+                )));
             }
         };
         let instance = PyClassInitializer::from(BaseTensorZeroGateway { client })
@@ -665,7 +678,7 @@ impl TensorZeroGateway {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
-            postgres_url,
+            postgres_config: postgres_url.map(PostgresConfig::Url),
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -678,10 +691,9 @@ impl TensorZeroGateway {
         let client = match client {
             Ok(client) => client,
             Err(e) => {
-                return Err(tensorzero_core_error(
-                    cls.py(),
-                    &format!("Failed to construct TensorZero client: {e:?}"),
-                )?);
+                return Err(tensorzero_error::TensorZeroInternalError::new_err(format!(
+                    "Failed to construct TensorZero client: {e:?}"
+                )));
             }
         };
         // Construct an instance of `TensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
@@ -737,7 +749,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -770,9 +782,16 @@ impl TensorZeroGateway {
     /// :param extra_body: If set, injects extra fields into the provider request body.
     /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
+    /// :param include_raw_usage: If set, include raw provider-specific usage data in the response.
     /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
+    /// :param otlp_traces_extra_attributes: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+    ///                                      Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-attributes-".
+    ///                                      Example: {"My-Attribute": "My-Value"} becomes header "tensorzero-otlp-traces-extra-attribute-My-Attribute: My-Value"
+    /// :param otlp_traces_extra_resources: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+    ///                                     Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-resources-".
+    ///                                     Example: {"My-Resource": "My-Value"} becomes header "tensorzero-otlp-traces-extra-resource-My-Resource: My-Value"
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns a generator that yields InferenceChunks as they come in.
     fn inference(
@@ -799,7 +818,10 @@ impl TensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        include_raw_usage: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
+        otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
@@ -826,7 +848,10 @@ impl TensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            include_raw_usage.unwrap_or(false),
             otlp_traces_extra_headers,
+            otlp_traces_extra_attributes,
+            otlp_traces_extra_resources,
             internal_dynamic_variant_config,
         )?);
 
@@ -1463,8 +1488,11 @@ impl TensorZeroGateway {
             .collect();
         let function_configs = Arc::new(function_configs);
 
+        // Wrap the client in ClientInferenceExecutor for use with evaluations
+        let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
+
         let core_args = EvaluationCoreArgs {
-            tensorzero_client: client.clone(),
+            inference_executor,
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
             evaluation_config,
             function_configs,
@@ -1517,6 +1545,7 @@ impl TensorZeroGateway {
     ),
     text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', order_by=None, limit=None, offset=None)"
     )]
+    #[pyo3(warn(message = "Please use `list_inferences` instead of `experimental_list_inferences`. In a future release, `experimental_list_inferences` will be removed.", category = PyDeprecationWarning))]
     // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
     // is written as an ellipsis object.
     #[expect(clippy::too_many_arguments)]
@@ -1649,12 +1678,14 @@ impl TensorZeroGateway {
     ///
     /// :param stored_samples: A list of stored samples to render.
     /// :param variants: A map from function name to variant name.
+    /// :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
     /// :return: A list of rendered samples.
-    #[pyo3(signature = (*, stored_samples, variants))]
+    #[pyo3(signature = (*, stored_samples, variants, concurrency=None))]
     fn experimental_render_samples(
         this: PyRef<'_, Self>,
         stored_samples: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
+        concurrency: Option<usize>,
     ) -> PyResult<Vec<RenderedSample>> {
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
@@ -1676,7 +1707,7 @@ impl TensorZeroGateway {
                 deserialize_from_stored_sample(this.py(), x, config)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.experimental_render_samples(stored_samples, variants);
+        let fut = client.experimental_render_samples(stored_samples, variants, concurrency);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
@@ -1780,10 +1811,9 @@ impl AsyncTensorZeroGateway {
                 let client = match client {
                     Ok(client) => client,
                     Err(e) => {
-                        return Err(tensorzero_core_error(
-                            py,
-                            &format!("Failed to construct TensorZero client: {e:?}"),
-                        )?);
+                        return Err(tensorzero_error::TensorZeroInternalError::new_err(format!(
+                            "Failed to construct TensorZero client: {e:?}"
+                        )));
                     }
                 };
 
@@ -1801,14 +1831,17 @@ impl AsyncTensorZeroGateway {
     }
 
     /// Close the connection to the TensorZero gateway.
+    #[expect(clippy::unused_async)]
     async fn close(&self) {
         // TODO - implement closing the 'reqwest' connection pool: https://github.com/tensorzero/tensorzero/issues/857
     }
 
+    #[expect(clippy::unused_async)]
     async fn __aenter__(this: Py<Self>) -> Py<Self> {
         this
     }
 
+    #[expect(clippy::unused_async)]
     async fn __aexit__(
         _this: Py<Self>,
         _exc_type: Py<PyAny>,
@@ -1853,7 +1886,7 @@ impl AsyncTensorZeroGateway {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
-            postgres_url,
+            postgres_config: postgres_url.map(PostgresConfig::Url),
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -1870,10 +1903,9 @@ impl AsyncTensorZeroGateway {
                 let client = match client {
                     Ok(client) => client,
                     Err(e) => {
-                        return Err(tensorzero_core_error(
-                            py,
-                            &format!("Failed to construct TensorZero client: {e:?}"),
-                        )?);
+                        return Err(tensorzero_error::TensorZeroInternalError::new_err(format!(
+                            "Failed to construct TensorZero client: {e:?}"
+                        )));
                     }
                 };
 
@@ -1893,7 +1925,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1926,6 +1958,7 @@ impl AsyncTensorZeroGateway {
     /// :param extra_body: If set, injects extra fields into the provider request body.
     /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
+    /// :param include_raw_usage: If set, include raw provider-specific usage data in the response.
     /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
@@ -1955,7 +1988,10 @@ impl AsyncTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        include_raw_usage: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
+        otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
@@ -1981,7 +2017,10 @@ impl AsyncTensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            include_raw_usage.unwrap_or(false),
             otlp_traces_extra_headers,
+            otlp_traces_extra_attributes,
+            otlp_traces_extra_resources,
             internal_dynamic_variant_config,
         )?;
         let client = this.as_super().client.clone();
@@ -2708,8 +2747,11 @@ impl AsyncTensorZeroGateway {
                 .collect();
             let function_configs = Arc::new(function_configs);
 
+            // Wrap the client in ClientInferenceExecutor for use with evaluations
+            let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
+
             let core_args = EvaluationCoreArgs {
-                tensorzero_client: client.clone(),
+                inference_executor,
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
                 evaluation_config,
                 function_configs,
@@ -2765,6 +2807,7 @@ impl AsyncTensorZeroGateway {
     ),
     text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', order_by=None, limit=None, offset=None)"
     )]
+    #[pyo3(warn(message = "Please use `list_inferences` instead of `experimental_list_inferences`. In a future release, `experimental_list_inferences` will be removed.", category = PyDeprecationWarning))]
     // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
     // is written as an ellipsis object.
     #[expect(clippy::too_many_arguments)]
@@ -2937,12 +2980,14 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param stored_samples: A list of stored samples to render.
     /// :param variants: A mapping from function name to variant name.
+    /// :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
     /// :return: A list of rendered samples.
-    #[pyo3(signature = (*, stored_samples, variants))]
+    #[pyo3(signature = (*, stored_samples, variants, concurrency=None))]
     fn experimental_render_samples<'a>(
         this: PyRef<'a, Self>,
         stored_samples: Vec<Bound<'a, PyAny>>,
         variants: HashMap<String, String>,
+        concurrency: Option<usize>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
@@ -2965,7 +3010,7 @@ impl AsyncTensorZeroGateway {
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .experimental_render_samples(stored_samples, variants)
+                .experimental_render_samples(stored_samples, variants, concurrency)
                 .await;
             Python::attach(|py| match res {
                 Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),
@@ -3042,33 +3087,26 @@ impl AsyncTensorZeroGateway {
 // This lint currently does nothing on stable, but let's include it
 // so that it will start working automatically when it's stabilized
 #[deny(non_exhaustive_omitted_patterns)]
-pub fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
+pub fn convert_error(_py: Python<'_>, e: TensorZeroError) -> PyErr {
     match e {
         TensorZeroError::Http {
             status_code,
             text,
             source: _,
-        } => tensorzero_error(py, status_code, text).unwrap_or_else(|e| e),
+        } => tensorzero_error::TensorZeroError::new_err((status_code, text)),
         TensorZeroError::Other { source } => {
-            tensorzero_core_error(py, &source.to_string()).unwrap_or_else(|e| e)
+            tensorzero_error::TensorZeroInternalError::new_err(source.to_string())
         }
         TensorZeroError::RequestTimeout => {
-            tensorzero_core_error(py, &e.to_string()).unwrap_or_else(|e| e)
+            tensorzero_error::TensorZeroInternalError::new_err(e.to_string())
         }
         // Required due to the `#[non_exhaustive]` attribute on `TensorZeroError` - we want to force
         // downstream consumers to handle all possible error types, but the compiler also requires us
         // to do this (since our python bindings are in a different crate from the Rust client.)
-        _ => tensorzero_core_error(py, &format!("Unexpected TensorZero error: {e:?}"))
-            .unwrap_or_else(|e| e),
+        _ => tensorzero_error::TensorZeroInternalError::new_err(format!(
+            "Unexpected TensorZero error: {e:?}"
+        )),
     }
-}
-
-fn tensorzero_error(py: Python<'_>, status_code: u16, text: Option<String>) -> PyResult<PyErr> {
-    Ok(PyErr::from_value(
-        tensorzero_error_class(py)?
-            .bind(py)
-            .call1((status_code, text))?,
-    ))
 }
 
 fn warn_no_config(py: Python<'_>, config: Option<&str>) -> PyResult<()> {

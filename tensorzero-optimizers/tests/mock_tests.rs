@@ -6,6 +6,15 @@ mod common;
 embedded_workflow_test_case!(fireworks_sft, common::fireworks_sft::FireworksSFTTestCase());
 http_workflow_test_case!(fireworks_sft, common::fireworks_sft::FireworksSFTTestCase());
 
+embedded_workflow_test_case!(
+    gcp_vertex_gemini_sft,
+    common::gcp_vertex_gemini_sft::GCPVertexGeminiSFTTestCase()
+);
+http_workflow_test_case!(
+    gcp_vertex_gemini_sft,
+    common::gcp_vertex_gemini_sft::GCPVertexGeminiSFTTestCase()
+);
+
 embedded_workflow_test_case!(openai_rft, common::openai_rft::OpenAIRFTTestCase());
 http_workflow_test_case!(openai_rft, common::openai_rft::OpenAIRFTTestCase());
 

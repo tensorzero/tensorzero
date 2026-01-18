@@ -6,7 +6,7 @@ use tokio::time::{Duration, sleep};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use super::use_mock_inference_provider;
+use super::use_mock_provider_api;
 use tensorzero::{
     ClientExt, ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceOutputSource,
     Input, InputMessage, InputMessageContent, LaunchOptimizationWorkflowParams, RenderedSample,
@@ -67,7 +67,7 @@ pub async fn test_dicl_optimization_chat() {
         .try_init();
 
     let embedding_provider = "openai";
-    let embedding_model = if use_mock_inference_provider() {
+    let embedding_model = if use_mock_provider_api() {
         "dummy-embedding-model".to_string()
     } else {
         "text-embedding-3-small".to_string()
@@ -83,15 +83,12 @@ pub async fn test_dicl_optimization_chat() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
 
-    let optimizer_info = uninitialized_optimizer_info
-        .load(&ProviderTypeDefaultCredentials::default())
-        .await
-        .unwrap();
+    let optimizer_info = uninitialized_optimizer_info.load();
     let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_pinocchio_examples(false);
     let val_examples = None; // No validation examples needed for this test
@@ -110,13 +107,15 @@ pub async fn test_dicl_optimization_chat() {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(
-        &config_glob,
-        false, // don't validate credentials in tests
-    )
-    .await
-    .unwrap()
-    .into_config_without_writing_for_tests();
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &config_glob,
+            false, // don't validate credentials in tests
+        )
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests(),
+    );
 
     let job_handle = optimizer_info
         .launch(
@@ -125,7 +124,7 @@ pub async fn test_dicl_optimization_chat() {
             val_examples,
             &credentials,
             &clickhouse,
-            Arc::new(config),
+            config.clone(),
         )
         .await
         .unwrap();
@@ -137,6 +136,7 @@ pub async fn test_dicl_optimization_chat() {
                 &client,
                 &credentials,
                 &ProviderTypeDefaultCredentials::default(),
+                &config.provider_types,
             )
             .await
             .unwrap();
@@ -147,7 +147,7 @@ pub async fn test_dicl_optimization_chat() {
         if matches!(status, OptimizationJobInfo::Failed { .. }) {
             panic!("Optimization failed: {status:?}");
         }
-        sleep(if use_mock_inference_provider() {
+        sleep(if use_mock_provider_api() {
             Duration::from_secs(1)
         } else {
             Duration::from_secs(60)
@@ -195,7 +195,7 @@ pub async fn test_dicl_optimization_chat() {
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
+        postgres_config: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -351,7 +351,7 @@ pub async fn test_dicl_optimization_json() {
         .try_init();
 
     let embedding_provider = "openai";
-    let embedding_model = if use_mock_inference_provider() {
+    let embedding_model = if use_mock_provider_api() {
         "dummy-embedding-model".to_string()
     } else {
         "text-embedding-3-small".to_string()
@@ -367,15 +367,12 @@ pub async fn test_dicl_optimization_json() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
 
-    let optimizer_info = uninitialized_optimizer_info
-        .load(&ProviderTypeDefaultCredentials::default())
-        .await
-        .unwrap();
+    let optimizer_info = uninitialized_optimizer_info.load();
 
     let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_pinocchio_examples(true);
@@ -395,13 +392,15 @@ pub async fn test_dicl_optimization_json() {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(
-        &config_glob,
-        false, // don't validate credentials in tests
-    )
-    .await
-    .unwrap()
-    .into_config_without_writing_for_tests();
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &config_glob,
+            false, // don't validate credentials in tests
+        )
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests(),
+    );
 
     let job_handle = optimizer_info
         .launch(
@@ -410,7 +409,7 @@ pub async fn test_dicl_optimization_json() {
             val_examples,
             &credentials,
             &clickhouse,
-            Arc::new(config),
+            config.clone(),
         )
         .await
         .unwrap();
@@ -422,6 +421,7 @@ pub async fn test_dicl_optimization_json() {
                 &client,
                 &credentials,
                 &ProviderTypeDefaultCredentials::default(),
+                &config.provider_types,
             )
             .await
             .unwrap();
@@ -432,7 +432,7 @@ pub async fn test_dicl_optimization_json() {
         if matches!(status, OptimizationJobInfo::Failed { .. }) {
             panic!("Optimization failed: {status:?}");
         }
-        sleep(if use_mock_inference_provider() {
+        sleep(if use_mock_provider_api() {
             Duration::from_secs(1)
         } else {
             Duration::from_secs(60)
@@ -479,7 +479,7 @@ pub async fn test_dicl_optimization_json() {
 
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
-        postgres_url: None,
+        postgres_config: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
@@ -656,7 +656,10 @@ fn create_inference_params(
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
         otlp_traces_extra_headers: Default::default(),
+        otlp_traces_extra_attributes: Default::default(),
+        otlp_traces_extra_resources: Default::default(),
         api_key: None,
+        include_raw_usage: false,
     }
 }
 

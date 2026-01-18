@@ -12,6 +12,7 @@ required-features = ["e2e_tests"]
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
+async-trait = { workspace = true }
 clap = { workspace = true }
 url = { workspace = true }
 tracing = { workspace = true }

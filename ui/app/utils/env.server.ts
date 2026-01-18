@@ -14,19 +14,15 @@ class EnvironmentVariableError extends Error {
 
 // Note: TENSORZERO_UI_LOG_LEVEL is handled in logger.ts to avoid circular dependencies.
 interface Env {
-  TENSORZERO_CLICKHOUSE_URL: string;
-  TENSORZERO_POSTGRES_URL: string | null;
+  TENSORZERO_POSTGRES_URL?: string;
   TENSORZERO_UI_READ_ONLY: boolean;
   TENSORZERO_GATEWAY_URL: string;
-  TENSORZERO_API_KEY: string | null;
-  OPENAI_BASE_URL: string | null;
-  FIREWORKS_BASE_URL: string | null;
-  FIREWORKS_ACCOUNT_ID: string | null;
-  TOGETHER_BASE_URL: string | null;
+  TENSORZERO_API_KEY?: string;
 }
 
 let _env: Env | undefined;
 let hasLoggedConfigPathDeprecation = false;
+let hasLoggedClickhouseUrlDeprecation = false;
 
 /**
  * Use this function to retrieve the environment variables instead of accessing
@@ -39,7 +35,6 @@ export function getEnv(): Env {
     return _env;
   }
 
-  const TENSORZERO_CLICKHOUSE_URL = getClickhouseUrl();
   const TENSORZERO_GATEWAY_URL = process.env.TENSORZERO_GATEWAY_URL;
 
   // This error is thrown on startup in tensorzero.server.ts
@@ -61,28 +56,23 @@ export function getEnv(): Env {
     hasLoggedConfigPathDeprecation = true;
   }
 
+  // Deprecated in 2025.12; can remove in 2026.02+.
+  if (
+    process.env.TENSORZERO_CLICKHOUSE_URL &&
+    !hasLoggedClickhouseUrlDeprecation
+  ) {
+    logger.warn(
+      "Deprecation Warning: TensorZero UI now makes all database queries through the gateway. The environment variable `TENSORZERO_CLICKHOUSE_URL` is deprecated and ignored.",
+    );
+    hasLoggedClickhouseUrlDeprecation = true;
+  }
+
   _env = {
-    TENSORZERO_CLICKHOUSE_URL,
-    TENSORZERO_POSTGRES_URL: process.env.TENSORZERO_POSTGRES_URL || null,
+    TENSORZERO_POSTGRES_URL: process.env.TENSORZERO_POSTGRES_URL,
     TENSORZERO_UI_READ_ONLY: process.env.TENSORZERO_UI_READ_ONLY === "1",
     TENSORZERO_GATEWAY_URL,
-    FIREWORKS_ACCOUNT_ID: process.env.FIREWORKS_ACCOUNT_ID || null,
-    FIREWORKS_BASE_URL: process.env.FIREWORKS_BASE_URL || null,
-    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
-    TOGETHER_BASE_URL: process.env.TOGETHER_BASE_URL || null,
-    TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY || null,
+    TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY,
   };
 
   return _env;
-}
-
-function getClickhouseUrl() {
-  const url = process.env.TENSORZERO_CLICKHOUSE_URL;
-  if (url) {
-    return url;
-  }
-
-  throw new EnvironmentVariableError(
-    "The environment variable `TENSORZERO_CLICKHOUSE_URL` is not set.",
-  );
 }

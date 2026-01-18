@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{Error, ErrorDetails};
-use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
+use crate::jsonschema_util::JSONSchema;
 
 use super::IMPLICIT_TOOL_DESCRIPTION;
 use super::types::{FunctionTool, OpenAICustomTool, ProviderTool, Tool};
@@ -46,7 +46,7 @@ pub enum FunctionToolConfig {
 #[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
-    pub parameters: StaticJSONSchema,
+    pub parameters: JSONSchema,
     /// The display name sent to the LLM (can be overridden via config)
     pub name: String,
     /// The key used to reference this tool in allowed_tools and function config
@@ -60,7 +60,7 @@ pub struct StaticToolConfig {
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
-    pub parameters: DynamicJSONSchema,
+    pub parameters: JSONSchema,
     pub name: String,
     pub strict: bool,
 }
@@ -71,7 +71,7 @@ pub struct DynamicToolConfig {
 #[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
-    pub parameters: StaticJSONSchema,
+    pub parameters: JSONSchema,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
@@ -80,7 +80,7 @@ pub struct ImplicitToolConfig {
 #[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
-    pub parameters: DynamicJSONSchema,
+    pub parameters: JSONSchema,
 }
 
 /// Records / lists the tools that were allowed in the request
@@ -510,9 +510,9 @@ impl ToolCallConfig {
 impl FunctionToolConfig {
     pub async fn validate_arguments(&self, arguments: &Value) -> Result<(), Error> {
         match self {
-            FunctionToolConfig::Static(config) => config.parameters.validate(arguments),
+            FunctionToolConfig::Static(config) => config.parameters.validate(arguments).await,
             FunctionToolConfig::Dynamic(config) => config.parameters.validate(arguments).await,
-            FunctionToolConfig::Implicit(config) => config.parameters.validate(arguments),
+            FunctionToolConfig::Implicit(config) => config.parameters.validate(arguments).await,
             FunctionToolConfig::DynamicImplicit(config) => {
                 config.parameters.validate(arguments).await
             }

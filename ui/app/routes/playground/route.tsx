@@ -7,7 +7,7 @@ import {
   isRouteErrorResponse,
   useNavigation,
 } from "react-router";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { DatasetCombobox } from "~/components/dataset/DatasetCombobox";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import {
@@ -341,13 +341,11 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       </div>
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Dataset</Label>
-        <DatasetSelector
-          label="Select a dataset"
+        <DatasetCombobox
           functionName={functionName ?? undefined}
           disabled={!functionName}
-          selected={datasetName ?? undefined}
+          selected={datasetName}
           onSelect={(value) => updateSearchParams({ datasetName: value })}
-          allowCreation={false}
         />
       </div>
       <div className="flex max-w-180 flex-col gap-2">

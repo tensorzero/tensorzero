@@ -7,11 +7,26 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{FunctionTool, Tool};
 
+use crate::ToolResult;
 use crate::context::SimpleToolContext;
-use crate::error::{ToolError, ToolResult};
+use crate::error::{NonControlToolError, ToolError};
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
 use crate::tool_metadata::ToolMetadata;
+
+/// Conversion from an erased tool reference to a TensorZero Tool definition.
+impl TryFrom<&dyn ErasedTool> for Tool {
+    type Error = ToolError;
+
+    fn try_from(tool: &dyn ErasedTool) -> Result<Self, Self::Error> {
+        Ok(Tool::Function(FunctionTool {
+            name: tool.name().to_string(),
+            description: tool.description().to_string(),
+            parameters: serde_json::to_value(tool.parameters_schema()?)?,
+            strict: false,
+        }))
+    }
+}
 
 /// Type-erased tool trait for registry storage.
 ///
@@ -31,6 +46,11 @@ pub trait ErasedTool: Send + Sync {
 
     /// Check if this is a durable tool (`TaskTool`) or lightweight (`SimpleTool`).
     fn is_durable(&self) -> bool;
+
+    /// Validate that the provided JSON can be deserialized into the tool's parameter types.
+    ///
+    /// This allows validating parameters before spawning a job, catching errors early.
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()>;
 }
 
 /// Type-erased `SimpleTool` trait for dynamic execution.
@@ -91,6 +111,19 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
     fn is_durable(&self) -> bool {
         true
     }
+
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
+            .map_err(|e| NonControlToolError::InvalidParams {
+                message: format!("llm_params: {e}"),
+            })?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("side_info: {e}"),
+            }
+        })?;
+        Ok(())
+    }
 }
 
 /// Blanket implementation of [`ErasedTool`] for all `SimpleTool` types.
@@ -113,6 +146,19 @@ impl<T: SimpleTool> ErasedTool for T {
 
     fn is_durable(&self) -> bool {
         false
+    }
+
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
+            .map_err(|e| NonControlToolError::InvalidParams {
+                message: format!("llm_params: {e}"),
+            })?;
+        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("side_info: {e}"),
+            }
+        })?;
+        Ok(())
     }
 }
 
@@ -164,16 +210,15 @@ impl ToolRegistry {
     ///
     /// # Errors
     ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
+    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
     pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
-            return Err(ToolError::DuplicateToolName(name.into_owned()));
+            return Err(NonControlToolError::DuplicateToolName {
+                name: name.into_owned(),
+            }
+            .into());
         }
-
-        // Validate schema generation succeeds
-        <T as ToolMetadata>::parameters_schema()?;
 
         let wrapper = Arc::new(ErasedTaskToolWrapper::<T>::new());
         self.tools.insert(name.into_owned(), wrapper);
@@ -184,18 +229,17 @@ impl ToolRegistry {
     ///
     /// # Errors
     ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
+    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
     pub fn register_simple_tool<T: SimpleTool + Default>(
         &mut self,
     ) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
-            return Err(ToolError::DuplicateToolName(name.into_owned()));
+            return Err(NonControlToolError::DuplicateToolName {
+                name: name.into_owned(),
+            }
+            .into());
         }
-
-        // Validate schema generation succeeds
-        <T as ToolMetadata>::parameters_schema()?;
 
         let tool = Arc::new(T::default());
         self.tools
@@ -221,6 +265,24 @@ impl ToolRegistry {
         self.tools.get(name).map(|t| t.is_durable())
     }
 
+    /// Validate parameters for a tool by name.
+    ///
+    /// Returns `NonControlToolError::ToolNotFound` if the tool doesn't exist.
+    /// Returns `NonControlToolError::InvalidParams` if validation fails.
+    pub fn validate_params(
+        &self,
+        tool_name: &str,
+        llm_params: &JsonValue,
+        side_info: &JsonValue,
+    ) -> ToolResult<()> {
+        let tool = self
+            .get(tool_name)
+            .ok_or_else(|| NonControlToolError::ToolNotFound {
+                name: tool_name.to_string(),
+            })?;
+        tool.validate_params(llm_params, side_info)
+    }
+
     /// List all registered tool names.
     pub fn list_tools(&self) -> Vec<&str> {
         self.tools.keys().map(String::as_str).collect()
@@ -240,25 +302,17 @@ impl ToolRegistry {
         self.simple_tools.keys().map(String::as_str).collect()
     }
 
-    /// Generate TensorZero tool definitions for all tools.
+    /// Iterate over all registered tools.
     ///
-    /// This can be used directly in TensorZero inference API calls.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a tool's parameter schema generation or serialization fails.
-    pub fn to_tensorzero_tools(&self) -> Result<Vec<Tool>, ToolError> {
-        self.tools
-            .values()
-            .map(|tool| {
-                Ok(Tool::Function(FunctionTool {
-                    name: tool.name().to_string(),
-                    description: tool.description().to_string(),
-                    parameters: serde_json::to_value(tool.parameters_schema()?)?,
-                    strict: false,
-                }))
-            })
-            .collect()
+    /// Use with `Tool::try_from` to convert to TensorZero tool definitions:
+    /// ```ignore
+    /// let tools: Result<Vec<Tool>, _> = registry
+    ///     .iter()
+    ///     .map(Tool::try_from)
+    ///     .collect();
+    /// ```
+    pub fn iter(&self) -> impl Iterator<Item = &dyn ErasedTool> {
+        self.tools.values().map(|arc| arc.as_ref())
     }
 
     /// Get the number of registered tools.

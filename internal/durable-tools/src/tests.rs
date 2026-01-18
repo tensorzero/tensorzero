@@ -6,12 +6,12 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::ToolContext;
 use crate::context::SimpleToolContext;
-use crate::error::{ToolError, ToolResult};
+use crate::error::{NonControlToolError, ToolError, ToolResult};
 use crate::executor::ToolExecutorBuilder;
 use crate::registry::{ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 use crate::simple_tool::SimpleTool;
@@ -37,6 +37,10 @@ struct EchoOutput {
 struct EchoSimpleTool;
 
 impl ToolMetadata for EchoSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_simple")
     }
@@ -45,12 +49,6 @@ impl ToolMetadata for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
@@ -58,9 +56,6 @@ impl ToolMetadata for EchoSimpleTool {
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -77,6 +72,10 @@ impl SimpleTool for EchoSimpleTool {
 struct EchoTaskTool;
 
 impl ToolMetadata for EchoTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_task")
     }
@@ -85,12 +84,6 @@ impl ToolMetadata for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
@@ -98,9 +91,6 @@ impl ToolMetadata for EchoTaskTool {
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -116,6 +106,10 @@ impl TaskTool for EchoTaskTool {
 struct DefaultTimeoutTaskTool;
 
 impl ToolMetadata for DefaultTimeoutTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_task")
     }
@@ -123,21 +117,11 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     // Uses default timeout (60 seconds from ToolMetadata)
 }
 
 #[async_trait]
 impl TaskTool for DefaultTimeoutTaskTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -154,6 +138,10 @@ impl TaskTool for DefaultTimeoutTaskTool {
 struct DefaultTimeoutSimpleTool;
 
 impl ToolMetadata for DefaultTimeoutSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_simple")
     }
@@ -161,21 +149,11 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
     }
-
-    fn parameters_schema() -> ToolResult<Schema> {
-        Ok(schema_for!(EchoParams))
-    }
-
-    type LlmParams = EchoParams;
-
     // Uses default timeout (60 seconds from ToolMetadata)
 }
 
 #[async_trait]
 impl SimpleTool for DefaultTimeoutSimpleTool {
-    type SideInfo = ();
-    type Output = EchoOutput;
-
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -309,13 +287,17 @@ mod registry_tests {
     }
 
     #[test]
-    fn to_tensorzero_tools_generates_correct_structure() {
+    fn iter_and_try_from_generates_correct_structure() {
         use tensorzero::Tool;
 
         let mut registry = ToolRegistry::new();
         registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
-        let tools = registry.to_tensorzero_tools().unwrap();
+        let tools: Vec<Tool> = registry
+            .iter()
+            .map(Tool::try_from)
+            .collect::<Result<_, _>>()
+            .unwrap();
         assert_eq!(tools.len(), 1);
 
         let tool = &tools[0];
@@ -349,15 +331,13 @@ mod registry_tests {
 
     #[test]
     fn register_task_tool_errors_on_duplicate() {
-        use crate::error::ToolError;
-
         let mut registry = ToolRegistry::new();
         registry.register_task_tool::<EchoTaskTool>().unwrap();
 
         // Second registration should fail
         let result = registry.register_task_tool::<EchoTaskTool>();
         match result {
-            Err(ToolError::DuplicateToolName(name)) => {
+            Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -369,15 +349,13 @@ mod registry_tests {
 
     #[test]
     fn register_simple_tool_errors_on_duplicate() {
-        use crate::error::ToolError;
-
         let mut registry = ToolRegistry::new();
         registry.register_simple_tool::<EchoSimpleTool>().unwrap();
 
         // Second registration should fail
         let result = registry.register_simple_tool::<EchoSimpleTool>();
         match result {
-            Err(ToolError::DuplicateToolName(name)) => {
+            Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_simple");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -389,7 +367,6 @@ mod registry_tests {
 
     #[test]
     fn register_tools_with_same_name_errors() {
-        use crate::error::ToolError;
         use std::borrow::Cow;
 
         // Create a SimpleTool with the same name as EchoTaskTool
@@ -397,6 +374,10 @@ mod registry_tests {
         struct ConflictingSimpleTool;
 
         impl ToolMetadata for ConflictingSimpleTool {
+            type SideInfo = ();
+            type Output = EchoOutput;
+            type LlmParams = EchoParams;
+
             fn name() -> Cow<'static, str> {
                 Cow::Borrowed("echo_task") // Same name as EchoTaskTool
             }
@@ -404,19 +385,10 @@ mod registry_tests {
             fn description() -> Cow<'static, str> {
                 Cow::Borrowed("Conflicting tool")
             }
-
-            fn parameters_schema() -> ToolResult<schemars::Schema> {
-                Ok(schemars::schema_for!(EchoParams))
-            }
-
-            type LlmParams = EchoParams;
         }
 
         #[async_trait::async_trait]
         impl SimpleTool for ConflictingSimpleTool {
-            type SideInfo = ();
-            type Output = EchoOutput;
-
             async fn execute(
                 llm_params: <Self as ToolMetadata>::LlmParams,
                 _side_info: Self::SideInfo,
@@ -435,7 +407,7 @@ mod registry_tests {
         // Registering a SimpleTool with the same name should fail
         let result = registry.register_simple_tool::<ConflictingSimpleTool>();
         match result {
-            Err(ToolError::DuplicateToolName(name)) => {
+            Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
             }
             _ => panic!("Expected DuplicateToolName error"),
@@ -568,10 +540,10 @@ mod error_tests {
         let tool_err: ToolError = task_err.into();
 
         match tool_err {
-            ToolError::ExecutionFailed(e) => {
-                assert_eq!(e.to_string(), "test error");
+            ToolError::NonControl(NonControlToolError::Internal { message }) => {
+                assert_eq!(message, "test error");
             }
-            _ => panic!("Expected ExecutionFailed"),
+            _ => panic!("Expected NonControl(Internal)"),
         }
     }
 
@@ -598,15 +570,18 @@ mod error_tests {
     }
 
     #[test]
-    fn task_error_from_tool_error_execution_failed() {
-        let tool_err = ToolError::ExecutionFailed(anyhow::anyhow!("test error"));
+    fn task_error_from_tool_error_user() {
+        let tool_err = ToolError::NonControl(NonControlToolError::User {
+            message: "test error".to_string(),
+            error_data: serde_json::json!({"kind": "TestError"}),
+        });
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::TaskInternal(e) => {
-                assert_eq!(e.to_string(), "test error");
+            TaskError::User { message, .. } => {
+                assert_eq!(message, "test error");
             }
-            _ => panic!("Expected TaskInternal"),
+            _ => panic!("Expected User"),
         }
     }
 
@@ -623,27 +598,31 @@ mod error_tests {
 
     #[test]
     fn task_error_from_tool_error_tool_not_found() {
-        let tool_err = ToolError::ToolNotFound("missing_tool".to_string());
+        let tool_err = ToolError::NonControl(NonControlToolError::ToolNotFound {
+            name: "missing_tool".to_string(),
+        });
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::TaskInternal(e) => {
-                assert!(e.to_string().contains("missing_tool"));
+            TaskError::User { message, .. } => {
+                assert!(message.contains("missing_tool"));
             }
-            _ => panic!("Expected TaskInternal"),
+            _ => panic!("Expected User"),
         }
     }
 
     #[test]
     fn task_error_from_tool_error_invalid_params() {
-        let tool_err = ToolError::InvalidParams("bad params".to_string());
+        let tool_err = ToolError::NonControl(NonControlToolError::InvalidParams {
+            message: "bad params".to_string(),
+        });
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::TaskInternal(e) => {
-                assert!(e.to_string().contains("bad params"));
+            TaskError::User { message, .. } => {
+                assert!(message.contains("bad params"));
             }
-            _ => panic!("Expected TaskInternal"),
+            _ => panic!("Expected User"),
         }
     }
 

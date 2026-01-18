@@ -17,8 +17,8 @@ function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
 
   const content = (
     <span
-      className="inline-block max-w-[80px] overflow-hidden align-middle font-mono whitespace-nowrap"
-      style={{ direction: "rtl", textOverflow: "ellipsis" }}
+      className="inline-block max-w-[80px] overflow-hidden align-middle font-mono text-ellipsis whitespace-nowrap"
+      dir="rtl"
     >
       {id}
     </span>
@@ -60,11 +60,11 @@ function TableItemTime({ timestamp }: TableItemTimeProps) {
 }
 
 interface TableItemTextProps {
-  text: string | null;
+  text?: string;
 }
 
 function TableItemText({ text }: TableItemTextProps) {
-  if (text === null) {
+  if (text === undefined) {
     return <span className="text-fg-muted">—</span>;
   } else {
     return <span className="whitespace-nowrap">{text}</span>;

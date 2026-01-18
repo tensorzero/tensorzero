@@ -30,7 +30,7 @@ pub struct ActionInputInfo {
 }
 
 /// The specific action type to execute.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ActionInput {
     Inference(Box<ClientInferenceParams>),
@@ -40,6 +40,7 @@ pub enum ActionInput {
 /// Response from the action endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
+#[expect(clippy::large_enum_variant)]
 pub enum ActionResponse {
     Inference(InferenceResponse),
     Feedback(FeedbackResponse),
@@ -83,6 +84,7 @@ pub async fn action(
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
+                app_state.rate_limiting_manager.clone(),
                 (*inference_params).try_into()?,
                 None, // No API key for internal endpoint
             ))

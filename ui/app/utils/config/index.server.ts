@@ -10,11 +10,16 @@
 
 import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
+import { getAutopilotClient } from "../tensorzero.server";
 import { DEFAULT_FUNCTION } from "../constants";
 import { logger } from "../logger";
+import { isAutopilotUnavailableError } from "../tensorzero/errors";
 
-// Poll interval in milliseconds (30 seconds)
-const CONFIG_HASH_POLL_INTERVAL_MS = 30_000;
+// Poll interval in milliseconds (5 seconds)
+const CONFIG_HASH_POLL_INTERVAL_MS = 5_000;
+
+// TTL for autopilot availability cache in milliseconds (30 seconds)
+const AUTOPILOT_CACHE_TTL_MS = 30_000;
 
 // Track if polling has been started
 let pollingStarted = false;
@@ -28,6 +33,38 @@ export async function loadConfig(): Promise<UiConfig> {
 }
 
 let configCache: UiConfig | undefined = undefined;
+let autopilotAvailableCache: { value: boolean; timestamp: number } | undefined =
+  undefined;
+
+/**
+ * Checks if autopilot is available by making a minimal request.
+ * The result is cached with a TTL.
+ */
+export async function checkAutopilotAvailable(): Promise<boolean> {
+  // Check if cache is valid (exists and not expired)
+  if (
+    autopilotAvailableCache !== undefined &&
+    Date.now() - autopilotAvailableCache.timestamp < AUTOPILOT_CACHE_TTL_MS
+  ) {
+    return autopilotAvailableCache.value;
+  }
+
+  try {
+    const client = getAutopilotClient();
+    await client.listAutopilotSessions({ limit: 1 });
+    autopilotAvailableCache = { value: true, timestamp: Date.now() };
+  } catch (error) {
+    if (isAutopilotUnavailableError(error)) {
+      autopilotAvailableCache = { value: false, timestamp: Date.now() };
+    } else {
+      // For other errors (network, etc.), assume unavailable but don't cache
+      logger.warn("Failed to check autopilot availability:", error);
+      return false;
+    }
+  }
+
+  return autopilotAvailableCache.value;
+}
 
 /**
  * Checks if the config hash has changed by polling the gateway's status endpoint.
@@ -149,6 +186,7 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
  */
 export function _resetForTesting(): void {
   configCache = undefined;
+  autopilotAvailableCache = undefined;
   pollingStarted = false;
 }
 

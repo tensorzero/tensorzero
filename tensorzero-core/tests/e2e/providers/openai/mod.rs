@@ -1224,7 +1224,6 @@ async fn test_embedding_request() {
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
                 &ProviderTypeDefaultCredentials::default(),
-                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
@@ -1251,30 +1250,33 @@ async fn test_embedding_request() {
         encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
+    let rate_limiting_config: Arc<tensorzero_core::rate_limiting::RateLimitingConfig> =
+        Arc::new(Default::default());
+    let clients = InferenceClients {
+        http_client: TensorzeroHttpClient::new_testing().unwrap(),
+        clickhouse_connection_info: clickhouse.clone(),
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        credentials: Arc::new(api_keys.clone()),
+        cache_options: CacheOptions {
+            max_age_s: None,
+            enabled: CacheEnabledMode::On,
+        },
+        tags: Arc::new(Default::default()),
+        rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
+            rate_limiting_config,
+            PostgresConnectionInfo::Disabled,
+        )),
+        otlp_config: Default::default(),
+        deferred_tasks: tokio_util::task::TaskTracker::new(),
+        scope_info: ScopeInfo {
+            tags: Arc::new(HashMap::new()),
+            api_key_public_id: None,
+        },
+        relay: None,
+        include_raw_usage: false,
+    };
     let response = model_config
-        .embed(
-            &request,
-            &model_name,
-            &InferenceClients {
-                http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                clickhouse_connection_info: clickhouse.clone(),
-                postgres_connection_info: PostgresConnectionInfo::Disabled,
-                credentials: Arc::new(api_keys.clone()),
-                cache_options: CacheOptions {
-                    max_age_s: None,
-                    enabled: CacheEnabledMode::On,
-                },
-                tags: Arc::new(Default::default()),
-                rate_limiting_config: Arc::new(Default::default()),
-                otlp_config: Default::default(),
-                deferred_tasks: tokio_util::task::TaskTracker::new(),
-                scope_info: ScopeInfo {
-                    tags: Arc::new(HashMap::new()),
-                    api_key_public_id: None,
-                },
-                relay: None,
-            },
-        )
+        .embed(&request, &model_name, &clients)
         .await
         .unwrap();
     assert!(
@@ -1342,29 +1344,7 @@ async fn test_embedding_request() {
     // Wait for ClickHouse write
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     let cached_response = model_config
-        .embed(
-            &request,
-            &model_name,
-            &InferenceClients {
-                http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                clickhouse_connection_info: clickhouse.clone(),
-                postgres_connection_info: PostgresConnectionInfo::Disabled,
-                credentials: Arc::new(api_keys.clone()),
-                cache_options: CacheOptions {
-                    max_age_s: None,
-                    enabled: CacheEnabledMode::On,
-                },
-                tags: Arc::new(Default::default()),
-                rate_limiting_config: Arc::new(Default::default()),
-                otlp_config: Default::default(),
-                deferred_tasks: tokio_util::task::TaskTracker::new(),
-                scope_info: ScopeInfo {
-                    tags: Arc::new(HashMap::new()),
-                    api_key_public_id: None,
-                },
-                relay: None,
-            },
-        )
+        .embed(&request, &model_name, &clients)
         .await
         .unwrap();
     assert!(cached_response.cached);
@@ -1391,7 +1371,6 @@ async fn test_embedding_sanity_check() {
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
                 &ProviderTypeDefaultCredentials::default(),
-                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
@@ -1421,6 +1400,8 @@ async fn test_embedding_sanity_check() {
     };
     let request_info = (&provider_config).into();
     let api_keys = InferenceCredentials::default();
+    let rate_limiting_config: Arc<tensorzero_core::rate_limiting::RateLimitingConfig> =
+        Arc::new(Default::default());
     let clients = InferenceClients {
         http_client: client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
@@ -1431,7 +1412,10 @@ async fn test_embedding_sanity_check() {
             enabled: CacheEnabledMode::On,
         },
         tags: Arc::new(Default::default()),
-        rate_limiting_config: Arc::new(Default::default()),
+        rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
+            rate_limiting_config,
+            PostgresConnectionInfo::Disabled,
+        )),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
         scope_info: ScopeInfo {
@@ -1439,6 +1423,7 @@ async fn test_embedding_sanity_check() {
             api_key_public_id: None,
         },
         relay: None,
+        include_raw_usage: false,
     };
 
     // Compute all 3 embeddings concurrently

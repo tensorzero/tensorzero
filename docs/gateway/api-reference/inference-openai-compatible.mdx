@@ -157,6 +157,7 @@ If you use `tensorzero::extra_body`, it will override the request from the gatew
 Each object in the array must have two or three fields:
 
 - `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+  - Use `-` as the final path element to append to an array (e.g., `/messages/-` appends to `messages`)
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
   - `delete = true`: Deletes the field at the specified location, if present.
@@ -293,6 +294,19 @@ Intelligence-Level: AGI
 ```
 
 </Accordion>
+
+#### `tensorzero::include_raw_usage`
+
+- **Type:** boolean
+- **Required:** no
+
+If `true`, the response's `usage` object will include a `tensorzero_raw_usage` field containing an array of raw provider-specific usage data from each model inference.
+
+This is useful for accessing provider-specific usage fields that TensorZero normalizes away, such as OpenAI's `reasoning_tokens` or Anthropic's `cache_read_input_tokens`.
+
+For streaming requests, this requires `stream_options.include_usage` to be `true` (or omitted, in which case it will be automatically enabled).
+
+See `tensorzero_raw_usage` in the [response](#response) section for more details.
 
 #### `tensorzero::params`
 
@@ -855,6 +869,17 @@ Contains token usage information for the request and response, with the followin
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
 
+#### `tensorzero_raw_usage`
+
+- **Type:** array (optional, only when `tensorzero::include_raw_usage` is `true`)
+
+An array of raw provider-specific usage data. Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
 </Tab>
 <Tab title="Streaming">
 
@@ -920,6 +945,17 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
+
+#### `tensorzero_raw_usage`
+
+- **Type:** array (optional, only when `tensorzero::include_raw_usage` is `true`)
+
+An array of raw provider-specific usage data. Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
 </Tab>
 </Tabs>

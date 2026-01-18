@@ -29,4 +29,5 @@ The instructions below assume you're using the provided setup with fixture data.
 
 ## Things to note
 
-1. For any new code, prefer `undefined` over `null`. The only place to use `null` is for `napi-rs` compatibility, because it uses `null` to represent an `Option<T>`. Never write a type as `T | undefined | null`.
+1. To test optimization workflows without real provider APIs, spin up the `mock-provider-api` and set `TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://localhost:3030` when running the gateway.
+2. For any new code, prefer `undefined` over `null`. The only place to use `null` is for `napi-rs` compatibility, because it uses `null` to represent an `Option<T>`. Never write a type as `T | undefined | null`.

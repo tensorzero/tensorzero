@@ -3,8 +3,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::db::postgres::PostgresConnectionInfo;
-use crate::endpoints::openai_compatible::RouterExt;
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, FromRequest, Json, Request, rejection::JsonRejection};
 use moka::sync::Cache;
@@ -22,10 +20,13 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::feedback::FeedbackQueries;
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints;
+use crate::endpoints::openai_compatible::RouterExt;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
+use crate::rate_limiting::RateLimitingManager;
 use autopilot_client::AutopilotClient;
 
 #[cfg(test)]
@@ -95,6 +96,15 @@ impl Drop for GatewayHandle {
                 });
                 tracing::info!("ClickHouse batch writer finished");
             }
+            // Return unused rate limit tokens to the database
+            if !self.app_state.rate_limiting_manager.is_empty() {
+                tracing::info!("Returning unused rate limit tokens to database");
+                if let Err(e) = self.app_state.rate_limiting_manager.shutdown() {
+                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
+                }
+                tracing::info!("Rate limit token return complete");
+            }
+
             self.app_state.deferred_tasks.close();
             // The 'wait' future will resolve immediately if the pool is empty.
             // Closing the pool doesn't block more futures from being added, so checking
@@ -139,6 +149,10 @@ pub struct AppStateData {
     pub config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
     /// Optional Autopilot API client for proxying requests to the Autopilot API
     pub autopilot_client: Option<Arc<AutopilotClient>>,
+    /// The deployment ID from ClickHouse (64-char hex string)
+    pub deployment_id: Option<String>,
+    /// Token pool manager for rate limiting pre-borrowing
+    pub rate_limiting_manager: Arc<RateLimitingManager>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -190,7 +204,7 @@ impl GatewayHandle {
         postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let config = Arc::new(config.into_config(&clickhouse_connection_info).await?);
+        let config = Arc::new(Box::pin(config.into_config(&clickhouse_connection_info)).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
@@ -214,6 +228,10 @@ impl GatewayHandle {
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
         let auth_cache = create_auth_cache_from_config(&config);
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new(
+            Arc::new(config.rate_limiting.clone()),
+            postgres_connection_info.clone(),
+        ));
         Self {
             app_state: AppStateData {
                 config,
@@ -224,6 +242,8 @@ impl GatewayHandle {
                 auth_cache,
                 config_snapshot_cache: None,
                 autopilot_client: None,
+                deployment_id: None,
+                rate_limiting_manager,
                 _private: (),
             },
             cancel_token,
@@ -256,6 +276,11 @@ impl GatewayHandle {
             cancel_token.clone(),
         );
 
+        // Fetch the deployment ID from ClickHouse (if available)
+        let deployment_id = crate::howdy::get_deployment_id(&clickhouse_connection_info)
+            .await
+            .ok();
+
         for (function_name, function_config) in &config.functions {
             function_config
                 .experimentation()
@@ -278,7 +303,13 @@ impl GatewayHandle {
                 .build(),
         );
 
-        let autopilot_client = setup_autopilot_client()?;
+        let autopilot_client =
+            setup_autopilot_client(&postgres_connection_info, deployment_id.as_ref()).await?;
+
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new(
+            Arc::new(config.rate_limiting.clone()),
+            postgres_connection_info.clone(),
+        ));
 
         Ok(Self {
             app_state: AppStateData {
@@ -290,6 +321,8 @@ impl GatewayHandle {
                 auth_cache,
                 config_snapshot_cache,
                 autopilot_client,
+                deployment_id,
+                rate_limiting_manager,
                 _private: (),
             },
             cancel_token,
@@ -301,8 +334,8 @@ impl GatewayHandle {
 
 impl AppStateData {
     /// Create an AppStateData for use with a historical config snapshot.
-    /// This version does not include auth_cache, config_snapshot_cache, or autopilot_client
-    /// since those are specific to the live gateway.
+    /// This version does not include auth_cache, config_snapshot_cache, autopilot_client,
+    /// or deployment_id since those are specific to the live gateway.
     pub fn new_for_snapshot(
         config: Arc<Config>,
         http_client: TensorzeroHttpClient,
@@ -310,6 +343,10 @@ impl AppStateData {
         postgres_connection_info: PostgresConnectionInfo,
         deferred_tasks: TaskTracker,
     ) -> Self {
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new(
+            Arc::new(config.rate_limiting.clone()),
+            postgres_connection_info.clone(),
+        ));
         Self {
             config,
             http_client,
@@ -319,6 +356,8 @@ impl AppStateData {
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
+            deployment_id: None,
+            rate_limiting_manager,
             _private: (),
         }
     }
@@ -456,14 +495,40 @@ pub async fn setup_postgres(
 /// Sets up the Autopilot API client from the environment.
 /// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
 /// `Ok(None)` if not set, or an error if client construction fails.
+/// Requires Postgres and ClickHouse (for deployment_id) to be enabled.
 ///
 /// Environment variables:
 /// - `TENSORZERO_AUTOPILOT_API_KEY`: Required to enable the client
 /// - `TENSORZERO_AUTOPILOT_BASE_URL`: Optional custom base URL (for testing)
-fn setup_autopilot_client() -> Result<Option<Arc<AutopilotClient>>, Error> {
+/// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Optional queue name for tool dispatching
+async fn setup_autopilot_client(
+    postgres_connection_info: &PostgresConnectionInfo,
+    deployment_id: Option<&String>,
+) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
+            let pool = postgres_connection_info.get_pool().ok_or_else(|| {
+                Error::new(ErrorDetails::AppState {
+                    message: "Autopilot client requires Postgres; set `TENSORZERO_POSTGRES_URL`."
+                        .to_string(),
+                })
+            })?;
+
+            // Require deployment_id (from ClickHouse) for autopilot
+            if deployment_id.is_none() {
+                return Err(Error::new(ErrorDetails::AppState {
+                    message:
+                        "Autopilot client requires ClickHouse; set `TENSORZERO_CLICKHOUSE_URL`."
+                            .to_string(),
+                }));
+            }
+            let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
+                .unwrap_or_else(|_| "autopilot".to_string());
+
             let mut builder = AutopilotClient::builder().api_key(api_key);
+            builder = builder
+                .spawn_pool(pool.clone())
+                .spawn_queue_name(queue_name);
 
             // Allow custom base URL for testing
             if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
@@ -476,7 +541,7 @@ fn setup_autopilot_client() -> Result<Option<Arc<AutopilotClient>>, Error> {
                 tracing::info!("Autopilot client using custom base URL: {}", base_url);
             }
 
-            let client = builder.build().map_err(Error::from)?;
+            let client = builder.build().await.map_err(Error::from)?;
             // TODO: Handshake with API to validate credentials
             tracing::info!("Autopilot client initialized");
             Ok(Some(Arc::new(client)))
@@ -592,7 +657,8 @@ pub async fn start_openai_compatible_gateway(
         .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
-        .layer(axum::middleware::from_fn(
+        .layer(axum::middleware::from_fn_with_state(
+            crate::observability::request_logging::InFlightRequestsData::new(),
             crate::observability::request_logging::request_logging_middleware,
         ))
         .with_state(gateway_handle.app_state.clone());

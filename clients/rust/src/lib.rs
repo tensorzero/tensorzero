@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::config::snapshot::ConfigSnapshot;
 use tensorzero_core::config::write_config_snapshot;
@@ -21,7 +23,7 @@ use uuid::Uuid;
 // Client core types
 pub use tensorzero_core::client::{
     Client, ClientBuilder, ClientBuilderMode, ClientMode, EmbeddedGateway, HTTPGateway,
-    get_config_no_verify_credentials,
+    PostgresConfig, get_config_no_verify_credentials,
 };
 
 // Client error types
@@ -443,6 +445,7 @@ pub trait ClientExt {
         &self,
         stored_samples: Vec<T>,
         variants: HashMap<String, String>,
+        concurrency: Option<usize>,
     ) -> Result<Vec<RenderedSample>, TensorZeroError>;
 
     async fn experimental_launch_optimization(
@@ -612,14 +615,14 @@ impl ClientExt for Client {
                 Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                Ok(Box::pin(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::internal::action::action(
                         &gateway.handle.app_state,
                         params,
                     )
                     .await
                     .map_err(err_to_http)
-                })
+                }))
                 .await?)
             }
         }
@@ -1276,6 +1279,7 @@ impl ClientExt for Client {
         &self,
         stored_samples: Vec<T>,
         variants: HashMap<String, String>, // Map from function name to variant name
+        concurrency: Option<usize>,
     ) -> Result<Vec<RenderedSample>, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, .. } = self.mode() else {
             return Err(TensorZeroError::Other {
@@ -1290,6 +1294,7 @@ impl ClientExt for Client {
             gateway.handle.app_state.config.clone(),
             stored_samples,
             variants,
+            concurrency,
         )
         .await
         .map_err(err_to_http)
@@ -1377,6 +1382,7 @@ impl ClientExt for Client {
                         &gateway.handle.app_state.http_client,
                         job_handle,
                         &gateway.handle.app_state.config.models.default_credentials,
+                        &gateway.handle.app_state.config.provider_types,
                     )
                     .await
                     .map_err(err_to_http)

@@ -1,5 +1,105 @@
 import { StatusCodes as HttpStatusCode } from "http-status-codes";
+import { isRouteErrorResponse } from "react-router";
+import { z } from "zod";
 import { isErrorLike } from "~/utils/common";
+
+/**
+ * Enum-like constants for categorizing infrastructure errors that survive
+ * serialization across the React Router server/client boundary.
+ *
+ * Use with React Router's `data()` helper:
+ * ```ts
+ * throw data({ errorType: InfraErrorType.GatewayUnavailable }, { status: 503 });
+ * ```
+ */
+export const InfraErrorType = {
+  GatewayUnavailable: "GATEWAY_UNAVAILABLE",
+  GatewayAuthFailed: "GATEWAY_AUTH_FAILED",
+  GatewayEndpointNotFound: "GATEWAY_ENDPOINT_NOT_FOUND",
+  ClickHouseUnavailable: "CLICKHOUSE_UNAVAILABLE",
+  ServerError: "SERVER_ERROR",
+} as const;
+
+export type InfraErrorType =
+  (typeof InfraErrorType)[keyof typeof InfraErrorType];
+
+/**
+ * Zod schema for InfraErrorData - validates error data passed via React Router's `data()` helper.
+ * Uses discriminatedUnion for type-safe validation of each error variant.
+ */
+export const InfraErrorDataSchema = z.discriminatedUnion("errorType", [
+  z.object({ errorType: z.literal(InfraErrorType.GatewayUnavailable) }),
+  z.object({ errorType: z.literal(InfraErrorType.GatewayAuthFailed) }),
+  z.object({
+    errorType: z.literal(InfraErrorType.GatewayEndpointNotFound),
+    routeInfo: z.string(),
+  }),
+  z.object({
+    errorType: z.literal(InfraErrorType.ClickHouseUnavailable),
+    message: z.string().optional(),
+  }),
+  z.object({
+    errorType: z.literal(InfraErrorType.ServerError),
+    message: z.string().optional(),
+  }),
+]);
+
+/**
+ * Discriminated union for error data passed via React Router's `data()` helper.
+ * Each variant only includes fields relevant to that error type, enforcing
+ * valid combinations at compile time.
+ *
+ * Inferred from InfraErrorDataSchema to ensure type and runtime validation stay in sync.
+ */
+export type InfraErrorData = z.infer<typeof InfraErrorDataSchema>;
+
+/**
+ * Discriminated union for classified errors used in error rendering.
+ * Mirrors InfraErrorData but uses 'type' for consistency with component props,
+ * and includes additional fields like 'status' for HTTP status codes.
+ */
+export type ClassifiedError =
+  | { type: typeof InfraErrorType.GatewayUnavailable }
+  | { type: typeof InfraErrorType.GatewayAuthFailed }
+  | { type: typeof InfraErrorType.GatewayEndpointNotFound; routeInfo: string }
+  | { type: typeof InfraErrorType.ClickHouseUnavailable; message?: string }
+  | {
+      type: typeof InfraErrorType.ServerError;
+      message?: string;
+      status?: number;
+      stack?: string;
+    };
+
+export function isInfraErrorData(value: unknown): value is InfraErrorData {
+  return InfraErrorDataSchema.safeParse(value).success;
+}
+
+/**
+ * Zod schemas for serialized error validation.
+ * These validate error objects after they cross the React Router serialization boundary,
+ * where instanceof checks fail and we must rely on object properties.
+ */
+const SerializedGatewayConnectionErrorSchema = z.object({
+  name: z.literal("GatewayConnectionError"),
+});
+
+const SerializedAuthenticationErrorSchema = z.object({
+  name: z.literal("TensorZeroServerError"),
+  status: z.literal(401),
+});
+
+const SerializedRouteNotFoundErrorSchema = z.object({
+  message: z.string().refine((m) => m.startsWith("Route not found:")),
+});
+
+const SerializedClickHouseErrorSchema = z.object({
+  name: z.string().refine((n) => n.startsWith("ClickHouse")),
+});
+
+const SerializedAutopilotUnavailableErrorSchema = z.object({
+  name: z.literal("TensorZeroServerError"),
+  status: z.union([z.literal(501), z.literal(401)]),
+});
 
 /**
  * Error thrown when the UI cannot connect to the TensorZero gateway.
@@ -8,7 +108,7 @@ import { isErrorLike } from "~/utils/common";
  */
 export class GatewayConnectionError extends Error {
   constructor(cause?: unknown) {
-    super("Cannot connect to TensorZero gateway", { cause });
+    super("Cannot connect to TensorZero Gateway", { cause });
     this.name = "GatewayConnectionError";
   }
 }
@@ -21,12 +121,87 @@ export function isGatewayConnectionError(
     return true;
   }
   // Check serialized object properties (works if thrown from server loader)
+  return SerializedGatewayConnectionErrorSchema.safeParse(error).success;
+}
+
+export function isAuthenticationError(error: unknown): boolean {
+  if (error instanceof TensorZeroServerError) {
+    return error.status === 401;
+  }
+  // Check serialized object properties (works if thrown from server loader)
+  return SerializedAuthenticationErrorSchema.safeParse(error).success;
+}
+
+/**
+ * Check if an error indicates a gateway API route not found.
+ * This typically happens when the UI version doesn't match the gateway version.
+ *
+ * Supports both:
+ * - Direct TensorZeroServerError.RouteNotFound instances (server-side)
+ * - Message pattern matching (for serialized errors)
+ */
+export function isGatewayEndpointNotFoundError(error: unknown): boolean {
+  if (error instanceof TensorZeroServerError.RouteNotFound) {
+    return true;
+  }
+  // Check serialized object properties (works if thrown from server loader)
+  return SerializedRouteNotFoundErrorSchema.safeParse(error).success;
+}
+
+/**
+ * Check if an error indicates a ClickHouse connection or query failure.
+ *
+ * Supports both:
+ * - Direct TensorZeroServerError.ClickHouse* instances (server-side)
+ * - Name pattern matching (for serialized errors where instanceof fails)
+ */
+export function isClickHouseError(error: unknown): boolean {
+  // Direct instanceof checks for all ClickHouse error subclasses
+  if (
+    error instanceof TensorZeroServerError.ClickHouseConnection ||
+    error instanceof TensorZeroServerError.ClickHouseQuery ||
+    error instanceof TensorZeroServerError.ClickHouseDeserialization ||
+    error instanceof TensorZeroServerError.ClickHouseMigration
+  ) {
+    return true;
+  }
+  // Check serialized object properties (works if thrown from server loader)
+  return SerializedClickHouseErrorSchema.safeParse(error).success;
+}
+
+/**
+ * Check if an error is an infrastructure error that should trigger graceful degradation.
+ * Includes: gateway unreachable, auth failed, route not found (version mismatch), ClickHouse unavailable.
+ *
+ * Handles both:
+ * - RouteErrorResponse with InfraErrorData (thrown via data() helper)
+ * - Direct Error instances (server-side or serialized)
+ */
+export function isInfraError(error: unknown): boolean {
+  // Check for RouteErrorResponse with InfraErrorData (thrown via data() helper)
+  if (isRouteErrorResponse(error) && isInfraErrorData(error.data)) {
+    return true;
+  }
+  // Check for direct Error instances (server-side) or serialized errors
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "GatewayConnectionError"
+    isGatewayConnectionError(error) ||
+    isAuthenticationError(error) ||
+    isGatewayEndpointNotFoundError(error) ||
+    isClickHouseError(error)
   );
+}
+
+/**
+ * Check if an error indicates that Autopilot is not configured.
+ * The gateway returns 501 NOT_IMPLEMENTED when autopilot is not implemented,
+ * or 401 UNAUTHORIZED when the autopilot API key is not configured.
+ */
+export function isAutopilotUnavailableError(error: unknown): boolean {
+  if (error instanceof TensorZeroServerError) {
+    return error.status === 501 || error.status === 401;
+  }
+  // Check serialized object properties (works if thrown from server loader)
+  return SerializedAutopilotUnavailableErrorSchema.safeParse(error).success;
 }
 
 export class TensorZeroServerError extends Error {
@@ -107,21 +282,25 @@ export class TensorZeroServerError extends Error {
   static ClickHouseConnection = class ClickHouseConnection extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
+      this.name = "ClickHouseConnectionError";
     }
   };
   static ClickHouseDeserialization = class ClickHouseDeserialization extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
+      this.name = "ClickHouseDeserializationError";
     }
   };
   static ClickHouseMigration = class ClickHouseMigration extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
+      this.name = "ClickHouseMigrationError";
     }
   };
   static ClickHouseQuery = class ClickHouseQuery extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
+      this.name = "ClickHouseQueryError";
     }
   };
   static ObjectStoreUnconfigured = class ObjectStoreUnconfigured extends TensorZeroServerError {
@@ -510,4 +689,201 @@ export function isTensorZeroServerError(
   error: unknown,
 ): error is TensorZeroServerError {
   return isErrorLike(error) && error.name === "TensorZeroServerError";
+}
+
+/**
+ * Returns a user-friendly label for an InfraErrorType.
+ * Used in error dialogs and UI components.
+ */
+export function getErrorLabel(type: InfraErrorType): string {
+  switch (type) {
+    case InfraErrorType.GatewayUnavailable:
+      return "Gateway Connection Error";
+    case InfraErrorType.GatewayAuthFailed:
+      return "Auth Error";
+    case InfraErrorType.GatewayEndpointNotFound:
+      return "Route Error";
+    case InfraErrorType.ClickHouseUnavailable:
+      return "Database Error";
+    case InfraErrorType.ServerError:
+      return "Server Error";
+    default: {
+      const _exhaustiveCheck: never = type;
+      return "Server Error";
+    }
+  }
+}
+
+/**
+ * Extracts error details from an unknown error in a type-safe way.
+ * Useful for displaying error information in UI components.
+ */
+export function getErrorDetails(error: unknown): {
+  message: string;
+  status?: number;
+} {
+  if (error instanceof TensorZeroServerError) {
+    return { message: error.message, status: error.status };
+  }
+  if (error instanceof GatewayConnectionError) {
+    return { message: error.message };
+  }
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  return { message: String(error) };
+}
+
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+  return "";
+}
+
+/**
+ * Classifies an error into a ClassifiedError discriminated union.
+ * Handles both direct Error instances and serialized error data from React Router boundaries.
+ */
+export function classifyError(error: unknown): ClassifiedError {
+  if (isRouteErrorResponse(error) && isInfraErrorData(error.data)) {
+    const { errorType } = error.data;
+    switch (errorType) {
+      case InfraErrorType.GatewayUnavailable:
+        return { type: InfraErrorType.GatewayUnavailable };
+      case InfraErrorType.GatewayAuthFailed:
+        return { type: InfraErrorType.GatewayAuthFailed };
+      case InfraErrorType.GatewayEndpointNotFound:
+        return {
+          type: InfraErrorType.GatewayEndpointNotFound,
+          routeInfo: error.data.routeInfo,
+        };
+      case InfraErrorType.ClickHouseUnavailable:
+        return {
+          type: InfraErrorType.ClickHouseUnavailable,
+          message: "message" in error.data ? error.data.message : undefined,
+        };
+      case InfraErrorType.ServerError:
+        return {
+          type: InfraErrorType.ServerError,
+          message: "message" in error.data ? error.data.message : undefined,
+          status: error.status,
+        };
+      default: {
+        const _exhaustiveCheck: never = errorType;
+        return { type: InfraErrorType.ServerError, status: error.status };
+      }
+    }
+  }
+
+  if (isGatewayConnectionError(error)) {
+    return { type: InfraErrorType.GatewayUnavailable };
+  }
+
+  if (isAuthenticationError(error)) {
+    return { type: InfraErrorType.GatewayAuthFailed };
+  }
+
+  if (isGatewayEndpointNotFoundError(error)) {
+    const errorMessage = extractErrorMessage(error);
+    const routeMatch = errorMessage.match(/Route not found: (\w+) (.+)/);
+    const routeInfo = routeMatch
+      ? `${routeMatch[1]} ${routeMatch[2]}`
+      : errorMessage;
+    return { type: InfraErrorType.GatewayEndpointNotFound, routeInfo };
+  }
+
+  if (isClickHouseError(error)) {
+    const message = extractErrorMessage(error) || undefined;
+    return { type: InfraErrorType.ClickHouseUnavailable, message };
+  }
+
+  const message = isRouteErrorResponse(error)
+    ? error.statusText || undefined
+    : error instanceof Error
+      ? error.message
+      : undefined;
+  const status = isRouteErrorResponse(error) ? error.status : undefined;
+  return { type: InfraErrorType.ServerError, message, status };
+}
+
+/**
+ * Info for displaying page-level errors to users.
+ */
+export interface PageErrorInfo {
+  title: string;
+  message: string;
+  status?: number;
+}
+
+/**
+ * Returns user-friendly error info for page-level errors.
+ * Maps status codes to sanitized messages - never exposes raw server strings.
+ */
+export function getPageErrorInfo(error: unknown): PageErrorInfo {
+  if (isRouteErrorResponse(error)) {
+    switch (error.status) {
+      case 400:
+        return {
+          title: "Bad Request",
+          message:
+            "The request was invalid. Please check your input and try again.",
+          status: 400,
+        };
+      case 401:
+        return {
+          title: "Unauthorized",
+          message: "Authentication is required to access this resource.",
+          status: 401,
+        };
+      case 403:
+        return {
+          title: "Forbidden",
+          message: "You don't have permission to access this resource.",
+          status: 403,
+        };
+      case 404:
+        return {
+          title: "Not Found",
+          message: "The requested resource could not be found.",
+          status: 404,
+        };
+      case 500:
+        return {
+          title: "Server Error",
+          message: "The server encountered an error. Please try again later.",
+          status: 500,
+        };
+      case 502:
+        return {
+          title: "Bad Gateway",
+          message: "Unable to reach the server. Please try again later.",
+          status: 502,
+        };
+      case 503:
+        return {
+          title: "Service Unavailable",
+          message:
+            "The service is temporarily unavailable. Please try again later.",
+          status: 503,
+        };
+      default:
+        return {
+          title: "Error",
+          message: "An unexpected error occurred.",
+          status: error.status,
+        };
+    }
+  }
+
+  return {
+    title: "Error",
+    message: "An unexpected error occurred.",
+  };
 }

@@ -141,8 +141,15 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
 
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
-    let payload =
-        json!({"inference_id": inference_id, "metric_name": "comment", "value": "bad job!"});
+    let payload = Params {
+        inference_id: Some(inference_id),
+        metric_name: String::from("comment"),
+        value: Value::String(String::from("bad job!")),
+        dryrun: None,
+        episode_id: None,
+        internal: false,
+        tags: HashMap::new(),
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -174,8 +181,16 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     // No sleeping, we should throttle in the gateway
-    let payload =
-        json!({"inference_id": inference_id, "metric_name": "comment", "value": "bad job!"});
+    let payload = Params {
+        inference_id: Some(inference_id),
+        metric_name: String::from("comment"),
+        value: Value::String(String::from("bad job!")),
+        dryrun: None,
+        episode_id: None,
+        internal: false,
+        tags: HashMap::new(),
+    };
+
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1531,6 +1546,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
     config
         .metrics
@@ -1870,6 +1886,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
     config
         .metrics

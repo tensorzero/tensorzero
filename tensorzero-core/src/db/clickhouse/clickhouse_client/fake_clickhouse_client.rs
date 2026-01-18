@@ -1,10 +1,9 @@
 #![cfg(any(test, feature = "pyo3"))]
 
 use async_trait::async_trait;
-use lazy_static::lazy_static;
 use secrecy::SecretString;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::db::clickhouse::batching::BatchWriterHandle;
@@ -15,10 +14,8 @@ use crate::db::clickhouse::{
 };
 use crate::error::{DelayedError, Error, ErrorDetails};
 
-lazy_static! {
-    static ref FAKE_DATABASE_URL: SecretString = SecretString::from("fake");
-    static ref FAKE_CLUSTER_NAME: Option<String> = None;
-}
+static FAKE_DATABASE_URL: LazyLock<SecretString> = LazyLock::new(|| SecretString::from("fake"));
+static FAKE_CLUSTER_NAME: LazyLock<Option<String>> = LazyLock::new(|| None);
 
 /// Simple fake implementation of ClickHouseClient for testing
 ///
@@ -48,7 +45,7 @@ impl FakeClickHouseClient {
     }
 }
 
-async fn write_fake<T: serde::Serialize + Send + Sync>(
+fn write_fake<T: serde::Serialize + Send + Sync>(
     rows: Rows<'_, T>,
     table: TableName,
     tables: &mut RwLockWriteGuard<'_, HashMap<String, Vec<serde_json::Value>>>,
@@ -76,7 +73,7 @@ impl ClickHouseClient for FakeClickHouseClient {
         &FAKE_CLUSTER_NAME
     }
 
-    fn database(&self) -> &str {
+    fn database(&self) -> &'static str {
         "fake"
     }
 
@@ -98,7 +95,6 @@ impl ClickHouseClient for FakeClickHouseClient {
             table,
             &mut self.data.write().await,
         )
-        .await
     }
 
     async fn write_non_batched_internal(
@@ -111,7 +107,6 @@ impl ClickHouseClient for FakeClickHouseClient {
             table,
             &mut self.data.write().await,
         )
-        .await
     }
 
     async fn run_query_synchronous(

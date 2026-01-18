@@ -29,7 +29,8 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     inference::types::{
-        Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage, current_timestamp,
+        Latency, ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, Role, Usage,
+        current_timestamp,
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
@@ -127,7 +128,6 @@ impl UninitializedEmbeddingModelConfig {
         self,
         provider_types: &ProviderTypesConfig,
         default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingModelConfig, Error> {
         // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
         // field via StoredEmbeddingModelConfig when loading from snapshot)
@@ -135,12 +135,7 @@ impl UninitializedEmbeddingModelConfig {
 
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
             let provider_config = config
-                .load(
-                    provider_types,
-                    name.clone(),
-                    default_credentials,
-                    http_client.clone(),
-                )
+                .load(provider_types, name.clone(), default_credentials)
                 .await?;
             Ok::<_, Error>((name, provider_config))
         }))
@@ -184,6 +179,7 @@ impl EmbeddingModelConfig {
                     model_name,
                     provider_name,
                     otlp_config: &clients.otlp_config,
+                    model_inference_id: Uuid::now_v7(),
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -377,6 +373,7 @@ pub struct EmbeddingProviderResponse {
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
@@ -407,6 +404,7 @@ pub struct EmbeddingModelResponse {
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
     pub cached: bool,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl EmbeddingModelResponse {
@@ -430,6 +428,7 @@ impl EmbeddingModelResponse {
             },
             embedding_provider_name: Arc::from(request.provider_name),
             cached: true,
+            raw_usage: None,
         }
     }
 
@@ -460,6 +459,7 @@ pub struct EmbeddingResponseWithMetadata {
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
     pub embedding_model_name: Arc<str>,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 impl EmbeddingModelResponse {
@@ -478,6 +478,7 @@ impl EmbeddingModelResponse {
             latency: embedding_provider_response.latency,
             embedding_provider_name,
             cached: false,
+            raw_usage: embedding_provider_response.raw_usage,
         }
     }
 }
@@ -495,6 +496,7 @@ impl EmbeddingResponseWithMetadata {
             latency: embedding_response.latency,
             embedding_provider_name: embedding_response.embedding_provider_name,
             embedding_model_name,
+            raw_usage: embedding_response.raw_usage,
         }
     }
 }
@@ -512,7 +514,6 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
         Ok(Self {
             id: response.id,
             output: vec![],
-            created: response.created,
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::User,
@@ -521,13 +522,14 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
                 })],
             }]), // TODO (#399): Store this information in a more appropriate way for this kind of request
             raw_request: response.raw_request,
-            raw_response: response.raw_response,
+            raw_response: response.raw_response.clone(),
             usage: response.usage,
             latency: response.latency,
-            model_provider_name: response.embedding_provider_name,
+            model_provider_name: response.embedding_provider_name.clone(),
             model_name: response.embedding_model_name,
             cached: false,
             finish_reason: None,
+            raw_usage: response.raw_usage,
         })
     }
 }
@@ -597,12 +599,8 @@ impl EmbeddingProviderInfo {
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request)
             .await?;
         let response_fut = self.inner.embed(
             request,
@@ -624,15 +622,11 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
-        let postgres_connection_info = clients.postgres_connection_info.clone();
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
             async move {
-                if let Err(e) = ticket_borrow
-                    .return_tickets(&postgres_connection_info, resource_usage)
-                    .await
-                {
+                if let Err(e) = ticket_borrow.return_tickets(resource_usage).await {
                     tracing::error!("Failed to return rate limit tickets: {}", e);
                 }
             }
@@ -663,11 +657,10 @@ impl UninitializedEmbeddingProviderConfig {
         provider_types: &ProviderTypesConfig,
         provider_name: Arc<str>,
         default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingProviderInfo, Error> {
         let provider_config = self
             .config
-            .load(provider_types, default_credentials, http_client)
+            .load(provider_types, default_credentials)
             .await?;
         // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
         // field via StoredEmbeddingProviderConfig when loading from snapshot)
@@ -759,6 +752,7 @@ impl EmbeddingProviderResponse {
         raw_response: String,
         usage: Usage,
         latency: Latency,
+        raw_usage: Option<Vec<RawUsageEntry>>,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -769,6 +763,7 @@ impl EmbeddingProviderResponse {
             raw_response,
             usage,
             latency,
+            raw_usage,
         }
     }
 }
@@ -802,6 +797,7 @@ mod tests {
         cache::{CacheEnabledMode, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         model_table::ProviderTypeDefaultCredentials,
+        rate_limiting::{RateLimitingManager, ScopeInfo},
     };
 
     use super::*;
@@ -857,14 +853,15 @@ mod tests {
                         enabled: CacheEnabledMode::Off,
                     },
                     tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
+                    rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: crate::rate_limiting::ScopeInfo {
+                    scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
                         api_key_public_id: None,
                     },
                     relay: None,
+                    include_raw_usage: false,
                 },
             )
             .await;
@@ -910,7 +907,6 @@ mod tests {
                 &ProviderTypesConfig::default(),
                 Arc::from("test_provider"),
                 &ProviderTypeDefaultCredentials::default(),
-                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();

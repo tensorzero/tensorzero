@@ -1,10 +1,18 @@
 //! E2E tests for the evaluation endpoints.
 
-use reqwest::Client;
+use std::time::Duration;
+
+use futures::StreamExt;
+use reqwest::{Client, StatusCode};
+use reqwest_eventsource::{Event, RequestBuilderExt};
+use serde_json::{Value, json};
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
 use tensorzero_core::endpoints::internal::evaluations::types::GetEvaluationStatisticsResponse;
 use tensorzero_core::endpoints::internal::evaluations::{
     GetEvaluationResultsResponse, GetEvaluationRunInfosResponse,
 };
+use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -444,8 +452,11 @@ async fn test_get_evaluation_results_haiku() {
     // Verify all results belong to the correct evaluation run
     let expected_run_id = Uuid::parse_str(evaluation_run_id).unwrap();
     for result in &response.results {
-        assert_eq!(result.evaluation_run_id, expected_run_id);
-        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+        let EvaluationResultRow::Chat(row) = result else {
+            panic!("Expected Chat result, got {result:?}");
+        };
+        assert_eq!(row.evaluation_run_id, expected_run_id);
+        assert_eq!(row.variant_name, "better_prompt_haiku_3_5");
     }
 }
 
@@ -477,12 +488,11 @@ async fn test_get_evaluation_results_entity_extraction() {
         "Expected 4 results (2 datapoints * 2 metrics)"
     );
 
-    // Verify JSON function output structure
+    // Verify results are JSON type
     for result in &response.results {
-        assert!(
-            result.generated_output.contains("\"raw\""),
-            "Generated output should have 'raw' field for JSON function"
-        );
+        let EvaluationResultRow::Json(_) = result else {
+            panic!("Expected Json result, got {result:?}");
+        };
     }
 }
 
@@ -519,7 +529,7 @@ async fn test_get_evaluation_results_multiple_runs() {
     let eval_run_ids: std::collections::HashSet<_> = response
         .results
         .iter()
-        .map(|r| r.evaluation_run_id)
+        .map(EvaluationResultRow::evaluation_run_id)
         .collect();
     assert_eq!(
         eval_run_ids.len(),
@@ -569,10 +579,16 @@ async fn test_get_evaluation_results_pagination() {
     );
 
     // Verify no overlap between pages
-    let page1_datapoints: std::collections::HashSet<_> =
-        page1.results.iter().map(|r| r.datapoint_id).collect();
-    let page2_datapoints: std::collections::HashSet<_> =
-        page2.results.iter().map(|r| r.datapoint_id).collect();
+    let page1_datapoints: std::collections::HashSet<_> = page1
+        .results
+        .iter()
+        .map(EvaluationResultRow::datapoint_id)
+        .collect();
+    let page2_datapoints: std::collections::HashSet<_> = page2
+        .results
+        .iter()
+        .map(EvaluationResultRow::datapoint_id)
+        .collect();
 
     let overlap: Vec<_> = page1_datapoints.intersection(&page2_datapoints).collect();
     assert!(
@@ -661,5 +677,838 @@ async fn test_get_evaluation_results_default_pagination() {
     assert!(
         !response.results.is_empty(),
         "Expected results with default pagination"
+    );
+}
+// ============================================================================
+// run_evaluation SSE streaming endpoint tests
+// ============================================================================
+
+/// Helper function to create a chat datapoint for testing evaluations
+async fn create_test_chat_datapoint(
+    client: &Client,
+    dataset_name: &str,
+    datapoint_id: Uuid,
+) -> Value {
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {
+                "system": { "assistant_name": "TestBot" },
+                "messages": [{
+                    "role": "user",
+                    "content": [{ "type": "text", "text": "Hello, write me a haiku" }]
+                }]
+            },
+            "output": [{ "type": "text", "text": "Test output response" }],
+            "is_custom": true,
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "Failed to create datapoint: {:?}",
+        resp.status()
+    );
+
+    resp.json().await.unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_success() {
+    let http_client = Client::new();
+    let _clickhouse = get_clickhouse().await;
+
+    // Create a unique dataset with test datapoints
+    let dataset_name = format!("test-eval-dataset-{}", Uuid::now_v7());
+    let datapoint_id1 = Uuid::now_v7();
+    let datapoint_id2 = Uuid::now_v7();
+
+    // Create test datapoints
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id1).await;
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
+
+    // Wait for data to be available in ClickHouse
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Build the evaluation request payload
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {
+                "exact_match_eval": {
+                    "type": "exact_match",
+                }
+            }
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation_streaming",
+        "dataset_name": dataset_name,
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "off",
+        "max_datapoints": 2,
+    });
+
+    // Make the SSE request
+    let mut event_stream = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut events: Vec<Value> = Vec::new();
+    let mut start_received = false;
+    let mut complete_received = false;
+    let mut success_count = 0;
+    let mut error_count = 0;
+
+    // Collect events from the stream
+    while let Some(event_result) = event_stream.next().await {
+        match event_result {
+            Ok(Event::Open) => continue,
+            Ok(Event::Message(message)) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+
+                let event: Value = serde_json::from_str(&message.data).unwrap();
+                let event_type = event.get("type").and_then(|t| t.as_str());
+
+                match event_type {
+                    Some("start") => {
+                        start_received = true;
+                        assert!(
+                            event.get("evaluation_run_id").is_some(),
+                            "Start event should have evaluation_run_id"
+                        );
+                        assert!(
+                            event.get("num_datapoints").is_some(),
+                            "Start event should have num_datapoints"
+                        );
+                    }
+                    Some("success") => {
+                        success_count += 1;
+                        assert!(
+                            event.get("datapoint").is_some(),
+                            "Success event should have datapoint"
+                        );
+                        assert!(
+                            event.get("response").is_some(),
+                            "Success event should have response"
+                        );
+                        assert!(
+                            event.get("evaluations").is_some(),
+                            "Success event should have evaluations"
+                        );
+                    }
+                    Some("error") => {
+                        error_count += 1;
+                    }
+                    Some("complete") => {
+                        complete_received = true;
+                        assert!(
+                            event.get("evaluation_run_id").is_some(),
+                            "Complete event should have evaluation_run_id"
+                        );
+                    }
+                    Some("fatal_error") => {
+                        panic!("Received fatal_error event: {:?}", event.get("message"));
+                    }
+                    _ => {}
+                }
+
+                events.push(event);
+            }
+            Err(reqwest_eventsource::Error::StreamEnded) => break,
+            Err(e) => panic!("SSE stream error: {e:?}"),
+        }
+    }
+
+    assert!(start_received, "Should receive start event");
+    assert!(complete_received, "Should receive complete event");
+    // We expect either success or error for each datapoint
+    assert!(
+        success_count + error_count > 0,
+        "Should receive at least one success or error event"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_missing_variant() {
+    let http_client = Client::new();
+
+    // Request without variant_name or internal_dynamic_variant_config
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {}
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation",
+        "dataset_name": "some_dataset",
+        // Missing variant_name and internal_dynamic_variant_config
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Should return 400 for missing variant"
+    );
+
+    let body: Value = resp.json().await.unwrap();
+    assert!(
+        body.get("error").is_some(),
+        "Response should contain an error"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_nonexistent_dataset() {
+    let http_client = Client::new();
+
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {}
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation",
+        "dataset_name": format!("nonexistent-dataset-{}", Uuid::now_v7()),
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    // The request should start streaming. We should get a start event with 0 datapoints,
+    // then a complete event.
+    let mut event_stream = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut found_error_or_empty = false;
+
+    while let Some(event_result) = event_stream.next().await {
+        match event_result {
+            Ok(Event::Open) => continue,
+            Ok(Event::Message(message)) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                let event: Value = serde_json::from_str(&message.data).unwrap();
+                let event_type = event.get("type").and_then(|t| t.as_str());
+
+                match event_type {
+                    Some("start") => {
+                        let num_datapoints = event.get("num_datapoints").and_then(|n| n.as_u64());
+                        if num_datapoints == Some(0) {
+                            found_error_or_empty = true;
+                        }
+                    }
+                    Some("fatal_error") => {
+                        found_error_or_empty = true;
+                        break;
+                    }
+                    Some("complete") => {
+                        found_error_or_empty = true;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            Err(reqwest_eventsource::Error::StreamEnded) => break,
+            Err(_) => {
+                found_error_or_empty = true;
+                break;
+            }
+        }
+    }
+
+    assert!(
+        found_error_or_empty,
+        "Should report error or empty dataset for nonexistent dataset"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
+    let http_client = Client::new();
+    let _clickhouse = get_clickhouse().await;
+
+    // Create a unique dataset with test datapoints
+    let dataset_name = format!("test-eval-ids-dataset-{}", Uuid::now_v7());
+    let datapoint_id1 = Uuid::now_v7();
+    let datapoint_id2 = Uuid::now_v7();
+    let datapoint_id3 = Uuid::now_v7();
+
+    // Create test datapoints
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id1).await;
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
+    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id3).await;
+
+    // Wait for data to be available
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Only evaluate specific datapoint IDs (2 out of 3)
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {
+                "exact_match_eval": {
+                    "type": "exact_match",
+                }
+            }
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation_datapoint_ids",
+        "datapoint_ids": [datapoint_id1.to_string(), datapoint_id2.to_string()],
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    let mut event_stream = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut num_datapoints_reported = None;
+    let mut start_received = false;
+
+    while let Some(event_result) = event_stream.next().await {
+        match event_result {
+            Ok(Event::Open) => continue,
+            Ok(Event::Message(message)) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+
+                let event: Value = serde_json::from_str(&message.data).unwrap();
+                let event_type = event.get("type").and_then(|t| t.as_str());
+
+                match event_type {
+                    Some("start") => {
+                        start_received = true;
+                        num_datapoints_reported =
+                            event.get("num_datapoints").and_then(|n| n.as_u64());
+                    }
+                    Some("complete") => break,
+                    Some("fatal_error") => {
+                        panic!("Received fatal_error event: {:?}", event.get("message"));
+                    }
+                    _ => {}
+                }
+            }
+            Err(reqwest_eventsource::Error::StreamEnded) => break,
+            Err(e) => panic!("SSE stream error: {e:?}"),
+        }
+    }
+
+    assert!(start_received, "Should receive start event");
+    assert_eq!(
+        num_datapoints_reported,
+        Some(2),
+        "Should report exactly 2 datapoints for the 2 specific IDs"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_conflicting_variant_config() {
+    let http_client = Client::new();
+
+    // Provide both variant_name AND internal_dynamic_variant_config (should fail)
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {}
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation",
+        "dataset_name": "some_dataset",
+        "variant_name": "test",
+        "internal_dynamic_variant_config": {
+            "type": "chat_completion",
+            "model": "test",
+            "active": true,
+        },
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Should return 400 when both variant_name and internal_dynamic_variant_config are provided"
+    );
+
+    let body: Value = resp.json().await.unwrap();
+    assert!(
+        body.get("error").is_some(),
+        "Response should contain an error"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_invalid_inference_cache() {
+    let http_client = Client::new();
+
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {}
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation",
+        "dataset_name": "some_dataset",
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "invalid_cache_mode",  // Invalid value
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Should return 400 for invalid inference_cache setting"
+    );
+
+    let body: Value = resp.json().await.unwrap();
+    assert!(
+        body.get("error").is_some(),
+        "Response should contain an error"
+    );
+}
+
+// ============================================================================
+// get_human_feedback endpoint tests
+// ============================================================================
+
+/// Test that get_human_feedback returns feedback when it exists.
+/// This test creates an inference, submits human feedback with the required tags,
+/// and then verifies the endpoint returns the correct feedback.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_returns_feedback_when_exists() {
+    let http_client = Client::new();
+
+    // First, run an inference to get an inference_id
+    let inference_payload = json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
+        },
+        "stream": false,
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        response.status().is_success(),
+        "inference request failed: {:?}",
+        response.status()
+    );
+    let response_json: Value = response.json().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let serialized_inference_output =
+        serde_json::to_string(response_json.get("output").unwrap()).unwrap();
+
+    // Create datapoint_id and evaluator_inference_id
+    let datapoint_id = Uuid::now_v7();
+    let evaluator_inference_id = Uuid::now_v7();
+
+    // Submit human feedback with required tags
+    let feedback_payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "brevity_score",
+        "value": 0.85,
+        "internal": true,
+        "tags": {
+            "tensorzero::human_feedback": "true",
+            "tensorzero::datapoint_id": datapoint_id.to_string(),
+            "tensorzero::evaluator_inference_id": evaluator_inference_id.to_string()
+        }
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&feedback_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "feedback request failed: {:?}",
+        response.status()
+    );
+
+    // Wait for ClickHouse to process the data
+    sleep(Duration::from_secs(1)).await;
+
+    // Now call the get_human_feedback endpoint
+    let resp = http_client
+        .post(get_gateway_endpoint(&format!(
+            "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+        )))
+        .json(&json!({
+            "metric_name": "brevity_score",
+            "output": serialized_inference_output
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_human_feedback request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: serde_json::Value = resp.json().await.unwrap();
+
+    assert!(
+        response.get("feedback").is_some(),
+        "Expected feedback to be present"
+    );
+
+    let feedback = response.get("feedback").unwrap();
+    assert_eq!(feedback.get("value").unwrap(), &json!(0.85));
+    assert_eq!(
+        feedback
+            .get("evaluator_inference_id")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        evaluator_inference_id.to_string()
+    );
+}
+
+/// Test that get_human_feedback returns None when no feedback exists.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_returns_none_when_not_exists() {
+    let http_client = Client::new();
+
+    let nonexistent_datapoint_id = Uuid::now_v7();
+
+    let resp = http_client
+        .post(get_gateway_endpoint(&format!(
+            "/internal/evaluations/datapoints/{nonexistent_datapoint_id}/get_human_feedback"
+        )))
+        .json(&json!({
+            "metric_name": "task_success",
+            "output": "some_output"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_human_feedback request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: serde_json::Value = resp.json().await.unwrap();
+
+    // When feedback is None, the field is omitted from the response
+    assert!(
+        response.get("feedback").is_none() || response.get("feedback").unwrap().is_null(),
+        "Expected feedback to be None for nonexistent metric"
+    );
+}
+
+/// Test that get_human_feedback works with boolean feedback values.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_with_boolean_value() {
+    let http_client = Client::new();
+
+    // First, run an inference to get an inference_id
+    let inference_payload = json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
+        },
+        "stream": false,
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json: Value = response.json().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let serialized_inference_output =
+        serde_json::to_string(response_json.get("output").unwrap()).unwrap();
+
+    // Create datapoint_id and evaluator_inference_id
+    let datapoint_id = Uuid::now_v7();
+    let evaluator_inference_id = Uuid::now_v7();
+
+    // Submit boolean human feedback with required tags
+    let feedback_payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "task_success",
+        "value": true,
+        "internal": true,
+        "tags": {
+            "tensorzero::human_feedback": "true",
+            "tensorzero::datapoint_id": datapoint_id.to_string(),
+            "tensorzero::evaluator_inference_id": evaluator_inference_id.to_string()
+        }
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&feedback_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Wait for ClickHouse to process the data
+    sleep(Duration::from_secs(1)).await;
+
+    // Now call the get_human_feedback endpoint
+    let resp = http_client
+        .post(get_gateway_endpoint(&format!(
+            "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+        )))
+        .json(&json!({
+            "metric_name": "task_success",
+            "output": serialized_inference_output
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+
+    let response: serde_json::Value = resp.json().await.unwrap();
+
+    assert!(response.get("feedback").is_some());
+
+    let feedback = response.get("feedback").unwrap();
+    assert_eq!(feedback.get("value").unwrap(), &json!(true));
+    assert_eq!(
+        feedback
+            .get("evaluator_inference_id")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        evaluator_inference_id.to_string()
+    );
+}
+
+/// Test that get_human_feedback returns the correct feedback when output doesn't match.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_output_mismatch() {
+    let http_client = Client::new();
+
+    // First, run an inference to get an inference_id
+    let inference_payload = json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
+        },
+        "stream": false,
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json: Value = response.json().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let serialized_inference_output =
+        serde_json::to_string(response_json.get("output").unwrap()).unwrap();
+
+    // Create datapoint_id and evaluator_inference_id
+    let datapoint_id = Uuid::now_v7();
+    let evaluator_inference_id = Uuid::now_v7();
+
+    // Submit human feedback
+    let feedback_payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "brevity_score",
+        "value": 0.5,
+        "internal": true,
+        "tags": {
+            "tensorzero::human_feedback": "true",
+            "tensorzero::datapoint_id": datapoint_id.to_string(),
+            "tensorzero::evaluator_inference_id": evaluator_inference_id.to_string()
+        }
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&feedback_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Wait for ClickHouse to process the data
+    sleep(Duration::from_secs(1)).await;
+
+    // Query with correct output - should find feedback
+    let url = get_gateway_endpoint(&format!(
+        "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+    ));
+
+    let resp = http_client
+        .post(url.clone())
+        .json(&json!({
+            "metric_name": "brevity_score",
+            "output": serialized_inference_output
+        }))
+        .send()
+        .await
+        .unwrap();
+    let response: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        response.get("feedback").is_some() && !response.get("feedback").unwrap().is_null(),
+        "Should find feedback with matching output"
+    );
+
+    // Query with different output - should not find feedback
+    let resp = http_client
+        .post(url)
+        .json(&json!({
+            "metric_name": "brevity_score",
+            "output": "different_output"
+        }))
+        .send()
+        .await
+        .unwrap();
+    let response: serde_json::Value = resp.json().await.unwrap();
+    // When feedback is None, the field is omitted from the response
+    assert!(
+        response.get("feedback").is_none() || response.get("feedback").unwrap().is_null(),
+        "Should not find feedback with different output"
+    );
+}
+
+/// Test that get_human_feedback handles invalid UUID in datapoint_id.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_invalid_uuid() {
+    let http_client = Client::new();
+
+    let resp = http_client
+        .post(get_gateway_endpoint(
+            "/internal/evaluations/datapoints/not-a-uuid/get_human_feedback",
+        ))
+        .json(&json!({
+            "metric_name": "test_metric",
+            "output": "test_output"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "Expected client error for invalid UUID, got status={:?}",
+        resp.status()
+    );
+}
+
+/// Test that get_human_feedback requires all parameters.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_human_feedback_missing_parameters() {
+    let http_client = Client::new();
+    let datapoint_id = Uuid::now_v7();
+
+    let url = get_gateway_endpoint(&format!(
+        "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+    ));
+
+    // Missing metric_name
+    let resp = http_client
+        .post(url.clone())
+        .json(&json!({
+            "output": "test_output"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "Expected client error for missing metric_name, got status={:?}",
+        resp.status()
+    );
+
+    // Missing output
+    let resp = http_client
+        .post(url.clone())
+        .json(&json!({
+            "metric_name": "test_metric"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "Expected client error for missing output, got status={:?}",
+        resp.status()
+    );
+
+    // Empty body
+    let resp = http_client.post(url).json(&json!({})).send().await.unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "Expected client error for empty body, got status={:?}",
+        resp.status()
     );
 }

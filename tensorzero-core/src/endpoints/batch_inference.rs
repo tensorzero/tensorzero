@@ -36,12 +36,13 @@ use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason,
     InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, current_timestamp,
+    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage,
 };
 use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::model::ModelTable;
 use crate::rate_limiting::ScopeInfo;
+use crate::relay::TensorzeroRelay;
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
@@ -125,6 +126,7 @@ pub async fn start_batch_inference(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        rate_limiting_manager,
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
@@ -147,7 +149,7 @@ pub async fn start_batch_inference(
     // Collect the tool params and output schemas into vectors of the same length as the batch
     let batch_dynamic_tool_params: Vec<DynamicToolParams> =
         BatchDynamicToolParamsWithSize(params.dynamic_tool_params, num_inferences).try_into()?;
-    let batch_dynamic_output_schemas: Vec<Option<DynamicJSONSchema>> =
+    let batch_dynamic_output_schemas: Vec<Option<JSONSchema>> =
         BatchOutputSchemasWithSize(params.output_schemas, num_inferences).try_into()?;
 
     let tool_configs = batch_dynamic_tool_params
@@ -170,18 +172,14 @@ pub async fn start_batch_inference(
     }
 
     // Validate the input
-    params
-        .inputs
-        .iter()
-        .enumerate()
-        .try_for_each(|(i, input)| {
-            function.validate_input(input).map_err(|e| {
-                Error::new(ErrorDetails::BatchInputValidation {
-                    index: i,
-                    message: e.to_string(),
-                })
+    for (i, input) in params.inputs.iter().enumerate() {
+        function.validate_input(input).await.map_err(|e| {
+            Error::new(ErrorDetails::BatchInputValidation {
+                index: i,
+                message: e.to_string(),
             })
         })?;
+    }
 
     // If a variant is pinned, only that variant should be attempted
     if let Some(ref variant_name) = params.variant_name {
@@ -202,23 +200,11 @@ pub async fn start_batch_inference(
 
     // Increment the request count
     counter!(
-        "request_count",
-        "endpoint" => "batch_inference",
-        "function_name" => params.function_name.to_string(),
-    )
-    .increment(1);
-    counter!(
         "tensorzero_requests_total",
         "endpoint" => "batch_inference",
         "function_name" => params.function_name.to_string(),
     )
     .increment(1);
-    counter!(
-        "inference_count",
-        "endpoint" => "batch_inference",
-        "function_name" => params.function_name.to_string(),
-    )
-    .increment(num_inferences as u64);
     counter!(
         "tensorzero_inferences_total",
         "endpoint" => "batch_inference",
@@ -242,12 +228,13 @@ pub async fn start_batch_inference(
         postgres_connection_info: postgres_connection_info.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: cache_options.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        rate_limiting_manager,
         tags: tags.clone(),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: config.gateway.relay.clone(),
+        include_raw_usage: false, // batch inference does not support include_raw_usage (#5452)
     };
 
     let inference_models = InferenceModels {
@@ -394,7 +381,7 @@ struct StartVariantBatchInferenceArgs<'a> {
     inference_clients: InferenceClients,
     inference_params: Vec<InferenceParams>,
     tool_configs: &'a Vec<Option<ToolCallConfig>>,
-    batch_dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
+    batch_dynamic_output_schemas: &'a Vec<Option<JSONSchema>>,
     config: &'a Arc<Config>,
     clickhouse_connection_info: &'a ClickHouseConnectionInfo,
     tags: Option<BatchTags>,
@@ -425,7 +412,7 @@ async fn start_variant_batch_inference(
         .iter()
         .map(|opt| opt.as_ref().map(|tc| Arc::new(tc.clone())))
         .collect();
-    let schemas_arc: Vec<Option<Arc<DynamicJSONSchema>>> = batch_dynamic_output_schemas
+    let schemas_arc: Vec<Option<Arc<JSONSchema>>> = batch_dynamic_output_schemas
         .iter()
         .map(|opt| opt.as_ref().map(|s| Arc::new(s.clone())))
         .collect();
@@ -512,9 +499,14 @@ pub async fn poll_batch_inference_handler(
         BatchStatus::Pending => {
             // For now, we don't support dynamic API keys for batch inference
             let credentials = InferenceCredentials::default();
-            let response =
-                poll_batch_inference(&batch_request, http_client, &config.models, &credentials)
-                    .await?;
+            let response = poll_batch_inference(
+                &batch_request,
+                http_client,
+                &config.models,
+                &credentials,
+                config.gateway.relay.as_ref(),
+            )
+            .await?;
             let response = write_poll_batch_inference(
                 &clickhouse_connection_info,
                 &batch_request,
@@ -682,11 +674,12 @@ async fn poll_batch_inference(
     http_client: TensorzeroHttpClient,
     models: &ModelTable,
     credentials: &InferenceCredentials,
+    relay: Option<&TensorzeroRelay>,
 ) -> Result<PollBatchInferenceResponse, Error> {
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
-        .get(batch_request.model_name.as_ref())
+        .get(batch_request.model_name.as_ref(), relay)
         .await?
         .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidModel {
@@ -1021,7 +1014,6 @@ pub async fn write_completed_batch_inference<'a>(
         };
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: current_timestamp(),
             output: output.clone(),
             system: system.map(Cow::into_owned),
             input_messages: RequestMessagesOrBatch::BatchInput(input_messages),
@@ -1033,6 +1025,7 @@ pub async fn write_completed_batch_inference<'a>(
             model_provider_name: batch_request.model_provider_name.clone().into(),
             cached: false,
             finish_reason,
+            raw_usage: None, // batch inference does not support include_raw_usage (#5452)
         };
         let tool_config: Option<ToolCallConfig> = match tool_params {
             Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {
@@ -1046,7 +1039,7 @@ pub async fn write_completed_batch_inference<'a>(
             None => None,
         };
         let output_schema = match output_schema
-            .map(|s| DynamicJSONSchema::parse_from_str(&s))
+            .map(|s| JSONSchema::parse_from_str(&s))
             .transpose()
         {
             Ok(s) => s,
@@ -1086,6 +1079,7 @@ pub async fn write_completed_batch_inference<'a>(
             inference_result.clone(),
             episode_id,
             variant_name.to_string(),
+            false, // batch inference does not support include_raw_usage (#5452)
         );
         inferences.push(inference_response);
         let metadata = InferenceDatabaseInsertMetadata {
@@ -1416,6 +1410,7 @@ impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
             variant_name: value.variant_name,
             content: output,
             usage,
+            raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             // This is currently unsupported in the batch API
             original_response: None,
             finish_reason: value.finish_reason,
@@ -1453,6 +1448,7 @@ impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
             variant_name: value.variant_name,
             output,
             usage,
+            raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             // This is currently unsupported in the batch API
             original_response: None,
             finish_reason: value.finish_reason,

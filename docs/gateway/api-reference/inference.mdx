@@ -237,6 +237,7 @@ This advanced feature is an "escape hatch" that lets you use provider-specific f
 Each object in the array must have two or three fields:
 
 - `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+  - Use `-` as the final path element to append to an array (e.g., `/messages/-` appends to `messages`)
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
   - `delete = true`: Deletes the field at the specified location, if present.
@@ -393,6 +394,17 @@ See below for more details.
 If `true`, the original response from the model will be included in the response in the `original_response` field as a string.
 
 See `original_response` in the [response](#response) section for more details.
+
+#### `include_raw_usage`
+
+- **Type:** boolean
+- **Required:** no
+
+If `true`, the response's `usage` object will include a `raw_usage` field containing an array of raw provider-specific usage data from each model inference.
+
+This is useful for accessing provider-specific usage fields that TensorZero normalizes away, such as OpenAI's `reasoning_tokens` or Anthropic's `cache_read_input_tokens`.
+
+See `raw_usage` in the [response](#response) section for more details.
 
 #### `input`
 
@@ -967,6 +979,17 @@ The object has the following fields:
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
 
+##### `raw_usage`
+
+- **Type:** array (optional, only when `include_raw_usage` is `true`)
+
+An array of raw provider-specific usage data. Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
 </Tab>
 <Tab title="Streaming">
 
@@ -1027,6 +1050,17 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+
+##### `raw_usage`
+
+- **Type:** array (optional, only when `include_raw_usage` is `true`)
+
+An array of raw provider-specific usage data. Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
 </Tab>
 </Tabs>
@@ -1091,6 +1125,17 @@ The object has the following fields:
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
 
+##### `raw_usage`
+
+- **Type:** array (optional, only when `include_raw_usage` is `true`)
+
+An array of raw provider-specific usage data. Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
 </Tab>
 <Tab title="Streaming">
 
@@ -1135,6 +1180,17 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+
+##### `raw_usage`
+
+- **Type:** array (optional, only when `include_raw_usage` is `true`)
+
+An array of raw provider-specific usage data. Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
 </Tab>
 </Tabs>

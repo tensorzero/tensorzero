@@ -34,7 +34,7 @@
 //!     ToolExecutor, ToolResult, async_trait, WorkerOptions,
 //!     http_gateway_client,
 //! };
-//! use schemars::{schema_for, JsonSchema, Schema};
+//! use schemars::JsonSchema;
 //! use serde::{Deserialize, Serialize};
 //! use std::borrow::Cow;
 //! use uuid::Uuid;
@@ -54,6 +54,10 @@
 //! struct SearchTool;
 //!
 //! impl ToolMetadata for SearchTool {
+//!     type SideInfo = ();
+//!     type Output = SearchResult;
+//!     type LlmParams = SearchParams;
+//!
 //!     fn name() -> Cow<'static, str> {
 //!         Cow::Borrowed("search")
 //!     }
@@ -61,25 +65,17 @@
 //!     fn description() -> Cow<'static, str> {
 //!         Cow::Borrowed("Search the web")
 //!     }
-//!
-//!     fn parameters_schema() -> ToolResult<Schema> {
-//!         Ok(schema_for!(SearchParams))
-//!     }
-//!
-//!     type LlmParams = SearchParams;
+//!     // parameters_schema() is automatically derived from LlmParams
 //! }
 //!
 //! #[async_trait]
 //! impl SimpleTool for SearchTool {
-//!     type SideInfo = ();
-//!     type Output = SearchResult;
-//!
 //!     async fn execute(
 //!         llm_params: <Self as ToolMetadata>::LlmParams,
-//!         _side_info: Self::SideInfo,
+//!         _side_info: <Self as ToolMetadata>::SideInfo,
 //!         ctx: SimpleToolContext<'_>,
 //!         idempotency_key: &str,
-//!     ) -> ToolResult<Self::Output> {
+//!     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 //!         // Implementation...
 //!         Ok(SearchResult { results: vec![] })
 //!     }
@@ -99,6 +95,10 @@
 //! struct ResearchTool;
 //!
 //! impl ToolMetadata for ResearchTool {
+//!     type SideInfo = ();
+//!     type Output = ResearchResult;
+//!     type LlmParams = ResearchParams;
+//!
 //!     fn name() -> Cow<'static, str> {
 //!         Cow::Borrowed("research")
 //!     }
@@ -106,27 +106,18 @@
 //!     fn description() -> Cow<'static, str> {
 //!         Cow::Borrowed("Research a topic")
 //!     }
-//!
-//!     fn parameters_schema() -> ToolResult<Schema> {
-//!         Ok(schema_for!(ResearchParams))
-//!     }
-//!
-//!     type LlmParams = ResearchParams;
 //! }
 //!
 //! #[async_trait]
 //! impl TaskTool for ResearchTool {
-//!     type SideInfo = ();
-//!     type Output = ResearchResult;
-//!
 //!     async fn execute(
 //!         llm_params: <Self as ToolMetadata>::LlmParams,
-//!         _side_info: Self::SideInfo,
+//!         _side_info: <Self as ToolMetadata>::SideInfo,
 //!         ctx: &mut ToolContext<'_>,
-//!     ) -> ToolResult<Self::Output> {
+//!     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 //!         // Call the search tool
 //!         let _search = ctx
-//!             .call_tool("search", serde_json::json!({"query": llm_params.topic}))
+//!             .call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null))
 //!             .await?;
 //!
 //!         // Use a checkpointed step
@@ -175,10 +166,10 @@
 mod context;
 mod error;
 mod executor;
-pub mod inference;
 mod registry;
 mod simple_tool;
 mod task_tool;
+pub mod tensorzero_client;
 mod tool_metadata;
 
 #[cfg(test)]
@@ -193,39 +184,61 @@ pub mod spawn {
 }
 
 // Re-export main types
-pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext};
-pub use error::{ToolError, ToolResult};
+pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext, ToolHandle};
+pub use durable_tools_spawn::TaskToolParams;
+pub use error::{NonControlToolError, ToolError, ToolResult, ToolResultExt};
 pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 pub use simple_tool::SimpleTool;
-// Re-export TaskToolParams from spawn crate for backward compatibility
-pub use durable_tools_spawn::TaskToolParams;
-pub use task_tool::{SideInfo, TaskTool, TaskToolAdapter};
+pub use task_tool::{TaskTool, TaskToolAdapter};
 pub use tool_metadata::ToolMetadata;
 
-// Re-export inference trait and helpers
-pub use inference::{
-    EmbeddedInferenceClient, InferenceClient, InferenceError, embedded_gateway_client, from_client,
+// Re-export TensorZero client trait and helpers
+pub use tensorzero_client::{
+    EmbeddedClient, TensorZeroClient, TensorZeroClientError, embedded_gateway_client, from_client,
     http_gateway_client,
 };
 
 // Re-export autopilot types for use by tools
-pub use inference::{
-    CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, ToolOutcome,
+pub use tensorzero_client::{
+    CreateEventGatewayRequest, CreateEventResponse, EventPayload, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, ToolOutcome,
+};
+
+// Re-export datapoint types for CRUD operations
+pub use tensorzero_client::{
+    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
+    DeleteDatapointsResponse, GetDatapointsResponse, ListDatapointsRequest, UpdateDatapointRequest,
+    UpdateDatapointsResponse,
+};
+
+// Re-export inference query filter and ordering types
+pub use tensorzero::{
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+    InferenceOutputSource, OrderBy, OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter,
+    TimeComparisonOperator, TimeFilter,
+};
+
+// Re-export config snapshot types for historical inference
+pub use tensorzero_client::SnapshotHash;
+
+// Re-export evaluation types
+pub use tensorzero_client::{
+    CacheEnabledMode, EvaluatorStatsResponse, RunEvaluationParams, RunEvaluationResponse,
 };
 
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
-    Client, ClientInferenceParams, InferenceParams, InferenceResponse, Input, InputMessage,
-    InputMessageContent, Role, TensorZeroError,
+    Client, ClientInferenceParams, DynamicToolParams, GetInferencesResponse, InferenceParams,
+    InferenceResponse, Input, InputMessage, InputMessageContent, ListInferencesRequest, Role,
+    TensorZeroError, Tool,
 };
 
 // Re-export async_trait for convenience
 pub use async_trait::async_trait;
 
 // Re-export durable types that tools may need
-pub use durable::{SpawnOptions, SpawnResult, TaskHandle, WorkerOptions};
+pub use durable::{SpawnOptions, SpawnResult, TaskHandle, Worker, WorkerOptions};
 
 // Re-export schemars for parameter schemas
 pub use schemars;

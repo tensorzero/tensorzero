@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use super::ClickHouseConnectionInfo;
+use super::escape_string_for_clickhouse_literal;
 use super::select_queries::{parse_count, parse_json_rows};
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::db::evaluation_queries::EvaluationResultRow;
@@ -13,6 +14,8 @@ use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::db::evaluation_queries::EvaluationStatisticsRow;
+use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
+use crate::db::evaluation_queries::RawEvaluationResultRow;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
 use crate::statistics_util::{wald_confint, wilson_confint};
@@ -100,13 +103,13 @@ fn get_evaluation_result_datapoint_id_subquery(
     let query = format!(
         "all_inference_ids AS (
             SELECT DISTINCT inference_id
-            FROM TagInference FINAL WHERE key = 'tensorzero::evaluation_run_id'
+            FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
             AND function_name = {{function_name:String}}
             AND value IN ({{evaluation_run_ids:Array(String)}})
         ),
         all_datapoint_ids AS (
             SELECT DISTINCT value as datapoint_id
-            FROM TagInference FINAL
+            FROM TagInference
             WHERE key = 'tensorzero::datapoint_id'
             AND function_name = {{function_name:String}}
             AND inference_id IN (SELECT inference_id FROM all_inference_ids)
@@ -153,7 +156,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     any(function_name) AS inference_function_name,
                     any(variant_name) AS variant_name,
                     max(toUInt128(inference_id)) AS max_inference_id
-                FROM TagInference FINAL
+                FROM TagInference
                 WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
                 GROUP BY inference_id
             )
@@ -223,7 +226,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     AND value = {evaluation_name:String}
                 )
             SELECT DISTINCT value as evaluation_run_id, variant_name
-            FROM TagInference FINAL
+            FROM TagInference
             WHERE key = 'tensorzero::evaluation_run_id'
                 AND function_name = {function_name:String}
                 AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
@@ -273,7 +276,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     '%Y-%m-%dT%H:%i:%SZ'
                 ) as most_recent_inference_date
             FROM
-                TagInference AS run_tag FINAL
+                TagInference AS run_tag
             WHERE
                 run_tag.key = 'tensorzero::evaluation_run_id'
                 AND run_tag.value IN ({evaluation_run_ids:Array(String)})
@@ -308,7 +311,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             r"
             WITH datapoint_inference_ids AS (
                 SELECT inference_id
-                FROM TagInference FINAL
+                FROM TagInference
                 WHERE key = 'tensorzero::datapoint_id'
                 AND value = {{datapoint_id:String}}
             )
@@ -345,7 +348,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         function_type: FunctionConfigType,
         metric_names: &[String],
         evaluation_run_ids: &[uuid::Uuid],
-    ) -> Result<Vec<crate::db::evaluation_queries::EvaluationStatisticsRow>, Error> {
+    ) -> Result<Vec<EvaluationStatisticsRow>, Error> {
         let inference_table_name = function_type.table_name();
 
         // Build the datapoint ID subquery
@@ -456,13 +459,15 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         &self,
         function_name: &str,
         evaluation_run_ids: &[uuid::Uuid],
-        inference_table_name: &str,
-        datapoint_table_name: &str,
+        function_type: FunctionConfigType,
         metric_names: &[String],
         datapoint_id: Option<&uuid::Uuid>,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<EvaluationResultRow>, Error> {
+        let inference_table_name = function_type.table_name();
+        let datapoint_table_name = function_type.datapoint_table_name();
+
         // Build the datapoint ID subquery with pagination
         let (datapoint_id_subquery, params_owned) = get_evaluation_result_datapoint_id_subquery(
             function_name,
@@ -486,7 +491,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             r"
             WITH {datapoint_id_subquery},
             filtered_dp AS (
-                SELECT * FROM {datapoint_table_name} FINAL
+                SELECT * FROM {datapoint_table_name}
                 WHERE function_name = {{function_name:String}}
                 AND id IN (SELECT datapoint_id FROM all_datapoint_ids)
             ),
@@ -524,7 +529,6 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 filtered_dp.name as name,
                 filtered_dp.output as reference_output,
                 filtered_inference.output as generated_output,
-                filtered_inference.function_name as function_name,
                 toUUID(filtered_inference.tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
                 filtered_inference.tags['tensorzero::dataset_name'] as dataset_name,
                 if(length(filtered_feedback.evaluator_inference_id) > 0, filtered_feedback.evaluator_inference_id, null) as evaluator_inference_id,
@@ -534,7 +538,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 filtered_feedback.value as metric_value,
                 filtered_feedback.feedback_id as feedback_id,
                 toBool(filtered_feedback.is_human_feedback) as is_human_feedback,
-                formatDateTime(filtered_dp.staled_at, '%Y-%m-%dT%H:%i:%SZ') as staled_at,
+                filtered_dp.staled_at as staled_at,
                 filtered_inference.variant_name as variant_name
             FROM filtered_dp
             INNER JOIN filtered_inference
@@ -553,7 +557,48 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         params.insert("metric_names", metric_names_joined.as_str());
 
         let response = self.run_query_synchronous(sql_query, &params).await?;
-        parse_json_rows(response.response.as_str())
+        let raw_rows: Vec<RawEvaluationResultRow> = parse_json_rows(response.response.as_str())?;
+
+        // Convert raw rows to typed enum variants based on function type
+        raw_rows
+            .into_iter()
+            .map(|row| match function_type {
+                FunctionConfigType::Chat => row.into_chat().map(EvaluationResultRow::Chat),
+                FunctionConfigType::Json => row.into_json().map(EvaluationResultRow::Json),
+            })
+            .collect()
+    }
+
+    async fn get_inference_evaluation_human_feedback(
+        &self,
+        metric_name: &str,
+        datapoint_id: &uuid::Uuid,
+        output: &str,
+    ) -> Result<Option<InferenceEvaluationHumanFeedbackRow>, Error> {
+        let sql_query = r"
+            SELECT value, evaluator_inference_id
+            FROM StaticEvaluationHumanFeedback
+            WHERE metric_name = {metric_name:String}
+            AND datapoint_id = {datapoint_id:UUID}
+            AND output = {output:String}
+            LIMIT 1
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let metric_name_str = metric_name.to_string();
+        let datapoint_id_str = datapoint_id.to_string();
+        let escaped_output = escape_string_for_clickhouse_literal(output);
+
+        let mut params = HashMap::new();
+        params.insert("metric_name", metric_name_str.as_str());
+        params.insert("datapoint_id", datapoint_id_str.as_str());
+        params.insert("output", escaped_output.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        let rows: Vec<InferenceEvaluationHumanFeedbackRow> =
+            parse_json_rows(response.response.as_str())?;
+        Ok(rows.into_iter().next())
     }
 }
 
@@ -567,7 +612,7 @@ mod tests {
             clickhouse_client::MockClickHouseClient,
             query_builder::test_util::assert_query_contains,
         },
-        evaluation_queries::EvaluationQueries,
+        evaluation_queries::{EvaluationQueries, EvaluationResultRow},
     };
     use crate::function::FunctionConfigType;
 
@@ -617,7 +662,7 @@ mod tests {
                 // Verify the query contains the expected structure
                 assert_query_contains(query, "SELECT");
                 assert_query_contains(query, "evaluation_run_id");
-                assert_query_contains(query, "FROM TagInference FINAL");
+                assert_query_contains(query, "FROM TagInference");
                 assert_query_contains(query, "LIMIT {limit:UInt32}");
                 assert_query_contains(query, "OFFSET {offset:UInt32}");
 
@@ -745,13 +790,13 @@ mod tests {
                     "
                 WITH all_inference_ids AS (
                     SELECT DISTINCT inference_id
-                    FROM TagInference FINAL WHERE key = 'tensorzero::evaluation_run_id'
+                    FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
                     AND function_name = {function_name:String}
                     AND value IN ({evaluation_run_ids:Array(String)})
                 ),
                 all_datapoint_ids AS (
                     SELECT DISTINCT value as datapoint_id
-                    FROM TagInference FINAL
+                    FROM TagInference
                     WHERE key = 'tensorzero::datapoint_id'
                     AND function_name = {function_name:String}
                     AND inference_id IN (SELECT inference_id FROM all_inference_ids)
@@ -871,7 +916,7 @@ mod tests {
                         AND value = {evaluation_name:String}
                     )
                 SELECT DISTINCT value as evaluation_run_id, variant_name
-                FROM TagInference FINAL
+                FROM TagInference
                 WHERE key = 'tensorzero::evaluation_run_id'
                     AND function_name = {function_name:String}
                     AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
@@ -949,7 +994,7 @@ mod tests {
                         '%Y-%m-%dT%H:%i:%SZ'
                     ) as most_recent_inference_date
                 FROM
-                    TagInference AS run_tag FINAL
+                    TagInference AS run_tag
                 WHERE
                     run_tag.key = 'tensorzero::evaluation_run_id'
                     AND run_tag.value IN ({evaluation_run_ids:Array(String)})
@@ -1073,7 +1118,7 @@ mod tests {
                     query,
                     "WITH datapoint_inference_ids AS (
                         SELECT inference_id
-                        FROM TagInference FINAL
+                        FROM TagInference
                         WHERE key = 'tensorzero::datapoint_id'
                         AND value = {datapoint_id:String}
                     )
@@ -1137,7 +1182,7 @@ mod tests {
                     query,
                     "WITH datapoint_inference_ids AS (
                         SELECT inference_id
-                        FROM TagInference FINAL
+                        FROM TagInference
                         WHERE key = 'tensorzero::datapoint_id'
                         AND value = {datapoint_id:String}
                     )
@@ -1505,6 +1550,10 @@ mod tests {
         assert!((result[0].ci_upper.unwrap() - 1.0).abs() < 0.001);
     }
 
+    // ============================================================================
+    // get_evaluation_results tests
+    // ============================================================================
+
     #[tokio::test]
     async fn test_get_evaluation_results() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
@@ -1552,8 +1601,7 @@ mod tests {
             .get_evaluation_results(
                 "test_func",
                 &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
-                "ChatInference",
-                "ChatInferenceDatapoint",
+                FunctionConfigType::Chat,
                 &["tensorzero::evaluation_name::test::evaluator_name::exact_match".to_string()],
                 None,
                 10,
@@ -1563,14 +1611,24 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].variant_name, "test_variant");
-        assert_eq!(result[0].dataset_name, "test_dataset");
-        assert_eq!(
-            result[0].metric_name,
-            Some("tensorzero::evaluation_name::test::evaluator_name::exact_match".to_string())
-        );
-        assert_eq!(result[0].metric_value, Some("true".to_string()));
-        assert!(!result[0].is_human_feedback);
+        match &result[0] {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.variant_name, "test_variant");
+                assert_eq!(row.dataset_name, "test_dataset");
+                assert_eq!(
+                    row.metric_name,
+                    Some(
+                        "tensorzero::evaluation_name::test::evaluator_name::exact_match"
+                            .to_string()
+                    )
+                );
+                assert_eq!(row.metric_value, Some("true".to_string()));
+                assert!(!row.is_human_feedback);
+            }
+            EvaluationResultRow::Json(_) => {
+                panic!("Expected Chat result")
+            }
+        }
     }
 
     #[tokio::test]
@@ -1581,8 +1639,8 @@ mod tests {
             .expect_run_query_synchronous()
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"ds1","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"variant1","name":null,"staled_at":null}
-{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b962","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b963","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b964","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b965","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b966","input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"ds2","metric_name":"metric2","metric_value":"0.95","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b967","is_human_feedback":true,"variant_name":"variant2","name":"named_dp","staled_at":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{\"messages\":[]}","generated_output":"{\"raw\":\"{}\",\"parsed\":{}}","reference_output":"{\"raw\":\"{}\",\"parsed\":{}}","dataset_name":"ds1","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"variant1","name":null,"staled_at":null}
+{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b962","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b963","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b964","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b965","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b966","input":"{\"messages\":[]}","generated_output":"{\"raw\":\"{}\",\"parsed\":{}}","reference_output":"{\"raw\":\"{}\",\"parsed\":{}}","dataset_name":"ds2","metric_name":"metric2","metric_value":"0.95","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b967","is_human_feedback":true,"variant_name":"variant2","name":"named_dp","staled_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 2,
                         written_rows: 0,
@@ -1598,8 +1656,7 @@ mod tests {
                     Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap(),
                     Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b965").unwrap(),
                 ],
-                "JsonInference",
-                "JsonInferenceDatapoint",
+                FunctionConfigType::Json,
                 &["metric1".to_string(), "metric2".to_string()],
                 None,
                 100,
@@ -1609,15 +1666,29 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].variant_name, "variant1");
-        assert!(!result[0].is_human_feedback);
-        assert!(result[0].evaluator_inference_id.is_none());
+        match &result[0] {
+            EvaluationResultRow::Json(row) => {
+                assert_eq!(row.variant_name, "variant1");
+                assert!(!row.is_human_feedback);
+                assert!(row.evaluator_inference_id.is_none());
+            }
+            EvaluationResultRow::Chat(_) => {
+                panic!("Expected Json result")
+            }
+        }
 
-        assert_eq!(result[1].variant_name, "variant2");
-        assert!(result[1].is_human_feedback);
-        assert!(result[1].evaluator_inference_id.is_some());
-        assert_eq!(result[1].name, Some("named_dp".to_string()));
-        assert!(result[1].staled_at.is_some());
+        match &result[1] {
+            EvaluationResultRow::Json(row) => {
+                assert_eq!(row.variant_name, "variant2");
+                assert!(row.is_human_feedback);
+                assert!(row.evaluator_inference_id.is_some());
+                assert_eq!(row.name, Some("named_dp".to_string()));
+                assert!(row.staled_at.is_some());
+            }
+            EvaluationResultRow::Chat(_) => {
+                panic!("Expected Json result")
+            }
+        }
     }
 
     #[tokio::test]
@@ -1641,8 +1712,7 @@ mod tests {
             .get_evaluation_results(
                 "nonexistent_func",
                 &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
-                "ChatInference",
-                "ChatInferenceDatapoint",
+                FunctionConfigType::Chat,
                 &["metric".to_string()],
                 None,
                 100,
@@ -1681,8 +1751,7 @@ mod tests {
             .get_evaluation_results(
                 "test_func",
                 &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
-                "JsonInference",
-                "JsonInferenceDatapoint",
+                FunctionConfigType::Json,
                 &["metric".to_string()],
                 None,
                 50,
@@ -1749,8 +1818,7 @@ mod tests {
             .get_evaluation_results(
                 "test_func",
                 &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
-                "ChatInference",
-                "ChatInferenceDatapoint",
+                FunctionConfigType::Chat,
                 &["tensorzero::evaluation_name::test::evaluator_name::exact_match".to_string()],
                 Some(&datapoint_id),
                 u32::MAX,
@@ -1760,15 +1828,25 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].variant_name, "test_variant");
-        assert_eq!(result[0].dataset_name, "test_dataset");
-        assert_eq!(
-            result[0].metric_name,
-            Some("tensorzero::evaluation_name::test::evaluator_name::exact_match".to_string())
-        );
-        assert_eq!(result[0].metric_value, Some("true".to_string()));
-        assert!(!result[0].is_human_feedback);
-        assert_eq!(result[0].name, Some("test_datapoint".to_string()));
+        match &result[0] {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.variant_name, "test_variant");
+                assert_eq!(row.dataset_name, "test_dataset");
+                assert_eq!(
+                    row.metric_name,
+                    Some(
+                        "tensorzero::evaluation_name::test::evaluator_name::exact_match"
+                            .to_string()
+                    )
+                );
+                assert_eq!(row.metric_value, Some("true".to_string()));
+                assert!(!row.is_human_feedback);
+                assert_eq!(row.name, Some("test_datapoint".to_string()));
+            }
+            EvaluationResultRow::Json(_) => {
+                panic!("Expected Chat result")
+            }
+        }
     }
 
     #[tokio::test]
@@ -1799,8 +1877,7 @@ mod tests {
             .get_evaluation_results(
                 "test_func",
                 &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
-                "JsonInference",
-                "JsonInferenceDatapoint",
+                FunctionConfigType::Json,
                 &["metric1".to_string()],
                 Some(&datapoint_id),
                 u32::MAX,
@@ -1810,8 +1887,15 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].variant_name, "test_variant");
-        assert_eq!(result[0].metric_value, Some("0.95".to_string()));
+        match &result[0] {
+            EvaluationResultRow::Json(row) => {
+                assert_eq!(row.variant_name, "test_variant");
+                assert_eq!(row.metric_value, Some("0.95".to_string()));
+            }
+            EvaluationResultRow::Chat(_) => {
+                panic!("Expected Json result")
+            }
+        }
     }
 
     #[tokio::test]
@@ -1831,8 +1915,8 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"ds1","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"variant1","name":null,"staled_at":null}
-{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b962","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b963","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b966","input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"ds1","metric_name":"metric1","metric_value":"0.75","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b967","is_human_feedback":true,"variant_name":"variant2","name":null,"staled_at":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{\"messages\":[]}","generated_output":"[]","reference_output":"[]","dataset_name":"ds1","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"variant1","name":null,"staled_at":null}
+{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b962","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b963","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b966","input":"{\"messages\":[]}","generated_output":"[]","reference_output":"[]","dataset_name":"ds1","metric_name":"metric1","metric_value":"0.75","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b967","is_human_feedback":true,"variant_name":"variant2","name":null,"staled_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 2,
                         written_rows: 0,
@@ -1849,8 +1933,7 @@ mod tests {
                     Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap(),
                     Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95f").unwrap(),
                 ],
-                "ChatInference",
-                "ChatInferenceDatapoint",
+                FunctionConfigType::Chat,
                 &["metric1".to_string()],
                 Some(&datapoint_id),
                 u32::MAX,
@@ -1860,14 +1943,27 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].variant_name, "variant1");
-        assert!(!result[0].is_human_feedback);
-        assert!(result[0].evaluator_inference_id.is_none());
-
-        assert_eq!(result[1].variant_name, "variant2");
-        assert!(result[1].is_human_feedback);
-        assert!(result[1].evaluator_inference_id.is_some());
-        assert!(result[1].staled_at.is_some());
+        match &result[0] {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.variant_name, "variant1");
+                assert!(!row.is_human_feedback);
+                assert!(row.evaluator_inference_id.is_none());
+            }
+            EvaluationResultRow::Json(_) => {
+                panic!("Expected Chat result")
+            }
+        }
+        match &result[1] {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.variant_name, "variant2");
+                assert!(row.is_human_feedback);
+                assert!(row.evaluator_inference_id.is_some());
+                assert!(row.staled_at.is_some());
+            }
+            EvaluationResultRow::Json(_) => {
+                panic!("Expected Chat result")
+            }
+        }
     }
 
     #[tokio::test]
@@ -1892,8 +1988,7 @@ mod tests {
             .get_evaluation_results(
                 "nonexistent_func",
                 &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
-                "ChatInference",
-                "ChatInferenceDatapoint",
+                FunctionConfigType::Chat,
                 &["metric".to_string()],
                 Some(&datapoint_id),
                 u32::MAX,
@@ -1923,8 +2018,8 @@ mod tests {
             .returning(|_, _| {
                 // Return rows for different metrics for the same inference
                 Ok(ClickHouseResponse {
-                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"test_dataset","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"test_variant","name":null,"staled_at":null}
-{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b968","input":"{}","generated_output":"{}","reference_output":"{}","dataset_name":"test_dataset","metric_name":"metric2","metric_value":"0.95","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b969","is_human_feedback":false,"variant_name":"test_variant","name":null,"staled_at":null}"#.to_string(),
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{\"messages\":[]}","generated_output":"[]","reference_output":"[]","dataset_name":"test_dataset","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"test_variant","name":null,"staled_at":null}
+{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b968","input":"{\"messages\":[]}","generated_output":"[]","reference_output":"[]","dataset_name":"test_dataset","metric_name":"metric2","metric_value":"0.95","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b969","is_human_feedback":false,"variant_name":"test_variant","name":null,"staled_at":null}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 2,
                         written_rows: 0,
@@ -1938,8 +2033,7 @@ mod tests {
             .get_evaluation_results(
                 "test_func",
                 &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
-                "ChatInference",
-                "ChatInferenceDatapoint",
+                FunctionConfigType::Chat,
                 &["metric1".to_string(), "metric2".to_string()],
                 Some(&datapoint_id),
                 u32::MAX,
@@ -1949,9 +2043,215 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].metric_name, Some("metric1".to_string()));
-        assert_eq!(result[0].metric_value, Some("true".to_string()));
-        assert_eq!(result[1].metric_name, Some("metric2".to_string()));
-        assert_eq!(result[1].metric_value, Some("0.95".to_string()));
+        match &result[0] {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.metric_name, Some("metric1".to_string()));
+                assert_eq!(row.metric_value, Some("true".to_string()));
+            }
+            EvaluationResultRow::Json(_) => {
+                panic!("Expected Chat result")
+            }
+        }
+        match &result[1] {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.metric_name, Some("metric2".to_string()));
+                assert_eq!(row.metric_value, Some("0.95".to_string()));
+            }
+            EvaluationResultRow::Json(_) => {
+                panic!("Expected Chat result")
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_no_feedback() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // Test case where inference exists but no feedback (LEFT JOIN returns nulls)
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{\"messages\":[]}","generated_output":"[]","reference_output":"[]","dataset_name":"ds","metric_name":null,"metric_value":null,"feedback_id":null,"is_human_feedback":false,"variant_name":"variant","name":null,"staled_at":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "test_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
+                FunctionConfigType::Chat,
+                &["metric".to_string()],
+                None,
+                100,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            EvaluationResultRow::Chat(row) => {
+                assert!(row.metric_name.is_none());
+                assert!(row.metric_value.is_none());
+                assert!(row.feedback_id.is_none());
+            }
+            EvaluationResultRow::Json(_) => {
+                panic!("Expected Chat result")
+            }
+        }
+    }
+
+    // ============================================================================
+    // get_inference_evaluation_human_feedback tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_found() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(
+                    query,
+                    "SELECT value, evaluator_inference_id
+                    FROM StaticEvaluationHumanFeedback
+                    WHERE metric_name = {metric_name:String}
+                    AND datapoint_id = {datapoint_id:UUID}
+                    AND output = {output:String}
+                    LIMIT 1
+                    FORMAT JSONEachRow",
+                );
+                assert_eq!(params.get("metric_name"), Some(&"test_metric"));
+                assert_eq!(
+                    params.get("datapoint_id"),
+                    Some(&"0196ee9c-d808-74f3-8000-02ec7409b95d")
+                );
+                assert_eq!(params.get("output"), Some(&r#"{"raw":"test output"}"#));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"value":"0.95","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95e"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback(
+                "test_metric",
+                &datapoint_id,
+                r#"{"raw":"test output"}"#,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let feedback = result.unwrap();
+        assert_eq!(feedback.value, serde_json::json!(0.95));
+        assert_eq!(
+            feedback.evaluator_inference_id,
+            Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_not_found() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback(
+                "nonexistent_metric",
+                &datapoint_id,
+                r#"{"raw":"test output"}"#,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_boolean_value() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"value":"true","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95e"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback("test_metric", &datapoint_id, "test output")
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let feedback = result.unwrap();
+        assert_eq!(feedback.value, serde_json::json!(true));
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_evaluation_human_feedback_object_value() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"value":"{\"score\":0.8,\"reason\":\"good\"}","evaluator_inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95e"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let datapoint_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_inference_evaluation_human_feedback("test_metric", &datapoint_id, "test output")
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let feedback = result.unwrap();
+        assert_eq!(
+            feedback.value,
+            serde_json::json!({"score": 0.8, "reason": "good"})
+        );
     }
 }

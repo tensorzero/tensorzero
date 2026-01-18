@@ -1,8 +1,7 @@
 use async_trait::async_trait;
-use lazy_static::lazy_static;
 use secrecy::SecretString;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
@@ -12,10 +11,9 @@ use crate::db::clickhouse::{
 };
 use crate::error::{DelayedError, Error};
 
-lazy_static! {
-    static ref DISABLED_DATABASE_URL: SecretString = SecretString::from("disabled");
-    static ref DISABLED_CLUSTER_NAME: Option<String> = None;
-}
+static DISABLED_DATABASE_URL: LazyLock<SecretString> =
+    LazyLock::new(|| SecretString::from("disabled"));
+static DISABLED_CLUSTER_NAME: LazyLock<Option<String>> = LazyLock::new(|| None);
 
 /// Disabled implementation of ClickHouseClient (no-op)
 ///
@@ -37,7 +35,7 @@ impl ClickHouseClient for DisabledClickHouseClient {
         &DISABLED_CLUSTER_NAME
     }
 
-    fn database(&self) -> &str {
+    fn database(&self) -> &'static str {
         "disabled"
     }
 

@@ -37,6 +37,12 @@ type = "chat"
 [functions.historical_only_func_{id}.variants.baseline]
 type = "chat_completion"
 model = "action_test_model_{id}"
+
+[functions.historical_only_func_{id}.variants.baseline.system_template]
+__tensorzero_remapped_path = "/config/functions/historical_only_func_{id}/system_template.minijinja"
+__data = """
+Do a historical inference successfully!
+"""
 "#
     );
 

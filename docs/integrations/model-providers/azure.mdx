@@ -1,14 +1,14 @@
 ---
-title: Getting Started with Azure OpenAI Service & Azure AI Foundry
+title: Getting Started with Azure
 sidebarTitle: Azure
-description: "Learn how to use TensorZero with Azure OpenAI Service and Azure AI Foundry LLMs: open-source gateway, observability, optimization, evaluations, and experimentation."
+description: "Learn how to use TensorZero with Azure LLMs: open-source gateway, observability, optimization, evaluations, and experimentation."
 ---
 
 TensorZero's `azure` provider supports both **Azure OpenAI Service** and **Azure AI Foundry**. Both use the same OpenAI-compatible API, so configuration is nearly identical—just use different endpoint URLs.
 
-This guide shows how to set up a minimal deployment to use the TensorZero Gateway with Azure OpenAI Service and Azure AI Foundry.
+This guide shows how to set up a minimal deployment to use the TensorZero Gateway with Azure.
 
-## Azure OpenAI Service
+## Azure
 
 ### Setup
 
@@ -55,7 +55,7 @@ If you need to configure the endpoint at runtime, you can set it to `endpoint = 
 
 ### Credentials
 
-You must set the `AZURE_OPENAI_API_KEY` environment variable before running the gateway.
+You must set the `AZURE_API_KEY` environment variable before running the gateway.
 
 You can customize the credential location by setting the `api_key_location` to `env::YOUR_ENVIRONMENT_VARIABLE` or `dynamic::ARGUMENT_NAME`.
 See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
@@ -75,7 +75,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:?Environment variable AZURE_OPENAI_API_KEY must be set.}
+      - AZURE_API_KEY=${AZURE_API_KEY:?Environment variable AZURE_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -108,7 +108,7 @@ curl -X POST http://localhost:3000/inference \
 
 #### Generate embeddings
 
-The Azure OpenAI Service model provider supports generating embeddings.
+The Azure model provider supports generating embeddings.
 You can find a [complete code example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/embeddings/providers/azure).
 
 #### Azure AI Foundry
@@ -117,7 +117,7 @@ Azure AI Foundry provides access to models from multiple providers (Meta Llama, 
 
 The same `azure` provider works with Azure AI Foundry.
 The key difference is the endpoint URL.
-All other configuration options (credentials, Docker Compose, inference) work the same as Azure OpenAI Service above.
+All other configuration options (credentials, Docker Compose, inference) work the same as Azure above.
 
 ## Call the OpenAI Responses API with Azure
 
@@ -129,8 +129,8 @@ routing = ["azure"]
 
 [models.azure-gpt-5-mini-responses.providers.azure]
 type = "openai"  # CAREFUL: not `azure`!
-api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
-api_key_location = "env::AZURE_OPENAI_API_KEY"
+api_base = "https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
+api_key_location = "env::AZURE_API_KEY"
 model_name = "gpt-5-mini"
 api_type = "responses"
 ```

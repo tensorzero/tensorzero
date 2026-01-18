@@ -1,22 +1,30 @@
 //! Autopilot API client implementation.
 
+use std::fmt;
 use std::time::Duration;
 
+use durable_tools_spawn::{SpawnClient, SpawnOptions};
 use futures::stream::{Stream, StreamExt};
+use moka::sync::Cache;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest_eventsource::{Event as SseEvent, EventSource};
 use secrecy::{ExposeSecret, SecretString};
+use sqlx::PgPool;
 use url::Url;
 use uuid::Uuid;
 
+use crate::StreamUpdate;
 use crate::error::AutopilotError;
 use crate::types::{
-    CreateEventRequest, CreateEventResponse, ErrorResponse, Event, ListEventsParams,
-    ListEventsResponse, ListSessionsParams, ListSessionsResponse, StreamEventsParams,
+    AutopilotToolCall, CreateEventRequest, CreateEventResponse, ErrorResponse, Event, EventPayload,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
 pub const DEFAULT_BASE_URL: &str = "https://api.autopilot.tensorzero.com";
+/// Default name for the durable queue used by autopilot
+pub const DEFAULT_SPAWN_QUEUE_NAME: &str = "autopilot";
 
 /// Returns the default base URL as a parsed [`Url`].
 ///
@@ -28,17 +36,40 @@ fn default_base_url() -> Url {
     Url::parse(DEFAULT_BASE_URL).expect("DEFAULT_BASE_URL is a valid URL")
 }
 
+const DEFAULT_TOOL_CALL_CACHE_CAPACITY: u64 = 256;
+const DEFAULT_TOOL_CALL_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
+
 // =============================================================================
 // Client Builder
 // =============================================================================
 
 /// Builder for creating an [`AutopilotClient`].
-#[derive(Default)]
 pub struct AutopilotClientBuilder {
     base_url: Option<Url>,
     api_key: Option<SecretString>,
     http_client: Option<reqwest::Client>,
     timeout: Option<Duration>,
+    spawn_pool: Option<PgPool>,
+    spawn_database_url: Option<SecretString>,
+    spawn_queue_name: String,
+    tool_call_cache_capacity: u64,
+    tool_call_cache_ttl: Duration,
+}
+
+impl Default for AutopilotClientBuilder {
+    fn default() -> Self {
+        Self {
+            base_url: None,
+            api_key: None,
+            http_client: None,
+            timeout: None,
+            spawn_pool: None,
+            spawn_database_url: None,
+            spawn_queue_name: DEFAULT_SPAWN_QUEUE_NAME.to_string(),
+            tool_call_cache_capacity: DEFAULT_TOOL_CALL_CACHE_CAPACITY,
+            tool_call_cache_ttl: DEFAULT_TOOL_CALL_CACHE_TTL,
+        }
+    }
 }
 
 impl AutopilotClientBuilder {
@@ -77,6 +108,36 @@ impl AutopilotClientBuilder {
         self
     }
 
+    /// Sets the Postgres pool used for durable tool spawning.
+    pub fn spawn_pool(mut self, pool: PgPool) -> Self {
+        self.spawn_pool = Some(pool);
+        self
+    }
+
+    /// Sets the Postgres URL used for durable tool spawning.
+    pub fn spawn_database_url(mut self, url: impl Into<SecretString>) -> Self {
+        self.spawn_database_url = Some(url.into());
+        self
+    }
+
+    /// Sets the durable queue name for tool spawning.
+    pub fn spawn_queue_name(mut self, name: impl Into<String>) -> Self {
+        self.spawn_queue_name = name.into();
+        self
+    }
+
+    /// Sets the tool call cache capacity.
+    pub fn tool_call_cache_capacity(mut self, capacity: u64) -> Self {
+        self.tool_call_cache_capacity = capacity;
+        self
+    }
+
+    /// Sets the tool call cache TTL.
+    pub fn tool_call_cache_ttl(mut self, ttl: Duration) -> Self {
+        self.tool_call_cache_ttl = ttl;
+        self
+    }
+
     /// Builds the [`AutopilotClient`].
     ///
     /// # Errors
@@ -84,7 +145,8 @@ impl AutopilotClientBuilder {
     /// Returns an error if:
     /// - The API key is not set
     /// - The HTTP client cannot be built
-    pub fn build(self) -> Result<AutopilotClient, AutopilotError> {
+    /// - Durable spawn configuration is missing or invalid
+    pub async fn build(self) -> Result<AutopilotClient, AutopilotError> {
         let api_key = self
             .api_key
             .ok_or(AutopilotError::MissingConfig("api_key"))?;
@@ -111,11 +173,30 @@ impl AutopilotClientBuilder {
             .build()
             .map_err(AutopilotError::Request)?;
 
+        let mut spawn_builder = SpawnClient::builder().queue_name(self.spawn_queue_name);
+        spawn_builder = if let Some(pool) = self.spawn_pool {
+            spawn_builder.pool(pool)
+        } else if let Some(database_url) = self.spawn_database_url {
+            spawn_builder.database_url(database_url)
+        } else {
+            return Err(AutopilotError::MissingConfig(
+                "spawn_pool or spawn_database_url",
+            ));
+        };
+
+        let spawn_client = spawn_builder.build().await?;
+        let tool_call_cache = Cache::builder()
+            .max_capacity(self.tool_call_cache_capacity)
+            .time_to_live(self.tool_call_cache_ttl)
+            .build();
+
         Ok(AutopilotClient {
             http_client,
             sse_http_client,
             base_url,
             api_key,
+            spawn_client,
+            tool_call_cache,
         })
     }
 }
@@ -125,12 +206,21 @@ impl AutopilotClientBuilder {
 // =============================================================================
 
 /// Client for the TensorZero Autopilot API.
-#[derive(Debug)]
 pub struct AutopilotClient {
     http_client: reqwest::Client,
     sse_http_client: reqwest::Client,
     base_url: Url,
     api_key: SecretString,
+    spawn_client: SpawnClient,
+    tool_call_cache: Cache<Uuid, AutopilotToolCall>,
+}
+
+impl fmt::Debug for AutopilotClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AutopilotClient")
+            .field("base_url", &self.base_url)
+            .finish_non_exhaustive()
+    }
 }
 
 impl AutopilotClient {
@@ -142,6 +232,78 @@ impl AutopilotClient {
     /// Returns the base URL of the API.
     pub fn base_url(&self) -> &Url {
         &self.base_url
+    }
+
+    fn cache_tool_call_event(&self, event: &Event) {
+        if let EventPayload::ToolCall(tool_call) = &event.payload {
+            self.tool_call_cache.insert(event.id, tool_call.clone());
+        }
+    }
+
+    fn cache_tool_call_events(&self, events: &[Event]) {
+        for event in events {
+            self.cache_tool_call_event(event);
+        }
+    }
+
+    /// Spawns a durable task to execute an approved tool call.
+    ///
+    /// This is called after a `ToolCallAuthorization` event with `Approved` status
+    /// is successfully created. It retrieves the original tool call details and
+    /// spawns the corresponding durable task for execution.
+    ///
+    /// # Tool Call Lookup
+    ///
+    /// The function first checks the local cache for the tool call. If not found,
+    /// it fetches the tool call event directly from the API using `get_event`.
+    ///
+    /// # Side Info
+    ///
+    /// The spawned task receives the side info that was stored in the ToolCall event.
+    /// This allows callers (e.g., autopilot sessions) to propagate tool-specific
+    /// configuration to the tool executor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Fetching the tool call event fails
+    /// - The event is not a tool call
+    /// - Tool call arguments cannot be parsed as JSON
+    /// - Spawning the durable task fails
+    async fn handle_tool_call_authorization(
+        &self,
+        session_id: Uuid,
+        tool_call_event_id: Uuid,
+    ) -> Result<(), AutopilotError> {
+        // Check cache first, otherwise fetch the tool call event directly
+        let autopilot_tool_call = match self.tool_call_cache.get(&tool_call_event_id) {
+            Some(tc) => tc,
+            None => {
+                let event = self.get_event(session_id, tool_call_event_id).await?;
+                match event.payload {
+                    EventPayload::ToolCall(tc) => tc,
+                    _ => return Err(AutopilotError::ToolCallNotFound(tool_call_event_id)),
+                }
+            }
+        };
+
+        let tool_name = autopilot_tool_call.name.clone();
+        let llm_params = autopilot_tool_call.arguments.clone();
+
+        // Use the side_info from the ToolCall event (propagated from caller)
+
+        let episode_id = Uuid::now_v7();
+        self.spawn_client
+            .spawn_tool_by_name(
+                &tool_name,
+                llm_params,
+                serde_json::to_value(autopilot_tool_call.side_info)?,
+                episode_id,
+                SpawnOptions::default(),
+            )
+            .await?;
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
@@ -212,8 +374,31 @@ impl AutopilotClient {
             .send()
             .await?;
         let response = self.check_response(response).await?;
-        let body = response.json().await?;
+        let body: ListEventsResponse = response.json().await?;
+        self.cache_tool_call_events(&body.events);
+        self.cache_tool_call_events(&body.pending_tool_calls);
         Ok(body)
+    }
+
+    /// Gets a single event by ID.
+    pub async fn get_event(
+        &self,
+        session_id: Uuid,
+        event_id: Uuid,
+    ) -> Result<Event, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/events/{event_id}"))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let event: Event = response.json().await?;
+        self.cache_tool_call_event(&event);
+        Ok(event)
     }
 
     /// Creates an event in a session.
@@ -224,6 +409,30 @@ impl AutopilotClient {
         session_id: Uuid,
         request: CreateEventRequest,
     ) -> Result<CreateEventResponse, AutopilotError> {
+        let tool_call_event_id = match &request.payload {
+            EventPayload::ToolCallAuthorization(auth) => match auth.status {
+                ToolCallAuthorizationStatus::Approved => Some(auth.tool_call_event_id),
+                // Don't start the tool if rejected
+                ToolCallAuthorizationStatus::Rejected { .. } => None,
+            },
+            _ => None,
+        };
+        if session_id == Uuid::nil() && request.config_snapshot_hash.is_none() {
+            return Err(AutopilotError::Http {
+                status_code: 400,
+                message: "Config snapshot hash must be set if a new session is being started"
+                    .to_string(),
+            });
+        }
+        if session_id != Uuid::nil() && request.config_snapshot_hash.is_some() {
+            return Err(AutopilotError::Http {
+                status_code: 400,
+                message:
+                    "Config snapshot hash must not be set if an existing session is being used"
+                        .to_string(),
+            });
+        }
+
         let url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events"))?;
@@ -235,7 +444,13 @@ impl AutopilotClient {
             .send()
             .await?;
         let response = self.check_response(response).await?;
-        let body = response.json().await?;
+        let body: CreateEventResponse = response.json().await?;
+
+        if let Some(tool_call_event_id) = tool_call_event_id {
+            self.handle_tool_call_authorization(session_id, tool_call_event_id)
+                .await?;
+        }
+
         Ok(body)
     }
 
@@ -257,7 +472,8 @@ impl AutopilotClient {
         &self,
         session_id: Uuid,
         params: StreamEventsParams,
-    ) -> Result<impl Stream<Item = Result<Event, AutopilotError>> + use<>, AutopilotError> {
+    ) -> Result<impl Stream<Item = Result<StreamUpdate, AutopilotError>> + use<>, AutopilotError>
+    {
         let mut url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events/stream"))?;
@@ -294,20 +510,30 @@ impl AutopilotClient {
         }
 
         // Connection is good, return the stream
-        let stream = event_source.filter_map(|result| async move {
-            match result {
-                Ok(SseEvent::Open) => None,
-                Ok(SseEvent::Message(message)) => {
-                    if message.event == "event" {
-                        match serde_json::from_str::<Event>(&message.data) {
-                            Ok(event) => Some(Ok(event)),
-                            Err(e) => Some(Err(AutopilotError::Json(e))),
+        let cache = self.tool_call_cache.clone();
+        let stream = event_source.filter_map(move |result| {
+            let cache = cache.clone();
+            async move {
+                match result {
+                    Ok(SseEvent::Open) => None,
+                    Ok(SseEvent::Message(message)) => {
+                        if message.event == "event" {
+                            match serde_json::from_str::<StreamUpdate>(&message.data) {
+                                Ok(update) => {
+                                    if let EventPayload::ToolCall(tool_call) = &update.event.payload
+                                    {
+                                        cache.insert(update.event.id, tool_call.clone());
+                                    }
+                                    Some(Ok(update))
+                                }
+                                Err(e) => Some(Err(AutopilotError::Json(e))),
+                            }
+                        } else {
+                            None
                         }
-                    } else {
-                        None
                     }
+                    Err(e) => Some(Err(AutopilotError::Sse(e.to_string()))),
                 }
-                Err(e) => Some(Err(AutopilotError::Sse(e.to_string()))),
             }
         });
 

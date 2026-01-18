@@ -68,6 +68,9 @@ pub struct ClientInferenceParams {
     /// if the fuser/judge model failed
     #[serde(default)]
     pub include_original_response: bool,
+    /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
+    #[serde(default)]
+    pub include_raw_usage: bool,
     // NOTE: Currently, ts_rs does not handle #[serde(transparent)] correctly,
     // so we disable the type generation for the extra_body and extra_headers fields.
     // I tried doing a direct #[ts(type = "InferenceExtraBody[]")] and
@@ -83,6 +86,7 @@ pub struct ClientInferenceParams {
     #[ts(skip)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
+
     /// OTLP trace headers to attach to the HTTP request to the TensorZero Gateway.
     /// These headers will be prefixed with `tensorzero-otlp-traces-extra-header-` and
     /// forwarded to the OTLP exporter. This field is not serialized into the request body.
@@ -90,6 +94,17 @@ pub struct ClientInferenceParams {
     #[serde(default)]
     #[ts(skip)]
     pub otlp_traces_extra_headers: HashMap<String, String>,
+
+    #[serde(skip)]
+    #[serde(default)]
+    #[ts(skip)]
+    pub otlp_traces_extra_attributes: HashMap<String, String>,
+
+    #[serde(skip)]
+    #[serde(default)]
+    #[ts(skip)]
+    pub otlp_traces_extra_resources: HashMap<String, String>,
+
     /// Tensorzero API key to set in the `Authorization` header when making the HTTP request to the TensorZero Gateway.
     /// This field is not serialized into the request body.
     #[serde(skip)]
@@ -122,6 +137,7 @@ impl TryFrom<ClientInferenceParams> for Params {
                 .collect(),
             cache_options: this.cache_options,
             include_original_response: this.include_original_response,
+            include_raw_usage: this.include_raw_usage,
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
             internal_dynamic_variant_config: this.internal_dynamic_variant_config,
@@ -150,10 +166,13 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials,
         cache_options,
         include_original_response,
+        include_raw_usage,
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,
         otlp_traces_extra_headers: _,
+        otlp_traces_extra_attributes: _,
+        otlp_traces_extra_resources: _,
         api_key: _,
     } = client_params;
     let _ = Params {
@@ -172,6 +191,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials: credentials.into_iter().map(|(k, v)| (k, v.0)).collect(),
         cache_options,
         include_original_response,
+        include_raw_usage,
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,

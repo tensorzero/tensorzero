@@ -34,3 +34,7 @@ allow = [
     "OpenSSL",
     "BSD-2-Clause",
 ]
+
+# These are not released and only used for local testing, we don't care about security vulnerabilities in them
+[graph]
+exclude = ["rate-limit-load-test", "feedback-load-test"]

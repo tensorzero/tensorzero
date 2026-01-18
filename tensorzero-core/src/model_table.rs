@@ -10,7 +10,7 @@ use std::{
 use crate::{
     config::{
         e2e_skip_credential_validation, provider_types::ProviderTypesConfig,
-        skip_credential_validation,
+        skip_credential_validation, with_skip_credential_validation,
     },
     error::{Error, ErrorDetails},
     model::{
@@ -35,6 +35,7 @@ use crate::{
         vllm::VLLMCredentials,
         xai::XAICredentials,
     },
+    relay::TensorzeroRelay,
 };
 use lazy_static::lazy_static;
 use secrecy::SecretString;
@@ -231,19 +232,35 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
         })
     }
 
-    pub async fn get(&self, key: &str) -> Result<Option<CowNoClone<'_, T>>, Error> {
+    pub async fn get(
+        &self,
+        key: &str,
+        relay: Option<&TensorzeroRelay>,
+    ) -> Result<Option<CowNoClone<'_, T>>, Error> {
         if let Some(model_config) = self.table.get(key) {
             return Ok(Some(CowNoClone::Borrowed(model_config)));
         }
         if let Some(shorthand) = check_shorthand(T::SHORTHAND_MODEL_PREFIXES, key) {
-            return Ok(Some(CowNoClone::Owned(
+            let model = if relay.is_some() {
+                let default_credentials = self.default_credentials.clone();
+                with_skip_credential_validation(async move {
+                    T::from_shorthand(
+                        shorthand.provider_type,
+                        shorthand.model_name,
+                        &default_credentials,
+                    )
+                    .await
+                })
+                .await?
+            } else {
                 T::from_shorthand(
                     shorthand.provider_type,
                     shorthand.model_name,
                     &self.default_credentials,
                 )
-                .await?,
-            )));
+                .await?
+            };
+            return Ok(Some(CowNoClone::Owned(model)));
         }
         Ok(None)
     }
@@ -445,7 +462,7 @@ impl ProviderTypeDefaultCredentials {
                     .try_into()
             }),
             azure: LazyCredential::new(move || {
-                load_credential_with_fallback(&azure_location, ProviderType::Azure)?.try_into()
+                load_azure_credential_with_legacy_fallback(&azure_location)?.try_into()
             }),
             deepseek: LazyCredential::new(move || {
                 load_credential_with_fallback(&deepseek_location, ProviderType::Deepseek)?
@@ -675,6 +692,32 @@ fn load_credential_with_fallback(
     } else {
         Ok(default_credential)
     }
+}
+
+/// Load Azure credential with legacy `AZURE_OPENAI_API_KEY` fallback support.
+/// Only applies fallback when using the default location (`AZURE_API_KEY`).
+fn load_azure_credential_with_legacy_fallback(
+    location: &CredentialLocationWithFallback,
+) -> Result<Credential, Error> {
+    // Check if using the default location (AZURE_API_KEY)
+    let is_default_location = matches!(
+        location.default_location(),
+        CredentialLocation::Env(key) if key == "AZURE_API_KEY"
+    );
+
+    // For the default location, check legacy key BEFORE attempting primary load
+    // to avoid logging an error when fallback will succeed
+    if is_default_location
+        && env::var("AZURE_API_KEY").is_err()
+        && let Ok(value) = env::var("AZURE_OPENAI_API_KEY")
+    {
+        crate::utils::deprecation_warning(
+            "The environment variable `AZURE_OPENAI_API_KEY` is deprecated and will be removed in a future release. Please set `AZURE_API_KEY` instead. The legacy value will be removed in 2026.4+ (#5530).",
+        );
+        return Ok(Credential::Static(SecretString::from(value)));
+    }
+
+    load_credential_with_fallback(location, ProviderType::Azure)
 }
 
 pub struct AnthropicKind;

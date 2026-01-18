@@ -36,11 +36,12 @@ use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
+use crate::relay::TensorzeroRelay;
 use crate::tool::{ToolCallConfig, create_dynamic_implicit_tool_config};
 use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
@@ -131,7 +132,7 @@ pub enum JsonMode {
 pub struct InferenceConfig {
     pub tool_config: Option<Arc<ToolCallConfig>>,
     pub templates: Arc<TemplateConfig<'static>>,
-    pub dynamic_output_schema: Option<Arc<DynamicJSONSchema>>,
+    pub dynamic_output_schema: Option<Arc<JSONSchema>>,
     pub function_name: Arc<str>,
     pub variant_name: Arc<str>,
     pub ids: InferenceIds,
@@ -150,7 +151,7 @@ pub struct InferenceConfig {
 pub struct BatchInferenceConfig {
     pub tool_configs: Vec<Option<Arc<ToolCallConfig>>>,
     pub templates: Arc<TemplateConfig<'static>>,
-    pub dynamic_output_schemas: Vec<Option<Arc<DynamicJSONSchema>>>,
+    pub dynamic_output_schemas: Vec<Option<Arc<JSONSchema>>>,
     pub function_name: Arc<str>,
     pub variant_name: Arc<str>,
     pub fetch_and_encode_input_files_before_inference: bool,
@@ -202,6 +203,7 @@ pub struct ModelUsedInfo {
     pub cached: bool,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
+    pub model_inference_id: Uuid,
 }
 
 pub trait Variant {
@@ -235,6 +237,7 @@ pub trait Variant {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error>;
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
@@ -515,6 +518,7 @@ impl Variant for VariantInfo {
         function_name: &str,
         variant_name: &str,
         global_outbound_http_timeout: &chrono::Duration,
+        relay: Option<&TensorzeroRelay>,
     ) -> Result<(), Error> {
         self.timeouts.validate(global_outbound_http_timeout)?;
         match &self.inner {
@@ -528,6 +532,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -541,6 +546,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -554,6 +560,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -567,6 +574,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -580,6 +588,7 @@ impl Variant for VariantInfo {
                         function_name,
                         variant_name,
                         global_outbound_http_timeout,
+                        relay,
                     )
                     .await
             }
@@ -803,6 +812,7 @@ async fn infer_model_request_stream<'request>(
                 raw_request,
                 model_provider_name,
                 cached,
+                model_inference_id,
             },
         messages: input_messages,
     } = retry_config
@@ -823,6 +833,7 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
         cached,
+        model_inference_id,
     };
     let config_type = function.config_type();
     let stream =
@@ -834,7 +845,7 @@ impl BatchInferenceConfig {
     pub fn new(
         templates: Arc<TemplateConfig<'static>>,
         tool_configs: Vec<Option<Arc<ToolCallConfig>>>,
-        dynamic_output_schemas: Vec<Option<Arc<DynamicJSONSchema>>>,
+        dynamic_output_schemas: Vec<Option<Arc<JSONSchema>>>,
         function_name: Arc<str>,
         variant_name: Arc<str>,
         fetch_and_encode_input_files_before_inference: bool,
@@ -918,14 +929,14 @@ mod tests {
     use crate::inference::types::{
         ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
     };
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::providers::dummy::{
         DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
         DummyProvider,
     };
-    use crate::rate_limiting::ScopeInfo;
+    use crate::rate_limiting::{RateLimitingManager, ScopeInfo};
     use crate::tool::{ToolCallConfig, ToolChoice};
 
     use serde_json::json;
@@ -1033,7 +1044,7 @@ mod tests {
             },
             "required": ["answer"],
         });
-        let output_schema = StaticJSONSchema::from_value(output_schema_value.clone()).unwrap();
+        let output_schema = JSONSchema::from_value(output_schema_value.clone()).unwrap();
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
 
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
@@ -1080,7 +1091,8 @@ mod tests {
             },
             "required": ["result"],
         });
-        let dynamic_output_schema = DynamicJSONSchema::new(dynamic_output_schema_value.clone());
+        let dynamic_output_schema =
+            JSONSchema::compile_background(dynamic_output_schema_value.clone());
         let inference_config_dynamic = InferenceConfig {
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1176,7 +1188,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1184,6 +1196,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1315,7 +1328,7 @@ mod tests {
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(json!({
+            output_schema: JSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "answer": { "type": "string" }
@@ -1486,7 +1499,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1494,6 +1507,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1658,7 +1672,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1666,6 +1680,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1818,7 +1833,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1826,6 +1841,7 @@ mod tests {
                 api_key_public_id: None,
             },
             relay: None,
+            include_raw_usage: false,
         };
         let inference_params = InferenceParams::default();
 
