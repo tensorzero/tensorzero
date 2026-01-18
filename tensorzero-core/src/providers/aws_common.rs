@@ -634,15 +634,27 @@ impl AWSProviderConfig {
     }
 
     /// Get the region for this request.
+    ///
+    /// For `AWSRegion::Static`, returns the configured region directly.
+    /// For `AWSRegion::Dynamic`, resolves the region from the request credentials.
+    /// For `AWSRegion::Sdk` or `None`, uses the region from the SDK config (auto-detected at startup).
     pub fn get_region(
         &self,
         dynamic_api_keys: &InferenceCredentials,
         provider_type: &str,
     ) -> Result<Region, Error> {
-        if let Some(region) = &self.region {
-            region.resolve(dynamic_api_keys)
-        } else {
-            self.sdk_config.region().cloned().ok_or_else(|| {
+        match &self.region {
+            Some(AWSRegion::Static(region)) => Ok(region.clone()),
+            Some(AWSRegion::Dynamic(key_name)) => {
+                let region_str = dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicRegionNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Ok(Region::new(region_str.expose_secret().to_string()))
+            }
+            // For Sdk or None, use the region resolved by the SDK at construction time
+            Some(AWSRegion::Sdk) | None => self.sdk_config.region().cloned().ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceClient {
                     raw_request: None,
                     raw_response: None,
@@ -650,7 +662,7 @@ impl AWSProviderConfig {
                     message: "No region configured".to_string(),
                     provider_type: provider_type.to_string(),
                 })
-            })
+            }),
         }
     }
 
@@ -1448,6 +1460,168 @@ mod tests {
         assert!(
             !AWSCredentials::Sdk.is_dynamic(),
             "Sdk credentials should return false"
+        );
+    }
+
+    // ===== AWSProviderConfig::get_region tests =====
+
+    fn make_sdk_config_with_region(region: &str) -> SdkConfig {
+        SdkConfig::builder()
+            .region(Region::new(region.to_string()))
+            .build()
+    }
+
+    fn make_sdk_config_without_region() -> SdkConfig {
+        SdkConfig::builder().build()
+    }
+
+    #[test]
+    fn test_get_region_with_static_region() {
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-west-2"),
+            region: Some(AWSRegion::Static(Region::new("eu-central-1"))),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config
+            .get_region(&credentials, "test_provider")
+            .expect("get_region should succeed");
+        assert_eq!(
+            result.as_ref(),
+            "eu-central-1",
+            "Static region should be returned directly, ignoring sdk_config region"
+        );
+    }
+
+    #[test]
+    fn test_get_region_with_dynamic_region() {
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-west-2"),
+            region: Some(AWSRegion::Dynamic("aws_region".to_string())),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::from([("aws_region", "ap-northeast-1")]));
+
+        let result = config
+            .get_region(&credentials, "test_provider")
+            .expect("get_region should succeed");
+        assert_eq!(
+            result.as_ref(),
+            "ap-northeast-1",
+            "Dynamic region should be resolved from credentials"
+        );
+    }
+
+    #[test]
+    fn test_get_region_with_dynamic_region_missing() {
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-west-2"),
+            region: Some(AWSRegion::Dynamic("missing_region".to_string())),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config.get_region(&credentials, "test_provider");
+        assert!(
+            result.is_err(),
+            "get_region should fail when dynamic region key is missing"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("missing_region"),
+            "Error should mention the missing key: {err}"
+        );
+    }
+
+    #[test]
+    fn test_get_region_with_sdk_region_uses_sdk_config() {
+        // This is the key test for the bug fix:
+        // When region is Some(AWSRegion::Sdk), we should fall back to sdk_config.region()
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-east-1"),
+            region: Some(AWSRegion::Sdk),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config
+            .get_region(&credentials, "test_provider")
+            .expect("get_region should succeed with AWSRegion::Sdk");
+        assert_eq!(
+            result.as_ref(),
+            "us-east-1",
+            "AWSRegion::Sdk should fall back to sdk_config.region()"
+        );
+    }
+
+    #[test]
+    fn test_get_region_with_none_uses_sdk_config() {
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-west-1"),
+            region: None,
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config
+            .get_region(&credentials, "test_provider")
+            .expect("get_region should succeed with None region");
+        assert_eq!(
+            result.as_ref(),
+            "us-west-1",
+            "None region should fall back to sdk_config.region()"
+        );
+    }
+
+    #[test]
+    fn test_get_region_with_sdk_region_no_sdk_config_region() {
+        // When region is Sdk but sdk_config has no region, should error
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_without_region(),
+            region: Some(AWSRegion::Sdk),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config.get_region(&credentials, "test_provider");
+        assert!(
+            result.is_err(),
+            "get_region should fail when sdk_config has no region"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("No region configured"),
+            "Error should mention no region configured: {err}"
+        );
+    }
+
+    #[test]
+    fn test_get_region_with_none_no_sdk_config_region() {
+        // When region is None and sdk_config has no region, should error
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_without_region(),
+            region: None,
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config.get_region(&credentials, "test_provider");
+        assert!(
+            result.is_err(),
+            "get_region should fail when sdk_config has no region"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("No region configured"),
+            "Error should mention no region configured: {err}"
         );
     }
 }
