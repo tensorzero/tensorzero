@@ -33,7 +33,7 @@ pub async fn test_reasoning_output_tokens_with_provider(provider: E2ETestProvide
         "episode_id": episode_id,
         "input": {
             "system": {"assistant_name": "Calculator"},
-            "messages": [{"role": "user", "content": "What is 2+2? Answer with just the number."}]
+            "messages": [{"role": "user", "content": "What is 34 * 57 + 21? Answer with just the number."}]
         },
         "stream": false,
         "extra_headers": extra_headers.extra_headers,
@@ -106,10 +106,10 @@ pub async fn test_reasoning_output_tokens_with_provider(provider: E2ETestProvide
         "response should have exactly 1 text block, got {text_count}"
     );
 
-    // Assert text content is very small (< 5 chars, expecting just "4")
+    // Assert text content is very small (<= 8 chars, expecting just "1959" plus maybe whitespace)
     assert!(
-        text_content.len() < 5,
-        "text content should be < 5 chars, got {} chars: '{text_content}'",
+        text_content.len() <= 8,
+        "text content should be <= 8 chars, got {} chars: '{text_content}'",
         text_content.len()
     );
 
