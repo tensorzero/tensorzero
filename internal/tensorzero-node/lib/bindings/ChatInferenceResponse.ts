@@ -11,6 +11,10 @@ export type ChatInferenceResponse = {
   content: Array<ContentBlockChatOutput>;
   usage: Usage;
   raw_usage?: Array<RawUsageEntry>;
+  /**
+   * DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
+   */
   original_response: string | null;
+  raw_response: string | null;
   finish_reason: FinishReason | null;
 };

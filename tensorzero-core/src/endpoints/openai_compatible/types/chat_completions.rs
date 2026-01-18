@@ -153,7 +153,7 @@ pub struct OpenAICompatibleParams {
     pub tensorzero_params: Option<InferenceParams>,
     #[serde(default, rename = "tensorzero::include_raw_usage")]
     pub tensorzero_include_raw_usage: bool,
-    /// DEPRECATED: Use `tensorzero::include_raw_response` instead.
+    /// DEPRECATED (#5697 / 2026.4+): Use `tensorzero::include_raw_response` instead.
     #[serde(default, rename = "tensorzero::include_original_response")]
     pub tensorzero_include_original_response: bool,
     #[serde(default, rename = "tensorzero::include_raw_response")]
@@ -216,7 +216,7 @@ pub struct OpenAICompatibleResponse {
     pub usage: OpenAICompatibleUsage,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
-    /// DEPRECATED: Use `tensorzero_raw_response` instead.
+    /// DEPRECATED (#5697 / 2026.4+): Use `tensorzero_raw_response` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -676,19 +676,25 @@ pub fn convert_openai_message_content(
     }
 }
 
-impl From<(InferenceResponse, String, bool)> for OpenAICompatibleResponse {
+impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse {
     fn from(
-        (inference_response, response_model_prefix, include_original_response): (
-            InferenceResponse,
-            String,
-            bool,
-        ),
+        (
+            inference_response,
+            response_model_prefix,
+            include_original_response,
+            include_raw_response,
+        ): (InferenceResponse, String, bool, bool),
     ) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
                 let (content, tool_calls) = process_chat_content(response.content);
                 let tensorzero_original_response = if include_original_response {
                     response.original_response
+                } else {
+                    None
+                };
+                let tensorzero_raw_response = if include_raw_response {
+                    response.raw_response
                 } else {
                     None
                 };
@@ -712,13 +718,18 @@ impl From<(InferenceResponse, String, bool)> for OpenAICompatibleResponse {
                     usage: response.usage.into(),
                     tensorzero_raw_usage: response.raw_usage,
                     tensorzero_original_response,
-                    tensorzero_raw_response: response.raw_response,
+                    tensorzero_raw_response,
                     episode_id: response.episode_id.to_string(),
                 }
             }
             InferenceResponse::Json(response) => {
                 let tensorzero_original_response = if include_original_response {
                     response.original_response
+                } else {
+                    None
+                };
+                let tensorzero_raw_response = if include_raw_response {
+                    response.raw_response
                 } else {
                     None
                 };
@@ -742,7 +753,7 @@ impl From<(InferenceResponse, String, bool)> for OpenAICompatibleResponse {
                     usage: response.usage.into(),
                     tensorzero_raw_usage: response.raw_usage,
                     tensorzero_original_response,
-                    tensorzero_raw_response: response.raw_response,
+                    tensorzero_raw_response,
                     episode_id: response.episode_id.to_string(),
                 }
             }

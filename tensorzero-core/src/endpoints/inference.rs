@@ -120,15 +120,15 @@ pub struct Params {
     pub cache_options: CacheParamsOptions,
     #[serde(default, skip_serializing)]
     pub credentials: InferenceCredentials,
-    /// DEPRECATED: Use `include_raw_response` instead.
+    /// DEPRECATED (#5697 / 2026.4+): Use `include_raw_response` instead.
     /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.
     /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
-    /// if the fuser/judge model failed
+    /// if the fuser/judge model failed.
     #[serde(default)]
     pub include_original_response: bool,
     /// If `true`, add a `raw_response` field to the response, containing the raw string response from the model.
     /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `raw_response`
-    /// if the fuser/judge model failed
+    /// if the fuser/judge model failed.
     #[serde(default)]
     pub include_raw_response: bool,
     /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
@@ -986,7 +986,7 @@ fn create_stream(
             buffer.push(chunk.clone());
 
             // Stream chunk, unless we've stripped all useful information
-            if should_stream_chunk_in_create_stream(&chunk, metadata.include_original_response, metadata.include_raw_usage) {
+            if should_stream_chunk_in_create_stream(&chunk, metadata.include_original_response, metadata.include_raw_response, metadata.include_raw_usage) {
                 yield Ok(prepare_response_chunk(&metadata, chunk));
             }
         }
@@ -1147,13 +1147,14 @@ fn create_stream(
 ///
 /// We want to stream chunks that have useful information (e.g. content, usage).
 ///
-/// We always want to stream a chunk if `include_original_response` is enabled.
+/// We always want to stream a chunk if `include_original_response` or `include_raw_response` is enabled.
 fn should_stream_chunk_in_create_stream(
     chunk: &InferenceResultChunk,
     include_original_response: bool,
+    include_raw_response: bool,
     include_raw_usage: bool,
 ) -> bool {
-    if include_original_response {
+    if include_original_response || include_raw_response {
         return true;
     }
 
@@ -1336,7 +1337,7 @@ pub struct ChatInferenceResponse {
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
-    /// DEPRECATED: Use `raw_response` instead.
+    /// DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1356,7 +1357,7 @@ pub struct JsonInferenceResponse {
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
-    /// DEPRECATED: Use `raw_response` instead.
+    /// DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1538,7 +1539,7 @@ pub struct ChatInferenceResponseChunk {
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
-    /// DEPRECATED: Use `raw_chunk` instead.
+    /// DEPRECATED (#5697 / 2026.4+): Use `raw_chunk` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_chunk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1557,7 +1558,7 @@ pub struct JsonInferenceResponseChunk {
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
-    /// DEPRECATED: Use `raw_chunk` instead.
+    /// DEPRECATED (#5697 / 2026.4+): Use `raw_chunk` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_chunk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

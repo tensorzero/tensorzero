@@ -386,14 +386,14 @@ The function must be defined in the configuration file.
 Alternatively, you can use the `model_name` field to call a model directly, without the need to define a function.
 See below for more details.
 
-#### `include_original_response`
+#### `include_raw_response`
 
 - **Type:** boolean
 - **Required:** no
 
-If `true`, the original response from the model will be included in the response in the `original_response` field as a string.
+If `true`, the raw response from the model will be included in the response in the `raw_response` field as a string.
 
-See `original_response` in the [response](#response) section for more details.
+See `raw_response` in the [response](#response) section for more details.
 
 #### `include_raw_usage`
 
@@ -949,11 +949,11 @@ The ID of the episode associated with the inference.
 
 The ID assigned to the inference.
 
-##### `original_response`
+##### `raw_response`
 
 - **Type:** string (optional)
 
-The original response from the model provider (only available when `include_original_response` is `true`).
+The raw response from the model provider (only available when `include_raw_response` is `true`).
 
 The returned data depends on the variant type:
 
@@ -1086,11 +1086,11 @@ The ID assigned to the inference.
 
 The ID of the episode associated with the inference.
 
-##### `original_response`
+##### `raw_response`
 
 - **Type:** string (optional)
 
-The original response from the model provider (only available when `include_original_response` is `true`).
+The raw response from the model provider (only available when `include_raw_response` is `true`).
 
 The returned data depends on the variant type:
 

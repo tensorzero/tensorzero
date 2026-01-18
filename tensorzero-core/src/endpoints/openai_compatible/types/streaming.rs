@@ -34,7 +34,7 @@ pub struct OpenAICompatibleResponseChunk {
     pub usage: Option<OpenAICompatibleUsage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
-    /// DEPRECATED: Use `tensorzero_raw_chunk` instead.
+    /// DEPRECATED (#5697 / 2026.4+): Use `tensorzero_raw_chunk` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_original_chunk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

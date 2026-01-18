@@ -137,6 +137,7 @@ pub async fn chat_completions_handler(
                 response,
                 response_model_prefix,
                 include_original_response,
+                include_raw_response,
             ));
             Ok(Json(openai_compatible_response).into_response())
         }
