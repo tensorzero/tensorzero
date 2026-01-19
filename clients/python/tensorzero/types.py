@@ -49,6 +49,7 @@ class RawResponseEntry:
 
     model_inference_id: UUID
     provider_type: str
+    api_type: ApiType
     data: str
 
 
@@ -287,6 +288,7 @@ def parse_raw_response_entry(entry: Dict[str, Any]) -> RawResponseEntry:
     return RawResponseEntry(
         model_inference_id=UUID(entry["model_inference_id"]),
         provider_type=entry["provider_type"],
+        api_type=entry["api_type"],
         data=entry["data"],
     )
 

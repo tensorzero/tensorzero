@@ -45,7 +45,7 @@ use crate::inference::types::usage::{
     aggregate_usage_across_model_inferences, aggregate_usage_from_single_streaming_model_inference,
 };
 use crate::inference::types::{
-    ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
+    ApiType, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
     InferenceResultChunk, InferenceResultStream, Input, InputExt, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
@@ -946,10 +946,20 @@ fn create_previous_raw_response_chunk(
         .previous_model_inference_results
         .iter()
         .filter(|r| !r.cached)
-        .map(|r| RawResponseEntry {
-            model_inference_id: r.id,
-            provider_type: r.model_provider_name.to_string(),
-            data: r.raw_response.clone(),
+        .map(|r| {
+            // Get api_type from raw_usage if available, otherwise default to ChatCompletions
+            let api_type = r
+                .raw_usage
+                .as_ref()
+                .and_then(|entries| entries.first())
+                .map(|entry| entry.api_type)
+                .unwrap_or(ApiType::ChatCompletions);
+            RawResponseEntry {
+                model_inference_id: r.id,
+                provider_type: r.model_provider_name.to_string(),
+                api_type,
+                data: r.raw_response.clone(),
+            }
         })
         .collect();
 
@@ -1462,10 +1472,20 @@ impl InferenceResponse {
                 .model_inference_results()
                 .iter()
                 .filter(|r| !r.cached) // Exclude TensorZero cache hits
-                .map(|r| RawResponseEntry {
-                    model_inference_id: r.id,
-                    provider_type: r.model_provider_name.to_string(),
-                    data: r.raw_response.clone(),
+                .map(|r| {
+                    // Get api_type from raw_usage if available, otherwise default to ChatCompletions
+                    let api_type = r
+                        .raw_usage
+                        .as_ref()
+                        .and_then(|entries| entries.first())
+                        .map(|entry| entry.api_type)
+                        .unwrap_or(ApiType::ChatCompletions);
+                    RawResponseEntry {
+                        model_inference_id: r.id,
+                        provider_type: r.model_provider_name.to_string(),
+                        api_type,
+                        data: r.raw_response.clone(),
+                    }
                 })
                 .collect();
             Some(entries)

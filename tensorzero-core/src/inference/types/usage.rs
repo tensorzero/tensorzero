@@ -45,6 +45,7 @@ pub fn raw_usage_entries_from_value(
 pub struct RawResponseEntry {
     pub model_inference_id: Uuid,
     pub provider_type: String,
+    pub api_type: ApiType,
     pub data: String,
 }
 

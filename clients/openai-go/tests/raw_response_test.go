@@ -30,6 +30,14 @@ func TestRawResponse(t *testing.T) {
 		_, ok = providerType.(string)
 		assert.True(t, ok, "provider_type should be a string")
 
+		// Verify api_type exists and is a valid value
+		apiType, ok := entry["api_type"]
+		assert.True(t, ok, "Entry should have api_type")
+		apiTypeStr, ok := apiType.(string)
+		assert.True(t, ok, "api_type should be a string")
+		validApiTypes := []string{"chat_completions", "responses", "embeddings"}
+		assert.Contains(t, validApiTypes, apiTypeStr, "api_type should be 'chat_completions', 'responses', or 'embeddings'")
+
 		// Verify data exists and is a string (raw response from provider)
 		data, ok := entry["data"]
 		assert.True(t, ok, "Entry should have data")

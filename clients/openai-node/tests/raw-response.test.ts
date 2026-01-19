@@ -24,6 +24,10 @@ describe("Raw Response", () => {
     expect(entry.model_inference_id).toBeDefined();
     expect(entry.provider_type).toBeDefined();
     expect(typeof entry.provider_type).toBe("string");
+    expect(entry.api_type).toBeDefined();
+    expect(["chat_completions", "responses", "embeddings"]).toContain(
+      entry.api_type
+    );
     expect(entry.data).toBeDefined();
     expect(typeof entry.data).toBe("string");
   };

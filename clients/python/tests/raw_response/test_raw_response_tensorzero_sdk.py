@@ -23,6 +23,10 @@ def assert_raw_response_entry_structure(entry: RawResponseEntry) -> None:
     assert entry.model_inference_id is not None, "Entry should have model_inference_id"
     assert entry.provider_type is not None, "Entry should have provider_type"
     assert isinstance(entry.provider_type, str), "provider_type should be a string"
+    assert entry.api_type is not None, "Entry should have api_type"
+    assert entry.api_type in ("chat_completions", "responses", "embeddings"), (
+        f"api_type should be 'chat_completions', 'responses', or 'embeddings', got {entry.api_type}"
+    )
     assert entry.data is not None, "Entry should have data"
     assert isinstance(entry.data, str), "data should be a string (raw response from provider)"
 
