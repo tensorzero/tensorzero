@@ -194,8 +194,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
         use $crate::providers::embeddings::test_single_token_array_with_provider;
         use $crate::providers::embeddings::test_batch_token_arrays_semantic_similarity_with_provider;
-        use $crate::providers::common::test_multi_turn_thought_non_streaming_with_provider;
-        use $crate::providers::common::test_multi_turn_thought_streaming_with_provider;
+        use $crate::providers::common::test_reasoning_multi_turn_thought_non_streaming_with_provider;
+        use $crate::providers::common::test_reasoning_multi_turn_thought_streaming_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -635,18 +635,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_multi_turn_thought_non_streaming() {
+        async fn test_reasoning_multi_turn_thought_non_streaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_multi_turn_thought_non_streaming_with_provider(provider).await;
+                test_reasoning_multi_turn_thought_non_streaming_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
-        async fn test_multi_turn_thought_streaming() {
+        async fn test_reasoning_multi_turn_thought_streaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_multi_turn_thought_streaming_with_provider(provider).await;
+                test_reasoning_multi_turn_thought_streaming_with_provider(provider).await;
             }
         }
 
@@ -12660,7 +12660,9 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
     assert!(content.to_lowercase().contains("tokyo"));
 }
 
-pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
+    provider: E2ETestProvider,
+) {
     if provider.variant_name == "together-deepseek-r1" {
         // This produces invalid tool calls within text blocks (e.g 🛠\u{fe0f}\n\n```json\n{\n  \"too)
         return;
@@ -12778,7 +12780,7 @@ pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETe
     // Don't bother checking ClickHouse, as we do that in lots of other tests
 }
 
-pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
     if provider.variant_name == "fireworks-deepseek" {
         // This either times out or returns "Internal Server Error"
         return;
