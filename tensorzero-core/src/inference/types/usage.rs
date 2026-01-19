@@ -358,10 +358,10 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "Unexpected non-cumulative")]
     fn test_aggregate_usage_from_single_streaming_model_inference_non_cumulative_uses_max() {
-        let logs_contain = crate::utils::testing::capture_logs();
-        // Tests the edge case where a later chunk has a smaller value
-        // The function should use the max (and log a warning)
+        // Tests the edge case where a later chunk has a smaller value.
+        // This triggers a debug_assert! because it indicates unexpected provider behavior.
         let chunks = vec![
             Usage {
                 input_tokens: Some(100),
@@ -372,26 +372,8 @@ mod tests {
                 output_tokens: Some(30), // Smaller than previous (unexpected)
             },
         ];
-        let result = aggregate_usage_from_single_streaming_model_inference(chunks);
-        assert_eq!(
-            result.input_tokens,
-            Some(100),
-            "should use max input_tokens even when later chunk is smaller"
-        );
-        assert_eq!(
-            result.output_tokens,
-            Some(50),
-            "should use max output_tokens even when later chunk is smaller"
-        );
-        // Verify warnings were logged for non-cumulative values
-        assert!(
-            logs_contain("Unexpected non-cumulative `input_tokens`"),
-            "should log warning for non-cumulative input_tokens"
-        );
-        assert!(
-            logs_contain("Unexpected non-cumulative `output_tokens`"),
-            "should log warning for non-cumulative output_tokens"
-        );
+        // This will panic due to debug_assert! when non-cumulative values are detected
+        let _ = aggregate_usage_from_single_streaming_model_inference(chunks);
     }
 
     // Tests for aggregate_usage_across_model_inferences
