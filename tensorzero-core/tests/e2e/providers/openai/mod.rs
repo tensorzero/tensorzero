@@ -1945,6 +1945,40 @@ pub async fn test_embedding_extra_body() {
     );
 }
 
+#[tokio::test]
+pub async fn test_embedding_extra_headers() {
+    // Use a random input string to avoid cache collisions in provider-proxy.
+    // The provider-proxy sanitizes Bearer tokens when computing cache keys,
+    // so requests with different auth tokens but the same input would hit the same cache entry.
+    let unique_input = format!("bad_auth_test_{}", Uuid::now_v7());
+    let payload = json!({
+        "input": unique_input,
+        "model": "tensorzero::embedding_model_name::openai_bad_auth_extra_headers",
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // The extra_headers override auth with an invalid token, so we expect an auth error
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Invalid auth should bubble up as a provider failure"
+    );
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:?}");
+    // OpenAI returns 401 for invalid auth, which TensorZero wraps as an error
+    let error_message = response_json["error"]
+        .as_str()
+        .expect("Expected a string error response due to invalid auth header");
+    assert!(
+        !error_message.is_empty(),
+        "Expected an error message due to invalid auth header"
+    );
+}
+
 // Tests that starting a batch inference with file input writes the file to the object store
 // We don't attempt to poll this batch inference, as we already have lots of tests that do that
 // (and we never read things back from the object in batch inference handling)
