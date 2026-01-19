@@ -3105,10 +3105,11 @@ fn convert_stream_response_with_metadata_to_chunk(
         Some(metadata) => {
             let usage = if metadata.prompt_token_count.is_some()
                 || metadata.candidates_token_count.is_some()
+                || metadata.thoughts_token_count.is_some()
             {
                 Some(Usage {
                     input_tokens: metadata.prompt_token_count,
-                    output_tokens: metadata.candidates_token_count,
+                    output_tokens: metadata.output_tokens(),
                 })
             } else {
                 None

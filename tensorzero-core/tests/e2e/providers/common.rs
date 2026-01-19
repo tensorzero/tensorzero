@@ -555,10 +555,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_reasoning_output_tokens() {
+        async fn test_reasoning_output_tokens_non_streaming() {
             let providers = $func().await.reasoning_usage_inference;
             for provider in providers {
-                $crate::providers::commonv2::usage::test_reasoning_output_tokens_with_provider(provider).await;
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_reasoning_output_tokens_streaming() {
+            let providers = $func().await.reasoning_usage_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_streaming_with_provider(provider).await;
             }
         }
 

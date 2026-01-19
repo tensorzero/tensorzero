@@ -3,7 +3,9 @@
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::E2ETestProvider;
 use crate::providers::helpers::get_modal_extra_headers;
+use futures::StreamExt;
 use reqwest::{Client, StatusCode};
+use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use uuid::Uuid;
@@ -13,7 +15,7 @@ use uuid::Uuid;
 /// Makes a single inference call and validates:
 /// - Text content is small (<= 8 chars)
 /// - output_tokens > 25 (proves reasoning tokens are counted)
-pub async fn test_reasoning_output_tokens_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_output_tokens_non_streaming_with_provider(provider: E2ETestProvider) {
     println!(
         "Testing reasoning output tokens for provider: {} ({})",
         provider.variant_name, provider.model_provider_name
@@ -104,6 +106,104 @@ pub async fn test_reasoning_output_tokens_with_provider(provider: E2ETestProvide
     assert!(
         output_tokens > 25,
         "output_tokens ({output_tokens}) should be > 25. \
+        This suggests reasoning tokens may not be included in output_tokens."
+    );
+}
+
+/// Test that providers correctly include reasoning tokens in output_tokens for streaming.
+///
+/// Makes a streaming inference call and validates:
+/// - output_tokens > 25 in the final chunk (proves reasoning tokens are counted)
+pub async fn test_reasoning_output_tokens_streaming_with_provider(provider: E2ETestProvider) {
+    println!(
+        "Testing streaming reasoning output tokens for provider: {} ({})",
+        provider.variant_name, provider.model_provider_name
+    );
+
+    let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "Calculator"},
+            "messages": [{"role": "user", "content": "What is 34 * 57 + 21 / 3? Answer with just the number."}]
+        },
+        "stream": true,
+        "extra_headers": extra_headers.extra_headers,
+    });
+
+    let mut chunks = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to create eventsource for streaming request for provider {}: {e}",
+                provider.variant_name
+            )
+        });
+
+    let mut output_tokens: Option<u64> = None;
+    let mut all_chunks: Vec<Value> = Vec::new();
+
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.unwrap_or_else(|e| {
+            panic!(
+                "Failed to receive chunk from stream for provider {}: {e}",
+                provider.variant_name
+            )
+        });
+        let Event::Message(chunk) = chunk else {
+            continue;
+        };
+        if chunk.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap_or_else(|e| {
+            panic!(
+                "Failed to parse chunk as JSON for provider {}: {e}. Data: {}",
+                provider.variant_name, chunk.data
+            )
+        });
+
+        all_chunks.push(chunk_json.clone());
+
+        // Check if this chunk has usage (comes in the final chunk)
+        if let Some(usage) = chunk_json.get("usage")
+            && let Some(tokens) = usage.get("output_tokens").and_then(|t| t.as_u64())
+        {
+            output_tokens = Some(tokens);
+        }
+    }
+
+    let output_tokens = output_tokens.unwrap_or_else(|| {
+        panic!(
+            "Streaming response should include usage with output_tokens for provider {}.\n\
+            Total chunks received: {}\n\
+            Last few chunks:\n{:#?}",
+            provider.variant_name,
+            all_chunks.len(),
+            all_chunks.iter().rev().take(3).collect::<Vec<_>>()
+        )
+    });
+
+    println!(
+        "Provider {} (streaming): output_tokens={}",
+        provider.variant_name, output_tokens
+    );
+
+    // Assert output_tokens > 25 (proves reasoning tokens are included)
+    assert!(
+        output_tokens > 25,
+        "output_tokens ({output_tokens}) should be > 25 for streaming. \
         This suggests reasoning tokens may not be included in output_tokens."
     );
 }
