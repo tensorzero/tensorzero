@@ -582,9 +582,10 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 }
 
 pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
-    // TODO (#5680): we disabled AWS/Anthropic tests on JSON functions + reasoning because the prefill breaks
+    // TODO (#5680): we disabled AWS/Anthropic/GCP Vertex Anthropic tests on JSON functions + reasoning because the prefill breaks
     if provider.variant_name == "aws-bedrock-thinking"
         || provider.variant_name == "anthropic-haiku-4-5-thinking"
+        || provider.variant_name == "gcp-vertex-anthropic-thinking"
     {
         return;
     }
@@ -813,9 +814,10 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         return;
     }
 
-    // TODO (#5680): we disabled AWS/Anthropic tests on JSON functions + reasoning because the prefill breaks
+    // TODO (#5680): we disabled AWS/Anthropic/GCP Vertex Anthropic tests on JSON functions + reasoning because the prefill breaks
     if provider.variant_name == "aws-bedrock-thinking"
         || provider.variant_name == "anthropic-haiku-4-5-thinking"
+        || provider.variant_name == "gcp-vertex-anthropic-thinking"
     {
         return;
     }
