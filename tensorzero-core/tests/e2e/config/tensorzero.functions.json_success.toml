@@ -80,6 +80,7 @@ system_template = "../../../fixtures/config/functions/json_success/prompt/system
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
 max_tokens = 2048
+thinking_budget_tokens = 1024
 
 [functions.json_success.variants.gcp-vertex-anthropic-thinking]
 type = "chat_completion"
@@ -88,6 +89,7 @@ system_template = "../../../fixtures/config/functions/json_success/prompt/system
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
 max_tokens = 2048
+thinking_budget_tokens = 1024
 
 [functions.json_success.variants.aws-bedrock-implicit]
 type = "chat_completion"
