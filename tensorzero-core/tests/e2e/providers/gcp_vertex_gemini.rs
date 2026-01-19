@@ -158,8 +158,8 @@ async fn get_providers() -> E2ETestProviders {
 
     let reasoning_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "gcp-vertex-gemini-pro".to_string(),
-        model_name: "gcp-gemini-2.5-pro".into(),
+        variant_name: "gcp-vertex-gemini-pro-thinking".to_string(),
+        model_name: "gcp-gemini-2.5-pro-thinking".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -168,7 +168,7 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
+        reasoning_inference: reasoning_providers.clone(),
         reasoning_usage_inference: reasoning_providers,
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),

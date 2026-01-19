@@ -253,6 +253,14 @@ model = "gcp-gemini-2.5-pro"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 500
 
+[functions.basic_test.variants.gcp-vertex-gemini-pro-thinking]
+type = "chat_completion"
+model = "gcp-gemini-2.5-pro-thinking"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 500
+# Set to minimum value to speed up tests and save tokens
+thinking_budget_tokens = 128
+
 [functions.basic_test.variants.gcp-vertex-gemini-flash-lite-tuned]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite-tuned"

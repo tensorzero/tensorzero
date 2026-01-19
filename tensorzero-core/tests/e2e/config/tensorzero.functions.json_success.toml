@@ -251,6 +251,16 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "on"
 max_tokens = 500
 
+[functions.json_success.variants.gcp-vertex-gemini-pro-thinking]
+type = "chat_completion"
+model = "gcp-gemini-2.5-pro-thinking"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 500
+# Set to minimum value to speed up tests and save tokens
+thinking_budget_tokens = 128
+
 [functions.json_success.variants.gcp-vertex-gemini-pro-implicit]
 type = "chat_completion"
 model = "gcp-gemini-2.5-pro"
