@@ -444,11 +444,21 @@ fn parse_and_warn_endpoint(url_str: &str, provider_type: &str) -> Result<Url, Er
 fn warn_if_not_aws_domain(url: &Url) {
     if let Some(host) = url.host_str() {
         let host_lower = host.to_lowercase();
-        if !host_lower.ends_with(".amazonaws.com") && !host_lower.ends_with(".api.aws") {
+        // Check for all known AWS partition domain suffixes:
+        // - amazonaws.com (standard AWS)
+        // - amazonaws.com.cn (AWS China: cn-north-1, cn-northwest-1)
+        // - api.aws (newer AWS API endpoints)
+        // - c2s.ic.gov (AWS US ISO)
+        // - sc2s.sgov.gov (AWS US ISOB)
+        let is_aws_domain = host_lower.ends_with(".amazonaws.com")
+            || host_lower.ends_with(".amazonaws.com.cn")
+            || host_lower.ends_with(".api.aws")
+            || host_lower.ends_with(".c2s.ic.gov")
+            || host_lower.ends_with(".sc2s.sgov.gov");
+        if !is_aws_domain {
             tracing::warn!(
-                "AWS endpoint URL `{url}` does not appear to be an AWS domain \
-                 (expected *.amazonaws.com or *.api.aws). \
-                 Requests will be sent to this endpoint."
+                "AWS endpoint URL `{url}` does not appear to be an AWS domain (e.g. *.amazonaws.com). \
+                 TensorZero will route requests to this endpoint, but be careful: a malicious endpoint can exfiltrate data or credentials."
             );
         }
     }
