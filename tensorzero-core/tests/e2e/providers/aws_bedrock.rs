@@ -25,6 +25,15 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     };
+
+    let claude_thinking_provider = E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-bedrock-thinking".to_string(),
+        model_name: "claude-sonnet-4-5-20250929-thinking-aws-bedrock".into(),
+        model_provider_name: "aws_bedrock".into(),
+        credentials: HashMap::new(),
+    };
+
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock".to_string(),
@@ -84,14 +93,24 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    // Dynamic region provider - passes region at request time
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-bedrock-dynamic-region".to_string(),
+        model_name: "claude-3-haiku-aws-bedrock-dynamic-region".into(),
+        model_provider_name: "aws-bedrock-dynamic-region".into(),
+        credentials: HashMap::from([("aws_bedrock_region".to_string(), "us-east-1".to_string())]),
+    }];
+
     E2ETestProviders {
         simple_inference: simple_inference_providers,
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
+        // TODO (#5680): we disabled AWS tests on JSON functions + reasoning because the prefill breaks
+        reasoning_inference: vec![claude_thinking_provider],
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
-        inference_params_dynamic_credentials: vec![],
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: vec![],
         provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: standard_providers.clone(),
@@ -103,9 +122,8 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: standard_providers.clone(),
         pdf_inference: standard_providers.clone(),
         input_audio: vec![],
-
         shorthand_inference: vec![],
-        // AWS bedrock only works with SDK credentials
+        // AWS Bedrock only works with SDK credentials
         credential_fallbacks: vec![],
     }
 }

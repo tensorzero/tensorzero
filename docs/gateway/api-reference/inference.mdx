@@ -237,6 +237,7 @@ This advanced feature is an "escape hatch" that lets you use provider-specific f
 Each object in the array must have two or three fields:
 
 - `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+  - Use `-` as the final path element to append to an array (e.g., `/messages/-` appends to `messages`)
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
   - `delete = true`: Deletes the field at the specified location, if present.

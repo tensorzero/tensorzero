@@ -1,16 +1,16 @@
+import * as React from "react";
 import {
-  data,
   isRouteErrorResponse,
   Links,
   Meta,
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
 } from "react-router";
 
-import { ConfigProvider } from "./context/config";
-import { ReadOnlyProvider } from "./context/read-only";
-import { AutopilotAvailableProvider } from "./context/autopilot-available";
+import { EMPTY_CONFIG } from "./context/config";
+import type { UiConfig } from "./types/tensorzero";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
 import {
@@ -18,20 +18,26 @@ import {
   checkAutopilotAvailable,
 } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
-import { GatewayAuthFailedState } from "./components/ui/error/GatewayAuthFailedState";
-import { GatewayRequiredState } from "./components/ui/error/GatewayRequiredState";
 import {
+  ErrorAppShell,
+  ErrorContent,
+  ErrorDialog,
+  PageNotFound,
+} from "./components/ui/error";
+import {
+  InfraErrorType,
+  isInfraErrorData,
   isAuthenticationError,
   isGatewayConnectionError,
+  isClickHouseError,
+  classifyError,
+  getErrorLabel,
+  type ClassifiedError,
 } from "./utils/tensorzero/errors";
-import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
-import { ReactQueryProvider } from "./providers/react-query";
+import { AppProviders } from "./providers/app-providers";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
-import { TooltipProvider } from "~/components/ui/tooltip";
-import { GlobalToastProvider } from "~/providers/global-toast-provider";
-import { Toaster } from "~/components/ui/toaster";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -53,10 +59,14 @@ export const links: Route.LinksFunction = () => [
 
 export const middleware: Route.MiddlewareFunction[] = [readOnlyMiddleware];
 
-const GATEWAY_UNAVAILABLE_ERROR = "TensorZero Gateway Unavailable";
-const GATEWAY_AUTH_FAILED_ERROR = "TensorZero Gateway Authentication Failed";
+interface LoaderData {
+  config: UiConfig;
+  isReadOnly: boolean;
+  autopilotAvailable: boolean;
+  infraError: ClassifiedError | null;
+}
 
-export async function loader() {
+export async function loader(): Promise<LoaderData> {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
   const isReadOnly = isReadOnlyMode();
@@ -66,13 +76,38 @@ export async function loader() {
       getConfig(),
       checkAutopilotAvailable(),
     ]);
-    return { config, isReadOnly, autopilotAvailable };
+    return { config, isReadOnly, autopilotAvailable, infraError: null };
   } catch (e) {
+    // Graceful degradation for infrastructure errors:
+    // Return fallback state so UI renders with dismissible error dialog.
+    // Child routes will handle their own errors via their error boundaries.
     if (isGatewayConnectionError(e)) {
-      throw data({ errorType: GATEWAY_UNAVAILABLE_ERROR }, { status: 503 });
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: { type: InfraErrorType.GatewayUnavailable },
+      };
     }
     if (isAuthenticationError(e)) {
-      throw data({ errorType: GATEWAY_AUTH_FAILED_ERROR }, { status: 401 });
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: { type: InfraErrorType.GatewayAuthFailed },
+      };
+    }
+    if (isClickHouseError(e)) {
+      const message = e instanceof Error ? e.message : undefined;
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: InfraErrorType.ClickHouseUnavailable,
+          message,
+        },
+      };
     }
     throw e;
   }
@@ -98,81 +133,72 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
-  const { config, isReadOnly, autopilotAvailable } = loaderData;
+  const { infraError } = loaderData;
+  const [dialogOpen, setDialogOpen] = React.useState(true);
+
+  // Reset dialog when infraError changes (component re-renders, not remounts)
+  React.useEffect(() => {
+    if (infraError) {
+      setDialogOpen(true);
+    }
+  }, [infraError]);
 
   return (
-    <ReactQueryProvider>
-      <GlobalToastProvider>
-        <ReadOnlyProvider value={isReadOnly}>
-          <AutopilotAvailableProvider value={autopilotAvailable}>
-            <ConfigProvider value={config}>
-              <SidebarProvider>
-                <TooltipProvider>
-                  <div className="fixed inset-0 flex">
-                    <AppSidebar />
-                    <ContentLayout>
-                      <Outlet />
-                    </ContentLayout>
-                  </div>
-                </TooltipProvider>
-              </SidebarProvider>
-            </ConfigProvider>
-          </AutopilotAvailableProvider>
-        </ReadOnlyProvider>
-        <Toaster />
-      </GlobalToastProvider>
-    </ReactQueryProvider>
+    <AppProviders loaderData={loaderData}>
+      <div className="fixed inset-0 flex">
+        <AppSidebar />
+        <ContentLayout>
+          <Outlet />
+        </ContentLayout>
+      </div>
+      {infraError && (
+        <ErrorDialog
+          open={dialogOpen}
+          onDismiss={() => setDialogOpen(false)}
+          onReopen={() => setDialogOpen(true)}
+          label={getErrorLabel(infraError.type)}
+        >
+          <ErrorContent error={infraError} />
+        </ErrorDialog>
+      )}
+    </AppProviders>
   );
 }
 
-// Fallback Error Boundary
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  // Check if this is a gateway connection error (wrapped with data() or raw)
-  if (
-    isRouteErrorResponse(error) &&
-    error.data?.errorType === GATEWAY_UNAVAILABLE_ERROR
-  ) {
-    return <GatewayRequiredState />;
-  }
-  if (isGatewayConnectionError(error)) {
-    return <GatewayRequiredState />;
+  const [open, setOpen] = React.useState(true);
+  const rootLoaderData = useRouteLoaderData<typeof loader>("root");
+
+  // Reset dialog when error changes (component may re-render, not remount)
+  React.useEffect(() => {
+    setOpen(true);
+  }, [error]);
+
+  // Client 404s - show PageNotFound in content area
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    if (!isInfraErrorData(error.data)) {
+      return (
+        <ErrorAppShell content={<PageNotFound />} loaderData={rootLoaderData} />
+      );
+    }
   }
 
-  // Check if this is a gateway authentication error (wrapped with data() or raw)
-  if (
-    isRouteErrorResponse(error) &&
-    error.data?.errorType === GATEWAY_AUTH_FAILED_ERROR
-  ) {
-    return <GatewayAuthFailedState />;
-  }
-  if (isAuthenticationError(error)) {
-    return <GatewayAuthFailedState />;
-  }
-
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
-  let stack: string | undefined;
-
-  if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error";
-    details =
-      error.status === 404
-        ? "The requested page could not be found."
-        : error.statusText || details;
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
-    stack = error.stack;
-  }
+  const classified = classifyError(error);
+  const label = getErrorLabel(classified.type);
 
   return (
-    <main className="container mx-auto p-4 pt-16">
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre className="w-full overflow-x-auto p-4">
-          <code>{stack}</code>
-        </pre>
-      )}
-    </main>
+    <ErrorAppShell
+      loaderData={rootLoaderData}
+      overlay={
+        <ErrorDialog
+          open={open}
+          onDismiss={() => setOpen(false)}
+          onReopen={() => setOpen(true)}
+          label={label}
+        >
+          <ErrorContent error={classified} />
+        </ErrorDialog>
+      }
+    />
   );
 }

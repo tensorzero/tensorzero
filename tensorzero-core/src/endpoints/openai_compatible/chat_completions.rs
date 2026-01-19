@@ -29,6 +29,7 @@ pub async fn chat_completions_handler(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        rate_limiting_manager,
         ..
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
@@ -115,6 +116,7 @@ pub async fn chat_completions_handler(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        rate_limiting_manager,
         params,
         api_key_ext,
     ))

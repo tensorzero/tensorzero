@@ -290,6 +290,9 @@ pub enum ErrorDetails {
     DynamicEndpointNotFound {
         key_name: String,
     },
+    DynamicRegionNotFound {
+        key_name: String,
+    },
     DynamicJsonSchema {
         message: String,
     },
@@ -649,6 +652,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicRegionNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::EvaluationRun { .. } => tracing::Level::ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => tracing::Level::ERROR,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
@@ -798,6 +802,7 @@ impl ErrorDetails {
             ErrorDetails::EvaluationRun { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::DynamicRegionNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
@@ -1142,6 +1147,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::DynamicEndpointNotFound { key_name } => {
                 write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
+            }
+            ErrorDetails::DynamicRegionNotFound { key_name } => {
+                write!(f, "Dynamic region '{key_name}' not found in credentials")
             }
             ErrorDetails::DynamicTemplateLoad { internal } => match internal {
                 AnalysisError::ParseError(err) => {
