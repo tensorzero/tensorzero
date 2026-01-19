@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::time::Duration;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use url::Url;
 
@@ -1020,8 +1021,9 @@ pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseC
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlock {
     Text {
         text: String,
@@ -1244,8 +1246,9 @@ pub(super) fn handle_anthropic_error(
     }
 }
 
-#[derive(Deserialize, Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlockDelta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
@@ -1262,8 +1265,9 @@ pub struct AnthropicMessageDelta {
     pub stop_sequence: Option<String>,
 }
 
-#[derive(Deserialize, Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicStreamMessage {
     ContentBlockDelta {
         delta: FlattenUnknown<'static, AnthropicContentBlockDelta>,

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
@@ -16,8 +17,9 @@ use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample
 use crate::tool::{ToolCallConfigDatabaseInsert, deserialize_optional_tool_info};
 
 /// Tagged enum for stored datapoints, used when querying from ClickHouse.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum StoredDatapoint {
     Chat(StoredChatInferenceDatapoint),
     Json(StoredJsonInferenceDatapoint),

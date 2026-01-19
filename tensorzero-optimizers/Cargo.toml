@@ -20,6 +20,8 @@ evaluations = { path = "../evaluations" }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
+tensorzero-derive = { path = "../internal/tensorzero-derive" }
 tokio = { workspace = true }
 tokio-util = "0.7.12"
 

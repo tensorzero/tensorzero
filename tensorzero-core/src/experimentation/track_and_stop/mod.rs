@@ -58,6 +58,7 @@ use estimate_optimal_probabilities::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -146,9 +147,10 @@ pub fn compute_track_and_stop_state(
 /// Public representation of Track-and-Stop state for external callers (tests, UI, monitoring).
 /// This type exposes sampling probabilities but hides internal implementation details like
 /// the `Nursery` struct and atomic counters.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum TrackAndStopState {
     Stopped {
         winner_variant_name: String,

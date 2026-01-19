@@ -19,9 +19,10 @@ use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
 
 /// The property to order datapoints by.
 /// This is flattened in the public API inside the `DatapointOrderBy` struct.
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "by", rename_all = "snake_case")]
+#[serde(tag = "by")]
+#[serde(rename_all = "snake_case")]
 pub enum DatapointOrderByTerm {
     /// Creation timestamp of the datapoint.
     #[schemars(title = "DatapointOrderByTimestamp")]
@@ -59,7 +60,7 @@ pub struct UpdateDatapointsRequest {
 }
 
 /// A tagged request to update a single datapoint in a dataset.
-#[derive(Debug, Serialize, TensorZeroDeserialize, JsonSchema, ts_rs::TS)]
+#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
@@ -520,9 +521,10 @@ pub struct CreateDatapointsFromInferenceRequest {
 
 /// Parameters for creating datapoints from inferences.
 /// Can specify either a list of inference IDs or a query to find inferences.
-#[derive(Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
+#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[export_schema]
 pub enum CreateDatapointsFromInferenceRequestParams {
     /// Create datapoints from specific inference IDs.
@@ -567,9 +569,9 @@ pub struct CreateDatapointsRequest {
 }
 
 /// A tagged request to create a single datapoint.
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
+#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[export_schema]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum CreateDatapointRequest {

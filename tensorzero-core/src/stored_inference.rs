@@ -36,6 +36,7 @@ use pyo3::{IntoPyObjectExt, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 /// This trait is used to represent a stored sample of data.
@@ -68,8 +69,9 @@ pub struct SimpleStoredSampleInfo {
 
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum StoredInference {
     #[schemars(title = "StoredInferenceChat")]
@@ -228,8 +230,9 @@ impl StoredChatInference {
 }
 
 /// Storage variant of StoredInference for database operations (no Python/TypeScript bindings)
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum StoredInferenceDatabase {
     Chat(StoredChatInferenceDatabase),
     Json(StoredJsonInference),

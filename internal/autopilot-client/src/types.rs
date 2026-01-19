@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 // Re-export types from tensorzero-types that InputMessage depends on
 use schemars::JsonSchema;
+use tensorzero_derive::TensorZeroDeserialize;
 pub use tensorzero_types::{
     Base64File, File, InputMessage, InputMessageContent, ObjectStoragePointer, RawText, Role,
     Template, Text, Thought, ToolCallWrapper, Unknown, UrlFile,
@@ -41,9 +42,10 @@ pub struct Event {
 }
 
 /// The UX-relevant status of the Autopilot.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(rename_all = "snake_case", tag = "status")]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "status")]
 pub enum AutopilotStatus {
     Idle,
     ServerSideProcessing,
@@ -61,8 +63,9 @@ pub struct StreamUpdate {
 }
 
 /// The payload of an event.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     Message(InputMessage),
@@ -95,8 +98,9 @@ impl EventPayload {
 }
 
 /// A status update within a session.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum StatusUpdate {
     Text { text: String },
@@ -208,8 +212,9 @@ pub struct AutopilotToolResult {
     pub result: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 pub enum ToolCallDecisionSource {
     Ui,
 }
@@ -221,15 +226,17 @@ pub struct ToolCallAuthorization {
     pub status: ToolCallAuthorizationStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 pub enum ToolCallAuthorizationStatus {
     Approved,
     Rejected { reason: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 pub enum ToolOutcome {
     Success(AutopilotToolResult),
     Failure {

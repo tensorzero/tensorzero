@@ -55,17 +55,19 @@ pub struct InferenceEvaluationConfig {
 /// Deprecated: Use `InferenceEvaluationConfig` instead
 pub type StaticEvaluationConfig = InferenceEvaluationConfig;
 
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum EvaluationConfig {
     #[serde(alias = "static")]
     Inference(InferenceEvaluationConfig),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum EvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
@@ -74,8 +76,9 @@ pub enum EvaluatorConfig {
 
 /// Minimal function configuration for evaluation purposes.
 /// Contains only the information needed to validate output schemas during evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum EvaluationFunctionConfig {
     /// Chat function - no output schema validation needed
@@ -382,7 +385,7 @@ impl UninitializedInferenceEvaluationConfig {
     }
 }
 
-#[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum UninitializedEvaluatorConfig {
@@ -571,7 +574,7 @@ pub struct UninitializedLLMJudgeVariantInfo {
     pub timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum UninitializedLLMJudgeVariantConfig {

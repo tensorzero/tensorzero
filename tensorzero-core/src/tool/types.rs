@@ -14,6 +14,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use strum::AsRefStr;
+use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
@@ -278,9 +279,10 @@ impl fmt::Display for OpenAICustomTool {
     }
 }
 
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {
     #[schemars(title = "OpenAICustomToolFormatText")]
     Text,

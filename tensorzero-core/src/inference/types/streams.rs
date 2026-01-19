@@ -22,6 +22,7 @@ use serde_json::Value;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use super::InferenceResult;
@@ -39,8 +40,9 @@ pub struct ProviderInferenceResponseChunk {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),

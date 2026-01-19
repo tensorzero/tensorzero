@@ -8,6 +8,7 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
 use crate::client::client_inference_params::ClientInferenceParams;
@@ -30,8 +31,9 @@ pub struct ActionInputInfo {
 }
 
 /// The specific action type to execute.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum ActionInput {
     Inference(Box<ClientInferenceParams>),
     Feedback(Box<FeedbackParams>),

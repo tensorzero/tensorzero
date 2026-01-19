@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
@@ -102,9 +103,10 @@ pub struct DemonstrationFeedbackFilter {
 
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "by", rename_all = "snake_case")]
+#[serde(tag = "by")]
+#[serde(rename_all = "snake_case")]
 pub enum OrderByTerm {
     // These titles become the names of the top-level OrderBy structs in the generated
     // schema, because it's flattened.
@@ -141,9 +143,10 @@ pub struct OrderBy {
 }
 
 /// Filters for querying inferences.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[export_schema]
 pub enum InferenceFilter {
     /// Filter by the value of a float metric

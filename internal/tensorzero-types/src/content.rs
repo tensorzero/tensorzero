@@ -10,7 +10,7 @@ use pyo3::types::PyModule;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tensorzero_derive::export_schema;
+use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
@@ -223,10 +223,11 @@ impl Unknown {
     }
 }
 
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[export_schema]
 pub enum ThoughtSummaryBlock {
     #[schemars(title = "ThoughtSummaryBlockSummaryText")]
