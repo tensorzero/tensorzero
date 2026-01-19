@@ -808,3 +808,41 @@ model = "gpt-4o-mini-2024-07-18"
 embedding_model = "openai::text-embedding-3-small"
 k = 3
 max_tokens = 100
+
+## Reasoning variants for usage tests
+
+[functions.basic_test.variants.anthropic-haiku-4-5-thinking]
+type = "chat_completion"
+model = "claude-haiku-4-5-thinking"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+
+[functions.basic_test.variants.gcp-vertex-anthropic-thinking]
+type = "chat_completion"
+model = "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+
+[functions.basic_test.variants.openai-gpt-5-mini]
+type = "chat_completion"
+model = "gpt-5-mini-responses"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+
+[functions.basic_test.variants.openai-gpt-5-mini-chat]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+
+[functions.basic_test.variants.openai-gpt-5-responses]
+type = "chat_completion"
+model = "responses-gpt-5"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+
+[functions.basic_test.variants.azure-gpt-5-mini]
+type = "chat_completion"
+model = "gpt-5-mini-azure"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048

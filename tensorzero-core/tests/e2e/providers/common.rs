@@ -106,18 +106,14 @@ pub struct EmbeddingTestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
-
     pub bad_auth_extra_headers: Vec<E2ETestProvider>,
     pub extra_body_inference: Vec<E2ETestProvider>,
-
     pub reasoning_inference: Vec<E2ETestProvider>,
-
+    pub reasoning_usage_inference: Vec<E2ETestProvider>,
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
-
     pub provider_type_default_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials_shorthand: Vec<E2ETestProvider>,
     pub credential_fallbacks: Vec<ModelTestProvider>,
-
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -125,11 +121,9 @@ pub struct E2ETestProviders {
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
     pub json_mode_off_inference: Vec<E2ETestProvider>,
-
     pub image_inference: Vec<E2ETestProvider>,
     pub pdf_inference: Vec<E2ETestProvider>,
     pub input_audio: Vec<E2ETestProvider>,
-
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
 }
@@ -557,6 +551,22 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.simple_inference;
             for provider in providers {
                 $crate::providers::commonv2::raw_usage::test_raw_usage_inference_with_provider_streaming(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_reasoning_output_tokens_non_streaming() {
+            let providers = $func().await.reasoning_usage_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_reasoning_output_tokens_streaming() {
+            let providers = $func().await.reasoning_usage_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_streaming_with_provider(provider).await;
             }
         }
 

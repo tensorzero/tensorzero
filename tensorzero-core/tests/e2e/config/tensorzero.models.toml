@@ -783,6 +783,26 @@ api_base = "http://localhost:3000/openai/v1/"
 api_key_location = "none"
 model_name = "tensorzero::model_name::dummy::good"
 
+# Anthropic Claude Haiku 4.5 with thinking
+[models."claude-haiku-4-5-thinking"]
+routing = ["anthropic"]
+
+[models."claude-haiku-4-5-thinking".providers.anthropic]
+type = "anthropic"
+model_name = "claude-haiku-4-5"
+extra_body = [
+    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
+]
+
+# Azure GPT-5-mini
+[models."gpt-5-mini-azure"]
+routing = ["azure"]
+
+[models."gpt-5-mini-azure".providers.azure]
+type = "azure"
+deployment_id = "gpt-5-mini"
+endpoint = "https://t0-azure-openai-east.openai.azure.com"
+
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 

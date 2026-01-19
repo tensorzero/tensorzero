@@ -817,7 +817,7 @@ fn make_provider_batch_inference_output(
     })?;
     let usage = Usage {
         input_tokens: usage_metadata.prompt_token_count,
-        output_tokens: usage_metadata.candidates_token_count,
+        output_tokens: usage_metadata.output_tokens(),
     };
 
     let (output, finish_reason) = get_response_content(
@@ -2913,6 +2913,20 @@ struct GCPVertexGeminiUsageMetadata {
     // GCP doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thoughts_token_count: Option<u32>,
+}
+
+impl GCPVertexGeminiUsageMetadata {
+    /// Returns output_tokens by summing candidates + thoughts tokens
+    fn output_tokens(&self) -> Option<u32> {
+        match (self.candidates_token_count, self.thoughts_token_count) {
+            (Some(c), Some(t)) => Some(c + t),
+            (Some(c), None) => Some(c),
+            (None, Some(t)) => Some(t),
+            (None, None) => None,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -3003,7 +3017,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         });
         let usage = Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count,
+            output_tokens: usage_metadata.output_tokens(),
         };
 
         let system = generic_request.system.clone();
@@ -3091,10 +3105,11 @@ fn convert_stream_response_with_metadata_to_chunk(
         Some(metadata) => {
             let usage = if metadata.prompt_token_count.is_some()
                 || metadata.candidates_token_count.is_some()
+                || metadata.thoughts_token_count.is_some()
             {
                 Some(Usage {
                     input_tokens: metadata.prompt_token_count,
-                    output_tokens: metadata.candidates_token_count,
+                    output_tokens: metadata.output_tokens(),
                 })
             } else {
                 None
@@ -3715,6 +3730,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: None,
                 candidates_token_count: None,
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3815,6 +3831,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3952,6 +3969,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -4674,6 +4692,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4736,6 +4755,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4786,6 +4806,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4954,6 +4975,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
         let mut last_tool_name = None;
