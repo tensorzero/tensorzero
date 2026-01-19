@@ -4133,8 +4133,20 @@ pub async fn check_inference_params_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 1);
+    // Some providers return thought blocks - filter them out since this test doesn't care about thoughts
+    let content: Vec<_> = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        content.len(),
+        1,
+        "Expected exactly one non-thought content block"
+    );
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -4388,10 +4400,13 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        if !content_blocks.is_empty() {
-            let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+        // Filter out thought blocks and collect text content
+        for content_block in content_blocks {
+            if content_block.get("type").unwrap().as_str().unwrap() == "text"
+                && let Some(text) = content_block.get("text").and_then(|t| t.as_str())
+            {
+                full_content.push_str(text);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -8539,8 +8554,20 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 1);
+    // Some providers return thought blocks - filter them out since this test doesn't care about thoughts
+    let content: Vec<_> = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        content.len(),
+        1,
+        "Expected exactly one non-thought content block"
+    );
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -8603,7 +8630,16 @@ pub async fn check_tool_use_multi_turn_inference_response(
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let content_blocks: Vec<_> = content_blocks
+        .into_iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        content_blocks.len(),
+        1,
+        "Expected exactly one non-thought content block in ClickHouse output"
+    );
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -8713,7 +8749,16 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let output: Vec<_> = output
+        .into_iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect();
+    assert_eq!(
+        output.len(),
+        1,
+        "Expected exactly one non-thought content block in ModelInference output"
+    );
     let first = output.first().unwrap();
     match first {
         StoredContentBlock::Text(text) => {
@@ -8829,10 +8874,13 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        if !content_blocks.is_empty() {
-            let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+        // Filter out thought blocks and collect text content
+        for content_block in content_blocks {
+            if content_block.get("type").unwrap().as_str().unwrap() == "text"
+                && let Some(text) = content_block.get("text").and_then(|t| t.as_str())
+            {
+                full_content.push_str(text);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -8909,7 +8957,16 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let output: Vec<_> = output
+        .into_iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        output.len(),
+        1,
+        "Expected exactly one non-thought content block in ClickHouse output"
+    );
     let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -9013,7 +9070,16 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let output: Vec<_> = output
+        .into_iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect();
+    assert_eq!(
+        output.len(),
+        1,
+        "Expected exactly one non-thought content block in ModelInference output"
+    );
     let first = output.first().unwrap();
     match first {
         StoredContentBlock::Text(text) => {

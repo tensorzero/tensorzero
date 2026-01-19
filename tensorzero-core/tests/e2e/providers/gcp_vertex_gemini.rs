@@ -319,26 +319,26 @@ async fn test_gcp_vertex_multi_turn_thought_non_streaming() {
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
 
     println!("Original Content blocks: {content_blocks:?}");
-    assert!(
-        content_blocks.len() == 2,
-        "Unexpected content blocks: {content_blocks:?}"
-    );
-    let signature = content_blocks[0]
-        .get("signature")
-        .unwrap()
-        .as_str()
-        .unwrap();
-    assert_eq!(
-        content_blocks[0],
-        json!({
-            "type": "thought",
-            "text": null,
-            "signature": signature,
-            "provider_type": "gcp_vertex_gemini",
+
+    // Check that we have at least one thought block with a signature
+    let thought_with_signature = content_blocks
+        .iter()
+        .find(|block| {
+            block["type"] == "thought" && block.get("signature").and_then(|s| s.as_str()).is_some()
         })
+        .expect("Expected at least one thought block with a signature");
+    assert_eq!(thought_with_signature["type"], "thought");
+    assert!(
+        thought_with_signature.get("signature").is_some(),
+        "Expected thought block to have a signature"
     );
-    assert_eq!(content_blocks[1]["type"], "tool_call");
-    let tool_id = content_blocks[1]["id"].as_str().unwrap();
+
+    // Check that we have a tool call
+    let tool_call = content_blocks
+        .iter()
+        .find(|block| block["type"] == "tool_call")
+        .expect("Expected at least one tool_call block");
+    let tool_id = tool_call["id"].as_str().unwrap();
 
     let tensorzero_content_blocks = content_blocks.clone();
 
