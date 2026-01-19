@@ -12726,12 +12726,12 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
         "Expected a tool call block in the content blocks: {content_blocks:?}"
     );
 
-    let tool_id = content_blocks
+    // Collect ALL tool call IDs - Anthropic requires a tool_result for every tool_use
+    let tool_ids: Vec<&str> = content_blocks
         .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap()["id"]
-        .as_str()
-        .unwrap();
+        .filter(|block| block["type"] == "tool_call")
+        .map(|block| block["id"].as_str().unwrap())
+        .collect();
 
     let tensorzero_content_blocks = content_blocks.clone();
 
@@ -12746,9 +12746,15 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
         }),
     ];
 
+    // Provide a tool result for each tool call
+    let tool_results: Vec<Value> = tool_ids
+        .iter()
+        .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+        .collect();
+
     new_messages.push(serde_json::json!({
         "role": "user",
-        "content": [{"type": "tool_result", "name": "My result", "result": "13", "id": tool_id}],
+        "content": tool_results,
     }));
 
     let payload = json!({

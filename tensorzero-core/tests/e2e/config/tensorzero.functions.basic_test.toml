@@ -837,7 +837,7 @@ model = "gpt-5-mini-responses"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 
-[functions.basic_test.variants.openai-gpt-5-mini-chat]
+[functions.basic_test.variants.openai-gpt-5-mini-chat-completions]
 type = "chat_completion"
 model = "openai::gpt-5-mini"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"

@@ -268,7 +268,7 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "openai-gpt-5-mini-chat".to_string(),
+            variant_name: "openai-gpt-5-mini-chat-completions".to_string(),
             model_name: "openai::gpt-5-mini".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
