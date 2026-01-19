@@ -1947,8 +1947,12 @@ pub async fn test_embedding_extra_body() {
 
 #[tokio::test]
 pub async fn test_embedding_extra_headers() {
+    // Use a random input string to avoid cache collisions in provider-proxy.
+    // The provider-proxy sanitizes Bearer tokens when computing cache keys,
+    // so requests with different auth tokens but the same input would hit the same cache entry.
+    let unique_input = format!("bad_auth_test_{}", uuid::Uuid::now_v7());
     let payload = json!({
-        "input": "Hello, world!",
+        "input": unique_input,
         "model": "tensorzero::embedding_model_name::openai_bad_auth_extra_headers",
     });
     let response = Client::new()
