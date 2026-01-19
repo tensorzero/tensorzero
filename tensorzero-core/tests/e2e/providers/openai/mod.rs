@@ -1957,13 +1957,20 @@ pub async fn test_embedding_extra_headers() {
         .send()
         .await
         .unwrap();
+    // Print status and body BEFORE assertion so we can debug CI failures
+    let status = response.status();
+    let response_text = response.text().await.unwrap();
+    println!(
+        "[EMBEDDING_EXTRA_HEADERS_DEBUG] status={}, response_body={}",
+        status, response_text
+    );
+    let response_json: Value = serde_json::from_str(&response_text).unwrap();
     // The extra_headers override auth with an invalid token, so we expect an auth error
     assert_eq!(
-        response.status(),
+        status,
         StatusCode::INTERNAL_SERVER_ERROR,
         "Invalid auth should bubble up as a provider failure"
     );
-    let response_json = response.json::<Value>().await.unwrap();
     println!("API response: {response_json:?}");
     // OpenAI returns 401 for invalid auth, which TensorZero wraps as an error
     let error_message = response_json["error"]
