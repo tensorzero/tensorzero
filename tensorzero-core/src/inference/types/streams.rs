@@ -98,6 +98,8 @@ pub struct ChatInferenceResultChunk {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_latency: Option<Duration>,
     /// Raw response string for the current chunk from the model provider.
+    /// Empty for fake streams (non-streaming converted to streaming).
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
 }
@@ -120,6 +122,8 @@ pub struct JsonInferenceResultChunk {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_latency: Option<Duration>,
     /// Raw response string for the current chunk from the model provider.
+    /// Empty for fake streams (non-streaming converted to streaming).
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
 }

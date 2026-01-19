@@ -1790,15 +1790,22 @@ impl InferenceResponseChunk {
 
     /// Helper to compute original_chunk and raw_chunk fields based on request flags.
     /// If both flags are true, both fields get the same value (cloned).
+    /// Returns None if the source is empty (e.g., for fake streams).
     fn compute_chunk_fields(
         source: String,
         include_original: bool,
         include_raw: bool,
     ) -> (Option<String>, Option<String>) {
+        // Don't serialize empty strings - return None instead
+        let source = if source.is_empty() {
+            None
+        } else {
+            Some(source)
+        };
         match (include_original, include_raw) {
-            (true, true) => (Some(source.clone()), Some(source)),
-            (true, false) => (Some(source), None),
-            (false, true) => (None, Some(source)),
+            (true, true) => (source.clone(), source),
+            (true, false) => (source, None),
+            (false, true) => (None, source),
             (false, false) => (None, None),
         }
     }

@@ -487,11 +487,10 @@ reasoning_effort = "minimal"
         }
     }
 
-    // Best-of-n streaming should have at least 2 entries for previous (non-streaming) inferences
-    // (2 candidates are made non-streaming, then judge is streaming)
+    // Best-of-n streaming should have at least the 2 candidates in raw_response
     assert!(
         raw_response_entries.len() >= 2,
-        "Best-of-n relay streaming should have at least 2 raw_response entries for candidates, got {} (accumulated across all chunks)",
+        "Best-of-n relay streaming should have at least 2 raw_response entries (2 candidates), got {} (accumulated across all chunks)",
         raw_response_entries.len()
     );
 
@@ -509,10 +508,11 @@ reasoning_effort = "minimal"
         );
     }
 
-    // Should also find raw_chunk for the streaming inference
+    // Best-of-N uses fake streaming (non-streaming candidate converted to stream)
+    // so raw_chunk should NOT be present (no actual streaming data)
     assert!(
-        found_raw_chunk,
-        "Best-of-n streaming should have raw_chunk for the final streaming inference"
+        !found_raw_chunk,
+        "Best-of-N streaming should NOT have raw_chunk (fake streaming has no chunk data)"
     );
 }
 

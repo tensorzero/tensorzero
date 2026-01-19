@@ -438,7 +438,7 @@ fn make_stream_from_non_stream(
             Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: content_blocks,
                 provider_latency,
-                raw_chunk: chat.original_response.unwrap_or_default(),
+                raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: chat.finish_reason,
                 usage,
                 raw_usage: raw_usage_entries.clone(),
@@ -452,7 +452,7 @@ fn make_stream_from_non_stream(
             raw_usage: raw_usage_entries,
             raw_response: None, // Not used for fused stream chunks
             provider_latency,
-            raw_chunk: json.original_response.unwrap_or_default(),
+            raw_chunk: String::new(), // No actual streaming data for fake streams
             finish_reason: json.finish_reason,
         })),
     };
@@ -1841,7 +1841,7 @@ mod tests {
                 raw_usage: None,
                 raw_response: None,
                 provider_latency: None,
-                raw_chunk: "My raw response".to_string(),
+                raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: Some(FinishReason::Length),
             })),]
         );

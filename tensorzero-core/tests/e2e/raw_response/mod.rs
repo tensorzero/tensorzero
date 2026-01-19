@@ -559,18 +559,19 @@ async fn e2e_test_raw_response_best_of_n_streaming() {
         }
     }
 
+    // Best-of-N uses fake streaming (non-streaming candidate converted to stream)
+    // so raw_chunk should NOT be present (no actual streaming data)
     assert!(
-        found_raw_chunk,
-        "Streaming Best-of-N response should include raw_chunk for the streaming inference"
+        !found_raw_chunk,
+        "Best-of-N streaming should NOT have raw_chunk (fake streaming has no chunk data)"
     );
 
     assert!(
         found_raw_response,
-        "Streaming Best-of-N response should include raw_response array for previous inferences"
+        "Streaming Best-of-N response should include raw_response array for all model inferences"
     );
 
-    // Best-of-N should have 2 candidates in raw_response (the evaluator's response is streamed)
-    // So raw_response should have at least 2 entries
+    // Best-of-N should have at least the 2 candidates in raw_response
     assert!(
         raw_response_count >= 2,
         "Best-of-N streaming should have at least 2 raw_response entries (2 candidates), got {raw_response_count}"
@@ -705,9 +706,12 @@ async fn e2e_test_raw_response_mixture_of_n_streaming() {
         }
     }
 
+    // Mixture-of-N with a streaming fuser (like gpt-4o-mini) uses real streaming,
+    // so raw_chunk SHOULD be present (contains actual fuser streaming data).
+    // Note: If the fuser were non-streaming, raw_chunk would NOT be present.
     assert!(
         found_raw_chunk,
-        "Streaming Mixture-of-N response should include raw_chunk for the fuser inference"
+        "Mixture-of-N streaming with streaming fuser should have raw_chunk (real streaming data)"
     );
 
     assert!(
@@ -715,7 +719,7 @@ async fn e2e_test_raw_response_mixture_of_n_streaming() {
         "Streaming Mixture-of-N response should include raw_response array for candidate inferences"
     );
 
-    // Mixture-of-N should have 2 candidates in raw_response (the fuser's response is streamed)
+    // Mixture-of-N should have at least the 2 candidates in raw_response (fuser is streaming)
     assert!(
         raw_response_count >= 2,
         "Mixture-of-N streaming should have at least 2 raw_response entries (2 candidates), got {raw_response_count}"
