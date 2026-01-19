@@ -698,17 +698,19 @@ fn convert_to_output(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GCPVertexAnthropic {
-    input_tokens: u32,
-    output_tokens: u32,
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct GCPVertexAnthropicUsage {
+    #[serde(default)]
+    input_tokens: Option<u32>,
+    #[serde(default)]
+    output_tokens: Option<u32>,
 }
 
-impl From<GCPVertexAnthropic> for Usage {
-    fn from(value: GCPVertexAnthropic) -> Self {
+impl From<GCPVertexAnthropicUsage> for Usage {
+    fn from(value: GCPVertexAnthropicUsage) -> Self {
         Usage {
-            input_tokens: Some(value.input_tokens),
-            output_tokens: Some(value.output_tokens),
+            input_tokens: value.input_tokens,
+            output_tokens: value.output_tokens,
         }
     }
 }
@@ -724,7 +726,7 @@ struct GCPVertexAnthropicResponse {
     stop_reason: Option<AnthropicStopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequence: Option<String>,
-    usage: GCPVertexAnthropic,
+    usage: GCPVertexAnthropicUsage,
 }
 
 #[derive(Debug)]
@@ -827,19 +829,8 @@ mod tests {
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolResult};
 
-    fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
-        let input_tokens = usage_info
-            .get("input_tokens")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as u32;
-        let output_tokens = usage_info
-            .get("output_tokens")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as u32;
-        GCPVertexAnthropic {
-            input_tokens,
-            output_tokens,
-        }
+    fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropicUsage {
+        serde_json::from_value(usage_info.clone()).unwrap_or_default()
     }
 
     #[tokio::test]
@@ -1273,15 +1264,26 @@ mod tests {
 
     #[test]
     fn test_anthropic_usage_to_usage() {
-        let anthropic_usage = GCPVertexAnthropic {
-            input_tokens: 100,
-            output_tokens: 50,
+        let anthropic_usage = GCPVertexAnthropicUsage {
+            input_tokens: Some(100),
+            output_tokens: Some(50),
         };
 
         let usage: Usage = anthropic_usage.into();
 
         assert_eq!(usage.input_tokens, Some(100));
         assert_eq!(usage.output_tokens, Some(50));
+
+        // Test with None values
+        let anthropic_usage = GCPVertexAnthropicUsage {
+            input_tokens: None,
+            output_tokens: Some(100),
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(usage.input_tokens, None);
+        assert_eq!(usage.output_tokens, Some(100));
     }
 
     #[test]
@@ -1300,9 +1302,9 @@ mod tests {
             model: "model-name".into(),
             stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
-            usage: GCPVertexAnthropic {
-                input_tokens: 100,
-                output_tokens: 50,
+            usage: GCPVertexAnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
             },
         };
         let latency = Latency::NonStreaming {
@@ -1392,9 +1394,9 @@ mod tests {
             model: "model-name".into(),
             stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
-            usage: GCPVertexAnthropic {
-                input_tokens: 100,
-                output_tokens: 50,
+            usage: GCPVertexAnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1480,9 +1482,9 @@ mod tests {
             model: "model-name".into(),
             stop_reason: None,
             stop_sequence: None,
-            usage: GCPVertexAnthropic {
-                input_tokens: 100,
-                output_tokens: 50,
+            usage: GCPVertexAnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1564,31 +1566,66 @@ mod tests {
             "output_tokens": 200
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 100);
-        assert_eq!(result.output_tokens, 200);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(200),
+            },
+            "both fields should be Some when present"
+        );
 
-        // Test with missing fields
+        // Test with missing output_tokens
         let usage_info = json!({
             "input_tokens": 50
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 50);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage {
+                input_tokens: Some(50),
+                output_tokens: None,
+            },
+            "output_tokens should be None when missing"
+        );
+
+        // Test with missing input_tokens (like Anthropic's message_delta)
+        let usage_info = json!({
+            "output_tokens": 100
+        });
+        let result = parse_usage_info(&usage_info);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage {
+                input_tokens: None,
+                output_tokens: Some(100),
+            },
+            "input_tokens should be None when missing"
+        );
 
         // Test with empty object
         let usage_info = json!({});
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage {
+                input_tokens: None,
+                output_tokens: None,
+            },
+            "both fields should be None for empty object"
+        );
 
-        // Test with non-numeric values
+        // Test with non-numeric values (falls back to default)
         let usage_info = json!({
             "input_tokens": "not a number",
             "output_tokens": true
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage::default(),
+            "non-numeric values should fall back to default"
+        );
     }
 
     #[test]
