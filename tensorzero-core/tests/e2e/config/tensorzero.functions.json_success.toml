@@ -396,6 +396,14 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "on"
 max_tokens = 100
 
+[functions.json_success.variants.openai-gpt-5-mini]
+type = "chat_completion"
+model = "gpt-5-mini-responses"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+
 [functions.json_success.variants.openai-responses-strict]
 type = "chat_completion"
 model = "responses-gpt-4o-mini-2024-07-18"
