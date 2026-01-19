@@ -573,6 +573,7 @@ mod tests {
             usage: Usage::default(),
             raw_usage: None,
             original_response: None,
+            raw_response: None,
             finish_reason: None,
         })
     }

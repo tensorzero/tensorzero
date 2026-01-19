@@ -295,6 +295,15 @@ Intelligence-Level: AGI
 
 </Accordion>
 
+#### `tensorzero::include_raw_response`
+
+- **Type:** boolean
+- **Required:** no
+
+If `true`, the raw responses from all model inferences will be included in the response in the `tensorzero_raw_response` field as an array.
+
+See `tensorzero_raw_response` in the [response](#response) section for more details.
+
 #### `tensorzero::include_raw_usage`
 
 - **Type:** boolean
@@ -869,6 +878,18 @@ Contains token usage information for the request and response, with the followin
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
 
+#### `tensorzero_raw_response`
+
+- **Type:** array (optional, only when `tensorzero::include_raw_response` is `true`)
+
+An array of raw provider-specific response data from all model inferences. Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `data`: The raw response string from the provider.
+
+For complex variants like `experimental_best_of_n_sampling`, this includes raw responses from all candidate inferences as well as the evaluator/fuser inference.
+
 #### `tensorzero_raw_usage`
 
 - **Type:** array (optional, only when `tensorzero::include_raw_usage` is `true`)
@@ -945,6 +966,24 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
+
+#### `tensorzero_raw_response`
+
+- **Type:** array (optional, only when `tensorzero::include_raw_response` is `true`)
+
+An array of raw provider-specific response data from previous model inferences (e.g., best-of-n candidates). Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `data`: The raw response string from the provider.
+
+This field is typically emitted in an early chunk of the stream and contains raw responses from model inferences that occurred before the current streaming inference (e.g., candidate inferences in `experimental_best_of_n_sampling`).
+
+#### `tensorzero_raw_chunk`
+
+- **Type:** string (optional, only when `tensorzero::include_raw_response` is `true`)
+
+The raw chunk from the model provider as a JSON string for the current streaming inference.
 
 #### `tensorzero_raw_usage`
 

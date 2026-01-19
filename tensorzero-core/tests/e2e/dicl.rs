@@ -369,6 +369,7 @@ async fn embed_insert_example(
         },
         relay: None,
         include_raw_usage: false,
+        include_raw_response: false,
     };
 
     let response = provider_config

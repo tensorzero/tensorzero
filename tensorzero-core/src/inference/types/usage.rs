@@ -38,6 +38,17 @@ pub fn raw_usage_entries_from_value(
     }]
 }
 
+/// A single entry in the raw response array, representing raw response data from one model inference.
+/// This preserves the original provider-specific response string that TensorZero normalizes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct RawResponseEntry {
+    pub model_inference_id: Uuid,
+    pub provider_type: String,
+    pub api_type: ApiType,
+    pub data: String,
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct Usage {
