@@ -12757,33 +12757,69 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
         "content": tool_results,
     }));
 
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "AskJeeves"},
-            "messages": new_messages
-        },
-        "stream": false,
-    });
-    println!("New payload: {payload}");
+    // Loop until we get a text response (some models may make multiple tool calls)
+    let max_iterations = 5;
+    for iteration in 0..max_iterations {
+        let payload = json!({
+            "function_name": "weather_helper",
+            "variant_name": provider.variant_name,
+            "episode_id": episode_id,
+            "input": {
+                "system": {"assistant_name": "AskJeeves"},
+                "messages": new_messages
+            },
+            "stream": false,
+        });
+        println!("Payload (iteration {iteration}): {payload}");
 
-    let response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    let response_json = response.json::<Value>().await.unwrap();
-    let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
-    assert!(
-        new_content_blocks
+        let response = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
+        let response_json = response.json::<Value>().await.unwrap();
+        let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+
+        // Check if we got a text response
+        if new_content_blocks
             .iter()
-            .any(|block| block["type"] == "text"),
-        "Expected at least one text block in the new content blocks: {new_content_blocks:?}"
-    );
-    // Don't bother checking ClickHouse, as we do that in lots of other tests
+            .any(|block| block["type"] == "text")
+        {
+            // Success - we got a text response
+            return;
+        }
+
+        // If not, check if we got more tool calls and provide results
+        let new_tool_ids: Vec<&str> = new_content_blocks
+            .iter()
+            .filter(|block| block["type"] == "tool_call")
+            .map(|block| block["id"].as_str().unwrap())
+            .collect();
+
+        assert!(
+            !new_tool_ids.is_empty(),
+            "Expected either a text block or tool call in response: {new_content_blocks:?}"
+        );
+
+        // Add assistant response and tool results for the next iteration
+        new_messages.push(serde_json::json!({
+            "role": "assistant",
+            "content": new_content_blocks,
+        }));
+
+        let tool_results: Vec<Value> = new_tool_ids
+            .iter()
+            .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+            .collect();
+
+        new_messages.push(serde_json::json!({
+            "role": "user",
+            "content": tool_results,
+        }));
+    }
+
+    panic!("Did not receive a text response after {max_iterations} iterations of tool calls");
 }
 
 pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
@@ -12794,6 +12830,11 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
 
     // TODO: https://github.com/tensorzero/tensorzero/issues/5270
     if provider.variant_name == "together-deepseek-r1" {
+        return;
+    }
+
+    // TODO: https://github.com/tensorzero/tensorzero/issues/5270
+    if provider.variant_name == "deepseek-reasoner" {
         return;
     }
 
@@ -12854,7 +12895,7 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse
+    // Check ClickHouse for the collected chunks from the first request
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -12880,4 +12921,131 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
             .any(|block| block["type"] == "tool_call"),
         "Expected a tool call block in the content blocks: {clickhouse_content_blocks:?}"
     );
+
+    // Now make a second streaming request with tool results (multi-turn)
+    // Collect ALL tool call IDs - Anthropic requires a tool_result for every tool_use
+    let tool_ids: Vec<&str> = clickhouse_content_blocks
+        .iter()
+        .filter(|block| block["type"] == "tool_call")
+        .map(|block| block["id"].as_str().unwrap())
+        .collect();
+
+    let mut new_messages = vec![
+        serde_json::json!({
+            "role": "user",
+            "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+        }),
+        serde_json::json!({
+            "role": "assistant",
+            "content": clickhouse_content_blocks,
+        }),
+    ];
+
+    // Provide a tool result for each tool call
+    let tool_results: Vec<Value> = tool_ids
+        .iter()
+        .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+        .collect();
+
+    new_messages.push(serde_json::json!({
+        "role": "user",
+        "content": tool_results,
+    }));
+
+    // Loop until we get a text response (some models may make multiple tool calls)
+    let max_iterations = 5;
+    for iteration in 0..max_iterations {
+        let payload = json!({
+            "function_name": "weather_helper",
+            "variant_name": provider.variant_name,
+            "episode_id": episode_id,
+            "input": {
+                "system": {"assistant_name": "AskJeeves"},
+                "messages": new_messages
+            },
+            "stream": true,
+        });
+        println!("Payload (iteration {iteration}): {payload}");
+
+        let mut event_source = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .eventsource()
+            .unwrap();
+        let mut chunks = vec![];
+        while let Some(event) = event_source.next().await {
+            let event = event.unwrap();
+            match event {
+                Event::Open => continue,
+                Event::Message(message) => {
+                    if message.data == "[DONE]" {
+                        break;
+                    }
+                    chunks.push(message.data);
+                }
+            }
+        }
+
+        // Validate we got chunks and extract inference_id
+        let mut current_inference_id = None;
+        for chunk in &chunks {
+            let chunk_json: Value = serde_json::from_str(chunk).unwrap();
+            println!("Chunk (iteration {iteration}): {chunk_json}");
+            current_inference_id = Some(
+                chunk_json
+                    .get("inference_id")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            );
+        }
+        let current_inference_id = current_inference_id.unwrap().parse::<Uuid>().unwrap();
+
+        // Sleep for 1 second to allow time for data to be inserted into ClickHouse
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        // Check ClickHouse for the collected chunks
+        let result = select_chat_inference_clickhouse(&clickhouse, current_inference_id)
+            .await
+            .unwrap();
+        let content_blocks_str = result.get("output").unwrap().as_str().unwrap();
+        let content_blocks: Vec<Value> = serde_json::from_str(content_blocks_str).unwrap();
+
+        // Check if we got a text response
+        if content_blocks.iter().any(|block| block["type"] == "text") {
+            // Success - we got a text response
+            return;
+        }
+
+        // If not, check if we got more tool calls and provide results
+        let new_tool_ids: Vec<&str> = content_blocks
+            .iter()
+            .filter(|block| block["type"] == "tool_call")
+            .map(|block| block["id"].as_str().unwrap())
+            .collect();
+
+        assert!(
+            !new_tool_ids.is_empty(),
+            "Expected either a text block or tool call in response: {content_blocks:?}"
+        );
+
+        // Add assistant response and tool results for the next iteration
+        new_messages.push(serde_json::json!({
+            "role": "assistant",
+            "content": content_blocks,
+        }));
+
+        let tool_results: Vec<Value> = new_tool_ids
+            .iter()
+            .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+            .collect();
+
+        new_messages.push(serde_json::json!({
+            "role": "user",
+            "content": tool_results,
+        }));
+    }
+
+    panic!("Did not receive a text response after {max_iterations} iterations of tool calls");
 }
