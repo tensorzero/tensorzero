@@ -150,6 +150,7 @@ impl TensorzeroRelay {
             tensorzero_dryrun: None,
             tensorzero_credentials: params.credentials,
             tensorzero_cache_options: None,
+            tensorzero_include_raw_response: params.include_raw_response,
         };
 
         let api_key = self
@@ -173,7 +174,12 @@ impl TensorzeroRelay {
                 })
             })?;
         match res.response {
-            OpenAIEmbeddingResponse::List { data, model, usage } => Ok(EmbeddingResponse {
+            OpenAIEmbeddingResponse::List {
+                data,
+                model,
+                usage,
+                tensorzero_raw_response,
+            } => Ok(EmbeddingResponse {
                 embeddings: data
                     .into_iter()
                     .map(|embedding| match embedding {
@@ -193,6 +199,7 @@ impl TensorzeroRelay {
                     })
                     .unwrap_or_default(),
                 model,
+                tensorzero_raw_response,
             }),
         }
     }
