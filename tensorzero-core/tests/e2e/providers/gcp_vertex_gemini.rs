@@ -294,7 +294,7 @@ async fn test_gcp_vertex_multi_turn_thought_non_streaming() {
     let episode_id = Uuid::now_v7();
     let payload = json!({
         "function_name": "weather_helper",
-        "variant_name": "gcp-vertex-gemini-pro",
+        "variant_name": "gcp-vertex-gemini-pro-thinking",
         "episode_id": episode_id,
         "input":{
             "system": {"assistant_name": "AskJeeves"},
@@ -360,7 +360,7 @@ async fn test_gcp_vertex_multi_turn_thought_non_streaming() {
 
     let payload = json!({
         "function_name": "weather_helper",
-        "variant_name": "gcp-vertex-gemini-pro",
+        "variant_name": "gcp-vertex-gemini-pro-thinking",
         "episode_id": episode_id,
         "input": {
             "system": {"assistant_name": "AskJeeves"},

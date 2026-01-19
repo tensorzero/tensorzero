@@ -12781,6 +12781,47 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
         let response_json = response.json::<Value>().await.unwrap();
         let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
 
+        // On the first iteration, verify that thoughts were actually sent to the provider
+        // This catches providers that silently drop input thoughts
+        if iteration == 0 {
+            let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+            let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+            // Sleep for ClickHouse trailing writes
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            let clickhouse = get_clickhouse().await;
+            let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+                .await
+                .unwrap();
+
+            let input_messages_str = model_inference
+                .get("input_messages")
+                .unwrap()
+                .as_str()
+                .unwrap();
+            let input_messages: Vec<Value> = serde_json::from_str(input_messages_str).unwrap();
+
+            // Verify assistant message contains thought blocks
+            let assistant_has_thought = input_messages.iter().any(|msg| {
+                msg.get("role").map(|r| r == "assistant").unwrap_or(false)
+                    && msg
+                        .get("content")
+                        .and_then(|c| c.as_array())
+                        .is_some_and(|blocks| {
+                            blocks
+                                .iter()
+                                .any(|block| block.get("type").is_some_and(|t| t == "thought"))
+                        })
+            });
+
+            assert!(
+                assistant_has_thought,
+                "Expected thought block in input_messages sent to provider, but none found. \
+                 Provider may be silently dropping thoughts. Input messages: {input_messages:?}"
+            );
+        }
+
         // Check if we got a text response
         if new_content_blocks
             .iter()
@@ -13004,6 +13045,41 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
 
         // Sleep for 1 second to allow time for data to be inserted into ClickHouse
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        // On the first iteration, verify that thoughts were actually sent to the provider
+        // This catches providers that silently drop input thoughts
+        if iteration == 0 {
+            let model_inference =
+                select_model_inference_clickhouse(&clickhouse, current_inference_id)
+                    .await
+                    .unwrap();
+
+            let input_messages_str = model_inference
+                .get("input_messages")
+                .unwrap()
+                .as_str()
+                .unwrap();
+            let input_messages: Vec<Value> = serde_json::from_str(input_messages_str).unwrap();
+
+            // Verify assistant message contains thought blocks
+            let assistant_has_thought = input_messages.iter().any(|msg| {
+                msg.get("role").map(|r| r == "assistant").unwrap_or(false)
+                    && msg
+                        .get("content")
+                        .and_then(|c| c.as_array())
+                        .is_some_and(|blocks| {
+                            blocks
+                                .iter()
+                                .any(|block| block.get("type").is_some_and(|t| t == "thought"))
+                        })
+            });
+
+            assert!(
+                assistant_has_thought,
+                "Expected thought block in input_messages sent to provider (streaming), but none found. \
+                 Provider may be silently dropping thoughts. Input messages: {input_messages:?}"
+            );
+        }
 
         // Check ClickHouse for the collected chunks
         let result = select_chat_inference_clickhouse(&clickhouse, current_inference_id)
