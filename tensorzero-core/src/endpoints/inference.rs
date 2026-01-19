@@ -448,6 +448,7 @@ pub async fn inference(
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: config.gateway.relay.clone(),
         include_raw_usage: params.include_raw_usage,
+        include_raw_response: params.include_raw_response,
     };
 
     let inference_models = InferenceModels {
@@ -941,24 +942,29 @@ fn create_previous_raw_response_chunk(
         return None;
     }
 
-    // Filter out cached model inferences and collect raw response entries
+    // Collect raw response entries, preferring passed-through entries from relay
     let entries: Vec<RawResponseEntry> = metadata
         .previous_model_inference_results
         .iter()
         .filter(|r| !r.cached)
-        .map(|r| {
-            // Get api_type from raw_usage if available, otherwise default to ChatCompletions
-            let api_type = r
-                .raw_usage
-                .as_ref()
-                .and_then(|entries| entries.first())
-                .map(|entry| entry.api_type)
-                .unwrap_or(ApiType::ChatCompletions);
-            RawResponseEntry {
-                model_inference_id: r.id,
-                provider_type: r.model_provider_name.to_string(),
-                api_type,
-                data: r.raw_response.clone(),
+        .flat_map(|r| {
+            // If there are passed-through relay_raw_response (from relay), use them
+            if let Some(passed_through) = &r.relay_raw_response {
+                passed_through.clone()
+            } else {
+                // Otherwise, generate entries from the model inference result
+                let api_type = r
+                    .raw_usage
+                    .as_ref()
+                    .and_then(|entries| entries.first())
+                    .map(|entry| entry.api_type)
+                    .unwrap_or(ApiType::ChatCompletions);
+                vec![RawResponseEntry {
+                    model_inference_id: r.id,
+                    provider_type: r.model_provider_name.to_string(),
+                    api_type,
+                    data: r.raw_response.clone(),
+                }]
             }
         })
         .collect();
@@ -1472,19 +1478,24 @@ impl InferenceResponse {
                 .model_inference_results()
                 .iter()
                 .filter(|r| !r.cached) // Exclude TensorZero cache hits
-                .map(|r| {
-                    // Get api_type from raw_usage if available, otherwise default to ChatCompletions
-                    let api_type = r
-                        .raw_usage
-                        .as_ref()
-                        .and_then(|entries| entries.first())
-                        .map(|entry| entry.api_type)
-                        .unwrap_or(ApiType::ChatCompletions);
-                    RawResponseEntry {
-                        model_inference_id: r.id,
-                        provider_type: r.model_provider_name.to_string(),
-                        api_type,
-                        data: r.raw_response.clone(),
+                .flat_map(|r| {
+                    // If there are passed-through relay_raw_response (from relay), use them
+                    if let Some(passed_through) = &r.relay_raw_response {
+                        passed_through.clone()
+                    } else {
+                        // Otherwise, generate entries from the model inference result
+                        let api_type = r
+                            .raw_usage
+                            .as_ref()
+                            .and_then(|entries| entries.first())
+                            .map(|entry| entry.api_type)
+                            .unwrap_or(ApiType::ChatCompletions);
+                        vec![RawResponseEntry {
+                            model_inference_id: r.id,
+                            provider_type: r.model_provider_name.to_string(),
+                            api_type,
+                            data: r.raw_response.clone(),
+                        }]
                     }
                 })
                 .collect();
@@ -1548,6 +1559,13 @@ impl InferenceResponse {
         match self {
             InferenceResponse::Chat(c) => c.raw_usage.as_ref(),
             InferenceResponse::Json(j) => j.raw_usage.as_ref(),
+        }
+    }
+
+    pub fn raw_response(&self) -> Option<&Vec<RawResponseEntry>> {
+        match self {
+            InferenceResponse::Chat(c) => c.raw_response.as_ref(),
+            InferenceResponse::Json(j) => j.raw_response.as_ref(),
         }
     }
 
@@ -1822,6 +1840,7 @@ pub struct InferenceClients {
     pub scope_info: ScopeInfo,
     pub relay: Option<TensorzeroRelay>,
     pub include_raw_usage: bool,
+    pub include_raw_response: bool,
 }
 
 // Carryall struct for models used in inference
@@ -2811,6 +2830,7 @@ mod tests {
             cached: false, // NOT cached, so raw_usage should be emitted
             finish_reason: Some(FinishReason::Stop),
             raw_usage: Some(raw_usage_entries.clone()),
+            relay_raw_response: None,
         };
 
         let mut metadata = create_test_metadata();
@@ -2907,6 +2927,7 @@ mod tests {
             cached: true, // CACHED - should be filtered out
             finish_reason: Some(FinishReason::Stop),
             raw_usage: Some(cached_raw_usage),
+            relay_raw_response: None,
         };
 
         let mut metadata = create_test_metadata();
@@ -2985,6 +3006,7 @@ mod tests {
             cached: false,
             finish_reason: Some(FinishReason::Stop),
             raw_usage: Some(raw_usage_entries),
+            relay_raw_response: None,
         };
 
         let mut metadata = create_test_metadata();

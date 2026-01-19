@@ -528,6 +528,7 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             cached: false,
             finish_reason: None,
             raw_usage: response.raw_usage,
+            relay_raw_response: None,
         })
     }
 }
@@ -847,6 +848,7 @@ mod tests {
                     },
                     relay: None,
                     include_raw_usage: false,
+                    include_raw_response: false,
                 },
             )
             .await;

@@ -2740,6 +2740,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),

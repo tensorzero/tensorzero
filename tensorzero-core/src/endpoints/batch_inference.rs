@@ -235,6 +235,7 @@ pub async fn start_batch_inference(
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: config.gateway.relay.clone(),
         include_raw_usage: false, // batch inference does not support include_raw_usage (#5452)
+        include_raw_response: false, // batch inference does not support include_raw_response
     };
 
     let inference_models = InferenceModels {
@@ -1026,6 +1027,7 @@ pub async fn write_completed_batch_inference<'a>(
             cached: false,
             finish_reason,
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
+            relay_raw_response: None, // batch inference does not support include_raw_response (#5710)
         };
         let tool_config: Option<ToolCallConfig> = match tool_params {
             Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {
