@@ -133,6 +133,20 @@ impl UninitializedEmbeddingModelConfig {
         // field via StoredEmbeddingModelConfig when loading from snapshot)
         let timeout_ms = self.timeout_ms;
 
+        // DEBUG: Log extra_headers in uninitialized config (before load)
+        for (provider_name, provider_config) in &self.providers {
+            let extra_header_names: Vec<_> = provider_config
+                .extra_headers
+                .as_ref()
+                .map(|h| h.data.iter().map(|eh| eh.name.as_str()).collect())
+                .unwrap_or_default();
+            tracing::info!(
+                "[EXTRA_HEADERS_DEBUG] UninitializedEmbeddingModelConfig::load (before) provider_name={}, extra_header_names={:?}",
+                provider_name,
+                extra_header_names
+            );
+        }
+
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
             let provider_config = config
                 .load(provider_types, name.clone(), default_credentials)
@@ -195,6 +209,18 @@ impl EmbeddingModelConfig {
                         return Ok(cache_lookup);
                     }
                 }
+                // DEBUG: Log extra_headers before calling embed
+                let extra_header_names: Vec<_> = provider_config
+                    .extra_headers
+                    .as_ref()
+                    .map(|h| h.data.iter().map(|eh| eh.name.as_str()).collect())
+                    .unwrap_or_default();
+                tracing::info!(
+                    "[EXTRA_HEADERS_DEBUG] EmbeddingModelConfig::embed model_name={}, provider_name={}, extra_header_names={:?}",
+                    model_name,
+                    provider_name,
+                    extra_header_names
+                );
                 let response = provider_config
                     .embed(request, clients, &provider_config.into())
                     .await;
@@ -668,6 +694,17 @@ impl UninitializedEmbeddingProviderConfig {
 
         let extra_body = self.extra_body;
         let extra_headers = self.extra_headers;
+
+        // DEBUG: Log extra_headers during config load
+        let extra_header_names: Vec<_> = extra_headers
+            .as_ref()
+            .map(|h| h.data.iter().map(|eh| eh.name.as_str()).collect())
+            .unwrap_or_default();
+        tracing::info!(
+            "[EXTRA_HEADERS_DEBUG] UninitializedEmbeddingProviderConfig::load provider_name={}, extra_header_names={:?}",
+            provider_name,
+            extra_header_names
+        );
 
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {

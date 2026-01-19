@@ -58,6 +58,10 @@ pub async fn embeddings(
     if let Some(relay) = &config.gateway.relay {
         return relay.relay_embeddings(params).await;
     }
+    tracing::info!(
+        "[EXTRA_HEADERS_DEBUG] embeddings endpoint: looking up model_name={}",
+        params.model_name
+    );
     let embedding_model = config
         .embedding_models
         .get(&params.model_name, config.gateway.relay.as_ref())
@@ -67,6 +71,20 @@ pub async fn embeddings(
                 model_name: params.model_name.clone(),
             })
         })?;
+    // DEBUG: Log extra_headers in retrieved model
+    for (provider_name, provider_info) in &embedding_model.providers {
+        let extra_header_names: Vec<_> = provider_info
+            .extra_headers
+            .as_ref()
+            .map(|h| h.data.iter().map(|eh| eh.name.as_str()).collect())
+            .unwrap_or_default();
+        tracing::info!(
+            "[EXTRA_HEADERS_DEBUG] embeddings endpoint: retrieved model_name={}, provider_name={}, extra_header_names={:?}",
+            params.model_name,
+            provider_name,
+            extra_header_names
+        );
+    }
     if let EmbeddingInput::Batch(array) = &params.input
         && array.is_empty()
     {
