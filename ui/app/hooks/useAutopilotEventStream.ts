@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Event } from "~/types/tensorzero";
+import type { Event, StreamUpdate } from "~/types/tensorzero";
 
 interface UseAutopilotEventStreamOptions {
   sessionId: string;
@@ -118,7 +118,8 @@ export function useAutopilotEventStream({
               const data = line.slice(6).trim();
               if (data) {
                 try {
-                  const event = JSON.parse(data) as Event;
+                  const streamUpdate = JSON.parse(data) as StreamUpdate;
+                  const event = streamUpdate.event;
                   lastEventIdRef.current = event.id;
 
                   setEvents((prev) => {
