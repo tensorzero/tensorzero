@@ -27,15 +27,15 @@ import {
   type PaginationState,
 } from "@tanstack/react-table";
 import PageButtons from "~/components/utils/PageButtons";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
 import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
 
 const columnHelper = createColumnHelper<DatasetMetadata>();
 
@@ -271,22 +271,22 @@ export default function DatasetTable({
         />
       </Suspense>
 
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
               Are you sure you want to delete the dataset{" "}
               <span className="font-mono text-lg font-bold text-red-500">
                 {datasetToDelete}
               </span>
               ?
-            </DialogTitle>
-            <DialogDescription>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
               The datapoints will be marked as stale in the database (soft
               deletion). This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex justify-between gap-2">
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex justify-between gap-2">
             <Button
               variant="outline"
               onClick={() => setDeleteDialogOpen(false)}
@@ -310,9 +310,9 @@ export default function DatasetTable({
               <Trash className="inline h-4 w-4" />
               Delete
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
