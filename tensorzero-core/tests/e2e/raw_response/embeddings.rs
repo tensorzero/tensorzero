@@ -49,7 +49,7 @@ fn assert_raw_response_entry(entry: &Value) {
 async fn e2e_test_embeddings_raw_response_requested() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": "tensorzero::embedding_model_name::text_embedding_3_small",
+        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
         "tensorzero::include_raw_response": true
     });
 
@@ -98,7 +98,7 @@ async fn e2e_test_embeddings_raw_response_requested() {
     let first_entry = &raw_response_array[0];
     assert_raw_response_entry(first_entry);
 
-    // Provider type should be "openai" for text_embedding_3_small
+    // Provider type should be "openai" for text-embedding-3-small
     let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
     assert_eq!(provider_type, "openai", "Provider type should be 'openai'");
 
@@ -118,7 +118,7 @@ async fn e2e_test_embeddings_raw_response_requested() {
 async fn e2e_test_embeddings_raw_response_not_requested() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": "tensorzero::embedding_model_name::text_embedding_3_small"
+        "model": "tensorzero::embedding_model_name::text-embedding-3-small"
         // tensorzero::include_raw_response is NOT set (defaults to false)
     });
 
@@ -148,7 +148,7 @@ async fn e2e_test_embeddings_raw_response_not_requested() {
 async fn e2e_test_embeddings_raw_response_explicitly_false() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": "tensorzero::embedding_model_name::text_embedding_3_small",
+        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
         "tensorzero::include_raw_response": false
     });
 
@@ -183,7 +183,7 @@ async fn e2e_test_embeddings_raw_response_batch() {
     ];
     let payload = json!({
         "input": inputs,
-        "model": "tensorzero::embedding_model_name::text_embedding_3_small",
+        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
         "tensorzero::include_raw_response": true
     });
 
@@ -242,7 +242,7 @@ async fn e2e_test_embeddings_raw_response_with_cache() {
     // First request: populate cache with raw_response enabled
     let payload = json!({
         "input": input_text,
-        "model": "tensorzero::embedding_model_name::text_embedding_3_small",
+        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
         "tensorzero::include_raw_response": true,
         "tensorzero::cache_options": {
             "enabled": "on",
@@ -319,7 +319,7 @@ async fn e2e_test_embeddings_raw_response_with_cache() {
 async fn e2e_test_embeddings_raw_response_entry_structure() {
     let payload = json!({
         "input": "Test entry structure",
-        "model": "tensorzero::embedding_model_name::text_embedding_3_small",
+        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
         "tensorzero::include_raw_response": true
     });
 
@@ -376,7 +376,7 @@ async fn e2e_test_embeddings_raw_response_entry_structure() {
 async fn e2e_test_embeddings_raw_response_with_dimensions() {
     let payload = json!({
         "input": "Test with specific dimensions",
-        "model": "tensorzero::embedding_model_name::text_embedding_3_small",
+        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
         "dimensions": 512,
         "tensorzero::include_raw_response": true
     });

@@ -607,7 +607,15 @@ async fn test_relay_raw_response_entry_structure() {
 /// Test relay passthrough works for embeddings include_raw_response
 #[tokio::test]
 async fn test_relay_raw_response_embeddings() {
-    let downstream_config = "";
+    // Configure downstream with dummy embedding provider
+    let downstream_config = r#"
+[embedding_models.test-embedding]
+routing = ["dummy"]
+
+[embedding_models.test-embedding.providers.dummy]
+type = "dummy"
+model_name = "test-embeddings"
+"#;
     let relay_config = "";
 
     let env = start_relay_test_environment(downstream_config, relay_config).await;
@@ -617,7 +625,7 @@ async fn test_relay_raw_response_embeddings() {
         .post(format!("http://{}/openai/v1/embeddings", env.relay.addr))
         .json(&json!({
             "input": "Hello, world!",
-            "model": "tensorzero::embedding_model_name::text_embedding_3_small",
+            "model": "tensorzero::embedding_model_name::test-embedding",
             "tensorzero::include_raw_response": true
         }))
         .send()
@@ -692,7 +700,7 @@ async fn test_relay_raw_response_embeddings() {
             .and_then(|v| v.as_str())
             .expect("raw_response entry should have provider_type");
         assert_eq!(
-            provider_type, "openai",
+            provider_type, "dummy",
             "provider_type should be from downstream provider, not relay"
         );
 
@@ -708,7 +716,15 @@ async fn test_relay_raw_response_embeddings() {
 /// Test that relay does NOT return raw_response for embeddings when not requested
 #[tokio::test]
 async fn test_relay_raw_response_embeddings_not_requested() {
-    let downstream_config = "";
+    // Configure downstream with dummy embedding provider
+    let downstream_config = r#"
+[embedding_models.test-embedding]
+routing = ["dummy"]
+
+[embedding_models.test-embedding.providers.dummy]
+type = "dummy"
+model_name = "test-embeddings"
+"#;
     let relay_config = "";
 
     let env = start_relay_test_environment(downstream_config, relay_config).await;
@@ -718,7 +734,7 @@ async fn test_relay_raw_response_embeddings_not_requested() {
         .post(format!("http://{}/openai/v1/embeddings", env.relay.addr))
         .json(&json!({
             "input": "Hello, world!",
-            "model": "tensorzero::embedding_model_name::text_embedding_3_small"
+            "model": "tensorzero::embedding_model_name::test-embedding"
             // tensorzero::include_raw_response is NOT set
         }))
         .send()
@@ -744,7 +760,15 @@ async fn test_relay_raw_response_embeddings_not_requested() {
 /// Test relay embeddings with batch input
 #[tokio::test]
 async fn test_relay_raw_response_embeddings_batch() {
-    let downstream_config = "";
+    // Configure downstream with dummy embedding provider
+    let downstream_config = r#"
+[embedding_models.test-embedding]
+routing = ["dummy"]
+
+[embedding_models.test-embedding.providers.dummy]
+type = "dummy"
+model_name = "test-embeddings"
+"#;
     let relay_config = "";
 
     let env = start_relay_test_environment(downstream_config, relay_config).await;
@@ -754,7 +778,7 @@ async fn test_relay_raw_response_embeddings_batch() {
         .post(format!("http://{}/openai/v1/embeddings", env.relay.addr))
         .json(&json!({
             "input": ["Hello, world!", "How are you?", "This is a test."],
-            "model": "tensorzero::embedding_model_name::text_embedding_3_small",
+            "model": "tensorzero::embedding_model_name::test-embedding",
             "tensorzero::include_raw_response": true
         }))
         .send()
