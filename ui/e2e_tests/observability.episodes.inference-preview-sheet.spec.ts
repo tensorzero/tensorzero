@@ -96,7 +96,11 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
 
     // Verify navigation to the inference page
     await page.waitForURL(href!, { timeout: 5000 });
-    await expect(page.getByText("Inferences", { exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByRole("navigation", { name: "breadcrumb" })
+        .getByText("Inferences", { exact: true }),
+    ).toBeVisible();
   });
 
   test("should switch between different inferences in the sheet", async ({

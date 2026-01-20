@@ -485,7 +485,11 @@ test.describe("should navigate to inference from Try with X modal and verify tag
       });
 
       // Verify we're on an inference detail page
-      await expect(page.getByText("Inferences", { exact: true })).toBeVisible();
+      await expect(
+        page
+          .getByRole("navigation", { name: "breadcrumb" })
+          .getByText("Inferences", { exact: true }),
+      ).toBeVisible();
 
       // Verify the tags section shows our UI tags
       await expect(page.getByText("tensorzero::internal")).toBeVisible();
@@ -522,8 +526,12 @@ test("should be able to add a datapoint from the inference page", async ({
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
 
-  // Verify we can see the datapoint content
-  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+  // Verify we can see the datapoint page loaded (breadcrumb shows "Datapoints")
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Datapoints", { exact: true }),
+  ).toBeVisible();
 
   // Clean up: delete the dataset by going to the list datasets page
   await page.goto("/datasets");
