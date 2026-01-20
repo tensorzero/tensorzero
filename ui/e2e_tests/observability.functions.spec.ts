@@ -8,9 +8,7 @@ test("should filter internal functions by default and toggle visibility", async 
   const table = page.getByRole("table");
   await expect(table.getByText("Variants")).toBeVisible();
 
-  // The count is displayed as a sibling to the heading (for inline flow)
-  const pageHeader = page.locator("h1").locator("..");
-  const countDisplay = pageHeader.locator("span.text-fg-muted");
+  const countDisplay = page.getByTestId("count-display").first();
   await expect(countDisplay).toBeVisible();
   const getCount = async () =>
     Number((await countDisplay.textContent())?.replace(/,/g, "").trim());

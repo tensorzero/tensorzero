@@ -42,6 +42,7 @@ function CountDisplay({
   const resolvedCount = count instanceof Promise ? use(count) : count;
   return (
     <span
+      data-testid="count-display"
       className={cn(
         "text-fg-muted font-medium",
         size === "lg" ? "text-2xl" : "text-xl",
