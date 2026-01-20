@@ -1288,13 +1288,25 @@ struct GeminiUsageMetadata {
     // Gemini doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thoughts_token_count: Option<u32>,
 }
 
 impl From<GeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GeminiUsageMetadata) -> Self {
+        // Sum candidates + thoughts tokens for output_tokens
+        let output_tokens = match (
+            usage_metadata.candidates_token_count,
+            usage_metadata.thoughts_token_count,
+        ) {
+            (Some(c), Some(t)) => Some(c + t),
+            (Some(c), None) => Some(c),
+            (None, Some(t)) => Some(t),
+            (None, None) => None,
+        };
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count,
+            output_tokens,
         }
     }
 }
@@ -1384,6 +1396,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: first_candidate.finish_reason.map(Into::into),
                 id: model_inference_id,
@@ -1566,6 +1579,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2083,6 +2097,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2186,6 +2201,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2321,6 +2337,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2630,6 +2647,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2696,6 +2714,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(15),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2766,6 +2785,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(3),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2826,6 +2846,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2883,6 +2904,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(8),
                 candidates_token_count: None, // No output tokens when blocked
+                thoughts_token_count: None,
             }),
         };
 
@@ -2931,6 +2953,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(0),
+                thoughts_token_count: None,
             }),
         };
 
@@ -3011,6 +3034,7 @@ mod tests {
                 usage_metadata: Some(GeminiUsageMetadata {
                     prompt_token_count: Some(1),
                     candidates_token_count: Some(1),
+                    thoughts_token_count: None,
                 }),
             };
 

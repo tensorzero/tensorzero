@@ -92,6 +92,13 @@ impl FunctionConfigType {
             FunctionConfigType::Json => "JsonInference",
         }
     }
+
+    pub fn datapoint_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "ChatInferenceDatapoint",
+            FunctionConfigType::Json => "JsonInferenceDatapoint",
+        }
+    }
 }
 
 impl FunctionConfig {
@@ -1890,6 +1897,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -1957,6 +1965,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2010,6 +2019,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2065,6 +2075,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2118,6 +2129,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2171,6 +2183,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2243,6 +2256,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2290,6 +2304,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2344,6 +2359,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2396,6 +2412,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2455,6 +2472,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(

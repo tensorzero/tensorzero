@@ -854,6 +854,7 @@ mod tests {
         model::{ModelConfig, ModelProvider, ProviderConfig},
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
+        rate_limiting::RateLimitingManager,
     };
 
     use super::*;
@@ -1081,6 +1082,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1118,6 +1120,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1174,6 +1177,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1214,6 +1218,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1286,6 +1291,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1323,6 +1329,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1379,7 +1386,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1388,6 +1395,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let input = LazyResolvedInput {
             system: None,

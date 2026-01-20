@@ -910,6 +910,7 @@ mod tests {
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::{DUMMY_JSON_RESPONSE_RAW, DummyProvider};
     use crate::providers::test_helpers::get_temperature_tool_config;
+    use crate::rate_limiting::RateLimitingManager;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
@@ -1295,7 +1296,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1304,6 +1305,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let system_template = get_system_template();
@@ -2310,7 +2312,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2319,6 +2321,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let templates = Box::leak(Box::new(get_test_template_config().await));
         let schema_any = JSONSchema::from_value(json!({ "type": "object" })).unwrap();

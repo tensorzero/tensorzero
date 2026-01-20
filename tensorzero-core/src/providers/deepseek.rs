@@ -800,6 +800,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_response,
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: finish_reason.map(OpenAIFinishReason::into),
                 id: model_inference_id,

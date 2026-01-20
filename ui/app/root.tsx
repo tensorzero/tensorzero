@@ -30,6 +30,7 @@ import {
   isAuthenticationError,
   isClickHouseError,
   isGatewayConnectionError,
+  isClickHouseError,
   classifyError,
   getErrorLabel,
   type ClassifiedError,

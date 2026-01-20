@@ -1,11 +1,11 @@
 import type { Route } from "./+types/route";
+import type { EvaluationResultRow } from "~/types/tensorzero";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   getEvaluationResults,
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import type { ParsedEvaluationResult } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable, type SelectedRowData } from "./EvaluationTable";
 import {
   PageHeader,
@@ -83,7 +83,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .then((response) => response.run_infos);
 
   // Create placeholder promises for results and statistics that will be used conditionally
-  let resultsPromise: Promise<ParsedEvaluationResult[]>;
+  let resultsPromise: Promise<EvaluationResultRow[]>;
   if (selected_evaluation_run_ids_array.length > 0) {
     // If there is a freshly inserted feedback, ClickHouse may take some time to
     // update the evaluation results as it is eventually consistent.
@@ -91,7 +91,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     resultsPromise = newFeedbackId
       ? pollForEvaluationResults(
           params.evaluation_name,
-          function_name,
           selected_evaluation_run_ids_array,
           newFeedbackId,
           limit,
@@ -99,7 +98,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         )
       : getEvaluationResults(
           params.evaluation_name,
-          function_name,
           selected_evaluation_run_ids_array,
           limit,
           offset,

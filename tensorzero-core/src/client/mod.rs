@@ -6,6 +6,7 @@ use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
+use crate::feature_flags;
 use crate::http::TensorzeroResponseWrapper;
 use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
@@ -332,7 +333,6 @@ pub enum TensorZeroError {
         source: TensorZeroInternalError,
     },
     RequestTimeout,
-    #[cfg(feature = "git")]
     Git {
         #[source]
         source: git2::Error,
@@ -355,7 +355,6 @@ impl Display for TensorZeroError {
             }
             TensorZeroError::Other { source } => write!(f, "{source}"),
             TensorZeroError::RequestTimeout => write!(f, "HTTP Error: request timed out"),
-            #[cfg(feature = "git")]
             TensorZeroError::Git { source } => write!(f, "Failed to get git info: {source}"),
         }
     }
@@ -397,6 +396,8 @@ pub enum ClientBuilderError {
     GatewayVersion(String),
     #[error("Failed to set up embedded gateway: {0}")]
     EmbeddedGatewaySetup(TensorZeroError),
+    #[error("Failed to initialize feature flags: {0}")]
+    FeatureFlags(TensorZeroError),
 }
 
 // Helper type to choose between using Debug or Display for a type
@@ -525,6 +526,11 @@ impl ClientBuilder {
 
     /// Constructs a `Client`, returning an error if the configuration is invalid.
     pub async fn build(self) -> Result<Client, ClientBuilderError> {
+        // Initialize feature flags (for embedded clients).
+        feature_flags::init_flags().map_err(|e| {
+            ClientBuilderError::FeatureFlags(TensorZeroError::Other { source: e.into() })
+        })?;
+
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => {
                 let client = self.build_http()?;
@@ -1116,6 +1122,7 @@ impl Client {
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         gateway.handle.app_state.postgres_connection_info.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
+                        gateway.handle.app_state.rate_limiting_manager.clone(),
                         params.try_into().map_err(err_to_http)?,
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
@@ -1439,5 +1446,25 @@ mod tests {
         assert!(logs_contain(
             "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
         ));
+    }
+
+    #[tokio::test]
+    async fn test_feature_flags_are_initialized() {
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: None,
+            clickhouse_url: None,
+            postgres_config: None,
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .expect("Failed to build client");
+
+        assert!(
+            !feature_flags::TEST_FLAG.get(),
+            "Should be able to get TEST_FLAG value without panic"
+        );
     }
 }

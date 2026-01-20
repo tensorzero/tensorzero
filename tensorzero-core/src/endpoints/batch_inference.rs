@@ -126,6 +126,7 @@ pub async fn start_batch_inference(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        rate_limiting_manager,
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
@@ -227,13 +228,14 @@ pub async fn start_batch_inference(
         postgres_connection_info: postgres_connection_info.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: cache_options.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        rate_limiting_manager,
         tags: tags.clone(),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: config.gateway.relay.clone(),
         include_raw_usage: false, // batch inference does not support include_raw_usage (#5452)
+        include_raw_response: false, // batch inference does not support include_raw_response
     };
 
     let inference_models = InferenceModels {
@@ -1025,6 +1027,7 @@ pub async fn write_completed_batch_inference<'a>(
             cached: false,
             finish_reason,
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
+            relay_raw_response: None, // batch inference does not support include_raw_response (#5710)
         };
         let tool_config: Option<ToolCallConfig> = match tool_params {
             Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {
@@ -1079,6 +1082,8 @@ pub async fn write_completed_batch_inference<'a>(
             episode_id,
             variant_name.to_string(),
             false, // batch inference does not support include_raw_usage (#5452)
+            false, // batch inference does not support include_original_response
+            false, // batch inference does not support include_raw_response
         );
         inferences.push(inference_response);
         let metadata = InferenceDatabaseInsertMetadata {
@@ -1412,6 +1417,7 @@ impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             // This is currently unsupported in the batch API
             original_response: None,
+            raw_response: None,
             finish_reason: value.finish_reason,
         })
     }
@@ -1450,6 +1456,7 @@ impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             // This is currently unsupported in the batch API
             original_response: None,
+            raw_response: None,
             finish_reason: value.finish_reason,
         })
     }
