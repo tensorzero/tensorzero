@@ -760,3 +760,11 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
 max_tokens = 100
+
+[functions.json_success.variants.xai-reasoning]
+type = "chat_completion"
+model = "grok-3-mini"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 800
