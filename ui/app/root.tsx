@@ -28,7 +28,6 @@ import {
   InfraErrorType,
   isInfraErrorData,
   isAuthenticationError,
-  isClickHouseError,
   isGatewayConnectionError,
   isClickHouseError,
   classifyError,
