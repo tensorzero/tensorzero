@@ -1,6 +1,7 @@
-use schemars::JsonSchema;
 use serde::Serialize;
-use tensorzero_derive::{TensorZeroDeserialize, export_schema};
+use tensorzero_derive::TensorZeroDeserialize;
+#[cfg(feature = "json-schema-bindings")]
+use tensorzero_derive::export_schema;
 
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{ClickhouseType, QueryParameter};
@@ -9,30 +10,46 @@ use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 /// Filter tree for querying datapoints.
 /// This is similar to `InferenceFilter` but without metric filters, as datapoints don't have associated metrics.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum DatapointFilter {
     /// Filter by tag key-value pair
-    #[schemars(title = "TagDatapointFilter")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "TagDatapointFilter")
+    )]
     Tag(TagFilter),
 
     /// Filter by datapoint update time
-    #[schemars(title = "TimeDatapointFilter")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "TimeDatapointFilter")
+    )]
     Time(TimeFilter),
 
     /// Logical AND of multiple filters
-    #[schemars(title = "AndDatapointFilter")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "AndDatapointFilter")
+    )]
     And { children: Vec<DatapointFilter> },
 
     /// Logical OR of multiple filters
-    #[schemars(title = "OrDatapointFilter")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "OrDatapointFilter")
+    )]
     Or { children: Vec<DatapointFilter> },
 
     /// Logical NOT of a filter
-    #[schemars(title = "NotDatapointFilter")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "NotDatapointFilter")
+    )]
     Not { child: Box<DatapointFilter> },
 }
 

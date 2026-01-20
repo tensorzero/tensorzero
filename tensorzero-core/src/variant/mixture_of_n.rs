@@ -6,7 +6,6 @@ use std::sync::Arc;
 use futures::StreamExt;
 use futures::future::{join_all, try_join_all};
 use rand::Rng;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -86,8 +85,9 @@ impl MixtureOfNConfig {
     }
 }
 
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedMixtureOfNConfig {
@@ -108,8 +108,9 @@ pub struct FuserConfig {
     pub inner: ChatCompletionConfig,
 }
 
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedFuserConfig {

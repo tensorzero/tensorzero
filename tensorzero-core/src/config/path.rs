@@ -3,7 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use toml::{
     Spanned, Table,
@@ -19,7 +18,8 @@ use crate::{config::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 /// all paths (e.g. `system_schema`) as `ResolvedTomlPath`s, which will
 /// track the original `.toml` file in order to perform correct relative path resolution.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ResolvedTomlPathData {
     __tensorzero_remapped_path: PathBuf,

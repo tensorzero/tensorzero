@@ -68,10 +68,13 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
+#[cfg(feature = "json-schema-bindings")]
 use schemars::JsonSchema;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::{Map, Value};
+#[cfg(feature = "json-schema-bindings")]
+use serde_json::Map;
+use serde_json::Value;
 use std::borrow::Borrow;
 use std::{
     borrow::Cow,
@@ -79,7 +82,9 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tensorzero_derive::{TensorZeroDeserialize, export_schema};
+use tensorzero_derive::TensorZeroDeserialize;
+#[cfg(feature = "json-schema-bindings")]
+use tensorzero_derive::export_schema;
 pub use tensorzero_types::{Input, InputMessage, InputMessageContent, TextKind, ToolCallWrapper};
 use uuid::Uuid;
 
@@ -962,19 +967,32 @@ pub enum ContentBlockOutput {
 
 /// Defines the types of content block that can come from a `chat` function
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub enum ContentBlockChatOutput {
-    #[schemars(title = "ContentBlockChatOutputText")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "ContentBlockChatOutputText")
+    )]
     Text(Text),
-    #[schemars(title = "ContentBlockChatOutputToolCall")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "ContentBlockChatOutputToolCall")
+    )]
     ToolCall(InferenceResponseToolCall),
-    #[schemars(title = "ContentBlockChatOutputThought")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "ContentBlockChatOutputThought")
+    )]
     Thought(Thought),
-    #[schemars(title = "ContentBlockChatOutputUnknown")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "ContentBlockChatOutputUnknown")
+    )]
     Unknown(Unknown),
 }
 
@@ -1416,8 +1434,9 @@ pub struct JsonInferenceResult {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
@@ -2218,6 +2237,7 @@ where
     Ok(())
 }
 
+#[cfg(feature = "json-schema-bindings")]
 pub(super) fn schema_for_delete_field(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
     let mut map = Map::new();
     map.insert("type".to_owned(), Value::String("boolean".to_owned()));

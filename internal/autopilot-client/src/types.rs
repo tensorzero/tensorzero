@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 // Re-export types from tensorzero-types that InputMessage depends on
-use schemars::JsonSchema;
 use tensorzero_derive::TensorZeroDeserialize;
 pub use tensorzero_types::{
     Base64File, File, InputMessage, InputMessageContent, ObjectStoragePointer, RawText, Role,
@@ -162,7 +161,8 @@ pub struct AutopilotSideInfo {
 
 /// Side info for optimization workflow tool (hidden from LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OptimizationWorkflowSideInfo {
     /// Polling interval in seconds (default: 60).
     #[serde(default = "default_poll_interval_secs")]

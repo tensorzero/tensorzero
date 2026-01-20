@@ -10,11 +10,11 @@ use std::fmt;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use strum::AsRefStr;
 use tensorzero_derive::TensorZeroDeserialize;
+#[cfg(feature = "json-schema-bindings")]
 use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
@@ -38,15 +38,16 @@ use super::config::DynamicToolConfig;
 /// as there's not really anything we can do besides experiment with them.
 /// They are a separate type `ProviderTool`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(AsRefStr, Clone, Debug, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(AsRefStr, Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
-    #[schemars(title = "FunctionTool")]
+    #[cfg_attr(feature = "json-schema-bindings", schemars(title = "FunctionTool"))]
     Function(FunctionTool), // Custom deserializer below accepts no type or type="client_side_function" (legacy)
-    #[schemars(title = "OpenAICustomTool")]
+    #[cfg_attr(feature = "json-schema-bindings", schemars(title = "OpenAICustomTool"))]
     #[serde(rename = "openai_custom")]
     OpenAICustom(OpenAICustomTool),
 }
@@ -194,7 +195,8 @@ impl Tool {
 /// Notably, we assume there is a JSON schema `parameters` that specifies the
 /// set of arguments that the tool will accept.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -263,7 +265,8 @@ impl FunctionTool {
 /// This only applies to the Chat Completions API. The Responses API has a slightly different request
 /// shape so we implement a conversion in `responses.rs`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -283,19 +286,27 @@ impl fmt::Display for OpenAICustomTool {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {
-    #[schemars(title = "OpenAICustomToolFormatText")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "OpenAICustomToolFormatText")
+    )]
     Text,
-    #[schemars(title = "OpenAICustomToolFormatGrammar")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "OpenAICustomToolFormatGrammar")
+    )]
     Grammar { grammar: OpenAIGrammarDefinition },
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OpenAIGrammarDefinition {
     pub syntax: OpenAIGrammarSyntax,
@@ -303,7 +314,8 @@ pub struct OpenAIGrammarDefinition {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIGrammarSyntax {
@@ -338,8 +350,12 @@ impl OpenAICustomTool {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[schemars(title = "ProviderToolScopeModelProvider")]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "json-schema-bindings",
+    schemars(title = "ProviderToolScopeModelProvider")
+)]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
 pub struct ProviderToolScopeModelProvider {
     pub model_name: String,
@@ -348,9 +364,10 @@ pub struct ProviderToolScopeModelProvider {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
 pub enum ProviderToolScope {
     #[default]
@@ -376,7 +393,8 @@ impl ProviderToolScope {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]

@@ -1,16 +1,19 @@
 use super::{deserialize_delete, serialize_delete};
+#[cfg(feature = "json-schema-bindings")]
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ExtraHeader {
     pub name: String,
     #[serde(flatten)]
@@ -18,7 +21,8 @@ pub struct ExtraHeader {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum ExtraHeaderKind {
@@ -80,17 +84,23 @@ pub struct FullExtraHeadersConfig {
 }
 
 pub mod dynamic {
+    #[cfg(feature = "json-schema-bindings")]
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
+    #[cfg(feature = "json-schema-bindings")]
     use tensorzero_derive::export_schema;
 
     #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-    #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+    #[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
-    #[export_schema]
+    #[cfg_attr(feature = "json-schema-bindings", export_schema)]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraHeader {
-        #[schemars(title = "ProviderExtraHeader")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "ProviderExtraHeader")
+        )]
         #[deprecated(note = "Migrate to `ModelProvider` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProvider` instead.
         Provider {
@@ -101,7 +111,10 @@ pub mod dynamic {
             /// The value of the HTTP header (e.g. `feature1,feature2,feature3`)
             value: String,
         },
-        #[schemars(title = "ProviderExtraHeaderDelete")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "ProviderExtraHeaderDelete")
+        )]
         #[deprecated(note = "Migrate to `ModelProviderDelete` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProviderDelete` instead.
         ProviderDelete {
@@ -113,11 +126,17 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
+            #[cfg_attr(
+                feature = "json-schema-bindings",
+                schemars(schema_with = "super::super::schema_for_delete_field")
+            )]
             /// Set to true to remove the header from the model provider request
             delete: (),
         },
-        #[schemars(title = "VariantExtraHeader")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "VariantExtraHeader")
+        )]
         Variant {
             /// A variant name in your configuration (e.g. `my_variant`)
             variant_name: String,
@@ -126,7 +145,10 @@ pub mod dynamic {
             /// The value of the HTTP header (e.g. `feature1,feature2,feature3`)
             value: String,
         },
-        #[schemars(title = "VariantExtraHeaderDelete")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "VariantExtraHeaderDelete")
+        )]
         VariantDelete {
             /// A variant name in your configuration (e.g. `my_variant`)
             variant_name: String,
@@ -136,11 +158,17 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
+            #[cfg_attr(
+                feature = "json-schema-bindings",
+                schemars(schema_with = "super::super::schema_for_delete_field")
+            )]
             /// Set to true to remove the header from the model provider request
             delete: (),
         },
-        #[schemars(title = "ModelProviderExtraHeader")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "ModelProviderExtraHeader")
+        )]
         ModelProvider {
             /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
             model_name: String,
@@ -151,7 +179,10 @@ pub mod dynamic {
             /// The value of the HTTP header (e.g. `feature1,feature2,feature3`)
             value: String,
         },
-        #[schemars(title = "ModelProviderExtraHeaderDelete")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "ModelProviderExtraHeaderDelete")
+        )]
         ModelProviderDelete {
             /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
             model_name: String,
@@ -163,18 +194,27 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
+            #[cfg_attr(
+                feature = "json-schema-bindings",
+                schemars(schema_with = "super::super::schema_for_delete_field")
+            )]
             /// Set to true to remove the header from the model provider request
             delete: (),
         },
-        #[schemars(title = "AlwaysExtraHeader")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "AlwaysExtraHeader")
+        )]
         Always {
             /// The name of the HTTP header (e.g. `anthropic-beta`)
             name: String,
             /// The value of the HTTP header (e.g. `feature1,feature2,feature3`)
             value: String,
         },
-        #[schemars(title = "AlwaysExtraHeaderDelete")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "AlwaysExtraHeaderDelete")
+        )]
         AlwaysDelete {
             /// The name of the HTTP header (e.g. `anthropic-beta`)
             name: String,
@@ -182,7 +222,10 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
+            #[cfg_attr(
+                feature = "json-schema-bindings",
+                schemars(schema_with = "super::super::schema_for_delete_field")
+            )]
             /// Set to true to remove the header from the model provider request
             delete: (),
         },

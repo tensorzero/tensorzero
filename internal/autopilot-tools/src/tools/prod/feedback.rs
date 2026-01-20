@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
+use schemars::Schema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{FeedbackParams, FeedbackResponse};
@@ -15,7 +15,8 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the feedback tool (visible to LLM).
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedbackToolParams {
     /// The episode ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
     #[serde(default)]

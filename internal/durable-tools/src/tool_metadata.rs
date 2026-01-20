@@ -1,4 +1,6 @@
-use schemars::{JsonSchema, Schema, SchemaGenerator};
+use schemars::Schema;
+#[cfg(feature = "json-schema-bindings")]
+use schemars::{JsonSchema, SchemaGenerator};
 use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::time::Duration;
@@ -67,17 +69,35 @@ pub trait ToolMetadata: Send + Sync + 'static {
     ///
     /// Must implement:
     /// - `Serialize` and `DeserializeOwned` for JSON serialization
-    /// - `JsonSchema` for schema generation
+    /// - `JsonSchema` for schema generation (when `json-schema-bindings` feature is enabled)
     /// - `Send + Sync + 'static` for thread-safety
+    #[cfg(feature = "json-schema-bindings")]
     type LlmParams: Serialize + DeserializeOwned + JsonSchema + Send + Sync + 'static;
+
+    /// The LLM-visible parameter type.
+    ///
+    /// This is what the LLM sees and can fill in when calling the tool.
+    ///
+    /// Must implement:
+    /// - `Serialize` and `DeserializeOwned` for JSON serialization
+    /// - `Send + Sync + 'static` for thread-safety
+    #[cfg(not(feature = "json-schema-bindings"))]
+    type LlmParams: Serialize + DeserializeOwned + Send + Sync + 'static;
 
     /// JSON Schema for the tool's LLM-visible parameters.
     ///
     /// By default, this is derived from the `LlmParams` type using `schemars`.
     /// Override this if you need custom schema generation.
+    #[cfg(feature = "json-schema-bindings")]
     fn parameters_schema() -> ToolResult<Schema> {
         Ok(SchemaGenerator::default().into_root_schema_for::<Self::LlmParams>())
     }
+
+    /// JSON Schema for the tool's LLM-visible parameters.
+    ///
+    /// Override this to provide a custom schema when `json-schema-bindings` feature is not enabled.
+    #[cfg(not(feature = "json-schema-bindings"))]
+    fn parameters_schema() -> ToolResult<Schema>;
 
     /// Execution timeout for this tool.
     ///

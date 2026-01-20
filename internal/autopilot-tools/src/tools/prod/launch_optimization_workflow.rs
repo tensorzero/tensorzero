@@ -9,7 +9,7 @@ use durable_tools::{NonControlToolError, TaskTool, ToolContext, ToolMetadata, To
 use crate::error::AutopilotToolError;
 
 use autopilot_client::OptimizationWorkflowSideInfo;
-use schemars::{JsonSchema, Schema};
+use schemars::Schema;
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::inferences::InferenceOutputSource;
 use tensorzero_core::endpoints::stored_inferences::v1::types::{InferenceFilter, OrderBy};
@@ -19,7 +19,8 @@ use tensorzero_core::optimization::{
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LaunchOptimizationWorkflowToolParams {
     /// The function name to optimize.
     pub function_name: String,

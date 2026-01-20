@@ -17,7 +17,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
 sqlx.workspace = true
-schemars.workspace = true
+schemars = { workspace = true, optional = true }
 thiserror.workspace = true
 ts-rs = { workspace = true, optional = true }
 url.workspace = true
@@ -30,3 +30,4 @@ workspace = true
 
 [features]
 ts-bindings = ["dep:ts-rs", "tensorzero-types/ts-bindings"]
+json-schema-bindings = ["dep:schemars", "tensorzero-types/json-schema-bindings"]

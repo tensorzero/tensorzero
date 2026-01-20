@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
+#[cfg(feature = "json-schema-bindings")]
 use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
@@ -15,7 +15,8 @@ use crate::stored_inference::StoredInference;
 pub use crate::endpoints::shared_types::OrderDirection;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FloatMetricFilter {
     pub metric_name: String,
@@ -24,7 +25,8 @@ pub struct FloatMetricFilter {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct BooleanMetricFilter {
     pub metric_name: String,
@@ -33,7 +35,8 @@ pub struct BooleanMetricFilter {
 
 /// Filter by tag key-value pair.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TagFilter {
     pub key: String,
@@ -43,18 +46,20 @@ pub struct TagFilter {
 
 /// Filter by timestamp.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TimeFilter {
     #[cfg_attr(feature = "ts-bindings", ts(type = "Date"))]
-    #[schemars(with = "String")]
+    #[cfg_attr(feature = "json-schema-bindings", schemars(with = "String"))]
     pub time: DateTime<Utc>,
     pub comparison_operator: TimeComparisonOperator,
 }
 
 /// Comparison operators for float metrics.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum FloatComparisonOperator {
     #[serde(rename = "<")]
@@ -73,7 +78,8 @@ pub enum FloatComparisonOperator {
 
 /// Comparison operators for timestamps.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TimeComparisonOperator {
     #[serde(rename = "<")]
@@ -92,7 +98,8 @@ pub enum TimeComparisonOperator {
 
 /// Comparison operators for tag filters.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TagComparisonOperator {
     #[serde(rename = "=")]
@@ -103,7 +110,8 @@ pub enum TagComparisonOperator {
 
 /// Filter by whether an inference has a demonstration.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DemonstrationFeedbackFilter {
     pub has_demonstration: bool,
@@ -112,7 +120,8 @@ pub struct DemonstrationFeedbackFilter {
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "by")]
 #[serde(rename_all = "snake_case")]
@@ -120,11 +129,11 @@ pub enum OrderByTerm {
     // These titles become the names of the top-level OrderBy structs in the generated
     // schema, because it's flattened.
     /// Creation timestamp of the item.
-    #[schemars(title = "OrderByTimestamp")]
+    #[cfg_attr(feature = "json-schema-bindings", schemars(title = "OrderByTimestamp"))]
     Timestamp,
 
     /// Value of a metric.
-    #[schemars(title = "OrderByMetric")]
+    #[cfg_attr(feature = "json-schema-bindings", schemars(title = "OrderByMetric"))]
     Metric {
         /// The name of the metric to order by.
         name: String,
@@ -135,13 +144,17 @@ pub enum OrderByTerm {
     ///
     /// Current relevance metric is very rudimentary (just term frequency), but we plan
     /// to improve it in the future.
-    #[schemars(title = "OrderBySearchRelevance")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "OrderBySearchRelevance")
+    )]
     SearchRelevance,
 }
 
 /// Order by clauses for querying inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OrderBy {
     /// The property to order by.
@@ -154,51 +167,77 @@ pub struct OrderBy {
 
 /// Filters for querying inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub enum InferenceFilter {
     /// Filter by the value of a float metric
-    #[schemars(title = "InferenceFilterFloatMetric")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InferenceFilterFloatMetric")
+    )]
     FloatMetric(FloatMetricFilter),
 
     /// Filter by the value of a boolean metric
-    #[schemars(title = "InferenceFilterBooleanMetric")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InferenceFilterBooleanMetric")
+    )]
     BooleanMetric(BooleanMetricFilter),
 
     /// Filter by whether an inference has a demonstration.
-    #[schemars(title = "InferenceFilterDemonstrationFeedback")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InferenceFilterDemonstrationFeedback")
+    )]
     DemonstrationFeedback(DemonstrationFeedbackFilter),
 
     /// Filter by tag key-value pair
-    #[schemars(title = "InferenceFilterTag")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InferenceFilterTag")
+    )]
     Tag(TagFilter),
 
     /// Filter by the timestamp of an inference.
-    #[schemars(title = "InferenceFilterTime")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InferenceFilterTime")
+    )]
     Time(TimeFilter),
 
     /// Logical AND of multiple filters
-    #[schemars(title = "InferenceFilterAnd")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InferenceFilterAnd")
+    )]
     And { children: Vec<InferenceFilter> },
 
     /// Logical OR of multiple filters
-    #[schemars(title = "InferenceFilterOr")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InferenceFilterOr")
+    )]
     Or { children: Vec<InferenceFilter> },
 
     /// Logical NOT of a filter
-    #[schemars(title = "InferenceFilterNot")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InferenceFilterNot")
+    )]
     Not { child: Box<InferenceFilter> },
 }
 
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Default, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Deserialize, Default, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct ListInferencesRequest {
     /// Optional function name to filter inferences by.
     /// If provided, only inferences from this function will be returned.
@@ -324,9 +363,10 @@ impl ListInferencesRequest {
 /// Request to get specific inferences by their IDs.
 /// Used by the `POST /v1/inferences/get_inferences` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct GetInferencesRequest {
     /// The IDs of the inferences to retrieve. Required.
     pub ids: Vec<Uuid>,
@@ -347,9 +387,10 @@ pub struct GetInferencesRequest {
 
 /// Response containing the requested inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,

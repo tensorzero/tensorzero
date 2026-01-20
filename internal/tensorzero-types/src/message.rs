@@ -6,63 +6,91 @@ use crate::content::{Arguments, RawText, System, Template, Text, Thought, Unknow
 use crate::file::File;
 use crate::role::Role;
 use crate::tool::{ToolCallWrapper, ToolResult};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tensorzero_derive::{TensorZeroDeserialize, export_schema};
+use tensorzero_derive::TensorZeroDeserialize;
+#[cfg(feature = "json-schema-bindings")]
+use tensorzero_derive::export_schema;
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 /// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(
     feature = "ts-bindings",
     ts(export, tag = "type", rename_all = "snake_case")
 )]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub enum InputMessageContent {
-    #[schemars(title = "InputMessageContentText")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InputMessageContentText")
+    )]
     Text(Text),
-    #[schemars(title = "InputMessageContentTemplate")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InputMessageContentTemplate")
+    )]
     Template(Template),
-    #[schemars(title = "InputMessageContentToolCall")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InputMessageContentToolCall")
+    )]
     ToolCall(ToolCallWrapper),
-    #[schemars(title = "InputMessageContentToolResult")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InputMessageContentToolResult")
+    )]
     ToolResult(ToolResult),
-    #[schemars(title = "InputMessageContentRawText")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InputMessageContentRawText")
+    )]
     RawText(RawText),
-    #[schemars(title = "InputMessageContentThought")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InputMessageContentThought")
+    )]
     Thought(Thought),
     #[serde(alias = "image")]
-    #[schemars(title = "InputMessageContentFile")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InputMessageContentFile")
+    )]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
     /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
-    #[schemars(title = "InputMessageContentUnknown")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "InputMessageContentUnknown")
+    )]
     Unknown(Unknown),
 }
 
 /// API representation of an input to a model.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct Input {
     /// System prompt of the input.
     #[serde(skip_serializing_if = "Option::is_none")]

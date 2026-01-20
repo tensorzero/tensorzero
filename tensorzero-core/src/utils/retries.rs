@@ -1,6 +1,5 @@
 #[expect(clippy::disallowed_types)]
 use backon::{ExponentialBuilder, Retryable};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, time::Duration};
 
@@ -20,7 +19,8 @@ use pyo3::prelude::*;
  */
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Copy, Clone, JsonSchema, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Deserialize, Copy, Clone, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RetryConfig {

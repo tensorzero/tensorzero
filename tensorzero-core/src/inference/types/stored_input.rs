@@ -16,12 +16,15 @@ use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{RawText, Role, Text, Thought, ToolCall, ToolResult, Unknown};
 use crate::tool::ToolCallWrapper;
 use futures::future::try_join_all;
+#[cfg(feature = "json-schema-bindings")]
 use schemars::JsonSchema;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::ops::Deref;
-use tensorzero_derive::{TensorZeroDeserialize, export_schema};
+use tensorzero_derive::TensorZeroDeserialize;
+#[cfg(feature = "json-schema-bindings")]
+use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -35,11 +38,12 @@ use pyo3::prelude::*;
 ///
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct StoredInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
@@ -99,10 +103,11 @@ impl StoredInput {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
 pub struct StoredInputMessage {
     pub role: Role,
@@ -241,28 +246,53 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub enum StoredInputMessageContent {
-    #[schemars(title = "StoredInputMessageContentText")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInputMessageContentText")
+    )]
     Text(Text),
-    #[schemars(title = "StoredInputMessageContentTemplate")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInputMessageContentTemplate")
+    )]
     Template(Template),
-    #[schemars(title = "StoredInputMessageContentToolCall")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInputMessageContentToolCall")
+    )]
     ToolCall(ToolCall),
-    #[schemars(title = "StoredInputMessageContentToolResult")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInputMessageContentToolResult")
+    )]
     ToolResult(ToolResult),
-    #[schemars(title = "StoredInputMessageContentRawText")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInputMessageContentRawText")
+    )]
     RawText(RawText),
-    #[schemars(title = "StoredInputMessageContentThought")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInputMessageContentThought")
+    )]
     Thought(Thought),
     #[serde(alias = "image")]
-    #[schemars(title = "StoredInputMessageContentFile", with = "ObjectStoragePointer")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInputMessageContentFile", with = "ObjectStoragePointer")
+    )]
     File(Box<StoredFile>),
-    #[schemars(title = "StoredInputMessageContentUnknown")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInputMessageContentUnknown")
+    )]
     Unknown(Unknown),
 }
 

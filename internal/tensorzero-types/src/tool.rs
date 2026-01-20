@@ -7,9 +7,9 @@
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+#[cfg(feature = "json-schema-bindings")]
 use tensorzero_derive::export_schema;
 
 /// In most cases, tool call arguments are a string.
@@ -30,10 +30,11 @@ where
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct ToolCall {
     pub id: String,
     pub name: String,
@@ -62,10 +63,11 @@ impl ToolCall {
 /// in the `arguments` field and the name in the `name` field.
 /// We support looping this back through the TensorZero inference API via the ToolCallWrapper
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct InferenceResponseToolCall {
     /// A Tool Call ID to match up with tool call responses. See #4058.
     pub id: String,
@@ -102,10 +104,11 @@ impl InferenceResponseToolCall {
 /// Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
 /// but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(untagged)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub enum ToolCallWrapper {
     ToolCall(ToolCall), // the format we store in the database
     InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
@@ -150,10 +153,11 @@ impl From<ToolCallWrapper> for ToolCall {
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
@@ -180,17 +184,21 @@ impl ToolResult {
 ///
 /// This enum is used to denote this tool choice.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub enum ToolChoice {
     None,
     #[default]
     Auto,
     Required,
     /// Forces the LLM to call a specific tool. The String is the name of the tool.
-    #[schemars(title = "ToolChoiceSpecific")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "ToolChoiceSpecific")
+    )]
     Specific(String),
 }

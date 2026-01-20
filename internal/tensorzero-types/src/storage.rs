@@ -3,8 +3,8 @@
 //! This module contains types for representing object storage locations.
 
 use object_store::path::Path;
-use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "json-schema-bindings")]
 use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
@@ -14,12 +14,16 @@ use pyo3::prelude::*;
 /// Currently, we only support S3-compatible object storage and local filesystem storage
 /// We test against Amazon S3, GCS, Cloudflare R2, and Minio
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StorageKind {
-    #[schemars(title = "StorageKindS3Compatible")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StorageKindS3Compatible")
+    )]
     S3Compatible {
         bucket_name: Option<String>,
         region: Option<String>,
@@ -32,11 +36,17 @@ pub enum StorageKind {
         #[serde(default)]
         prefix: String,
     },
-    #[schemars(title = "StorageKindFilesystem")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StorageKindFilesystem")
+    )]
     Filesystem { path: String },
     // This must be set explicitly in `tensorzero.toml` to allow image requests to succeed
     // By default, requests will fail (we'll have a `None` for the outer `ObjectStoreData`)
-    #[schemars(title = "StorageKindDisabled")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StorageKindDisabled")
+    )]
     Disabled,
 }
 
@@ -45,9 +55,10 @@ pub enum StorageKind {
 /// unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
 /// file data first.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoragePath {
     pub kind: StorageKind,
@@ -56,7 +67,7 @@ pub struct StoragePath {
         deserialize_with = "deserialize_storage_path"
     )]
     #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
-    #[schemars(with = "String")]
+    #[cfg_attr(feature = "json-schema-bindings", schemars(with = "String"))]
     pub path: object_store::path::Path,
 }
 

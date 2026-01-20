@@ -4,20 +4,24 @@ use crate::inference::types::extra_headers::{
 
 use super::{deserialize_delete, serialize_delete};
 use crate::inference::types::extra_body::dynamic::ExtraBody;
+#[cfg(feature = "json-schema-bindings")]
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+#[cfg(feature = "json-schema-bindings")]
 use tensorzero_derive::export_schema;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
     #[serde(flatten)]
@@ -25,11 +29,15 @@ pub struct ExtraBodyReplacement {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExtraBodyReplacementKind {
-    #[schemars(title = "ExtraBodyReplacementKindValue")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "ExtraBodyReplacementKindValue")
+    )]
     Value(Value),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
     #[serde(
@@ -185,7 +193,8 @@ pub fn prepare_relay_extra_headers(
 /// The 'InferenceExtraBody' options provided directly in an inference request.
 /// These have not yet been filtered by variant name
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraBody {
     extra_body: Vec<DynamicExtraBody>,
@@ -234,17 +243,23 @@ pub struct FullExtraBodyConfig {
 }
 
 pub mod dynamic {
+    #[cfg(feature = "json-schema-bindings")]
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
+    #[cfg(feature = "json-schema-bindings")]
     use tensorzero_derive::export_schema;
 
     #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-    #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+    #[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
-    #[export_schema]
+    #[cfg_attr(feature = "json-schema-bindings", export_schema)]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraBody {
-        #[schemars(title = "ProviderExtraBody")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "ProviderExtraBody")
+        )]
         #[deprecated(note = "Migrate to `ModelProvider` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProvider` instead.
         Provider {
@@ -255,7 +270,10 @@ pub mod dynamic {
             /// The value to set the field to
             value: serde_json::Value,
         },
-        #[schemars(title = "ProviderExtraBodyDelete")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "ProviderExtraBodyDelete")
+        )]
         #[deprecated(note = "Migrate to `ModelProviderDelete` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProviderDelete` instead.
         ProviderDelete {
@@ -267,11 +285,14 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
+            #[cfg_attr(
+                feature = "json-schema-bindings",
+                schemars(schema_with = "super::super::schema_for_delete_field")
+            )]
             /// Set to true to remove the field from the model provider request's body
             delete: (),
         },
-        #[schemars(title = "VariantExtraBody")]
+        #[cfg_attr(feature = "json-schema-bindings", schemars(title = "VariantExtraBody"))]
         Variant {
             /// A variant name in your configuration (e.g. `my_variant`)
             variant_name: String,
@@ -280,7 +301,10 @@ pub mod dynamic {
             /// The value to set the field to
             value: serde_json::Value,
         },
-        #[schemars(title = "VariantExtraBodyDelete")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "VariantExtraBodyDelete")
+        )]
         VariantDelete {
             /// A variant name in your configuration (e.g. `my_variant`)
             variant_name: String,
@@ -290,11 +314,17 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
+            #[cfg_attr(
+                feature = "json-schema-bindings",
+                schemars(schema_with = "super::super::schema_for_delete_field")
+            )]
             /// Set to true to remove the field from the model provider request's body
             delete: (),
         },
-        #[schemars(title = "ModelProviderExtraBody")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "ModelProviderExtraBody")
+        )]
         ModelProvider {
             /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
             model_name: String,
@@ -305,7 +335,10 @@ pub mod dynamic {
             /// The value to set the field to
             value: serde_json::Value,
         },
-        #[schemars(title = "ModelProviderExtraBodyDelete")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "ModelProviderExtraBodyDelete")
+        )]
         ModelProviderDelete {
             /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
             model_name: String,
@@ -317,18 +350,24 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
+            #[cfg_attr(
+                feature = "json-schema-bindings",
+                schemars(schema_with = "super::super::schema_for_delete_field")
+            )]
             /// Set to true to remove the field from the model provider request's body
             delete: (),
         },
-        #[schemars(title = "AlwaysExtraBody")]
+        #[cfg_attr(feature = "json-schema-bindings", schemars(title = "AlwaysExtraBody"))]
         Always {
             /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
             /// The value to set the field to
             value: serde_json::Value,
         },
-        #[schemars(title = "AlwaysExtraBodyDelete")]
+        #[cfg_attr(
+            feature = "json-schema-bindings",
+            schemars(title = "AlwaysExtraBodyDelete")
+        )]
         AlwaysDelete {
             /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
@@ -336,7 +375,10 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
+            #[cfg_attr(
+                feature = "json-schema-bindings",
+                schemars(schema_with = "super::super::schema_for_delete_field")
+            )]
             /// Set to true to remove the field from the model provider request's body
             delete: (),
         },

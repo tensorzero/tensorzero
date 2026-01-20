@@ -104,7 +104,7 @@ pub enum ExperimentationConfig {
     // (serde enums cannot be #[serde(flatten)])
     // we can write a custom deserializer for this if we want
     TrackAndStop(track_and_stop::TrackAndStopConfig),
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     #[cfg(test)]
     AlwaysFails(AlwaysFailsConfig),
 }

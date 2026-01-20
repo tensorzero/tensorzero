@@ -12,6 +12,7 @@ use crate::endpoints::datasets::v1::types::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
+#[cfg(feature = "ts-bindings")]
 use crate::inference::types::extra_body::DynamicExtraBody;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 #[cfg(feature = "pyo3")]
@@ -33,7 +34,6 @@ use chrono::{DateTime, Utc};
 use pyo3::types::PyList;
 #[cfg(feature = "pyo3")]
 use pyo3::{IntoPyObjectExt, prelude::*};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_derive::TensorZeroDeserialize;
@@ -70,14 +70,21 @@ pub struct SimpleStoredSampleInfo {
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StoredInference {
-    #[schemars(title = "StoredInferenceChat")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInferenceChat")
+    )]
     Chat(StoredChatInference),
-    #[schemars(title = "StoredInferenceJson")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "StoredInferenceJson")
+    )]
     Json(StoredJsonInference),
 }
 
@@ -257,7 +264,8 @@ impl StoredInferenceDatabase {
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StoredChatInference {
     pub function_name: String,
@@ -266,7 +274,7 @@ pub struct StoredChatInference {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
-    #[schemars(with = "String")]
+    #[cfg_attr(feature = "json-schema-bindings", schemars(with = "String"))]
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
@@ -346,7 +354,8 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StoredJsonInference {
     pub function_name: String,
@@ -355,7 +364,7 @@ pub struct StoredJsonInference {
     pub output: JsonInferenceOutput,
     #[serde(default)]
     pub dispreferred_outputs: Vec<JsonInferenceOutput>,
-    #[schemars(with = "String")]
+    #[cfg_attr(feature = "json-schema-bindings", schemars(with = "String"))]
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
@@ -366,7 +375,7 @@ pub struct StoredJsonInference {
     #[cfg_attr(feature = "ts-bindings", ts(as = "Vec<DynamicExtraBody>"))]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
-    #[schemars(!default)]
+    #[cfg_attr(feature = "json-schema-bindings", schemars(!default))]
     pub inference_params: InferenceParams,
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub processing_time_ms: Option<u64>,

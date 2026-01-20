@@ -291,6 +291,8 @@ def generate_rust_schemas(repo_root: Path, schema_dir: Path) -> None:
                 "tensorzero-core",
                 "-p",
                 "tensorzero-types",
+                "--features",
+                "json-schema-bindings",
                 "export_schema",
             ],
             cwd=repo_root,

@@ -16,6 +16,7 @@
 
 - Use `_` instead of `-` in API routes.
 - Gate `ts_rs::TS` derives and `#[ts(...)]` attributes behind `#[cfg_attr(feature = "ts-bindings", ...)]` to reduce compile times for normal builds; `pnpm build-bindings` enables this feature automatically.
+- Gate `schemars::JsonSchema` derives, `#[schemars(...)]` attributes, and `#[export_schema]` behind `#[cfg_attr(feature = "json-schema-bindings", ...)]` to reduce compile times for normal builds; `pnpm generate-python-schemas` enables this feature automatically.
 - For any `Option` types visible from the frontend, include `#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]` and `#[serde(skip_serializing_if = "Option::is_none")]` so `None` values are not returned over the wire. In very rare cases we may decide do return `null`s, but in general we want to omit them.
 - Some tests make HTTP requests to the gateway; to start the gateway, you can run `cargo run-e2e`. (This gateway has dependencies on some docker containers, and it's appropriate to ask the user to run `docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up`.)
 - We use RFC 3339 as the standard format for datetime.

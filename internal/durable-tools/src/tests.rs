@@ -6,7 +6,6 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::ToolContext;
@@ -22,7 +21,8 @@ use crate::tool_metadata::ToolMetadata;
 // Test Fixtures
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct EchoParams {
     message: String,
 }

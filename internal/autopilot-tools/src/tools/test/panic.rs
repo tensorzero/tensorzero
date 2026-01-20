@@ -4,11 +4,10 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the panic tool (visible to LLM).
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct PanicToolParams {
     /// The panic message.
     pub panic_message: String,

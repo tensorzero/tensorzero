@@ -7,10 +7,11 @@
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::types::PyModule;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tensorzero_derive::{TensorZeroDeserialize, export_schema};
+use tensorzero_derive::TensorZeroDeserialize;
+#[cfg(feature = "json-schema-bindings")]
+use tensorzero_derive::export_schema;
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -25,24 +26,32 @@ pub struct Arguments(
 );
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct Template {
     pub name: String,
-    #[schemars(with = "Map<String, Value>")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(with = "Map<String, Value>")
+    )]
     pub arguments: Arguments,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub enum System {
     Text(String),
-    #[schemars(with = "Map<String, Value>")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(with = "Map<String, Value>")
+    )]
     Template(Arguments),
 }
 
@@ -55,11 +64,12 @@ pub enum System {
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct Text {
     pub text: String,
 }
@@ -81,11 +91,12 @@ impl Text {
 /// Struct that represents raw text content that should be passed directly to the model
 /// without any template processing or validation
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct RawText {
     pub value: String,
 }
@@ -107,10 +118,11 @@ impl RawText {
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct Unknown {
     /// The underlying content block to be passed to the model provider.
     pub data: Value,
@@ -230,23 +242,28 @@ impl Unknown {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub enum ThoughtSummaryBlock {
-    #[schemars(title = "ThoughtSummaryBlockSummaryText")]
+    #[cfg_attr(
+        feature = "json-schema-bindings",
+        schemars(title = "ThoughtSummaryBlockSummaryText")
+    )]
     SummaryText { text: String },
 }
 
 /// Struct that represents a model's reasoning
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct Thought {
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,

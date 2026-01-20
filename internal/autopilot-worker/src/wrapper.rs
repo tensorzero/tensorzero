@@ -198,6 +198,10 @@ where
         T::description()
     }
 
+    fn parameters_schema() -> DurableToolResult<Schema> {
+        T::parameters_schema()
+    }
+
     type LlmParams = T::LlmParams;
     type SideInfo = AutopilotSideInfo;
     /// The wrapped tool "returns" by writing to the autopilot API
@@ -380,7 +384,7 @@ mod tests {
     use super::*;
     use durable_tools::{CreateEventResponse, TensorZeroClientError};
     use mockall::mock;
-    use schemars::JsonSchema;
+    use schemars::JsonSchema as TestJsonSchema;
     use tensorzero::ActionInput;
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
@@ -518,7 +522,7 @@ mod tests {
 
     // ===== Test TaskTool for wrapper testing =====
 
-    #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+    #[derive(Debug, Clone, Serialize, Deserialize, TestJsonSchema)]
     struct TestTaskToolParams {
         message: String,
     }
@@ -560,7 +564,7 @@ mod tests {
 
     // ===== Test SimpleTool for wrapper testing =====
 
-    #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+    #[derive(Debug, Clone, Serialize, Deserialize, TestJsonSchema)]
     struct TestSimpleToolParams {
         query: String,
     }

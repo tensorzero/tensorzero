@@ -6,7 +6,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-e2e_tests = []
+e2e_tests = ["json-schema-bindings"]
+json-schema-bindings = ["tensorzero-core/json-schema-bindings", "autopilot-client/json-schema-bindings", "durable-tools/json-schema-bindings"]
 
 [dependencies]
 durable-tools = { path = "../durable-tools" }

@@ -6,8 +6,8 @@
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "json-schema-bindings")]
 use tensorzero_derive::export_schema;
 
 use crate::error::{Error, ErrorDetails};
@@ -81,11 +81,12 @@ use super::wire::ToolChoice;
 ///
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields, export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[export_schema]
+#[cfg_attr(feature = "json-schema-bindings", export_schema)]
 pub struct DynamicToolParams {
     /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
     /// If not provided, all static tools are allowed.

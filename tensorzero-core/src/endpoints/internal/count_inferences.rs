@@ -2,7 +2,6 @@
 
 use axum::extract::State;
 use axum::{Json, debug_handler};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
@@ -14,7 +13,8 @@ use crate::utils::gateway::{AppState, AppStateData};
 
 /// Request to count inferences matching the given parameters.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct CountInferencesRequest {
     /// Optional function name to filter inferences by.
@@ -40,7 +40,8 @@ pub struct CountInferencesRequest {
 
 /// Response containing the count of matching inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
+#[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CountInferencesResponse {
     /// The count of inferences matching the query parameters.
