@@ -325,6 +325,7 @@ dependencies = [
  "sqlx",
  "tensorzero-types",
  "thiserror 2.0.17",
+ "tracing",
  "ts-rs",
  "url",
  "uuid",

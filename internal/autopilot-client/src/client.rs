@@ -486,9 +486,27 @@ impl AutopilotClient {
         let body: ApproveAllToolCallsResponse = response.json().await?;
 
         // Spawn durable tasks for each approved tool call
+        let mut spawn_errors: Vec<(Uuid, Box<AutopilotError>)> = Vec::new();
         for tool_call_event_id in &body.tool_call_event_ids {
-            self.handle_tool_call_authorization(session_id, *tool_call_event_id)
-                .await?;
+            if let Err(e) = self
+                .handle_tool_call_authorization(session_id, *tool_call_event_id)
+                .await
+            {
+                tracing::error!(
+                    session_id = %session_id,
+                    tool_call_event_id = %tool_call_event_id,
+                    error = %e,
+                    "Failed to spawn task for approved tool call"
+                );
+                spawn_errors.push((*tool_call_event_id, Box::new(e)));
+            }
+        }
+
+        if !spawn_errors.is_empty() {
+            return Err(AutopilotError::PartialSpawnFailure {
+                response: body,
+                errors: spawn_errors,
+            });
         }
 
         Ok(body)
