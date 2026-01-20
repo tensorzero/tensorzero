@@ -133,8 +133,8 @@ macro_rules! generate_provider_tests {
     ($func:ident) => {
         use $crate::providers::common::test_dynamic_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_dynamic_tool_use_streaming_inference_request_with_provider;
-        use $crate::providers::common::test_inference_params_inference_request_with_provider;
-        use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_dynamic_credentials_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_dynamic_credentials_streaming_inference_request_with_provider;
         use $crate::providers::common::test_provider_type_default_credentials_with_provider;
         use $crate::providers::common::test_provider_type_default_credentials_shorthand_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
@@ -287,18 +287,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_inference_params_inference_request() {
+        async fn test_inference_params_dynamic_credentials_inference_request() {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
-                test_inference_params_inference_request_with_provider(provider).await;
+                test_inference_params_dynamic_credentials_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
-        async fn test_inference_params_streaming_inference_request() {
+        async fn test_inference_params_dynamic_credentials_streaming_inference_request() {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
-                test_inference_params_streaming_inference_request_with_provider(provider).await;
+                test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(provider).await;
             }
         }
 
@@ -4055,7 +4055,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     full_content
 }
 
-pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_inference_params_dynamic_credentials_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
     // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
     if provider.model_name.contains("gemini-2.5-pro") {
         return;
@@ -4311,7 +4313,7 @@ pub async fn check_inference_params_response(
     assert_eq!(output.len(), 1);
 }
 
-pub async fn test_inference_params_streaming_inference_request_with_provider(
+pub async fn test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
