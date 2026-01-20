@@ -693,20 +693,20 @@ max_tokens = 800
 
 [functions.basic_test.variants.hyperbolic]
 type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct"
+model = "openai/gpt-oss-20b"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.hyperbolic-extra-body]
 type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct"
+model = "openai/gpt-oss-20b"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.hyperbolic-extra-headers]
 type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct"
+model = "openai/gpt-oss-20b"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [
@@ -715,13 +715,13 @@ extra_headers = [
 
 [functions.basic_test.variants.hyperbolic-dynamic]
 type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct-dynamic"
+model = "openai/gpt-oss-20b-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.hyperbolic-shorthand]
 type = "chat_completion"
-model = "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct"
+model = "hyperbolic::openai/gpt-oss-20b"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
