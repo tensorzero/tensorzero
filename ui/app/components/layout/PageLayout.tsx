@@ -19,14 +19,15 @@ import { ChevronRight } from "lucide-react";
 
 export interface BreadcrumbSegment {
   label: string;
-  href: string;
+  /** If omitted, segment is rendered as non-clickable text */
+  href?: string;
   /** If true, renders label in monospace font (for IDs, names, etc.) */
   isIdentifier?: boolean;
 }
 
 /**
  * Renders breadcrumb segments for use in PageHeader eyebrow.
- * All segments are clickable links.
+ * Segments with href are clickable links; segments without href are plain text.
  */
 function Breadcrumbs({ segments }: { segments: BreadcrumbSegment[] }) {
   if (segments.length === 0) return null;
@@ -35,15 +36,21 @@ function Breadcrumbs({ segments }: { segments: BreadcrumbSegment[] }) {
     <Breadcrumb>
       <BreadcrumbList className="gap-1.5 text-sm">
         {segments.map((segment, index) => (
-          <BreadcrumbItem key={segment.href}>
-            <BreadcrumbLink asChild>
-              <Link
-                to={segment.href}
-                className={segment.isIdentifier ? "font-mono" : undefined}
-              >
+          <BreadcrumbItem key={segment.href ?? `${index}-${segment.label}`}>
+            {segment.href ? (
+              <BreadcrumbLink asChild>
+                <Link
+                  to={segment.href}
+                  className={segment.isIdentifier ? "font-mono" : undefined}
+                >
+                  {segment.label}
+                </Link>
+              </BreadcrumbLink>
+            ) : (
+              <span className={segment.isIdentifier ? "font-mono" : undefined}>
                 {segment.label}
-              </Link>
-            </BreadcrumbLink>
+              </span>
+            )}
             {index < segments.length - 1 && (
               <BreadcrumbSeparator>
                 <ChevronRight className="h-3 w-3" />

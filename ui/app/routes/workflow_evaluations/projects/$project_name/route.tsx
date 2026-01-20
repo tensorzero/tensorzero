@@ -114,6 +114,7 @@ export default function WorkflowEvaluationProjectPage({
                   label: "Workflow Evaluations",
                   href: "/workflow_evaluations",
                 },
+                { label: "Projects" },
               ]}
             />
           }
