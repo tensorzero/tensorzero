@@ -18,8 +18,11 @@ interface LayoutErrorBoundaryProps {
  * - Page errors (404, resource not found): Shows inline content
  */
 export function LayoutErrorBoundary({ error }: LayoutErrorBoundaryProps) {
-  logger.error(error);
   const [dialogOpen, setDialogOpen] = React.useState(true);
+
+  React.useEffect(() => {
+    logger.error(error);
+  }, [error]);
 
   // Infra errors -> dismissible dialog
   if (isInfraError(error)) {
