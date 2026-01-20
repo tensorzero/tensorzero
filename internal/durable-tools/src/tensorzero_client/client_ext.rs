@@ -703,6 +703,8 @@ impl TensorZeroClient for Client {
                     num_successes: evaluation_stats.evaluation_infos.len(),
                     num_errors: evaluation_stats.evaluation_errors.len(),
                     stats: stats_response,
+                    // HTTP client doesn't support per-datapoint results
+                    datapoint_results: None,
                 })
             }
         }

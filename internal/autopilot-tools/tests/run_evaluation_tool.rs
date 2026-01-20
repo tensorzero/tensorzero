@@ -31,6 +31,7 @@ fn create_mock_run_evaluation_response() -> RunEvaluationResponse {
         num_successes: 95,
         num_errors: 5,
         stats,
+        datapoint_results: None,
     }
 }
 
@@ -53,6 +54,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
         max_datapoints: Some(50),
         precision_targets: HashMap::new(),
         inference_cache: CacheEnabledMode::Off,
+        include_datapoint_results: false,
     };
 
     let side_info = AutopilotSideInfo {
@@ -123,6 +125,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
         max_datapoints: None,
         precision_targets: HashMap::new(),
         inference_cache: CacheEnabledMode::Off,
+        include_datapoint_results: false,
     };
 
     let side_info = AutopilotSideInfo {
@@ -190,6 +193,7 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
         max_datapoints: Some(200),
         precision_targets,
         inference_cache: CacheEnabledMode::ReadOnly,
+        include_datapoint_results: false,
     };
 
     let side_info = AutopilotSideInfo {
@@ -251,6 +255,7 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
         max_datapoints: None,
         precision_targets: HashMap::new(),
         inference_cache: CacheEnabledMode::Off,
+        include_datapoint_results: false,
     };
 
     let side_info = AutopilotSideInfo {
