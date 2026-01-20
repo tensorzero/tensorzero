@@ -143,7 +143,7 @@ impl TensorZeroClient for MockTensorZeroClient {
         &self,
         _dataset_name: String,
         _request: tensorzero::ListDatapointsRequest,
-    ) -> Result<tensorzero::GetDatapointsResponse, TensorZeroClientError> {
+    ) -> Result<tensorzero::ListDatapointsResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 

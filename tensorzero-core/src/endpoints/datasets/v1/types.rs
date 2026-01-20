@@ -445,6 +445,20 @@ pub struct UpdateDatapointMetadataRequest {
     pub metadata: DatapointMetadataUpdate,
 }
 
+/// The format of the response from `list_datapoints`.
+/// Controls whether to return full datapoint objects or only datapoint IDs.
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+#[export_schema]
+pub enum DatapointResponseFormat {
+    /// Return full datapoint objects (default).
+    #[default]
+    Datapoint,
+    /// Return only datapoint IDs.
+    Id,
+}
+
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
 #[derive(Debug, Default, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
@@ -489,6 +503,12 @@ pub struct ListDatapointsRequest {
     ///   filters, it will perform a full table scan, which may be extremely slow depending
     ///   on the data volume.
     pub search_query_experimental: Option<String>,
+
+    /// The format of the response.
+    /// Use `"datapoint"` (the default) to return full datapoint objects,
+    /// or `"id"` to return only the datapoint IDs.
+    #[serde(default)]
+    pub response_format: DatapointResponseFormat,
 }
 
 /// Request to get specific datapoints by their IDs.
@@ -508,6 +528,30 @@ pub struct GetDatapointsRequest {
 pub struct GetDatapointsResponse {
     /// The retrieved datapoints.
     pub datapoints: Vec<Datapoint>,
+}
+
+/// Response containing only datapoint IDs.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
+#[ts(export)]
+pub struct ListDatapointsIdsOnlyResponse {
+    /// The IDs of the matching datapoints.
+    pub ids: Vec<Uuid>,
+}
+
+/// Response from the `list_datapoints` endpoint.
+/// The structure depends on the `response_format` parameter in the request.
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export)]
+#[export_schema]
+pub enum ListDatapointsResponse {
+    /// Full datapoint objects.
+    #[schemars(title = "ListDatapointsResponseDatapoints")]
+    Datapoints(GetDatapointsResponse),
+    /// Only datapoint IDs.
+    #[schemars(title = "ListDatapointsResponseIds")]
+    IdsOnly(ListDatapointsIdsOnlyResponse),
 }
 
 /// Request to create datapoints from inferences.

@@ -18,8 +18,8 @@ pub use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
     GetConfigResponse, GetDatapointsResponse, InferenceResponse, ListDatapointsRequest,
-    PostgresConfig, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
-    WriteConfigRequest, WriteConfigResponse,
+    ListDatapointsResponse, PostgresConfig, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::cache::CacheEnabledMode;
@@ -250,7 +250,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         dataset_name: String,
         request: ListDatapointsRequest,
-    ) -> Result<GetDatapointsResponse, TensorZeroClientError>;
+    ) -> Result<ListDatapointsResponse, TensorZeroClientError>;
 
     /// Get specific datapoints by their IDs.
     async fn get_datapoints(

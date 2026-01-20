@@ -11,7 +11,8 @@ use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
 use tensorzero::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    ListDatapointsRequest, UpdateChatDatapointRequest, UpdateDatapointRequest,
+    ListDatapointsRequest, ListDatapointsResponse, UpdateChatDatapointRequest,
+    UpdateDatapointRequest,
 };
 use uuid::Uuid;
 
@@ -397,7 +398,7 @@ async fn test_list_datapoints_tool_basic(pool: PgPool) {
     mock_client
         .expect_list_datapoints()
         .withf(|dataset_name, _request| dataset_name == "test_dataset")
-        .return_once(move |_, _| Ok(mock_response));
+        .return_once(move |_, _| Ok(ListDatapointsResponse::Datapoints(mock_response)));
 
     let tool = ListDatapointsTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
@@ -446,7 +447,7 @@ async fn test_list_datapoints_tool_with_filters(pool: PgPool) {
                 && request.limit == Some(50)
                 && request.offset == Some(10)
         })
-        .return_once(move |_, _| Ok(mock_response));
+        .return_once(move |_, _| Ok(ListDatapointsResponse::Datapoints(mock_response)));
 
     let tool = ListDatapointsTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);

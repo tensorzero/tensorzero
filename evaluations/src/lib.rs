@@ -27,7 +27,7 @@ use tensorzero_core::client::{
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::endpoints::datasets::v1::{
     get_datapoints, list_datapoints,
-    types::{GetDatapointsRequest, ListDatapointsRequest},
+    types::{GetDatapointsRequest, ListDatapointsRequest, ListDatapointsResponse},
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::inference::types::InputExt;
@@ -462,9 +462,14 @@ pub async fn run_evaluation_core_streaming(
             offset: Some(0),
             ..Default::default()
         };
-        list_datapoints(&clients.clickhouse_client, dataset_name.clone(), request)
-            .await?
-            .datapoints
+        let response =
+            list_datapoints(&clients.clickhouse_client, dataset_name.clone(), request).await?;
+        match response {
+            ListDatapointsResponse::Datapoints(dp) => dp.datapoints,
+            ListDatapointsResponse::IdsOnly(_) => {
+                bail!("Unexpected IdsOnly response when response_format was not specified")
+            }
+        }
     } else {
         // Load by IDs
         let request = GetDatapointsRequest {
