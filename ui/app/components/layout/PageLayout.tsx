@@ -33,9 +33,11 @@ type CountValue = number | bigint | Promise<number | bigint>;
 function CountDisplay({
   count,
   size = "lg",
+  className,
 }: {
   count: CountValue;
   size?: "lg" | "md";
+  className?: string;
 }) {
   const resolvedCount = count instanceof Promise ? use(count) : count;
   return (
@@ -43,6 +45,7 @@ function CountDisplay({
       className={cn(
         "text-fg-muted font-medium",
         size === "lg" ? "text-2xl" : "text-xl",
+        className,
       )}
     >
       {resolvedCount.toLocaleString()}
@@ -75,23 +78,31 @@ function PageHeader({
         {eyebrow && (
           <div className="text-fg-secondary text-sm font-normal">{eyebrow}</div>
         )}
-        <div className="flex items-center gap-2">
+        <div>
           {title && (
             <h1
               className={cn(
-                "text-2xl font-medium",
-                !heading && name && "font-mono leading-none",
+                "inline align-middle text-2xl font-medium",
+                !heading && name && "font-mono",
               )}
             >
               {title}
             </h1>
           )}
           {count !== undefined && (
-            <Suspense fallback={<Skeleton className="h-8 w-24" />}>
-              <CountDisplay count={count} />
+            <Suspense
+              fallback={
+                <Skeleton className="ml-2 inline-block h-6 w-16 align-middle" />
+              }
+            >
+              <CountDisplay count={count} className="ml-2 align-middle" />
             </Suspense>
           )}
-          {tag && <div className="ml-1 flex items-center">{tag}</div>}
+          {tag && (
+            <span className="ml-3 inline-flex items-center align-middle">
+              {tag}
+            </span>
+          )}
         </div>
       </div>
       {children && <div className="mt-8 flex flex-col gap-8">{children}</div>}
