@@ -2,6 +2,13 @@
 //!
 //! The `RateLimitingManager` is the primary interface for rate limiting operations.
 //! It wraps a `RateLimitingConfig` and provides methods to consume and return tickets.
+//!
+//! # Failure behavior
+//!
+//! This implementation uses **fail-closed** semantics: if rate limiting backend is unavailable
+//! (connection error, timeout, etc.), rate limiting operations return errors,
+//! which causes the gateway to reject requests. This prevents us sending expensive traffic
+//! to LLM providers when the rate limiting backend is down.
 
 use std::sync::Arc;
 

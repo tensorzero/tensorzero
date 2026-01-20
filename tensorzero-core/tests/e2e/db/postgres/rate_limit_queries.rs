@@ -96,7 +96,7 @@ async fn test_atomic_consistency_under_load(pool_opts: PgPoolOptions, conn_opts:
     let handles: Vec<_> = (0..20)
         .map(|i| {
             let conn_clone = conn.clone();
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 let requests = vec![
@@ -153,7 +153,7 @@ async fn test_race_condition_no_over_consumption(
     let handles: Vec<_> = (0..50)
         .map(|_| {
             let conn_clone = conn.clone();
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 let request = create_consume_request(key, 5, 100, 10, RateLimitInterval::Minute);
@@ -214,7 +214,7 @@ async fn test_race_condition_interleaved_consume_return(
     // 15 concurrent consumers requesting 10 each
     for _ in 0..15 {
         let conn_clone = conn.clone();
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
         #[expect(clippy::disallowed_methods)]
         let handle = tokio::spawn(async move {
             let request = create_consume_request(key, 10, 100, 10, RateLimitInterval::Minute);
@@ -226,7 +226,7 @@ async fn test_race_condition_interleaved_consume_return(
     // 10 concurrent returners returning 5 each
     for _ in 0..10 {
         let conn_clone = conn.clone();
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
         #[expect(clippy::disallowed_methods)]
         let handle = tokio::spawn(async move {
             let request = create_return_request(key, 5, 100, 10, RateLimitInterval::Minute);
@@ -437,7 +437,7 @@ async fn test_concurrent_stress(pool_opts: PgPoolOptions, conn_opts: PgConnectOp
     let handles: Vec<_> = (0..100)
         .map(|i| {
             let conn_clone = conn.clone();
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 let key = format!("stress_key_{}", i % 10); // 10 different keys

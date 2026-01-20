@@ -578,7 +578,7 @@ scope = [
         .map(|_| {
             let client_clone = client.clone();
             let tags_clone = tags.clone();
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(
                 async move { make_request_with_tags(&client_clone, tags_clone, stream).await },
@@ -663,7 +663,7 @@ scope = [
         .map(|i| {
             let client_clone = client.clone();
             let tags = HashMap::from([(format!("user_id_{id}"), format!("user{}", i % 3))]);
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 (
@@ -972,7 +972,7 @@ scope = [
         .map(|_| {
             let client_clone = client.clone();
             let tags_clone = tags.clone();
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(
                 async move { make_request_with_tags(&client_clone, tags_clone, stream).await },

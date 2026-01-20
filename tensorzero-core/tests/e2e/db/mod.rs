@@ -5,6 +5,7 @@ mod experimentation_queries;
 mod feedback_queries;
 mod inference_count_queries;
 mod inference_queries;
-mod rate_limit_queries;
+mod postgres;
 mod select_queries;
+mod valkey;
 mod workflow_evaluation_queries;
