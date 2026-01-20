@@ -129,10 +129,11 @@ filter = 'package(gateway)'
 slow-timeout = { period = "20s", terminate-after = 2 }
 
 # The proc-macro tests use `trybuild`, which runs compilation
-# for various crates as part of the test
+# for various crates as part of the test. This can be slow on CI runners
+# without a warm cache, so we give it a longer timeout.
 [[profile.default.overrides]]
 filter = 'package(tensorzero-derive)'
-slow-timeout = { period = "20s", terminate-after = 2 }
+slow-timeout = { period = "30s", terminate-after = 3 }
 
 [[profile.default.overrides]]
 # Web search is very slow
