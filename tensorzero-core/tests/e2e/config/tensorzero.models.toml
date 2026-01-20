@@ -485,19 +485,19 @@ type = "xai"
 model_name = "grok-4-1-fast-non-reasoning"
 api_key_location = "dynamic::xai_api_key"
 
-[models."meta-llama/Meta-Llama-3-70B-Instruct"]
+[models."openai/gpt-oss-20b"]
 routing = ["hyperbolic"]
 
-[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+[models."openai/gpt-oss-20b".providers.hyperbolic]
 type = "hyperbolic"
-model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+model_name = "openai/gpt-oss-20b"
 
-[models."meta-llama/Meta-Llama-3-70B-Instruct-dynamic"]
+[models."openai/gpt-oss-20b-dynamic"]
 routing = ["hyperbolic"]
 
-[models."meta-llama/Meta-Llama-3-70B-Instruct-dynamic".providers.hyperbolic]
+[models."openai/gpt-oss-20b-dynamic".providers.hyperbolic]
 type = "hyperbolic"
-model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+model_name = "openai/gpt-oss-20b"
 api_key_location = "dynamic::hyperbolic_api_key"
 
 [models."deepseek-chat"]
