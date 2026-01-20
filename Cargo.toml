@@ -22,6 +22,7 @@ members = [
     "internal/tensorzero-types",
     "internal/tensorzero-types-providers",
     "internal/autopilot-worker",
+    "internal/tensorzero-signals",
 ]
 resolver = "2"
 

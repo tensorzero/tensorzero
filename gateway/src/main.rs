@@ -9,7 +9,7 @@ use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::time::Duration;
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
-use tokio::signal;
+use tensorzero_signals::shutdown_signal;
 use tokio_stream::wrappers::IntervalStream;
 
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
@@ -458,54 +458,6 @@ fn get_postgres_status_string(postgres: &PostgresConnectionInfo) -> String {
         #[expect(unreachable_patterns)]
         _ => "test".to_string(),
     }
-}
-
-pub async fn shutdown_signal() {
-    // If any errors occur in these futures, we log them and return from the future
-    // This will cause the `tokio::select!` block to resolve - i.e. we treat it as
-    // though a shutdown signal was immediately received.
-    let ctrl_c = async {
-        let _ = signal::ctrl_c()
-            .await
-            .log_err_pretty("Failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        if let Ok(mut sig) = signal::unix::signal(signal::unix::SignalKind::terminate())
-            .log_err_pretty("Failed to install SIGTERM handler")
-        {
-            sig.recv().await;
-        }
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    #[cfg(unix)]
-    let hangup = async {
-        if let Ok(mut sig) = signal::unix::signal(signal::unix::SignalKind::hangup())
-            .log_err_pretty("Failed to install SIGHUP handler")
-        {
-            sig.recv().await;
-        }
-    };
-
-    #[cfg(not(unix))]
-    let hangup = std::future::pending::<()>();
-
-    tokio::select! {
-        () = ctrl_c => {
-            tracing::info!("Received Ctrl+C signal");
-        }
-        () = terminate => {
-            tracing::info!("Received SIGTERM signal");
-        }
-        () = hangup => {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            tracing::info!("Received SIGHUP signal");
-        }
-    };
 }
 
 /// Spawn the autopilot worker if environment variables are set.

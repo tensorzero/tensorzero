@@ -49,6 +49,8 @@ where
         self,
         addr: A,
         service: S,
+        task_tracker: tokio_util::task::TaskTracker,
+        shutdown: tokio::sync::broadcast::Receiver<()>,
     ) -> Result<(SocketAddr, impl Future<Output = ()>), std::io::Error>
     where
         S: HttpService<Incoming> + Clone + Send + 'static,
@@ -63,39 +65,44 @@ where
         let proxy = Arc::new(self);
 
         Ok((listener.local_addr()?, async move {
+            let mut shutdown = shutdown;
             loop {
-                let Ok((stream, _)) = listener.accept().await else {
-                    continue;
-                };
-
-                let service = service.clone();
-
-                let proxy = proxy.clone();
-                // Spawn each connection handler on a TaskTracker so background tasks are tracked
-                // and can be awaited during shutdown.
-                let connection_tasks = tokio_util::task::TaskTracker::new();
-                let connection_tasks_for_conn = connection_tasks.clone();
-                // Clone again for passing into the service (avoids moving the value out of the one used to
-                // call `spawn`).
-                let connection_tasks_for_service = connection_tasks_for_conn.clone();
-                connection_tasks_for_conn.spawn(async move {
-                    if let Err(err) = server::conn::http1::Builder::new()
-                        .preserve_header_case(true)
-                        .title_case_headers(true)
-                        .serve_connection(
-                            TokioIo::new(stream),
-                            Self::wrap_service(
-                                proxy.clone(),
-                                service.clone(),
-                                connection_tasks_for_service,
-                            ),
-                        )
-                        .with_upgrades()
-                        .await
-                    {
-                        tracing::error!("Error in proxy: {err:?}");
+                tokio::select! {
+                    _ = shutdown.recv() => {
+                        tracing::info!("Proxy server shutting down");
+                        break;
                     }
-                });
+                    accept_result = listener.accept() => {
+                        let Ok((stream, _)) = accept_result else {
+                            continue;
+                        };
+
+                        let service = service.clone();
+
+                        let proxy = proxy.clone();
+                        // Clone again for passing into the service (avoids moving the value out of the one used to
+                        // call `spawn`).
+                        let connection_tasks_for_service = task_tracker.clone();
+                        task_tracker.spawn(async move {
+                            if let Err(err) = server::conn::http1::Builder::new()
+                                .preserve_header_case(true)
+                                .title_case_headers(true)
+                                .serve_connection(
+                                    TokioIo::new(stream),
+                                    Self::wrap_service(
+                                        proxy.clone(),
+                                        service.clone(),
+                                        connection_tasks_for_service,
+                                    ),
+                                )
+                                .with_upgrades()
+                                .await
+                            {
+                                tracing::error!("Error in proxy: {err:?}");
+                            }
+                        });
+                    }
+                }
             }
         }))
     }

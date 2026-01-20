@@ -2367,6 +2367,7 @@ dependencies = [
  "tensorzero-auth",
  "tensorzero-core",
  "tensorzero-optimizers",
+ "tensorzero-signals",
  "tensorzero-unsafe-helpers",
  "tokio",
  "tokio-stream",
@@ -3611,6 +3612,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tensorzero-signals",
  "tokio",
  "tokio-stream",
  "tower",
@@ -4401,6 +4403,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "tensorzero-signals",
  "tokio",
  "tokio-rustls",
  "tokio-util",
@@ -6269,6 +6272,14 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "tensorzero-signals"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

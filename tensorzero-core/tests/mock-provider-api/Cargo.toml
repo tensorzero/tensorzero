@@ -27,6 +27,7 @@ anyhow.workspace = true
 uuid = { workspace = true }
 object_store = { workspace = true }
 bytes = "1.10.1"
+tensorzero-signals = { path = "../../../internal/tensorzero-signals" }
 
 [dev-dependencies]
 eventsource-stream = "0.2.3"
