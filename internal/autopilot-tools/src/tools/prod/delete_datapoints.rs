@@ -32,18 +32,18 @@ impl ToolMetadata for DeleteDatapointsTool {
     type Output = DeleteDatapointsResponse;
     type LlmParams = DeleteDatapointsToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("delete_datapoints")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Delete datapoints from a dataset by their IDs. \
              This is a soft delete - datapoints are marked as stale but not truly removed.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Delete datapoints from a dataset by their IDs.",
@@ -73,6 +73,7 @@ impl ToolMetadata for DeleteDatapointsTool {
 #[async_trait]
 impl SimpleTool for DeleteDatapointsTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,

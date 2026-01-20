@@ -33,11 +33,11 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsFromInferencesToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("create_datapoints_from_inferences")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Create datapoints in a dataset from existing inferences. \
              Specify either specific inference IDs or a query to find inferences. \
@@ -45,7 +45,7 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Create datapoints from existing inferences.",
@@ -130,6 +130,7 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
 #[async_trait]
 impl SimpleTool for CreateDatapointsFromInferencesTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,

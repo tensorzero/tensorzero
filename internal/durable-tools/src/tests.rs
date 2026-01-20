@@ -41,15 +41,15 @@ impl ToolMetadata for EchoSimpleTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("echo_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(10)
     }
 }
@@ -57,6 +57,7 @@ impl ToolMetadata for EchoSimpleTool {
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
@@ -69,6 +70,7 @@ impl SimpleTool for EchoSimpleTool {
 }
 
 /// A simple `TaskTool` for testing.
+#[derive(Default)]
 struct EchoTaskTool;
 
 impl ToolMetadata for EchoTaskTool {
@@ -76,15 +78,15 @@ impl ToolMetadata for EchoTaskTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("echo_task")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(60)
     }
 }
@@ -92,6 +94,7 @@ impl ToolMetadata for EchoTaskTool {
 #[async_trait]
 impl TaskTool for EchoTaskTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,
@@ -103,6 +106,7 @@ impl TaskTool for EchoTaskTool {
 }
 
 /// Another `TaskTool` with different timeout for testing defaults.
+#[derive(Default)]
 struct DefaultTimeoutTaskTool;
 
 impl ToolMetadata for DefaultTimeoutTaskTool {
@@ -110,11 +114,11 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_task")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
     }
     // Uses default timeout (60 seconds from ToolMetadata)
@@ -123,6 +127,7 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
 #[async_trait]
 impl TaskTool for DefaultTimeoutTaskTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,
@@ -142,11 +147,11 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
     }
     // Uses default timeout (60 seconds from ToolMetadata)
@@ -155,6 +160,7 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
 #[async_trait]
 impl SimpleTool for DefaultTimeoutSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
@@ -378,11 +384,11 @@ mod registry_tests {
             type Output = EchoOutput;
             type LlmParams = EchoParams;
 
-            fn name() -> Cow<'static, str> {
+            fn name(&self) -> Cow<'static, str> {
                 Cow::Borrowed("echo_task") // Same name as EchoTaskTool
             }
 
-            fn description() -> Cow<'static, str> {
+            fn description(&self) -> Cow<'static, str> {
                 Cow::Borrowed("Conflicting tool")
             }
         }
@@ -390,6 +396,7 @@ mod registry_tests {
         #[async_trait::async_trait]
         impl SimpleTool for ConflictingSimpleTool {
             async fn execute(
+                &self,
                 llm_params: <Self as ToolMetadata>::LlmParams,
                 _side_info: Self::SideInfo,
                 _ctx: SimpleToolContext<'_>,
@@ -427,13 +434,13 @@ mod erasure_tests {
 
     #[test]
     fn erased_task_tool_wrapper_exposes_name() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
         assert_eq!(wrapper.name(), "echo_task");
     }
 
     #[test]
     fn erased_task_tool_wrapper_exposes_description() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
         assert_eq!(
             wrapper.description().as_ref(),
             "Echoes the input message (durable)"
@@ -442,45 +449,48 @@ mod erasure_tests {
 
     #[test]
     fn erased_task_tool_wrapper_exposes_timeout() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
         assert_eq!(wrapper.timeout(), Duration::from_secs(60));
     }
 
     #[test]
     fn erased_task_tool_wrapper_default_timeout() {
-        let wrapper = ErasedTaskToolWrapper::<DefaultTimeoutTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::<DefaultTimeoutTaskTool>::default();
         assert_eq!(wrapper.timeout(), Duration::from_secs(60));
     }
 
     #[test]
     fn erased_task_tool_wrapper_is_durable_true() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
         assert!(wrapper.is_durable());
     }
 
     #[test]
     fn erased_simple_tool_exposes_metadata() {
         let tool = EchoSimpleTool;
-        assert_eq!(tool.name(), "echo_simple");
-        assert_eq!(tool.description().as_ref(), "Echoes the input message");
-        assert_eq!(tool.timeout(), Duration::from_secs(10));
+        assert_eq!(ToolMetadata::name(&tool), "echo_simple");
+        assert_eq!(
+            ToolMetadata::description(&tool).as_ref(),
+            "Echoes the input message"
+        );
+        assert_eq!(ToolMetadata::timeout(&tool), Duration::from_secs(10));
     }
 
     #[test]
     fn erased_simple_tool_default_timeout() {
         let tool = DefaultTimeoutSimpleTool;
-        assert_eq!(tool.timeout(), Duration::from_secs(60));
+        assert_eq!(ToolMetadata::timeout(&tool), Duration::from_secs(60));
     }
 
     #[test]
     fn erased_simple_tool_is_durable_false() {
         let tool = EchoSimpleTool;
-        assert!(!tool.is_durable());
+        assert!(!ErasedTool::is_durable(&tool));
     }
 
     #[test]
     fn erased_task_tool_wrapper_parameters_schema_has_message_field() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
         let schema = wrapper.parameters_schema().unwrap();
 
         // The schema should be an object with a "message" property

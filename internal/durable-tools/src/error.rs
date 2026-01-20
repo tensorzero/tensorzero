@@ -231,6 +231,9 @@ impl From<DurableError> for ToolError {
             DurableError::InvalidEventName { reason } => {
                 ToolError::NonControl(NonControlToolError::InvalidEventName { reason })
             }
+            DurableError::InvalidTaskParams { message, .. } => {
+                ToolError::NonControl(NonControlToolError::InvalidParams { message })
+            }
         }
     }
 }
