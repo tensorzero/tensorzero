@@ -106,18 +106,14 @@ pub struct EmbeddingTestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
-
     pub bad_auth_extra_headers: Vec<E2ETestProvider>,
     pub extra_body_inference: Vec<E2ETestProvider>,
-
     pub reasoning_inference: Vec<E2ETestProvider>,
-
+    pub reasoning_usage_inference: Vec<E2ETestProvider>,
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
-
     pub provider_type_default_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials_shorthand: Vec<E2ETestProvider>,
     pub credential_fallbacks: Vec<ModelTestProvider>,
-
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -125,11 +121,9 @@ pub struct E2ETestProviders {
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
     pub json_mode_off_inference: Vec<E2ETestProvider>,
-
     pub image_inference: Vec<E2ETestProvider>,
     pub pdf_inference: Vec<E2ETestProvider>,
     pub input_audio: Vec<E2ETestProvider>,
-
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
 }
@@ -219,7 +213,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test(flavor = "multi_thread")]
         async fn test_warn_ignored_thought_block() {
             let logs_contain = tensorzero_core::utils::testing::capture_logs();
@@ -237,7 +230,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_streaming_reasoning_inference_request_simple() {
             let providers = $func().await.reasoning_inference;
@@ -253,7 +245,6 @@ macro_rules! generate_provider_tests {
                 test_bad_auth_extra_headers_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_shorthand_inference_request() {
@@ -303,7 +294,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_inference_params_streaming_inference_request() {
             let providers = $func().await.inference_params_dynamic_credentials;
@@ -312,7 +302,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_provider_type_default_credentials() {
             let providers = $func().await.provider_type_default_credentials;
@@ -320,7 +309,6 @@ macro_rules! generate_provider_tests {
                 test_provider_type_default_credentials_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_provider_type_default_credentials_shorthand() {
@@ -342,7 +330,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_used_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -350,7 +337,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_auto_used_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_used_streaming_inference_request() {
@@ -360,7 +346,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_unused_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -368,7 +353,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_auto_unused_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request() {
@@ -378,7 +362,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_required_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -386,7 +369,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_required_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_required_streaming_inference_request() {
@@ -396,7 +378,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_none_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -404,7 +385,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_none_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_none_streaming_inference_request() {
@@ -414,7 +394,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_specific_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -422,7 +401,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_specific_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_specific_streaming_inference_request() {
@@ -432,7 +410,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_allowed_tools_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -440,7 +417,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_allowed_tools_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_allowed_tools_streaming_inference_request() {
@@ -450,7 +426,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_multi_turn_inference_request() {
             let providers = $func().await.tool_multi_turn_inference;
@@ -458,7 +433,6 @@ macro_rules! generate_provider_tests {
                 test_tool_multi_turn_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_multi_turn_streaming_inference_request() {
@@ -492,7 +466,6 @@ macro_rules! generate_provider_tests {
         }
         tensorzero::make_gateway_test_functions!(test_dynamic_tool_use_streaming_inference_request);
 
-
         #[tokio::test]
         async fn test_parallel_tool_use_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
@@ -500,7 +473,6 @@ macro_rules! generate_provider_tests {
                 test_parallel_tool_use_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_parallel_tool_use_streaming_inference_request() {
@@ -510,7 +482,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_json_mode_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -518,7 +489,6 @@ macro_rules! generate_provider_tests {
                 test_json_mode_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_reasoning_inference_request_json_mode() {
@@ -528,7 +498,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_streaming_reasoning_inference_request_json_mode() {
             let providers = $func().await.reasoning_inference;
@@ -537,7 +506,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_dynamic_json_mode_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -545,7 +513,6 @@ macro_rules! generate_provider_tests {
                 test_dynamic_json_mode_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_json_mode_streaming_inference_request() {
@@ -587,6 +554,22 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_reasoning_output_tokens_non_streaming() {
+            let providers = $func().await.reasoning_usage_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_reasoning_output_tokens_streaming() {
+            let providers = $func().await.reasoning_usage_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_streaming_with_provider(provider).await;
+            }
+        }
+
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
@@ -594,7 +577,6 @@ macro_rules! generate_provider_tests {
                 test_image_inference_with_provider_filesystem(provider).await;
             }
         }
-
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_url_inference_store_filesystem() {
@@ -604,7 +586,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_amazon_s3() {
             let providers = $func().await.image_inference;
@@ -612,7 +593,6 @@ macro_rules! generate_provider_tests {
                 test_image_inference_with_provider_amazon_s3(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_extra_body() {
@@ -630,7 +610,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_short_inference_request() {
             let providers = $func().await.simple_inference;
@@ -639,7 +618,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_multi_turn_parallel_tool_use_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
@@ -647,7 +625,6 @@ macro_rules! generate_provider_tests {
                 test_multi_turn_parallel_tool_use_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_multi_turn_parallel_tool_use_streaming_inference_request() {
@@ -696,7 +673,6 @@ macro_rules! generate_provider_tests {
                 test_basic_embedding_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_bulk_embedding() {
@@ -2402,9 +2378,14 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             assert!(!res["error"].as_str().unwrap().is_empty());
         }
         "aws_bedrock" => {
+            // HTTP/2 may reject Content-Length mismatch at send time vs HTTP/1.1 getting "Bad Request"
             assert!(
                 res["error"].as_str().unwrap().contains("Bad Request")
-                    || res["error"].as_str().unwrap().contains("ConnectorError"),
+                    || res["error"].as_str().unwrap().contains("ConnectorError")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .contains("error sending request"),
                 "Unexpected error: {res}"
             );
         }
@@ -2606,7 +2587,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
 pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
     // * Mistral doesn't support assistant prefill
     // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
-    // * Some AWS bedrock models error when the last message is an assistant message
+    // * Some AWS Bedrock models error when the last message is an assistant message
     // * Azure AI foundry seems to ignore trailing assistant messages
     // * xAI seems to also ignore them
     if provider.model_provider_name == "mistral"

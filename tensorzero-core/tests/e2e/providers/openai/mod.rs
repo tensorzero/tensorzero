@@ -258,11 +258,29 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
+    let reasoning_usage_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-gpt-5-mini".to_string(),
+            model_name: "gpt-5-mini-responses".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-gpt-5-mini-chat".to_string(),
+            model_name: "openai::gpt-5-mini".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        reasoning_usage_inference: reasoning_usage_providers,
         embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
@@ -1224,7 +1242,6 @@ async fn test_embedding_request() {
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
                 &ProviderTypeDefaultCredentials::default(),
-                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
@@ -1251,31 +1268,34 @@ async fn test_embedding_request() {
         encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
+    let rate_limiting_config: Arc<tensorzero_core::rate_limiting::RateLimitingConfig> =
+        Arc::new(Default::default());
+    let clients = InferenceClients {
+        http_client: TensorzeroHttpClient::new_testing().unwrap(),
+        clickhouse_connection_info: clickhouse.clone(),
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        credentials: Arc::new(api_keys.clone()),
+        cache_options: CacheOptions {
+            max_age_s: None,
+            enabled: CacheEnabledMode::On,
+        },
+        tags: Arc::new(Default::default()),
+        rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
+            rate_limiting_config,
+            PostgresConnectionInfo::Disabled,
+        )),
+        otlp_config: Default::default(),
+        deferred_tasks: tokio_util::task::TaskTracker::new(),
+        scope_info: ScopeInfo {
+            tags: Arc::new(HashMap::new()),
+            api_key_public_id: None,
+        },
+        relay: None,
+        include_raw_usage: false,
+        include_raw_response: false,
+    };
     let response = model_config
-        .embed(
-            &request,
-            &model_name,
-            &InferenceClients {
-                http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                clickhouse_connection_info: clickhouse.clone(),
-                postgres_connection_info: PostgresConnectionInfo::Disabled,
-                credentials: Arc::new(api_keys.clone()),
-                cache_options: CacheOptions {
-                    max_age_s: None,
-                    enabled: CacheEnabledMode::On,
-                },
-                tags: Arc::new(Default::default()),
-                rate_limiting_config: Arc::new(Default::default()),
-                otlp_config: Default::default(),
-                deferred_tasks: tokio_util::task::TaskTracker::new(),
-                scope_info: ScopeInfo {
-                    tags: Arc::new(HashMap::new()),
-                    api_key_public_id: None,
-                },
-                relay: None,
-                include_raw_usage: false,
-            },
-        )
+        .embed(&request, &model_name, &clients)
         .await
         .unwrap();
     assert!(
@@ -1343,30 +1363,7 @@ async fn test_embedding_request() {
     // Wait for ClickHouse write
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     let cached_response = model_config
-        .embed(
-            &request,
-            &model_name,
-            &InferenceClients {
-                http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                clickhouse_connection_info: clickhouse.clone(),
-                postgres_connection_info: PostgresConnectionInfo::Disabled,
-                credentials: Arc::new(api_keys.clone()),
-                cache_options: CacheOptions {
-                    max_age_s: None,
-                    enabled: CacheEnabledMode::On,
-                },
-                tags: Arc::new(Default::default()),
-                rate_limiting_config: Arc::new(Default::default()),
-                otlp_config: Default::default(),
-                deferred_tasks: tokio_util::task::TaskTracker::new(),
-                scope_info: ScopeInfo {
-                    tags: Arc::new(HashMap::new()),
-                    api_key_public_id: None,
-                },
-                relay: None,
-                include_raw_usage: false,
-            },
-        )
+        .embed(&request, &model_name, &clients)
         .await
         .unwrap();
     assert!(cached_response.cached);
@@ -1393,7 +1390,6 @@ async fn test_embedding_sanity_check() {
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
                 &ProviderTypeDefaultCredentials::default(),
-                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
@@ -1423,6 +1419,8 @@ async fn test_embedding_sanity_check() {
     };
     let request_info = (&provider_config).into();
     let api_keys = InferenceCredentials::default();
+    let rate_limiting_config: Arc<tensorzero_core::rate_limiting::RateLimitingConfig> =
+        Arc::new(Default::default());
     let clients = InferenceClients {
         http_client: client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
@@ -1433,7 +1431,10 @@ async fn test_embedding_sanity_check() {
             enabled: CacheEnabledMode::On,
         },
         tags: Arc::new(Default::default()),
-        rate_limiting_config: Arc::new(Default::default()),
+        rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
+            rate_limiting_config,
+            PostgresConnectionInfo::Disabled,
+        )),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
         scope_info: ScopeInfo {
@@ -1442,6 +1443,7 @@ async fn test_embedding_sanity_check() {
         },
         relay: None,
         include_raw_usage: false,
+        include_raw_response: false,
     };
 
     // Compute all 3 embeddings concurrently
@@ -1960,6 +1962,40 @@ pub async fn test_embedding_extra_body() {
             .unwrap()
             .len(),
         256
+    );
+}
+
+#[tokio::test]
+pub async fn test_embedding_extra_headers() {
+    // Use a random input string to avoid cache collisions in provider-proxy.
+    // The provider-proxy sanitizes Bearer tokens when computing cache keys,
+    // so requests with different auth tokens but the same input would hit the same cache entry.
+    let unique_input = format!("bad_auth_test_{}", Uuid::now_v7());
+    let payload = json!({
+        "input": unique_input,
+        "model": "tensorzero::embedding_model_name::openai_bad_auth_extra_headers",
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // The extra_headers override auth with an invalid token, so we expect an auth error
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Invalid auth should bubble up as a provider failure"
+    );
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:?}");
+    // OpenAI returns 401 for invalid auth, which TensorZero wraps as an error
+    let error_message = response_json["error"]
+        .as_str()
+        .expect("Expected a string error response due to invalid auth header");
+    assert!(
+        !error_message.is_empty(),
+        "Expected an error message due to invalid auth header"
     );
 }
 

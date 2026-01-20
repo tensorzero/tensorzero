@@ -84,6 +84,7 @@ pub async fn action(
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
+                app_state.rate_limiting_manager.clone(),
                 (*inference_params).try_into()?,
                 None, // No API key for internal endpoint
             ))

@@ -39,6 +39,7 @@ mod providers;
 mod proxy;
 mod rate_limiting;
 mod rate_limiting_startup;
+mod raw_response;
 mod raw_usage;
 mod render_inferences;
 mod retries;

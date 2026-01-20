@@ -20,6 +20,7 @@ pub async fn embeddings_handler(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        rate_limiting_manager,
         ..
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
@@ -32,6 +33,7 @@ pub async fn embeddings_handler(
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
+        rate_limiting_manager,
         embedding_params,
         api_key_ext,
     )

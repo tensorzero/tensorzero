@@ -8,7 +8,7 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
     ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
     Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, RawUsageEntry, RequestMessage, Text, Thought,
+    ProviderInferenceResponseArgs, RawResponseEntry, RawUsageEntry, RequestMessage, Text, Thought,
     ThoughtSummaryBlock, ToolCall, Unknown, Usage,
 };
 use crate::jsonschema_util::JSONSchema;
@@ -88,12 +88,19 @@ pub struct ChatInferenceResultChunk {
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw responses from previous model inferences (e.g., best-of-n candidates).
+    /// Used for artificial chunks emitted at stream start.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<Vec<RawResponseEntry>>,
     /// Time elapsed between making the request to the model provider and receiving this chunk.
     /// Important: this is NOT latency from the start of the TensorZero request.
     /// None for artificial chunks created by TensorZero (e.g., usage/finish_reason chunks).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_latency: Option<Duration>,
-    pub raw_response: String,
+    /// Raw response string for the current chunk from the model provider.
+    /// Empty for fake streams (non-streaming converted to streaming).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
 }
 
@@ -105,12 +112,19 @@ pub struct JsonInferenceResultChunk {
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw responses from previous model inferences (e.g., best-of-n candidates).
+    /// Used for artificial chunks emitted at stream start.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<Vec<RawResponseEntry>>,
     /// Time elapsed between making the request to the model provider and receiving this chunk.
     /// Important: this is NOT latency from the start of the TensorZero request.
     /// None for artificial chunks created by TensorZero (e.g., usage/finish_reason chunks).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_latency: Option<Duration>,
-    pub raw_response: String,
+    /// Raw response string for the current chunk from the model provider.
+    /// Empty for fake streams (non-streaming converted to streaming).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
 }
 
@@ -150,10 +164,17 @@ impl InferenceResultChunk {
         }
     }
 
-    pub fn raw_response(&self) -> &str {
+    pub fn raw_response(&self) -> Option<&Vec<RawResponseEntry>> {
         match self {
-            InferenceResultChunk::Chat(chunk) => &chunk.raw_response,
-            InferenceResultChunk::Json(chunk) => &chunk.raw_response,
+            InferenceResultChunk::Chat(chunk) => chunk.raw_response.as_ref(),
+            InferenceResultChunk::Json(chunk) => chunk.raw_response.as_ref(),
+        }
+    }
+
+    pub fn raw_chunk(&self) -> &str {
+        match self {
+            InferenceResultChunk::Chat(chunk) => &chunk.raw_chunk,
+            InferenceResultChunk::Json(chunk) => &chunk.raw_chunk,
         }
     }
 
@@ -185,9 +206,10 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
             content: chunk.content,
             usage: chunk.usage,
             raw_usage: chunk.raw_usage,
+            raw_response: None, // Only populated via artificial chunks from TensorZero
             provider_latency: Some(chunk.provider_latency),
             finish_reason: chunk.finish_reason,
-            raw_response: chunk.raw_response,
+            raw_chunk: chunk.raw_response,
         }
     }
 }
@@ -220,8 +242,9 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
             thought,
             usage: chunk.usage,
             raw_usage: chunk.raw_usage,
+            raw_response: None, // Only populated via artificial chunks from TensorZero
             provider_latency: Some(chunk.provider_latency),
-            raw_response: chunk.raw_response,
+            raw_chunk: chunk.raw_response,
             finish_reason: chunk.finish_reason,
         }
     }
@@ -302,11 +325,11 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     let mut blocks: IndexMap<(ContentBlockOutputType, String), ContentBlockOutput> =
         IndexMap::new();
     // If the variant gave us an explicit 'raw_response', use that.
-    // Otherwise, concatenate the raw_response from each chunk.
+    // Otherwise, concatenate the raw_chunk from each chunk.
     let raw_response = raw_response.unwrap_or_else(|| {
         value
             .iter()
-            .map(InferenceResultChunk::raw_response)
+            .map(InferenceResultChunk::raw_chunk)
             .filter(|s| !s.is_empty()) // remove artificial chunks (e.g. our final chunk with usage and finish reason)
             .collect::<Vec<&str>>()
             .join("\n")
@@ -607,6 +630,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         raw_response,
         usage: model_inference_usage,
         raw_usage,
+        relay_raw_response: None,
         provider_latency,
         finish_reason,
         id: model_inference_id,
@@ -900,7 +924,8 @@ mod tests {
                 content,
                 usage: None,
                 raw_usage: None,
-                raw_response: "{\"message\": \"Hello}".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"message\": \"Hello}".to_string(),
                 provider_latency,
                 finish_reason: None,
             }),
@@ -914,7 +939,8 @@ mod tests {
                     output_tokens: Some(4),
                 }),
                 raw_usage: None,
-                raw_response: ", world!\"}".to_string(),
+                raw_response: None,
+                raw_chunk: ", world!\"}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -1009,7 +1035,8 @@ mod tests {
                 thought: Some("Thought 1".to_string()),
                 usage: Some(usage1),
                 raw_usage: None,
-                raw_response: "{\"name\":".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(150)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -1018,7 +1045,8 @@ mod tests {
                 thought: Some("Thought 2".to_string()),
                 usage: Some(usage2),
                 raw_usage: None,
-                raw_response: "\"John\",\"age\":30}".to_string(),
+                raw_response: None,
+                raw_chunk: "\"John\",\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -1096,7 +1124,8 @@ mod tests {
                 thought: Some("Thought 1".to_string()),
                 usage: Some(model_inference_usage),
                 raw_usage: None,
-                raw_response: "{\"name\":".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(100)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -1105,7 +1134,8 @@ mod tests {
                 thought: None,
                 usage: None,
                 raw_usage: None,
-                raw_response: "\"John\"}".to_string(),
+                raw_response: None,
+                raw_chunk: "\"John\"}".to_string(),
                 provider_latency: Some(Duration::from_millis(200)),
                 finish_reason: None,
             }),
@@ -1179,7 +1209,8 @@ mod tests {
                 thought: None,
                 usage: Some(model_inference_usage),
                 raw_usage: None,
-                raw_response: "{\"name\":\"John\",".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"name\":\"John\",".to_string(),
                 provider_latency: Some(Duration::from_millis(100)),
                 finish_reason: None,
             }),
@@ -1188,7 +1219,8 @@ mod tests {
                 thought: Some("Thought 2".to_string()),
                 usage: None,
                 raw_usage: None,
-                raw_response: String::new(),
+                raw_response: None,
+                raw_chunk: String::new(),
                 provider_latency: Some(Duration::from_millis(200)),
                 finish_reason: None,
             }),
@@ -1197,7 +1229,8 @@ mod tests {
                 thought: None,
                 usage: None,
                 raw_usage: None,
-                raw_response: "\"age\":30}".to_string(),
+                raw_response: None,
+                raw_chunk: "\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(300)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -1307,7 +1340,8 @@ mod tests {
                 thought: Some("Thought 1".to_string()),
                 usage: Some(usage1),
                 raw_usage: None,
-                raw_response: "{\"name\":".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(150)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -1316,7 +1350,8 @@ mod tests {
                 thought: Some("Thought 2".to_string()),
                 usage: Some(usage2),
                 raw_usage: None,
-                raw_response: "\"John\",\"age\":30}".to_string(),
+                raw_response: None,
+                raw_chunk: "\"John\",\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -1423,8 +1458,9 @@ mod tests {
                 thought: Some("Thought 1".to_string()),
                 usage: Some(usage1),
                 raw_usage: None,
+                raw_response: None,
                 finish_reason: Some(FinishReason::Stop),
-                raw_response: "{\"name\":".to_string(),
+                raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(150)),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1432,8 +1468,9 @@ mod tests {
                 thought: Some("Thought 2".to_string()),
                 usage: Some(usage2),
                 raw_usage: None,
+                raw_response: None,
                 finish_reason: Some(FinishReason::ToolCall),
-                raw_response: "\"John\",\"age\":30}".to_string(),
+                raw_chunk: "\"John\",\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
             }),
         ];
@@ -1527,7 +1564,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "{\"message\": \"Hello}".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"message\": \"Hello}".to_string(),
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1584,7 +1622,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "my raw thought".to_string(),
+                raw_response: None,
+                raw_chunk: "my raw thought".to_string(),
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1598,7 +1637,8 @@ mod tests {
                     output_tokens: Some(4),
                 }),
                 raw_usage: None,
-                raw_response: ", world!\"}".to_string(),
+                raw_response: None,
+                raw_chunk: ", world!\"}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -1613,7 +1653,8 @@ mod tests {
                 })],
                 usage: None,
                 raw_usage: None,
-                raw_response: "my other raw thought".to_string(),
+                raw_response: None,
+                raw_chunk: "my other raw thought".to_string(),
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1735,7 +1776,8 @@ mod tests {
                 })],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1750,7 +1792,8 @@ mod tests {
                     output_tokens: Some(20),
                 }),
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -1818,7 +1861,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1840,7 +1884,8 @@ mod tests {
                     output_tokens: Some(25),
                 }),
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -1906,7 +1951,8 @@ mod tests {
                 })],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1921,7 +1967,8 @@ mod tests {
                     output_tokens: Some(10),
                 }),
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -1985,7 +2032,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -2006,7 +2054,8 @@ mod tests {
                     output_tokens: Some(15),
                 }),
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -2076,7 +2125,8 @@ mod tests {
                 output_tokens: Some(5),
             }),
             raw_usage: None,
-            raw_response: "chunk1".to_string(),
+            raw_response: None,
+            raw_chunk: "chunk1".to_string(),
             provider_latency,
             finish_reason: Some(FinishReason::ToolCall),
         })];
@@ -2145,7 +2195,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -2169,7 +2220,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -2196,7 +2248,8 @@ mod tests {
                     output_tokens: Some(30),
                 }),
                 raw_usage: None,
-                raw_response: "chunk3".to_string(),
+                raw_response: None,
+                raw_chunk: "chunk3".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -2285,7 +2338,8 @@ mod tests {
         let result = JsonInferenceResultChunk::from(tool_chunk);
         assert_eq!(result.raw, Some("{\"key\": \"value\"}".to_string()));
         assert_eq!(result.thought, None);
-        assert_eq!(result.raw_response, "raw response");
+        assert_eq!(result.raw_response, None);
+        assert_eq!(result.raw_chunk, "raw response");
         assert_eq!(result.provider_latency, Some(Duration::from_secs(1)));
         assert_eq!(
             result.usage,

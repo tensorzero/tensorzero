@@ -652,6 +652,7 @@ fn create_inference_params(
         credentials: Default::default(),
         cache_options: Default::default(),
         include_original_response: true,
+        include_raw_response: false,
         extra_body: Default::default(),
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,

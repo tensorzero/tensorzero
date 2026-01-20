@@ -12,7 +12,6 @@ import {
   PageLayout,
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
-import Input from "~/components/inference/Input";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 import {
@@ -23,6 +22,7 @@ import {
   useFetcher,
   type RouteHandle,
 } from "react-router";
+import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
@@ -49,9 +49,10 @@ import { getConfig } from "~/utils/config/index.server";
 import type {
   EvaluationConfig,
   EvaluatorConfig,
-  ContentBlockChatOutput,
   JsonInferenceOutput,
+  ContentBlockChatOutput,
 } from "~/types/tensorzero";
+
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
@@ -135,7 +136,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   const consolidatedEvaluationResults =
-    await consolidateEvaluationResults(evaluationResults);
+    consolidateEvaluationResults(evaluationResults);
   if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
     // Find which evaluation run IDs are missing from the results
     const foundEvaluationRunIds = new Set(
@@ -237,7 +238,7 @@ export default function EvaluationDatapointPage({
     );
   }
   const outputsToDisplay = [
-    ...(consolidatedEvaluationResults[0].reference_output !== null
+    ...(consolidatedEvaluationResults[0].reference_output != null
       ? [
           {
             id: "Reference",
@@ -319,7 +320,7 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <Input {...consolidatedEvaluationResults[0].input} />
+            <InputElement input={consolidatedEvaluationResults[0].input} />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}

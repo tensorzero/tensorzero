@@ -300,11 +300,7 @@ export function prepareInferenceActionRequest(
 ): ClientInferenceParams {
   // Create base ClientInferenceParams with default values
   const baseParams: ClientInferenceParams = {
-    function_name: null,
-    model_name: null,
-    episode_id: null,
     input: { system: undefined, messages: [] },
-    stream: null,
     params: {
       chat_completion: {
         temperature: null,
@@ -317,9 +313,7 @@ export function prepareInferenceActionRequest(
         stop_sequences: null,
       },
     },
-    variant_name: null,
     provider_tools: [],
-    dryrun: null,
     internal: true,
     tags: {
       "tensorzero::ui": "true",
@@ -330,9 +324,9 @@ export function prepareInferenceActionRequest(
       max_age_s: null,
       enabled: "on",
     },
-    include_original_response: false,
+    include_original_response: false, // deprecated
+    include_raw_response: false,
     include_raw_usage: false,
-    internal_dynamic_variant_config: null,
   };
 
   // Prepare request based on source and function type
@@ -347,13 +341,13 @@ export function prepareInferenceActionRequest(
     // Handle datapoints from tensorzero-node (with StoredInput)
     const dynamicVariantInfo = args.editedVariantInfo
       ? variantInfoToUninitializedVariantInfo(args.editedVariantInfo)
-      : null;
+      : undefined;
 
     // Handle default function: use model_name instead of variant_name
     if (args.resource.function_name === DEFAULT_FUNCTION) {
       return {
         ...baseParams,
-        model_name: args.model_name || null,
+        model_name: args.model_name || undefined,
         input: args.resource.input,
         internal_dynamic_variant_config: dynamicVariantInfo,
       };
@@ -363,7 +357,7 @@ export function prepareInferenceActionRequest(
       ...baseParams,
       function_name: args.resource.function_name,
       input: args.resource.input,
-      variant_name: args.variant || null,
+      variant_name: args.variant || undefined,
       internal_dynamic_variant_config: dynamicVariantInfo,
     };
   } else {
