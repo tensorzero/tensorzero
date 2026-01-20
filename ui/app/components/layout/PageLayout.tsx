@@ -80,7 +80,7 @@ function PageHeader({
             <h1
               className={cn(
                 "text-2xl font-medium",
-                name && "font-mono leading-none",
+                !heading && name && "font-mono leading-none",
               )}
             >
               {title}
