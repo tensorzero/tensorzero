@@ -266,6 +266,7 @@ export * from "./RateLimitingConfigPriority";
 export * from "./RateLimitingConfigRule";
 export * from "./RateLimitingConfigScope";
 export * from "./RateLimitingConfigScopes";
+export * from "./RawResponseEntry";
 export * from "./RawText";
 export * from "./RawUsageEntry";
 export * from "./RenderedSample";

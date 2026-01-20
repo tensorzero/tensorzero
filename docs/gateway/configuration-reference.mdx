@@ -701,7 +701,7 @@ When specified, `secret_access_key` must also be provided. Both fields must use 
 - **Type:** string
 - **Required:** no
 
-Custom endpoint URL for the AWS Bedrock API. Useful for AWS PrivateLink, FIPS endpoints, or local testing (e.g., LocalStack).
+Custom endpoint URL for the AWS Bedrock API. Useful for AWS PrivateLink, FIPS endpoints, AWS China/GovCloud regions, or local testing (e.g., LocalStack).
 
 The supported locations are:
 
@@ -712,6 +712,18 @@ The supported locations are:
 - `none` - treat as unspecified
 
 See the [AWS Bedrock service endpoints documentation](https://docs.aws.amazon.com/general/latest/gr/bedrock.html) for available endpoints.
+
+<Note>
+
+AWS China regions (`cn-north-1`, `cn-northwest-1`) and AWS GovCloud regions use different DNS suffixes than standard AWS regions.
+For these partitions, you must specify the full `endpoint_url`.
+For example:
+
+```toml
+endpoint_url = "https://bedrock-runtime.cn-north-1.amazonaws.com.cn"
+```
+
+</Note>
 
 ```toml title="tensorzero.toml"
 [models.claude-3-haiku.providers.aws_bedrock]
@@ -840,7 +852,7 @@ Defines the endpoint name to use with the AWS SageMaker API.
 - **Type:** string
 - **Required:** no
 
-Custom endpoint URL for the AWS SageMaker API. Useful for AWS PrivateLink, FIPS endpoints, or local testing (e.g., LocalStack).
+Custom endpoint URL for the AWS SageMaker API. Useful for AWS PrivateLink, FIPS endpoints, AWS China/GovCloud regions, or local testing (e.g., LocalStack).
 
 The supported locations are:
 
@@ -851,6 +863,18 @@ The supported locations are:
 - `none` - treat as unspecified
 
 See the [AWS SageMaker service endpoints documentation](https://docs.aws.amazon.com/general/latest/gr/sagemaker.html) for available endpoints.
+
+<Note>
+
+AWS China regions (`cn-north-1`, `cn-northwest-1`) and AWS GovCloud regions use different DNS suffixes than standard AWS regions.
+For these partitions, you must specify the full `endpoint_url`.
+For example:
+
+```toml
+endpoint_url = "https://bedrock-runtime.cn-north-1.amazonaws.com.cn"
+```
+
+</Note>
 
 ```toml title="tensorzero.toml"
 [models.my-model.providers.aws_sagemaker]

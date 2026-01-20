@@ -386,14 +386,14 @@ The function must be defined in the configuration file.
 Alternatively, you can use the `model_name` field to call a model directly, without the need to define a function.
 See below for more details.
 
-#### `include_original_response`
+#### `include_raw_response`
 
 - **Type:** boolean
 - **Required:** no
 
-If `true`, the original response from the model will be included in the response in the `original_response` field as a string.
+If `true`, the raw responses from all model inferences will be included in the response in the `raw_response` field as an array.
 
-See `original_response` in the [response](#response) section for more details.
+See `raw_response` in the [response](#response) section for more details.
 
 #### `include_raw_usage`
 
@@ -949,18 +949,18 @@ The ID of the episode associated with the inference.
 
 The ID assigned to the inference.
 
-##### `original_response`
+##### `raw_response`
 
-- **Type:** string (optional)
+- **Type:** array (optional, only when `include_raw_response` is `true`)
 
-The original response from the model provider (only available when `include_original_response` is `true`).
+An array of raw provider-specific response data from all model inferences. Each entry contains:
 
-The returned data depends on the variant type:
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data`: The raw response string from the provider.
 
-- `chat_completion`: raw response from the inference to the `model`
-- `experimental_best_of_n_sampling`: raw response from the inference to the `evaluator`
-- `experimental_mixture_of_n_sampling`: raw response from the inference to the `fuser`
-- `experimental_dynamic_in_context_learning`: raw response from the inference to the `model`
+For complex variants like `experimental_best_of_n_sampling`, this includes raw responses from all candidate inferences as well as the evaluator/fuser inference.
 
 ##### `variant_name`
 
@@ -1062,6 +1062,25 @@ An array of raw provider-specific usage data. Each entry contains:
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
+##### `raw_response`
+
+- **Type:** array (optional, only when `include_raw_response` is `true`)
+
+An array of raw provider-specific response data from model inferences that occurred before the current streaming inference (e.g., candidate inferences in `experimental_best_of_n_sampling`). This appears in early chunks of the stream.
+
+Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data`: The raw response string from the provider.
+
+##### `raw_chunk`
+
+- **Type:** string (optional, only when `include_raw_response` is `true`)
+
+The raw chunk from the current streaming model inference. This is included in content-bearing chunks (typically all chunks except the first metadata chunk and final usage-only chunk).
+
 </Tab>
 </Tabs>
 
@@ -1086,18 +1105,18 @@ The ID assigned to the inference.
 
 The ID of the episode associated with the inference.
 
-##### `original_response`
+##### `raw_response`
 
-- **Type:** string (optional)
+- **Type:** array (optional, only when `include_raw_response` is `true`)
 
-The original response from the model provider (only available when `include_original_response` is `true`).
+An array of raw provider-specific response data from all model inferences. Each entry contains:
 
-The returned data depends on the variant type:
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data`: The raw response string from the provider.
 
-- `chat_completion`: raw response from the inference to the `model`
-- `experimental_best_of_n_sampling`: raw response from the inference to the `evaluator`
-- `experimental_mixture_of_n_sampling`: raw response from the inference to the `fuser`
-- `experimental_dynamic_in_context_learning`: raw response from the inference to the `model`
+For complex variants like `experimental_best_of_n_sampling`, this includes raw responses from all candidate inferences as well as the evaluator/fuser inference.
 
 ##### `output`
 
@@ -1191,6 +1210,25 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+##### `raw_response`
+
+- **Type:** array (optional, only when `include_raw_response` is `true`)
+
+An array of raw provider-specific response data from model inferences that occurred before the current streaming inference (e.g., candidate inferences in `experimental_best_of_n_sampling`). This appears in early chunks of the stream.
+
+Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data`: The raw response string from the provider.
+
+##### `raw_chunk`
+
+- **Type:** string (optional, only when `include_raw_response` is `true`)
+
+The raw chunk from the current streaming model inference. This is included in content-bearing chunks (typically all chunks except the first metadata chunk and final usage-only chunk).
 
 </Tab>
 </Tabs>

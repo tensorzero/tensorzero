@@ -250,11 +250,18 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
-# Set the thinking budget to the minimum value.
-# This speeds up our tests, saves us some tokens, and prevents the model from
-# hitting our token limit
+
+[models."gcp-gemini-2.5-pro-thinking"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gcp-gemini-2.5-pro-thinking".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-2.5-pro"
+location = "global"
+project_id = "tensorzero-public"
+# Include thoughts in the response (thinking_budget_tokens set at variant level)
 extra_body = [
-    { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
+    { pointer = "/generationConfig/thinkingConfig/includeThoughts", value = true },
 ]
 
 [models."gemini-2.0-flash-lite"]
@@ -782,6 +789,26 @@ type = "openai"
 api_base = "http://localhost:3000/openai/v1/"
 api_key_location = "none"
 model_name = "tensorzero::model_name::dummy::good"
+
+# Anthropic Claude Haiku 4.5 with thinking
+[models."claude-haiku-4-5-thinking"]
+routing = ["anthropic"]
+
+[models."claude-haiku-4-5-thinking".providers.anthropic]
+type = "anthropic"
+model_name = "claude-haiku-4-5"
+extra_body = [
+    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
+]
+
+# Azure GPT-5-mini
+[models."gpt-5-mini-azure"]
+routing = ["azure"]
+
+[models."gpt-5-mini-azure".providers.azure]
+type = "azure"
+deployment_id = "gpt-5-mini"
+endpoint = "https://t0-azure-openai-east.openai.azure.com"
 
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]

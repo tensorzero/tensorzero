@@ -438,10 +438,11 @@ fn make_stream_from_non_stream(
             Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: content_blocks,
                 provider_latency,
-                raw_response: chat.original_response.unwrap_or_default(),
+                raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: chat.finish_reason,
                 usage,
                 raw_usage: raw_usage_entries.clone(),
+                raw_response: None, // Not used for fused stream chunks
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -449,8 +450,9 @@ fn make_stream_from_non_stream(
             thought: None,
             usage,
             raw_usage: raw_usage_entries,
+            raw_response: None, // Not used for fused stream chunks
             provider_latency,
-            raw_response: json.original_response.unwrap_or_default(),
+            raw_chunk: String::new(), // No actual streaming data for fake streams
             finish_reason: json.finish_reason,
         })),
     };
@@ -1176,6 +1178,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1210,6 +1213,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1263,6 +1267,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1300,6 +1305,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1378,6 +1384,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1412,6 +1419,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1477,6 +1485,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1830,8 +1839,9 @@ mod tests {
                     output_tokens: Some(20),
                 }),
                 raw_usage: None,
+                raw_response: None,
                 provider_latency: None,
-                raw_response: "My raw response".to_string(),
+                raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: Some(FinishReason::Length),
             })),]
         );

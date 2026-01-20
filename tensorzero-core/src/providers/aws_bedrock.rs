@@ -1,22 +1,19 @@
 //! AWS Bedrock model provider using direct HTTP calls to the Converse API.
 
-use aws_credential_types::Credentials;
 use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
-use aws_types::SdkConfig;
 use aws_types::region::Region;
 use bytes::BytesMut;
 use futures::StreamExt;
 use futures::future::try_join_all;
 use reqwest::StatusCode;
-use secrecy::ExposeSecret;
 use serde::Serialize;
 use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::aws_common::{
-    self, AWSCredentials, AWSEndpointUrl, AWSRegion, get_credentials, sign_request,
-    warn_if_credential_exfiltration_risk,
+    AWSCredentials, AWSEndpointUrl, AWSProviderConfig, AWSRegion, check_eventstream_exception,
+    send_aws_request, sign_request,
 };
 use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use crate::cache::ModelProviderRequest;
@@ -62,13 +59,7 @@ pub const PROVIDER_TYPE: &str = "aws_bedrock";
 pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
-    sdk_config: SdkConfig,
-    #[serde(skip)]
-    region: Option<AWSRegion>,
-    #[serde(skip)]
-    endpoint_url: Option<AWSEndpointUrl>,
-    #[serde(skip)]
-    credentials: AWSCredentials,
+    config: AWSProviderConfig,
 }
 
 impl AWSBedrockProvider {
@@ -79,125 +70,20 @@ impl AWSBedrockProvider {
         endpoint_url: Option<AWSEndpointUrl>,
         credentials: AWSCredentials,
     ) -> Result<Self, Error> {
-        // Get the SDK config for credential loading
-        let sdk_config = aws_common::config_with_region(PROVIDER_TYPE, static_region).await?;
-
-        // Warn about potential credential exfiltration risk
-        warn_if_credential_exfiltration_risk(&endpoint_url, &credentials, PROVIDER_TYPE);
-
-        Ok(Self {
-            model_id,
-            sdk_config,
+        let config = AWSProviderConfig::new(
+            static_region,
             region,
             endpoint_url,
             credentials,
-        })
+            PROVIDER_TYPE,
+        )
+        .await?;
+
+        Ok(Self { model_id, config })
     }
 
     pub fn model_id(&self) -> &str {
         &self.model_id
-    }
-
-    /// Get the base URL for the Bedrock API.
-    fn get_base_url(&self, dynamic_api_keys: &InferenceCredentials) -> Result<String, Error> {
-        if let Some(endpoint_url) = &self.endpoint_url {
-            let url = endpoint_url.resolve(dynamic_api_keys)?;
-            Ok(url.to_string().trim_end_matches('/').to_string())
-        } else {
-            let region = self.get_region(dynamic_api_keys)?;
-            Ok(format!(
-                "https://bedrock-runtime.{}.amazonaws.com",
-                region.as_ref()
-            ))
-        }
-    }
-
-    /// Get the region for this request.
-    fn get_region(&self, dynamic_api_keys: &InferenceCredentials) -> Result<Region, Error> {
-        if let Some(region) = &self.region {
-            region.resolve(dynamic_api_keys)
-        } else {
-            // Use the region from the SDK config
-            self.sdk_config.region().cloned().ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceClient {
-                    raw_request: None,
-                    raw_response: None,
-                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message: "No region configured".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })
-        }
-    }
-
-    /// Get credentials for this request.
-    async fn get_request_credentials(
-        &self,
-        dynamic_api_keys: &InferenceCredentials,
-    ) -> Result<Credentials, Error> {
-        match &self.credentials {
-            AWSCredentials::Static {
-                access_key_id,
-                secret_access_key,
-                session_token,
-            } => {
-                // Use static credentials directly
-                Ok(Credentials::new(
-                    access_key_id.clone(),
-                    secret_access_key.expose_secret().to_string(),
-                    session_token
-                        .as_ref()
-                        .map(|st| st.expose_secret().to_string()),
-                    None,
-                    "tensorzero",
-                ))
-            }
-            AWSCredentials::Dynamic {
-                access_key_id_key,
-                secret_access_key_key,
-                session_token_key,
-            } => {
-                // Resolve dynamic credentials from the request
-                let ak = dynamic_api_keys.get(access_key_id_key).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "aws".to_string(),
-                        message: format!(
-                            "Dynamic `access_key_id` with key `{access_key_id_key}` is missing"
-                        ),
-                    })
-                })?;
-                let sk = dynamic_api_keys.get(secret_access_key_key).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "aws".to_string(),
-                        message: format!(
-                            "Dynamic `secret_access_key` with key `{secret_access_key_key}` is missing"
-                        ),
-                    })
-                })?;
-                let st = session_token_key
-                    .as_ref()
-                    .map(|key| {
-                        dynamic_api_keys.get(key).ok_or_else(|| {
-                            Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: "aws".to_string(),
-                                message: format!(
-                                    "Dynamic `session_token` with key `{key}` is missing"
-                                ),
-                            })
-                        })
-                    })
-                    .transpose()?;
-
-                Ok(Credentials::new(
-                    ak.expose_secret().to_string(),
-                    sk.expose_secret().to_string(),
-                    st.map(|s| s.expose_secret().to_string()),
-                    None,
-                    "tensorzero",
-                ))
-            }
-            AWSCredentials::Sdk => get_credentials(&self.sdk_config, PROVIDER_TYPE).await,
-        }
     }
 }
 
@@ -223,7 +109,9 @@ impl InferenceProvider for AWSBedrockProvider {
         } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "bedrock-runtime", PROVIDER_TYPE)?;
         let url = format!(
             "{}/model/{}/converse",
             base_url,
@@ -231,71 +119,30 @@ impl InferenceProvider for AWSBedrockProvider {
         );
 
         // Get credentials and region
-        let credentials = self.get_request_credentials(dynamic_api_keys).await?;
-        let region = self.get_region(dynamic_api_keys)?;
+        let credentials = self
+            .config
+            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+            .await?;
+        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
-        // Build headers (extra headers + required content-type for JSON body)
-        let mut headers = http_extra_headers;
-        headers.insert(
-            http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/json"),
-        );
-        headers.insert(
-            http::header::ACCEPT,
-            http::header::HeaderValue::from_static("application/json"),
-        );
-
-        // Sign the request
-        let signed_headers = sign_request(
-            "POST",
+        // Send signed request
+        let aws_response = send_aws_request(
+            http_client,
             &url,
-            &headers,
-            &body_bytes,
+            http_extra_headers,
+            body_bytes,
             &credentials,
             region.as_ref(),
             "bedrock",
             PROVIDER_TYPE,
-        )?;
-
-        // Send request
-        let start_time = Instant::now();
-        let response = http_client
-            .post(&url)
-            .headers(signed_headers)
-            .body(body_bytes)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error sending request to AWS Bedrock: {e}"),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            &raw_request,
+        )
+        .await?;
 
         let latency = Latency::NonStreaming {
-            response_time: start_time.elapsed(),
+            response_time: aws_response.response_time,
         };
-
-        let status = response.status();
-        let raw_response = response.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error reading response from AWS Bedrock: {e}"),
-                raw_request: Some(raw_request.clone()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        if !status.is_success() {
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: format!("AWS Bedrock returned error status {status}: {raw_response}"),
-                raw_request: Some(raw_request),
-                raw_response: Some(raw_response),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }));
-        }
+        let raw_response = aws_response.raw_response;
 
         // Parse response
         let response: ConverseResponse = serde_json::from_str(&raw_response).map_err(|e| {
@@ -345,7 +192,9 @@ impl InferenceProvider for AWSBedrockProvider {
         } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL for streaming endpoint
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "bedrock-runtime", PROVIDER_TYPE)?;
         let url = format!(
             "{}/model/{}/converse-stream",
             base_url,
@@ -353,8 +202,11 @@ impl InferenceProvider for AWSBedrockProvider {
         );
 
         // Get credentials and region
-        let credentials = self.get_request_credentials(dynamic_api_keys).await?;
-        let region = self.get_region(dynamic_api_keys)?;
+        let credentials = self
+            .config
+            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+            .await?;
+        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
         // Build headers
         let mut headers = http_extra_headers;
@@ -859,6 +711,7 @@ fn convert_converse_response(
             raw_response,
             usage,
             raw_usage,
+            relay_raw_response: None,
             provider_latency: latency,
             finish_reason: Some(convert_stop_reason(response.stop_reason)),
             id: model_inference_id,
@@ -973,22 +826,8 @@ where
                     loop {
                         match decoder.decode_frame(&mut buffer) {
                             Ok(DecodedFrame::Complete(message)) => {
-                                // Check for exception messages first (AWS Smithy event stream format)
-                                let message_type = message.headers().iter()
-                                    .find(|h| h.name().as_str() == ":message-type")
-                                    .and_then(|h| h.value().as_string().ok())
-                                    .map(|s| s.as_str().to_owned());
-
-                                if message_type.as_deref() == Some("exception") {
-                                    // See https://smithy.io/2.0/aws/amazon-eventstream.html for details on the AWS Smithy event stream format
-                                    let exception_type = message.headers().iter()
-                                        .find(|h| h.name().as_str() == ":exception-type")
-                                        .and_then(|h| h.value().as_string().ok())
-                                        .map(|s| s.as_str().to_owned())
-                                        .unwrap_or_else(|| "unknown".to_string());
-
-                                    let error_message = String::from_utf8_lossy(message.payload()).to_string();
-
+                                // Check for exception messages using shared helper
+                                if let Some((exception_type, error_message)) = check_eventstream_exception(&message) {
                                     yield Err(ErrorDetails::InferenceServer {
                                         raw_request: Some(raw_request.clone()),
                                         raw_response: Some(error_message),

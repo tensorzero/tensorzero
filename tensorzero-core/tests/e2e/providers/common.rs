@@ -106,18 +106,14 @@ pub struct EmbeddingTestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
-
     pub bad_auth_extra_headers: Vec<E2ETestProvider>,
     pub extra_body_inference: Vec<E2ETestProvider>,
-
     pub reasoning_inference: Vec<E2ETestProvider>,
-
+    pub reasoning_usage_inference: Vec<E2ETestProvider>,
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
-
     pub provider_type_default_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials_shorthand: Vec<E2ETestProvider>,
     pub credential_fallbacks: Vec<ModelTestProvider>,
-
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -125,11 +121,9 @@ pub struct E2ETestProviders {
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
     pub json_mode_off_inference: Vec<E2ETestProvider>,
-
     pub image_inference: Vec<E2ETestProvider>,
     pub pdf_inference: Vec<E2ETestProvider>,
     pub input_audio: Vec<E2ETestProvider>,
-
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
 }
@@ -200,8 +194,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
         use $crate::providers::embeddings::test_single_token_array_with_provider;
         use $crate::providers::embeddings::test_batch_token_arrays_semantic_similarity_with_provider;
-        use $crate::providers::common::test_multi_turn_thought_non_streaming_with_provider;
-        use $crate::providers::common::test_multi_turn_thought_streaming_with_provider;
+        use $crate::providers::common::test_reasoning_multi_turn_thought_non_streaming_with_provider;
+        use $crate::providers::common::test_reasoning_multi_turn_thought_streaming_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -560,6 +554,22 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_reasoning_output_tokens_non_streaming() {
+            let providers = $func().await.reasoning_usage_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_reasoning_output_tokens_streaming() {
+            let providers = $func().await.reasoning_usage_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_streaming_with_provider(provider).await;
+            }
+        }
+
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
@@ -625,18 +635,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_multi_turn_thought_non_streaming() {
+        async fn test_reasoning_multi_turn_thought_non_streaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_multi_turn_thought_non_streaming_with_provider(provider).await;
+                test_reasoning_multi_turn_thought_non_streaming_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
-        async fn test_multi_turn_thought_streaming() {
+        async fn test_reasoning_multi_turn_thought_streaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_multi_turn_thought_streaming_with_provider(provider).await;
+                test_reasoning_multi_turn_thought_streaming_with_provider(provider).await;
             }
         }
 
@@ -4123,8 +4133,20 @@ pub async fn check_inference_params_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 1);
+    // Some providers return thought blocks - filter them out since this test doesn't care about thoughts
+    let content: Vec<_> = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        content.len(),
+        1,
+        "Expected exactly one non-thought content block"
+    );
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -4378,10 +4400,13 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        if !content_blocks.is_empty() {
-            let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+        // Filter out thought blocks and collect text content
+        for content_block in content_blocks {
+            if content_block.get("type").unwrap().as_str().unwrap() == "text"
+                && let Some(text) = content_block.get("text").and_then(|t| t.as_str())
+            {
+                full_content.push_str(text);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -8529,8 +8554,20 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 1);
+    // Some providers return thought blocks - filter them out since this test doesn't care about thoughts
+    let content: Vec<_> = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        content.len(),
+        1,
+        "Expected exactly one non-thought content block"
+    );
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -8593,7 +8630,16 @@ pub async fn check_tool_use_multi_turn_inference_response(
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let content_blocks: Vec<_> = content_blocks
+        .into_iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        content_blocks.len(),
+        1,
+        "Expected exactly one non-thought content block in ClickHouse output"
+    );
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -8703,7 +8749,16 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let output: Vec<_> = output
+        .into_iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect();
+    assert_eq!(
+        output.len(),
+        1,
+        "Expected exactly one non-thought content block in ModelInference output"
+    );
     let first = output.first().unwrap();
     match first {
         StoredContentBlock::Text(text) => {
@@ -8819,10 +8874,13 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        if !content_blocks.is_empty() {
-            let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+        // Filter out thought blocks and collect text content
+        for content_block in content_blocks {
+            if content_block.get("type").unwrap().as_str().unwrap() == "text"
+                && let Some(text) = content_block.get("text").and_then(|t| t.as_str())
+            {
+                full_content.push_str(text);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -8899,7 +8957,16 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let output: Vec<_> = output
+        .into_iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        output.len(),
+        1,
+        "Expected exactly one non-thought content block in ClickHouse output"
+    );
     let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -9003,7 +9070,16 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let output: Vec<_> = output
+        .into_iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect();
+    assert_eq!(
+        output.len(),
+        1,
+        "Expected exactly one non-thought content block in ModelInference output"
+    );
     let first = output.first().unwrap();
     match first {
         StoredContentBlock::Text(text) => {
@@ -12650,7 +12726,9 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
     assert!(content.to_lowercase().contains("tokyo"));
 }
 
-pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
+    provider: E2ETestProvider,
+) {
     if provider.variant_name == "together-deepseek-r1" {
         // This produces invalid tool calls within text blocks (e.g 🛠\u{fe0f}\n\n```json\n{\n  \"too)
         return;
@@ -12714,12 +12792,12 @@ pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETe
         "Expected a tool call block in the content blocks: {content_blocks:?}"
     );
 
-    let tool_id = content_blocks
+    // Collect ALL tool call IDs - Anthropic requires a tool_result for every tool_use
+    let tool_ids: Vec<&str> = content_blocks
         .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap()["id"]
-        .as_str()
-        .unwrap();
+        .filter(|block| block["type"] == "tool_call")
+        .map(|block| block["id"].as_str().unwrap())
+        .collect();
 
     let tensorzero_content_blocks = content_blocks.clone();
 
@@ -12734,41 +12812,124 @@ pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETe
         }),
     ];
 
+    // Provide a tool result for each tool call
+    let tool_results: Vec<Value> = tool_ids
+        .iter()
+        .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+        .collect();
+
     new_messages.push(serde_json::json!({
         "role": "user",
-        "content": [{"type": "tool_result", "name": "My result", "result": "13", "id": tool_id}],
+        "content": tool_results,
     }));
 
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "AskJeeves"},
-            "messages": new_messages
-        },
-        "stream": false,
-    });
-    println!("New payload: {payload}");
+    // Loop until we get a text response (some models may make multiple tool calls)
+    let max_iterations = 5;
+    for iteration in 0..max_iterations {
+        let payload = json!({
+            "function_name": "weather_helper",
+            "variant_name": provider.variant_name,
+            "episode_id": episode_id,
+            "input": {
+                "system": {"assistant_name": "AskJeeves"},
+                "messages": new_messages
+            },
+            "stream": false,
+        });
+        println!("Payload (iteration {iteration}): {payload}");
 
-    let response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    let response_json = response.json::<Value>().await.unwrap();
-    let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
-    assert!(
-        new_content_blocks
+        let response = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
+        let response_json = response.json::<Value>().await.unwrap();
+        let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+
+        // On the first iteration, verify that thoughts were actually sent to the provider
+        // This catches providers that silently drop input thoughts
+        if iteration == 0 {
+            let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+            let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+            // Sleep for ClickHouse trailing writes
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            let clickhouse = get_clickhouse().await;
+            let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+                .await
+                .unwrap();
+
+            let input_messages_str = model_inference
+                .get("input_messages")
+                .unwrap()
+                .as_str()
+                .unwrap();
+            let input_messages: Vec<Value> = serde_json::from_str(input_messages_str).unwrap();
+
+            // Verify assistant message contains thought blocks
+            let assistant_has_thought = input_messages.iter().any(|msg| {
+                msg.get("role").map(|r| r == "assistant").unwrap_or(false)
+                    && msg
+                        .get("content")
+                        .and_then(|c| c.as_array())
+                        .is_some_and(|blocks| {
+                            blocks
+                                .iter()
+                                .any(|block| block.get("type").is_some_and(|t| t == "thought"))
+                        })
+            });
+
+            assert!(
+                assistant_has_thought,
+                "Expected thought block in input_messages sent to provider, but none found. \
+                 Provider may be silently dropping thoughts. Input messages: {input_messages:?}"
+            );
+        }
+
+        // Check if we got a text response
+        if new_content_blocks
             .iter()
-            .any(|block| block["type"] == "text"),
-        "Expected at least one text block in the new content blocks: {new_content_blocks:?}"
-    );
-    // Don't bother checking ClickHouse, as we do that in lots of other tests
+            .any(|block| block["type"] == "text")
+        {
+            // Success - we got a text response
+            return;
+        }
+
+        // If not, check if we got more tool calls and provide results
+        let new_tool_ids: Vec<&str> = new_content_blocks
+            .iter()
+            .filter(|block| block["type"] == "tool_call")
+            .map(|block| block["id"].as_str().unwrap())
+            .collect();
+
+        assert!(
+            !new_tool_ids.is_empty(),
+            "Expected either a text block or tool call in response: {new_content_blocks:?}"
+        );
+
+        // Add assistant response and tool results for the next iteration
+        new_messages.push(serde_json::json!({
+            "role": "assistant",
+            "content": new_content_blocks,
+        }));
+
+        let tool_results: Vec<Value> = new_tool_ids
+            .iter()
+            .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+            .collect();
+
+        new_messages.push(serde_json::json!({
+            "role": "user",
+            "content": tool_results,
+        }));
+    }
+
+    panic!("Did not receive a text response after {max_iterations} iterations of tool calls");
 }
 
-pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
     if provider.variant_name == "fireworks-deepseek" {
         // This either times out or returns "Internal Server Error"
         return;
@@ -12776,6 +12937,11 @@ pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestPr
 
     // TODO: https://github.com/tensorzero/tensorzero/issues/5270
     if provider.variant_name == "together-deepseek-r1" {
+        return;
+    }
+
+    // TODO: https://github.com/tensorzero/tensorzero/issues/5270
+    if provider.variant_name == "deepseek-reasoner" {
         return;
     }
 
@@ -12836,7 +13002,7 @@ pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestPr
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse
+    // Check ClickHouse for the collected chunks from the first request
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -12862,4 +13028,166 @@ pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestPr
             .any(|block| block["type"] == "tool_call"),
         "Expected a tool call block in the content blocks: {clickhouse_content_blocks:?}"
     );
+
+    // Now make a second streaming request with tool results (multi-turn)
+    // Collect ALL tool call IDs - Anthropic requires a tool_result for every tool_use
+    let tool_ids: Vec<&str> = clickhouse_content_blocks
+        .iter()
+        .filter(|block| block["type"] == "tool_call")
+        .map(|block| block["id"].as_str().unwrap())
+        .collect();
+
+    let mut new_messages = vec![
+        serde_json::json!({
+            "role": "user",
+            "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+        }),
+        serde_json::json!({
+            "role": "assistant",
+            "content": clickhouse_content_blocks,
+        }),
+    ];
+
+    // Provide a tool result for each tool call
+    let tool_results: Vec<Value> = tool_ids
+        .iter()
+        .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+        .collect();
+
+    new_messages.push(serde_json::json!({
+        "role": "user",
+        "content": tool_results,
+    }));
+
+    // Loop until we get a text response (some models may make multiple tool calls)
+    let max_iterations = 5;
+    for iteration in 0..max_iterations {
+        let payload = json!({
+            "function_name": "weather_helper",
+            "variant_name": provider.variant_name,
+            "episode_id": episode_id,
+            "input": {
+                "system": {"assistant_name": "AskJeeves"},
+                "messages": new_messages
+            },
+            "stream": true,
+        });
+        println!("Payload (iteration {iteration}): {payload}");
+
+        let mut event_source = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .eventsource()
+            .unwrap();
+        let mut chunks = vec![];
+        while let Some(event) = event_source.next().await {
+            let event = event.unwrap();
+            match event {
+                Event::Open => continue,
+                Event::Message(message) => {
+                    if message.data == "[DONE]" {
+                        break;
+                    }
+                    chunks.push(message.data);
+                }
+            }
+        }
+
+        // Validate we got chunks and extract inference_id
+        let mut current_inference_id = None;
+        for chunk in &chunks {
+            let chunk_json: Value = serde_json::from_str(chunk).unwrap();
+            println!("Chunk (iteration {iteration}): {chunk_json}");
+            current_inference_id = Some(
+                chunk_json
+                    .get("inference_id")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            );
+        }
+        let current_inference_id = current_inference_id.unwrap().parse::<Uuid>().unwrap();
+
+        // Sleep for 1 second to allow time for data to be inserted into ClickHouse
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        // On the first iteration, verify that thoughts were actually sent to the provider
+        // This catches providers that silently drop input thoughts
+        if iteration == 0 {
+            let model_inference =
+                select_model_inference_clickhouse(&clickhouse, current_inference_id)
+                    .await
+                    .unwrap();
+
+            let input_messages_str = model_inference
+                .get("input_messages")
+                .unwrap()
+                .as_str()
+                .unwrap();
+            let input_messages: Vec<Value> = serde_json::from_str(input_messages_str).unwrap();
+
+            // Verify assistant message contains thought blocks
+            let assistant_has_thought = input_messages.iter().any(|msg| {
+                msg.get("role").map(|r| r == "assistant").unwrap_or(false)
+                    && msg
+                        .get("content")
+                        .and_then(|c| c.as_array())
+                        .is_some_and(|blocks| {
+                            blocks
+                                .iter()
+                                .any(|block| block.get("type").is_some_and(|t| t == "thought"))
+                        })
+            });
+
+            assert!(
+                assistant_has_thought,
+                "Expected thought block in input_messages sent to provider (streaming), but none found. \
+                 Provider may be silently dropping thoughts. Input messages: {input_messages:?}"
+            );
+        }
+
+        // Check ClickHouse for the collected chunks
+        let result = select_chat_inference_clickhouse(&clickhouse, current_inference_id)
+            .await
+            .unwrap();
+        let content_blocks_str = result.get("output").unwrap().as_str().unwrap();
+        let content_blocks: Vec<Value> = serde_json::from_str(content_blocks_str).unwrap();
+
+        // Check if we got a text response
+        if content_blocks.iter().any(|block| block["type"] == "text") {
+            // Success - we got a text response
+            return;
+        }
+
+        // If not, check if we got more tool calls and provide results
+        let new_tool_ids: Vec<&str> = content_blocks
+            .iter()
+            .filter(|block| block["type"] == "tool_call")
+            .map(|block| block["id"].as_str().unwrap())
+            .collect();
+
+        assert!(
+            !new_tool_ids.is_empty(),
+            "Expected either a text block or tool call in response: {content_blocks:?}"
+        );
+
+        // Add assistant response and tool results for the next iteration
+        new_messages.push(serde_json::json!({
+            "role": "assistant",
+            "content": content_blocks,
+        }));
+
+        let tool_results: Vec<Value> = new_tool_ids
+            .iter()
+            .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+            .collect();
+
+        new_messages.push(serde_json::json!({
+            "role": "user",
+            "content": tool_results,
+        }));
+    }
+
+    panic!("Did not receive a text response after {max_iterations} iterations of tool calls");
 }

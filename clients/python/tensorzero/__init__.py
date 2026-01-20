@@ -140,6 +140,7 @@ from .types import (
     NotFilter,  # pyright: ignore[reportDeprecated]
     OrderBy,
     OrFilter,  # pyright: ignore[reportDeprecated]
+    RawResponseEntry,
     RawText,
     RawUsageEntry,
     System,
@@ -300,6 +301,7 @@ __all__ = [
     "ProviderExtraBodyDelete",  # DEPRECATED
     "ProviderExtraHeader",  # DEPRECATED
     "ProviderExtraHeaderDelete",  # DEPRECATED
+    "RawResponseEntry",
     "RawText",
     "RawUsageEntry",
     "RenderedSample",
