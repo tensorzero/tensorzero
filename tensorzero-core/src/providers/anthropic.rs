@@ -43,6 +43,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
+use crate::utils::deprecation_warning;
 use uuid::Uuid;
 
 use super::helpers::convert_stream_error;
@@ -51,13 +52,74 @@ use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_t
 lazy_static! {
     static ref ANTHROPIC_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
-        Url::parse("https://api.anthropic.com/v1/messages")
+        Url::parse("https://api.anthropic.com/v1/")
             .expect("Failed to parse ANTHROPIC_DEFAULT_BASE_URL")
     };
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
 pub const PROVIDER_TYPE: &str = "anthropic";
+
+/// Checks if the api_base ends with `/messages` and warns if it does.
+/// This mirrors the OpenAI pattern in `check_api_base_suffix`.
+fn check_api_base_suffix(api_base: &Url) {
+    let path = api_base.path();
+    if path.ends_with("/messages") || path.ends_with("/messages/") {
+        // IMPORTANT: After the deprecation period, we should still keep `check_api_base_suffix` but change the warning message.
+        // See OpenAI's `check_api_base_suffix` for more details.
+        // Deprecation #5668: https://github.com/tensorzero/tensorzero/issues/5668
+        deprecation_warning(&format!(
+            "The gateway automatically appends `/messages` to the `api_base`. \
+            You provided `{api_base}` which includes the `/messages` suffix. \
+            Please remove the `/messages` suffix from `api_base`. \
+            The suffix will be stripped automatically for now, but this behavior \
+            may be removed in a future release."
+        ));
+    }
+}
+
+/// Normalizes an api_base by stripping the `/messages` suffix if present.
+/// Returns the normalized URL.
+fn normalize_api_base(mut api_base: Url) -> Url {
+    let path = api_base.path().to_string();
+    if path.ends_with("/messages") {
+        let new_path = &path[..path.len() - "/messages".len()];
+        // Ensure trailing slash
+        let new_path = if new_path.ends_with('/') {
+            new_path.to_string()
+        } else {
+            format!("{new_path}/")
+        };
+        api_base.set_path(&new_path);
+        api_base
+    } else if path.ends_with("/messages/") {
+        let new_path = &path[..path.len() - "/messages/".len()];
+        // Ensure trailing slash
+        let new_path = if new_path.ends_with('/') {
+            new_path.to_string()
+        } else {
+            format!("{new_path}/")
+        };
+        api_base.set_path(&new_path);
+        api_base
+    } else {
+        api_base
+    }
+}
+
+/// Constructs the messages URL by appending `/messages` to the base URL.
+/// This mirrors the OpenAI pattern in `get_chat_url`.
+fn get_messages_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("messages").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
@@ -76,9 +138,15 @@ impl AnthropicProvider {
         credentials: AnthropicCredentials,
         beta_structured_outputs: bool,
     ) -> Self {
+        // Check and normalize api_base if provided
+        let normalized_api_base = api_base.map(|url| {
+            check_api_base_suffix(&url);
+            normalize_api_base(url)
+        });
+
         AnthropicProvider {
             model_name,
-            api_base,
+            api_base: normalized_api_base,
             credentials,
             beta_structured_outputs,
         }
@@ -92,6 +160,10 @@ impl AnthropicProvider {
         self.api_base
             .as_ref()
             .unwrap_or(&ANTHROPIC_DEFAULT_BASE_URL)
+    }
+
+    fn messages_url(&self) -> Result<Url, Error> {
+        get_messages_url(self.base_url())
     }
 }
 
@@ -195,8 +267,9 @@ impl InferenceProvider for AnthropicProvider {
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
+        let request_url = self.messages_url()?;
         let mut builder = http_client
-            .post(self.base_url().as_ref())
+            .post(request_url.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
@@ -297,8 +370,9 @@ impl InferenceProvider for AnthropicProvider {
         })?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
+        let request_url = self.messages_url()?;
         let mut builder = http_client
-            .post(self.base_url().as_ref())
+            .post(request_url.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
@@ -2955,13 +3029,14 @@ mod tests {
     fn test_anthropic_base_url() {
         assert_eq!(
             ANTHROPIC_DEFAULT_BASE_URL.as_str(),
-            "https://api.anthropic.com/v1/messages"
+            "https://api.anthropic.com/v1/",
+            "Default base URL should be the API root without /messages"
         );
     }
 
     #[test]
     fn test_anthropic_provider_custom_api_base() {
-        let custom_url = Url::parse("https://example.com/custom").unwrap();
+        let custom_url = Url::parse("https://example.com/custom/").unwrap();
         let provider = AnthropicProvider::new(
             "claude".to_string(),
             Some(custom_url.clone()),
@@ -2969,7 +3044,16 @@ mod tests {
             false,
         );
 
-        assert_eq!(provider.base_url(), &custom_url);
+        assert_eq!(
+            provider.base_url(),
+            &custom_url,
+            "Custom api_base should be stored as-is"
+        );
+        assert_eq!(
+            provider.messages_url().unwrap().as_str(),
+            "https://example.com/custom/messages",
+            "messages_url() should append /messages to custom base URL"
+        );
     }
 
     #[test]
@@ -2983,7 +3067,145 @@ mod tests {
 
         assert_eq!(
             provider.base_url().as_str(),
-            ANTHROPIC_DEFAULT_BASE_URL.as_str()
+            "https://api.anthropic.com/v1/",
+            "Default base URL should be the API root"
+        );
+        assert_eq!(
+            provider.messages_url().unwrap().as_str(),
+            "https://api.anthropic.com/v1/messages",
+            "messages_url() should return URL with /messages appended"
+        );
+    }
+
+    #[test]
+    fn test_get_messages_url() {
+        // Test with URL with trailing slash
+        let base_url = Url::parse("https://api.anthropic.com/v1/").unwrap();
+        let messages_url = get_messages_url(&base_url).unwrap();
+        assert_eq!(
+            messages_url.as_str(),
+            "https://api.anthropic.com/v1/messages",
+            "Should append /messages to base URL with trailing slash"
+        );
+
+        // Test with URL without trailing slash
+        let base_url = Url::parse("https://api.anthropic.com/v1").unwrap();
+        let messages_url = get_messages_url(&base_url).unwrap();
+        assert_eq!(
+            messages_url.as_str(),
+            "https://api.anthropic.com/v1/messages",
+            "Should append /messages to base URL without trailing slash"
+        );
+
+        // Test with custom base URL
+        let base_url = Url::parse("https://example.com/anthropic/v1/").unwrap();
+        let messages_url = get_messages_url(&base_url).unwrap();
+        assert_eq!(
+            messages_url.as_str(),
+            "https://example.com/anthropic/v1/messages",
+            "Should work with custom base URLs"
+        );
+    }
+
+    #[test]
+    fn test_check_api_base_suffix() {
+        let logs_contain = capture_logs();
+
+        // Valid cases (should not warn)
+        check_api_base_suffix(&Url::parse("https://api.anthropic.com/v1/").unwrap());
+        check_api_base_suffix(&Url::parse("https://api.anthropic.com/v1").unwrap());
+        check_api_base_suffix(&Url::parse("https://example.com/anthropic/").unwrap());
+
+        // Invalid cases (should warn with deprecation)
+        let url1 = Url::parse("https://api.anthropic.com/v1/messages").unwrap();
+        check_api_base_suffix(&url1);
+        assert!(
+            logs_contain("Deprecation Warning"),
+            "Should emit deprecation warning for URL ending with /messages"
+        );
+        assert!(
+            logs_contain("automatically appends `/messages`"),
+            "Warning should mention automatic appending"
+        );
+
+        let url2 = Url::parse("https://api.anthropic.com/v1/messages/").unwrap();
+        check_api_base_suffix(&url2);
+        assert!(
+            logs_contain(url2.as_ref()),
+            "Warning should include the problematic URL"
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_base() {
+        // Test URL ending with /messages
+        let url = Url::parse("https://api.anthropic.com/v1/messages").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://api.anthropic.com/v1/",
+            "Should strip /messages and add trailing slash"
+        );
+
+        // Test URL ending with /messages/
+        let url = Url::parse("https://api.anthropic.com/v1/messages/").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://api.anthropic.com/v1/",
+            "Should strip /messages/ and preserve trailing slash"
+        );
+
+        // Test URL without /messages suffix (should remain unchanged)
+        let url = Url::parse("https://api.anthropic.com/v1/").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://api.anthropic.com/v1/",
+            "Should not modify URL without /messages suffix"
+        );
+
+        // Test custom URL with /messages
+        let url = Url::parse("https://example.com/anthropic/v1/messages").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://example.com/anthropic/v1/",
+            "Should work with custom URLs"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_provider_normalizes_api_base_with_messages() {
+        let logs_contain = capture_logs();
+
+        // Create provider with api_base that includes /messages
+        let url_with_messages = Url::parse("https://example.com/v1/messages").unwrap();
+        let provider = AnthropicProvider::new(
+            "claude".to_string(),
+            Some(url_with_messages),
+            AnthropicCredentials::None,
+            false,
+        );
+
+        // Verify the stored api_base is normalized
+        assert_eq!(
+            provider.base_url().as_str(),
+            "https://example.com/v1/",
+            "Provider should store normalized base URL without /messages"
+        );
+
+        // Verify messages_url() returns the correct full URL
+        assert_eq!(
+            provider.messages_url().unwrap().as_str(),
+            "https://example.com/v1/messages",
+            "messages_url() should return URL with /messages appended"
+        );
+
+        // Verify deprecation warning was emitted
+        assert!(
+            logs_contain("Deprecation Warning"),
+            "Should emit deprecation warning when api_base includes /messages"
         );
     }
 
