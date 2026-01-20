@@ -8,12 +8,12 @@ test("should filter internal functions by default and toggle visibility", async 
   const table = page.getByRole("table");
   await expect(table.getByText("Variants")).toBeVisible();
 
-  const headingCounts = page
-    .getByRole("heading", { level: 1 })
-    .filter({ hasText: /^\d/ });
-  await expect(headingCounts).toHaveCount(1);
+  // The count is displayed as a sibling to the heading (for inline flow)
+  const pageHeader = page.locator("h1").locator("..");
+  const countDisplay = pageHeader.locator("span.text-fg-muted");
+  await expect(countDisplay).toBeVisible();
   const getCount = async () =>
-    Number((await headingCounts.first().textContent())?.trim());
+    Number((await countDisplay.textContent())?.replace(/,/g, "").trim());
 
   const initialCount = await getCount();
 
