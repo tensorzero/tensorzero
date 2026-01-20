@@ -26,7 +26,7 @@ import {
   SectionHeader,
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
-import { getFunctionTypeIcon } from "~/utils/icon";
+import { FunctionTypeBadge } from "~/components/function/FunctionSelector";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { TimeWindow } from "~/types/tensorzero";
@@ -278,14 +278,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           />
         }
         name={function_name}
-        tag={
-          <span
-            className={`${getFunctionTypeIcon(function_config.type).iconBg} inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 font-mono text-sm`}
-          >
-            {getFunctionTypeIcon(function_config.type).icon}
-            {function_config.type}
-          </span>
-        }
+        tag={<FunctionTypeBadge type={function_config.type} />}
       >
         <BasicInfo functionConfig={function_config} />
       </PageHeader>

@@ -43,7 +43,7 @@ test.describe("Clone Datapoint", () => {
     await page.waitForLoadState("networkidle");
 
     // Verify the dataset page loads and has at least one datapoint
-    await expect(page.getByText("Dataset", { exact: true })).toBeVisible({
+    await expect(page.getByText("Datasets", { exact: true })).toBeVisible({
       timeout: 10000,
     });
 

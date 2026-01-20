@@ -485,7 +485,7 @@ test.describe("should navigate to inference from Try with X modal and verify tag
       });
 
       // Verify we're on an inference detail page
-      await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+      await expect(page.getByText("Inferences", { exact: true })).toBeVisible();
 
       // Verify the tags section shows our UI tags
       await expect(page.getByText("tensorzero::internal")).toBeVisible();

@@ -28,6 +28,7 @@ import {
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+import { toFunctionUrl } from "~/utils/urls";
 import { applyPaginationLogic } from "~/utils/pagination";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 
@@ -238,7 +239,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
               { label: "Functions", href: "/observability/functions" },
               {
                 label: function_name,
-                href: `/observability/functions/${function_name}`,
+                href: toFunctionUrl(function_name),
                 isIdentifier: true,
               },
               { label: "Variants" },

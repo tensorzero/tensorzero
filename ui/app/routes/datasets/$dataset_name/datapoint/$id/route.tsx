@@ -646,7 +646,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
               { label: "Datasets", href: "/datasets" },
               {
                 label: datapoint.dataset_name,
-                href: `/datasets/${datapoint.dataset_name}`,
+                href: toDatasetUrl(datapoint.dataset_name),
                 isIdentifier: true,
               },
               { label: "Datapoints" },

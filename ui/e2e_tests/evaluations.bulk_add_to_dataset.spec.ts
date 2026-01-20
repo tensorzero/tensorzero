@@ -213,7 +213,7 @@ test("should be able to bulk add selected inferences to a dataset from multi-eva
   await page.waitForLoadState("networkidle");
 
   // Verify we're on the inference page
-  await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+  await expect(page.getByText("Inferences", { exact: true })).toBeVisible();
 
   // Verify the variant name is llama_8b_initial_prompt (the variant we selected from the third row)
   await expect(page.getByText("llama_8b_initial_prompt")).toBeVisible();

@@ -290,7 +290,7 @@ export default function EvaluationDatapointPage({
                 { label: "Evaluations", href: "/evaluations" },
                 {
                   label: evaluation_name,
-                  href: `/evaluations/${evaluation_name}`,
+                  href: toEvaluationUrl(evaluation_name),
                   isIdentifier: true,
                 },
                 { label: "Results" },

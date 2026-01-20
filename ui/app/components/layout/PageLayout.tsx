@@ -1,67 +1,16 @@
 import { Badge } from "~/components/ui/badge";
 import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbSeparator,
-} from "~/components/ui/breadcrumb";
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { Suspense, use, type ReactNode } from "react";
-import { Link } from "react-router";
 import { cn } from "~/utils/common";
 import { Skeleton } from "~/components/ui/skeleton";
-import { ChevronRight } from "lucide-react";
-
-export interface BreadcrumbSegment {
-  label: string;
-  /** If omitted, segment is rendered as non-clickable text */
-  href?: string;
-  /** If true, renders label in monospace font (for IDs, names, etc.) */
-  isIdentifier?: boolean;
-}
-
-/**
- * Renders breadcrumb segments for use in PageHeader eyebrow.
- * Segments with href are clickable links; segments without href are plain text.
- */
-function Breadcrumbs({ segments }: { segments: BreadcrumbSegment[] }) {
-  if (segments.length === 0) return null;
-
-  return (
-    <Breadcrumb>
-      <BreadcrumbList className="gap-1.5 text-sm">
-        {segments.map((segment, index) => (
-          <BreadcrumbItem key={segment.href ?? `${index}-${segment.label}`}>
-            {segment.href ? (
-              <BreadcrumbLink asChild>
-                <Link
-                  to={segment.href}
-                  className={segment.isIdentifier ? "font-mono" : undefined}
-                >
-                  {segment.label}
-                </Link>
-              </BreadcrumbLink>
-            ) : (
-              <span className={segment.isIdentifier ? "font-mono" : undefined}>
-                {segment.label}
-              </span>
-            )}
-            {index < segments.length - 1 && (
-              <BreadcrumbSeparator>
-                <ChevronRight className="h-3 w-3" />
-              </BreadcrumbSeparator>
-            )}
-          </BreadcrumbItem>
-        ))}
-      </BreadcrumbList>
-    </Breadcrumb>
-  );
-}
+import {
+  Breadcrumbs,
+  type BreadcrumbSegment,
+} from "~/components/layout/Breadcrumbs";
 
 const PageLayout: React.FC<React.ComponentProps<"div">> = ({
   children,
@@ -82,25 +31,20 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 type CountValue = number | bigint | Promise<number | bigint>;
 
 interface PageHeaderProps {
-  /**
-   * Eyebrow content displayed above the title.
-   * Can be simple text (for modals) or breadcrumbs (for pages).
-   */
   eyebrow?: ReactNode;
   heading?: string;
   name?: string;
   count?: CountValue;
   children?: ReactNode;
-  /** Inline badge/tag displayed after the title */
   tag?: ReactNode;
 }
 
 function CountDisplay({ count }: { count: CountValue }) {
   const resolvedCount = count instanceof Promise ? use(count) : count;
   return (
-    <h1 className="text-fg-muted text-2xl font-medium">
+    <span className="text-fg-muted text-2xl font-medium">
       {resolvedCount.toLocaleString()}
-    </h1>
+    </span>
   );
 }
 
@@ -223,4 +167,5 @@ export {
   SectionsGroup,
   PageLayout,
   Breadcrumbs,
+  type BreadcrumbSegment,
 };
