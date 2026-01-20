@@ -732,6 +732,8 @@ impl RateLimitedInputContent for Thought {
             // not the internal model thoughts.
             summary: _,
             provider_type: _,
+            // We don't count extra_data towards token usage as it's opaque provider data
+            extra_data: _,
         } = self;
         text.as_ref().map_or(0, |text| get_estimated_tokens(text))
             + signature

@@ -856,3 +856,21 @@ type = "chat_completion"
 model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
+
+# OpenRouter reasoning variants
+
+# Grok 3 Mini with effort-based reasoning
+[functions.basic_test.variants.openrouter-grok-reasoning]
+type = "chat_completion"
+model = "grok-3-mini-openrouter"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+reasoning_effort = "low"
+
+# Claude Haiku 4.5 with max_tokens-based reasoning
+[functions.basic_test.variants.openrouter-claude-reasoning]
+type = "chat_completion"
+model = "claude-haiku-4-5-openrouter"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+thinking_budget_tokens = 1024

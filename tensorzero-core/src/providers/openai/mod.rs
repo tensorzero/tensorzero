@@ -2719,6 +2719,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 signature: None,
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }));
         }
         if let Some(text) = message.content {
@@ -2869,6 +2870,7 @@ fn openai_to_tensorzero_chunk(
                 id: "1".to_string(),
                 summary_id: None,
                 summary_text: None,
+                extra_data: None,
             }));
         }
         if let Some(text) = choice.delta.content {

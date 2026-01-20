@@ -271,6 +271,7 @@ fn parse_thinking_output(
                         signature: None,
                         summary: None,
                         provider_type: None,
+                        extra_data: None,
                     }));
                 return Ok(output);
             };
@@ -281,6 +282,7 @@ fn parse_thinking_output(
                     signature: None,
                     summary: None,
                     provider_type: None,
+                    extra_data: None,
                 }),
             );
             Ok(output)
@@ -375,6 +377,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             })
         );
 
@@ -390,6 +393,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             })],
             json_block_index: Some(0),
         };
@@ -417,6 +421,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             })
         );
         assert_eq!(
@@ -426,6 +431,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             })
         );
     }

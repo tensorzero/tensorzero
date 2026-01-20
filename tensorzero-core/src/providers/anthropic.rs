@@ -1146,6 +1146,7 @@ fn convert_to_output(
             signature: Some(signature),
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         })),
         FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
@@ -1153,6 +1154,7 @@ fn convert_to_output(
                 signature: Some(data),
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }))
         }
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown(Unknown {
@@ -1432,6 +1434,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1448,6 +1451,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1501,6 +1505,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(provider_type.to_string()),
+                    extra_data: None,
                 })],
                 None,
                 raw_message,
@@ -1516,6 +1521,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
