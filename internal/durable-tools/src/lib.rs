@@ -172,6 +172,9 @@ mod task_tool;
 pub mod tensorzero_client;
 mod tool_metadata;
 
+#[cfg(feature = "typescript")]
+pub mod typescript;
+
 #[cfg(test)]
 mod tests;
 

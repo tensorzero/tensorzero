@@ -261,15 +261,15 @@ impl ToolMetadata for EchoSimpleTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("echo_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(10)
     }
 }
@@ -277,6 +277,7 @@ impl ToolMetadata for EchoSimpleTool {
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
@@ -289,6 +290,7 @@ impl SimpleTool for EchoSimpleTool {
 }
 
 /// A simple `TaskTool` for testing.
+#[derive(Default)]
 struct EchoTaskTool;
 
 impl ToolMetadata for EchoTaskTool {
@@ -296,15 +298,15 @@ impl ToolMetadata for EchoTaskTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("echo_task")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(60)
     }
 }
@@ -312,9 +314,10 @@ impl ToolMetadata for EchoTaskTool {
 #[async_trait]
 impl TaskTool for EchoTaskTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         Ok(EchoOutput {
             echoed: llm_params.message,
@@ -352,6 +355,7 @@ fn extract_text_from_response(response: &InferenceResponse) -> String {
 }
 
 /// A `SimpleTool` that calls inference and returns the response text.
+#[derive(Default)]
 struct InferenceSimpleTool;
 
 impl ToolMetadata for InferenceSimpleTool {
@@ -359,15 +363,15 @@ impl ToolMetadata for InferenceSimpleTool {
     type Output = InferenceToolOutput;
     type LlmParams = InferencePromptParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("inference_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Calls inference and returns the response")
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(30)
     }
 }
@@ -375,6 +379,7 @@ impl ToolMetadata for InferenceSimpleTool {
 #[async_trait]
 impl SimpleTool for InferenceSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         ctx: SimpleToolContext<'_>,
@@ -409,6 +414,7 @@ impl SimpleTool for InferenceSimpleTool {
 }
 
 /// A `TaskTool` that calls inference and returns the response text.
+#[derive(Default)]
 struct InferenceTaskTool;
 
 impl ToolMetadata for InferenceTaskTool {
@@ -416,15 +422,15 @@ impl ToolMetadata for InferenceTaskTool {
     type Output = InferenceToolOutput;
     type LlmParams = InferencePromptParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("inference_task")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Calls inference (durable) and returns the response")
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(60)
     }
 }
@@ -432,9 +438,10 @@ impl ToolMetadata for InferenceTaskTool {
 #[async_trait]
 impl TaskTool for InferenceTaskTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         let input = Input {
             system: None,
@@ -636,11 +643,11 @@ impl ToolMetadata for KeyCapturingSimpleTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("key_capturing_tool")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Captures idempotency keys for testing")
     }
 }
@@ -648,6 +655,7 @@ impl ToolMetadata for KeyCapturingSimpleTool {
 #[async_trait]
 impl SimpleTool for KeyCapturingSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
@@ -663,6 +671,7 @@ impl SimpleTool for KeyCapturingSimpleTool {
 }
 
 /// A `TaskTool` that calls a `SimpleTool` multiple times.
+#[derive(Default)]
 struct MultiCallTaskTool;
 
 impl ToolMetadata for MultiCallTaskTool {
@@ -670,11 +679,11 @@ impl ToolMetadata for MultiCallTaskTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("multi_call_task")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Calls a SimpleTool multiple times")
     }
 }
@@ -682,9 +691,10 @@ impl ToolMetadata for MultiCallTaskTool {
 #[async_trait]
 impl TaskTool for MultiCallTaskTool {
     async fn execute(
+        &self,
         _llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         // Call the same SimpleTool three times with different params
         ctx.call_tool(

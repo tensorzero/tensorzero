@@ -54,17 +54,17 @@ impl ToolMetadata for InferenceTool {
     type Output = InferenceResponse;
     type LlmParams = InferenceToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("inference")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Call TensorZero inference endpoint. Optionally use a config snapshot hash to use historical configuration.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Call TensorZero inference endpoint to get an LLM response.",
@@ -147,6 +147,7 @@ impl ToolMetadata for InferenceTool {
 #[async_trait]
 impl SimpleTool for InferenceTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,

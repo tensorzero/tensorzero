@@ -36,11 +36,11 @@ impl ToolMetadata for SlowSimpleTool {
     type Output = SlowSimpleOutput;
     type LlmParams = SlowSimpleParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("slow_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Sleeps for the specified duration before returning. A SimpleTool for testing timeout behavior.",
         )
@@ -50,6 +50,7 @@ impl ToolMetadata for SlowSimpleTool {
 #[async_trait]
 impl SimpleTool for SlowSimpleTool {
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,

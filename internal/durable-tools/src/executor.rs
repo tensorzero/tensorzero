@@ -15,6 +15,9 @@ use crate::task_tool::{TaskTool, TaskToolAdapter};
 use crate::tensorzero_client::TensorZeroClient;
 use durable_tools_spawn::TaskToolParams;
 
+#[cfg(feature = "typescript")]
+use crate::typescript::JsRuntimePool;
+
 /// High-level orchestrator for tool execution.
 ///
 /// `ToolExecutor` manages both the durable client and tool registry,
@@ -103,7 +106,7 @@ impl ToolExecutor {
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
     /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    pub async fn register_task_tool<T: TaskTool>(&self) -> Result<&Self, ToolError> {
+    pub async fn register_task_tool<T: TaskTool + Default>(&self) -> Result<&Self, ToolError> {
         // Register with tool registry
         {
             let mut registry = self.registry.write().await;
@@ -112,6 +115,32 @@ impl ToolExecutor {
 
         // Register the adapter with durable
         self.durable.register::<TaskToolAdapter<T>>().await?;
+
+        Ok(self)
+    }
+
+    /// Register a `TaskTool` instance.
+    ///
+    /// This is useful for tools that need runtime configuration,
+    /// like `TypeScriptToolInstance` which has unique code per instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
+    pub async fn register_task_tool_instance<T: TaskTool + Clone>(
+        &self,
+        tool: T,
+    ) -> Result<&Self, ToolError> {
+        // Register with tool registry
+        {
+            let mut registry = self.registry.write().await;
+            registry.register_task_tool_instance(tool.clone())?;
+        }
+
+        // Create adapter and register instance with durable
+        let adapter = TaskToolAdapter::new(tool);
+        self.durable.register_instance(adapter).await?;
 
         Ok(self)
     }
@@ -142,7 +171,7 @@ impl ToolExecutor {
     /// # Errors
     ///
     /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool<T: TaskTool>(
+    pub async fn spawn_tool<T: TaskTool + Default>(
         &self,
         llm_params: T::LlmParams,
         side_info: T::SideInfo,
@@ -217,7 +246,7 @@ impl ToolExecutor {
         options: SpawnOptions,
     ) -> anyhow::Result<SpawnResult>
     where
-        T: TaskTool,
+        T: TaskTool + Default,
         E: Executor<'e, Database = Postgres>,
     {
         let wrapped = TaskToolParams {
@@ -328,6 +357,9 @@ pub struct ToolExecutorBuilder {
     queue_name: String,
     default_max_attempts: u32,
     t0_client: Option<Arc<dyn TensorZeroClient>>,
+    /// Number of TypeScript worker threads (only with `typescript` feature).
+    #[cfg(feature = "typescript")]
+    typescript_workers: Option<usize>,
 }
 
 impl ToolExecutorBuilder {
@@ -339,7 +371,20 @@ impl ToolExecutorBuilder {
             queue_name: "tools".to_string(),
             default_max_attempts: 5,
             t0_client: None,
+            #[cfg(feature = "typescript")]
+            typescript_workers: None,
         }
+    }
+
+    /// Set the number of TypeScript worker threads.
+    ///
+    /// If not set, defaults to the number of available CPUs.
+    /// Only available when the `typescript` feature is enabled.
+    #[cfg(feature = "typescript")]
+    #[must_use]
+    pub fn typescript_workers(mut self, num_workers: usize) -> Self {
+        self.typescript_workers = Some(num_workers);
+        self
     }
 
     /// Set the database URL (will create a new connection pool).
@@ -403,6 +448,22 @@ impl ToolExecutorBuilder {
         };
 
         // Create the app context with the pool and TensorZero client
+        #[cfg(feature = "typescript")]
+        let app_ctx = {
+            // Create JsRuntimePool with specified or default number of workers
+            let num_workers = self.typescript_workers.unwrap_or_else(|| {
+                std::thread::available_parallelism()
+                    .map(|p| p.get())
+                    .unwrap_or(4)
+            });
+            let js_runtime_pool = Arc::new(JsRuntimePool::new(
+                num_workers,
+                tokio::runtime::Handle::current(),
+            ));
+            ToolAppState::new(pool.clone(), registry.clone(), t0_client, js_runtime_pool)
+        };
+
+        #[cfg(not(feature = "typescript"))]
         let app_ctx = ToolAppState::new(pool.clone(), registry.clone(), t0_client);
 
         // Build the durable client with the app context

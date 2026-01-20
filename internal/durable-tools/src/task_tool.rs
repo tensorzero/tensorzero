@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use durable::{Task, TaskContext, TaskResult};
 use std::borrow::Cow;
-use std::marker::PhantomData;
+use std::sync::Arc;
 
 use crate::context::{ToolAppState, ToolContext};
 use crate::error::ToolResult as ToolExecResult;
@@ -50,11 +50,11 @@ use crate::tool_metadata::ToolMetadata;
 ///     type Output = ResearchResult;
 ///     type LlmParams = ResearchParams;
 ///
-///     fn name() -> Cow<'static, str> {
+///     fn name(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("research")
 ///     }
 ///
-///     fn description() -> Cow<'static, str> {
+///     fn description(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("Research a topic")
 ///     }
 ///     // parameters_schema() is automatically derived from LlmParams
@@ -63,12 +63,13 @@ use crate::tool_metadata::ToolMetadata;
 /// #[async_trait]
 /// impl TaskTool for ResearchTool {
 ///     async fn execute(
+///         &self,
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         _side_info: <Self as ToolMetadata>::SideInfo,
-///         ctx: &mut ToolContext<'_>,
+///         ctx: &ToolContext,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Call other tools
-///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null)).await?;
+///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null), Default::default()).await?;
 ///
 ///         // Use checkpointed steps
 ///         let analysis = ctx
@@ -110,11 +111,11 @@ use crate::tool_metadata::ToolMetadata;
 ///     type SideInfo = GitHubCredentials;
 ///     type Output = Vec<String>;
 ///
-///     fn name() -> Cow<'static, str> {
+///     fn name(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("github_search")
 ///     }
 ///
-///     fn description() -> Cow<'static, str> {
+///     fn description(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("Search GitHub")
 ///     }
 ///     // parameters_schema() is automatically derived from LlmParams
@@ -123,9 +124,10 @@ use crate::tool_metadata::ToolMetadata;
 /// #[async_trait]
 /// impl TaskTool for GitHubSearchTool {
 ///     async fn execute(
+///         &self,
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         side_info: <Self as ToolMetadata>::SideInfo,
-///         ctx: &mut ToolContext<'_>,
+///         ctx: &ToolContext,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Use llm_params.query (from LLM)
 ///         // Use side_info.api_token (hidden from LLM)
@@ -138,18 +140,18 @@ pub trait TaskTool: ToolMetadata {
     /// Execute the tool logic.
     ///
     /// This is called by the durable worker when the tool is invoked.
-    /// The context is passed by mutable reference to allow wrapper types
-    /// to perform additional checkpointed operations after execution.
+    /// The context uses interior mutability, so only a shared reference is needed.
     ///
     /// # Arguments
     ///
     /// * `llm_params` - Parameters provided by the LLM
     /// * `side_info` - Side information provided at spawn time (hidden from LLM)
-    /// * `ctx` - The tool execution context
+    /// * `ctx` - The tool execution context (Clone + Send, can be shared with embedded runtimes)
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &ToolContext,
     ) -> ToolExecResult<<Self as ToolMetadata>::Output>;
 }
 
@@ -159,37 +161,44 @@ pub use durable_tools_spawn::TaskToolParams;
 /// Adapter that implements `durable::Task` for any `TaskTool`.
 ///
 /// This allows `TaskTools` to be registered with the durable worker.
-pub struct TaskToolAdapter<T: TaskTool>(PhantomData<T>);
+pub struct TaskToolAdapter<T: TaskTool> {
+    tool: Arc<T>,
+}
 
 impl<T: TaskTool> TaskToolAdapter<T> {
-    /// Create a new adapter instance.
-    pub fn new() -> Self {
-        Self(PhantomData)
+    /// Create a new adapter instance wrapping a tool.
+    pub fn new(tool: T) -> Self {
+        Self {
+            tool: Arc::new(tool),
+        }
     }
 }
 
-impl<T: TaskTool> Default for TaskToolAdapter<T> {
+impl<T: TaskTool + Default> Default for TaskToolAdapter<T> {
     fn default() -> Self {
-        Self::new()
+        Self::new(T::default())
     }
 }
 
 #[async_trait]
 impl<T: TaskTool> Task<ToolAppState> for TaskToolAdapter<T> {
-    fn name() -> Cow<'static, str> {
-        <T as ToolMetadata>::name()
+    fn name(&self) -> Cow<'static, str> {
+        self.tool.name()
     }
 
     type Params = TaskToolParams<<T as ToolMetadata>::LlmParams, T::SideInfo>;
     type Output = T::Output;
 
     async fn run(
+        &self,
         wrapped: Self::Params,
-        mut task_ctx: TaskContext<ToolAppState>,
+        task_ctx: TaskContext<ToolAppState>,
         app_ctx: ToolAppState,
     ) -> TaskResult<Self::Output> {
-        let mut tool_ctx = ToolContext::new(&mut task_ctx, &app_ctx, wrapped.episode_id);
-        T::execute(wrapped.llm_params, wrapped.side_info, &mut tool_ctx)
+        // ToolContext now takes ownership of task_ctx and app_ctx
+        let tool_ctx = ToolContext::new(task_ctx, app_ctx, wrapped.episode_id);
+        self.tool
+            .execute(wrapped.llm_params, wrapped.side_info, &tool_ctx)
             .await
             .map_err(Into::into)
     }

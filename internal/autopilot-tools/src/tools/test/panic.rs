@@ -24,11 +24,11 @@ impl ToolMetadata for PanicTool {
     type Output = ();
     type LlmParams = PanicToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("panic")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Panics with the given message. Used for testing crash recovery.")
     }
 }
@@ -40,9 +40,10 @@ impl TaskTool for PanicTool {
         reason = "This tool is specifically for testing panic handling"
     )]
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &ToolContext,
     ) -> ToolResult<Self::Output> {
         std::panic::panic_any(llm_params.panic_message);
     }
