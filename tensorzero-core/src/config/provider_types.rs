@@ -165,7 +165,8 @@ pub struct GCPVertexAnthropicProviderTypeConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "storage_type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "storage_type", rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum GCPBatchConfigType {
     // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
     // to override the global provider-types batch config.

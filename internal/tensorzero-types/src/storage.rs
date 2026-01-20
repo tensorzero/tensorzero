@@ -13,8 +13,9 @@ use pyo3::prelude::*;
 /// Configuration for the object storage backend
 /// Currently, we only support S3-compatible object storage and local filesystem storage
 /// We test against Amazon S3, GCS, Cloudflare R2, and Minio
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 #[export_schema]
 #[ts(export)]
 pub enum StorageKind {

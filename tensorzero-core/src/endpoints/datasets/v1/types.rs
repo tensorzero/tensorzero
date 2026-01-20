@@ -19,10 +19,9 @@ use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
 
 /// The property to order datapoints by.
 /// This is flattened in the public API inside the `DatapointOrderBy` struct.
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "by")]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "by", rename_all = "snake_case")]
 pub enum DatapointOrderByTerm {
     /// Creation timestamp of the datapoint.
     #[schemars(title = "DatapointOrderByTimestamp")]

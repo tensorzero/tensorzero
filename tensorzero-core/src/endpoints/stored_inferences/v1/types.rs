@@ -103,7 +103,7 @@ pub struct DemonstrationFeedbackFilter {
 
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "by", rename_all = "snake_case")]
 pub enum OrderByTerm {

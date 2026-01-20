@@ -76,9 +76,8 @@ pub enum EvaluatorConfig {
 
 /// Minimal function configuration for evaluation purposes.
 /// Contains only the information needed to validate output schemas during evaluation.
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
 pub enum EvaluationFunctionConfig {
     /// Chat function - no output schema validation needed

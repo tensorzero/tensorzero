@@ -1037,7 +1037,7 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
 // Streaming types for OpenAI Responses API
 // Based on: https://platform.openai.com/docs/api-reference/responses-streaming
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[expect(dead_code)]
 pub(super) enum OpenAIResponsesStreamEvent {

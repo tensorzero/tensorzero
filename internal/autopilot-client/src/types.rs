@@ -41,9 +41,9 @@ pub struct Event {
 }
 
 /// The UX-relevant status of the Autopilot.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS, PartialEq)]
 #[ts(export)]
-#[serde(tag = "status", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "status")]
 pub enum AutopilotStatus {
     Idle,
     ServerSideProcessing,
@@ -61,7 +61,7 @@ pub struct StreamUpdate {
 }
 
 /// The payload of an event.
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
@@ -95,7 +95,7 @@ impl EventPayload {
 }
 
 /// A status update within a session.
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum StatusUpdate {
@@ -208,7 +208,7 @@ pub struct AutopilotToolResult {
     pub result: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallDecisionSource {
     Ui,
@@ -221,14 +221,14 @@ pub struct ToolCallAuthorization {
     pub status: ToolCallAuthorizationStatus,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallAuthorizationStatus {
     Approved,
     Rejected { reason: String },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutcome {
     Success(AutopilotToolResult),

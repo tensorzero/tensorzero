@@ -278,7 +278,7 @@ impl fmt::Display for OpenAICustomTool {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {

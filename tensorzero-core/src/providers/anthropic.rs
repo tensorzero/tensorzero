@@ -1265,9 +1265,8 @@ pub struct AnthropicMessageDelta {
     pub stop_sequence: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
+#[derive(Deserialize, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum AnthropicStreamMessage {
     ContentBlockDelta {
         delta: FlattenUnknown<'static, AnthropicContentBlockDelta>,
