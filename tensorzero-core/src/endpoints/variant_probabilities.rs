@@ -128,7 +128,7 @@ mod tests {
 
             [functions.test_function.variants.variant_b]
             type = "chat_completion"
-            model = "anthropic::claude-3-5-sonnet-20241022"
+            model = "anthropic::claude-sonnet-4-5"
         "#;
 
         let mut temp_file = NamedTempFile::new().unwrap();

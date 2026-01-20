@@ -108,74 +108,74 @@ type = "groq"
 model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 api_key_location = "dynamic::groq_api_key"
 
-[models.claude-3-haiku-20240307]
+[models.claude-haiku-4-5]
 routing = ["anthropic", "aws_bedrock"]
 
-[models.claude-3-haiku-20240307.providers.anthropic]
+[models.claude-haiku-4-5.providers.anthropic]
 type = "anthropic"
-model_name = "claude-3-haiku-20240307"
+model_name = "claude-haiku-4-5"
 
-[models.claude-3-haiku-20240307.providers.aws_bedrock]
+[models.claude-haiku-4-5.providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "us-east-1"
 
-[models.claude-3-haiku-20240307-us-east-1]
+[models.claude-haiku-4-5-us-east-1]
 routing = ["aws-bedrock-us-east-1"]
 
-[models.claude-3-haiku-20240307-us-east-1.providers.aws-bedrock-us-east-1]
+[models.claude-haiku-4-5-us-east-1.providers.aws-bedrock-us-east-1]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "us-east-1"
 
-[models.claude-3-haiku-20240307-uk-hogwarts-1]
+[models.claude-haiku-4-5-uk-hogwarts-1]
 routing = ["aws-bedrock-uk-hogwarts-1"]
 
-[models.claude-3-haiku-20240307-uk-hogwarts-1.providers.aws-bedrock-uk-hogwarts-1]
+[models.claude-haiku-4-5-uk-hogwarts-1.providers.aws-bedrock-uk-hogwarts-1]
 type = "aws_bedrock"
-model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "uk-hogwarts-1"
 
 # Duplicate so that we can test just Anthropic no fallbacks
-[models.claude-3-haiku-20240307-anthropic]
+[models.claude-haiku-4-5-anthropic]
 routing = ["anthropic"]
 
-[models.claude-3-haiku-20240307-anthropic.providers.anthropic]
+[models.claude-haiku-4-5-anthropic.providers.anthropic]
 type = "anthropic"
-model_name = "claude-3-haiku-20240307"
+model_name = "claude-haiku-4-5"
 
-[models."claude-3-haiku-20240307-anthropic-dynamic"]
+[models."claude-haiku-4-5-anthropic-dynamic"]
 routing = ["anthropic"]
 
-[models."claude-3-haiku-20240307-anthropic-dynamic".providers.anthropic]
+[models."claude-haiku-4-5-anthropic-dynamic".providers.anthropic]
 type = "anthropic"
-model_name = "claude-3-haiku-20240307"
+model_name = "claude-haiku-4-5"
 api_key_location = "dynamic::anthropic_api_key"
 
 # Duplicate so that we can test just AWS Bedrock no fallbacks
-[models.claude-3-haiku-20240307-aws-bedrock]
+[models.claude-haiku-4-5-aws-bedrock]
 routing = ["aws_bedrock"]
 
-[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+[models.claude-haiku-4-5-aws-bedrock.providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "us-east-1"
 
-[models."claude-sonnet-4-5-20250929-thinking-aws-bedrock"]
+[models."claude-sonnet-4-5-thinking-aws-bedrock"]
 routing = ["aws_bedrock"]
 
-[models."claude-sonnet-4-5-20250929-thinking-aws-bedrock".providers.aws_bedrock]
+[models."claude-sonnet-4-5-thinking-aws-bedrock".providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+model_id = "us.anthropic.claude-sonnet-4-5-v1:0"
 region = "us-east-1"
 
 # AWS Bedrock with dynamic region for E2E testing
-[models.claude-3-haiku-aws-bedrock-dynamic-region]
+[models.claude-haiku-4-5-aws-bedrock-dynamic-region]
 routing = ["aws-bedrock-dynamic-region"]
 
-[models.claude-3-haiku-aws-bedrock-dynamic-region.providers.aws-bedrock-dynamic-region]
+[models.claude-haiku-4-5-aws-bedrock-dynamic-region.providers.aws-bedrock-dynamic-region]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "dynamic::aws_bedrock_region"
 
 [models.gemma-3-1b-aws-sagemaker-openai]
@@ -199,12 +199,12 @@ region = "us-east-2"
 model_name = "gemma3:1b"
 hosted_provider = "tgi"
 
-[models.claude-3-haiku-20240307-gcp-vertex]
+[models.claude-haiku-4-5-gcp-vertex]
 routing = ["gcp_vertex_anthropic"]
 
-[models.claude-3-haiku-20240307-gcp-vertex.providers.gcp_vertex_anthropic]
+[models.claude-haiku-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
 type = "gcp_vertex_anthropic"
-model_id = "claude-3-haiku@20240307"
+model_id = "claude-haiku-4-5@20251001"
 location = "us-central1"
 project_id = "tensorzero-public"
 
@@ -356,14 +356,6 @@ routing = ["aws_bedrock"]
 [models.deepseek-r1-aws-bedrock.providers.aws_bedrock]
 type = "aws_bedrock"
 model_id = "us.deepseek.r1-v1:0"
-region = "us-east-1"
-
-[models.claude-haiku-4-5-aws-bedrock]
-routing = ["aws_bedrock"]
-
-[models.claude-haiku-4-5-aws-bedrock.providers.aws_bedrock]
-type = "aws_bedrock"
-model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "us-east-1"
 
 [models.nova-lite-v1]

@@ -26,7 +26,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.anthropic]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-anthropic"
+model = "claude-haiku-4-5-anthropic"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -34,7 +34,7 @@ max_tokens = 100
 
 [functions.json_success.variants.anthropic-strict]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-anthropic"
+model = "claude-haiku-4-5-anthropic"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -42,7 +42,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.anthropic-implicit]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-anthropic"
+model = "claude-haiku-4-5-anthropic"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "tool"
@@ -50,7 +50,7 @@ max_tokens = 100
 
 [functions.json_success.variants.aws-bedrock]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-aws-bedrock"
+model = "claude-haiku-4-5-aws-bedrock"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -66,7 +66,7 @@ max_tokens = 500
 
 [functions.json_success.variants.aws-bedrock-thinking]
 type = "chat_completion"
-model = "claude-sonnet-4-5-20250929-thinking-aws-bedrock"
+model = "claude-sonnet-4-5-thinking-aws-bedrock"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -93,7 +93,7 @@ thinking_budget_tokens = 1024
 
 [functions.json_success.variants.aws-bedrock-implicit]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-aws-bedrock"
+model = "claude-haiku-4-5-aws-bedrock"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "tool"
@@ -101,7 +101,7 @@ max_tokens = 100
 
 [functions.json_success.variants.aws-bedrock-strict]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-aws-bedrock"
+model = "claude-haiku-4-5-aws-bedrock"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -273,7 +273,7 @@ max_tokens = 500
 
 [functions.json_success.variants.gcp-vertex-haiku]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-gcp-vertex"
+model = "claude-haiku-4-5-gcp-vertex"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -281,7 +281,7 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp-vertex-haiku-strict]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-gcp-vertex"
+model = "claude-haiku-4-5-gcp-vertex"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -289,7 +289,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.gcp-vertex-haiku-implicit]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-gcp-vertex"
+model = "claude-haiku-4-5-gcp-vertex"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "tool"
@@ -595,7 +595,7 @@ max_tokens = 100
 
 [functions.json_success.variants.anthropic_json_mode_off]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-anthropic"
+model = "claude-haiku-4-5-anthropic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -603,7 +603,7 @@ max_tokens = 100
 
 [functions.json_success.variants.aws_bedrock_json_mode_off]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-aws-bedrock"
+model = "claude-haiku-4-5-aws-bedrock"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -667,7 +667,7 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp_vertex_haiku_json_mode_off]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-gcp-vertex"
+model = "claude-haiku-4-5-gcp-vertex"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"

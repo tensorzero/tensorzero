@@ -799,7 +799,7 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-sonnet-4-5-20250929"
+model = "anthropic::claude-sonnet-4-5"
 
 [functions.pdf_test.variants.gcp-vertex-sonnet]
 type = "chat_completion"
@@ -807,7 +807,7 @@ model = "claude-sonnet-4-5-gcp-vertex"
 
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-aws-bedrock"
+model = "claude-haiku-4-5-aws-bedrock"
 
 [models.claude-sonnet-4-5-gcp-vertex]
 routing = ["gcp_vertex_anthropic"]
@@ -826,12 +826,12 @@ type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 api_type = "responses"
 
-[models.claude-3-haiku-20240307-aws-bedrock]
+[models.claude-haiku-4-5-aws-bedrock]
 routing = ["aws_bedrock"]
 
-[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+[models.claude-haiku-4-5-aws-bedrock.providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "us-east-1"
 "#;
 
@@ -852,7 +852,7 @@ model = "responses-gpt-4o-mini-2024-07-18"
 
 [functions.image_test.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-3-haiku-20240307"
+model = "anthropic::claude-haiku-4-5"
 
 [functions.image_test.variants.google_ai_studio]
 type = "chat_completion"
@@ -881,27 +881,27 @@ api_type = "responses"
 
 [functions.image_test.variants.gcp-vertex-haiku]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-gcp-vertex"
+model = "claude-haiku-4-5-gcp-vertex"
 
-[models.claude-3-haiku-20240307-gcp-vertex]
+[models.claude-haiku-4-5-gcp-vertex]
 routing = ["gcp_vertex_anthropic"]
 
-[models.claude-3-haiku-20240307-gcp-vertex.providers.gcp_vertex_anthropic]
+[models.claude-haiku-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
 type = "gcp_vertex_anthropic"
-model_id = "claude-3-haiku@20240307"
+model_id = "claude-haiku-4-5@20251001"
 location = "us-central1"
 project_id = "tensorzero-public"
 
 [functions.image_test.variants.aws-bedrock]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-aws-bedrock"
+model = "claude-haiku-4-5-aws-bedrock"
 
-[models.claude-3-haiku-20240307-aws-bedrock]
+[models.claude-haiku-4-5-aws-bedrock]
 routing = ["aws_bedrock"]
 
-[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+[models.claude-haiku-4-5-aws-bedrock.providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "us-east-1"
 "#;
 
@@ -2507,7 +2507,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
 ) {
     reset_capture_logs();
     // Bedrock rejects input thoughts for these models
-    if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
+    if provider.model_name == "claude-haiku-4-5-aws-bedrock"
         || provider.model_name == "deepseek-r1-aws-bedrock"
     {
         return;

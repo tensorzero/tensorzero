@@ -63,10 +63,10 @@ pub struct GEPAConfig {
     /// Maximum number of concurrent inference calls
     pub max_concurrency: u32,
 
-    /// Model for analysis (e.g., "anthropic::claude-sonnet-4-5-20250929")
+    /// Model for analysis (e.g., "anthropic::claude-sonnet-4-5")
     pub analysis_model: String,
 
-    /// Model for mutation (e.g., "anthropic::claude-sonnet-4-5-20250929")
+    /// Model for mutation (e.g., "anthropic::claude-sonnet-4-5")
     pub mutation_model: String,
 
     /// Optional random seed for reproducibility
@@ -213,8 +213,8 @@ impl UninitializedGEPAConfig {
     ///
     /// :param function_name: Name of the function being optimized.
     /// :param evaluation_name: Name of the evaluation used to score candidate variants.
-    /// :param analysis_model: Model for analyzing inference results (e.g., "anthropic::claude-sonnet-4-5-20250929").
-    /// :param mutation_model: Model for generating prompt mutations (e.g., "anthropic::claude-sonnet-4-5-20250929").
+    /// :param analysis_model: Model for analyzing inference results (e.g., "anthropic::claude-sonnet-4-5").
+    /// :param mutation_model: Model for generating prompt mutations (e.g., "anthropic::claude-sonnet-4-5").
     /// :param initial_variants: Optional list of variant names to initialize GEPA with. If None, uses all variants defined for the function.
     /// :param variant_prefix: Prefix for the name of the new optimized variants.
     /// :param batch_size: Number of training samples to analyze per iteration. Default: 5.

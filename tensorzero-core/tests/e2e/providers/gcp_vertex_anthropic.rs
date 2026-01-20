@@ -27,7 +27,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-haiku".to_string(),
-        model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+        model_name: "claude-haiku-4-5-gcp-vertex".into(),
         model_provider_name: "gcp_vertex_anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -35,7 +35,7 @@ async fn get_providers() -> E2ETestProviders {
     let image_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-haiku".to_string(),
-        model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+        model_name: "claude-haiku-4-5-gcp-vertex".into(),
         model_provider_name: "gcp_vertex_anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -51,7 +51,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-haiku-extra-body".to_string(),
-        model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+        model_name: "claude-haiku-4-5-gcp-vertex".into(),
         model_provider_name: "gcp_vertex_anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -59,7 +59,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-haiku-extra-headers".to_string(),
-        model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+        model_name: "claude-haiku-4-5-gcp-vertex".into(),
         model_provider_name: "gcp_vertex_anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -68,21 +68,21 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "gcp-vertex-haiku".to_string(),
-            model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+            model_name: "claude-haiku-4-5-gcp-vertex".into(),
             model_provider_name: "gcp_vertex_anthropic".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "gcp-vertex-haiku-implicit".to_string(),
-            model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+            model_name: "claude-haiku-4-5-gcp-vertex".into(),
             model_provider_name: "gcp_vertex_anthropic".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "gcp-vertex-haiku-strict".to_string(),
-            model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+            model_name: "claude-haiku-4-5-gcp-vertex".into(),
             model_provider_name: "gcp_vertex_anthropic".into(),
             credentials: HashMap::new(),
         },
@@ -91,7 +91,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp_vertex_haiku_json_mode_off".to_string(),
-        model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+        model_name: "claude-haiku-4-5-gcp-vertex".into(),
         model_provider_name: "gcp_vertex_anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -99,7 +99,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp_vertex_anthropic_shorthand".to_string(),
-        model_name: "gcp_vertex_anthropic::projects/tensorzero-public/locations/us-central1/publishers/anthropic/models/claude-3-haiku@20240307".into(),
+        model_name: "gcp_vertex_anthropic::projects/tensorzero-public/locations/us-central1/publishers/anthropic/models/claude-haiku-4-5@20251001".into(),
         model_provider_name: "gcp_vertex_anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -109,7 +109,7 @@ async fn get_providers() -> E2ETestProviders {
         model_info: HashMap::from([
             (
                 "model_id".to_string(),
-                "claude-3-haiku@20240307".to_string(),
+                "claude-haiku-4-5@20251001".to_string(),
             ),
             ("location".to_string(), "us-central1".to_string()),
             ("project_id".to_string(), "tensorzero-public".to_string()),

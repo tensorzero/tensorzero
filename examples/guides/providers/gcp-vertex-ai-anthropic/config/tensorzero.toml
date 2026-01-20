@@ -1,9 +1,9 @@
-[models.claude_3_haiku_20240307]
+[models.claude_haiku_4_5]
 routing = ["gcp_vertex_anthropic"]
 
-[models.claude_3_haiku_20240307.providers.gcp_vertex_anthropic]
+[models.claude_haiku_4_5.providers.gcp_vertex_anthropic]
 type = "gcp_vertex_anthropic"
-model_id = "claude-3-haiku@20240307"
+model_id = "claude-haiku-4-5@20251001"
 location = "us-central1"
 project_id = "your-project-id"  # change this
 
@@ -12,4 +12,4 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "claude_3_haiku_20240307"
+model = "claude_haiku_4_5"
