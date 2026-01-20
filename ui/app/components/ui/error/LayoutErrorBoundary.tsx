@@ -6,6 +6,7 @@ import {
   classifyError,
   getErrorLabel,
 } from "~/utils/tensorzero/errors";
+import { logger } from "~/utils/logger";
 
 interface LayoutErrorBoundaryProps {
   error: unknown;
@@ -17,6 +18,7 @@ interface LayoutErrorBoundaryProps {
  * - Page errors (404, resource not found): Shows inline content
  */
 export function LayoutErrorBoundary({ error }: LayoutErrorBoundaryProps) {
+  logger.error(error);
   const [dialogOpen, setDialogOpen] = React.useState(true);
 
   // Infra errors -> dismissible dialog
