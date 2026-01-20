@@ -491,7 +491,7 @@ max_tokens = 100
 # Note - GCP doesn't allow fine-tuning any Anthropic models, so we just test the 'publishers/anthropic' shorthand
 [functions.basic_test.variants.gcp_vertex_anthropic_shorthand]
 type = "chat_completion"
-model = "gcp_vertex_anthropic::projects/tensorzero-public/locations/us-central1/publishers/anthropic/models/claude-haiku-4-5@20251001"
+model = "gcp_vertex_anthropic::projects/tensorzero-public/locations/us-east5/publishers/anthropic/models/claude-haiku-4-5@20251001"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 

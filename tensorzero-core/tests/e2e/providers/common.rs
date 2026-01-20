@@ -2090,6 +2090,8 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     let episode_id = Uuid::now_v7();
     println!("Provider name: {}", provider.model_provider_name);
 
+    // Note: Claude 4.5 on GCP Vertex AI doesn't allow both `temperature` and `top_p`
+    // to be specified at the same time, so we only send `temperature` for that provider.
     let extra_body = if provider.model_provider_name == "aws_bedrock" {
         json!([
             {
@@ -2118,6 +2120,14 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "provider_name": provider.model_provider_name,
                 "pointer": "/generationConfig/top_p",
                 "value": 0.8
+            }
+        ])
+    } else if provider.model_provider_name == "gcp_vertex_anthropic" {
+        json!([
+            {
+                "variant_name": provider.variant_name,
+                "pointer": "/temperature",
+                "value": 0.5
             }
         ])
     } else {

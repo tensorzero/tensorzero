@@ -4,7 +4,7 @@ routing = ["gcp_vertex_anthropic"]
 [models.claude_haiku_4_5.providers.gcp_vertex_anthropic]
 type = "gcp_vertex_anthropic"
 model_id = "claude-haiku-4-5@20251001"
-location = "us-central1"
+location = "us-east5"
 project_id = "your-project-id"  # change this
 
 [functions.my_function_name]

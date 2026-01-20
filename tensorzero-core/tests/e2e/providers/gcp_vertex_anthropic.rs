@@ -99,7 +99,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp_vertex_anthropic_shorthand".to_string(),
-        model_name: "gcp_vertex_anthropic::projects/tensorzero-public/locations/us-central1/publishers/anthropic/models/claude-haiku-4-5@20251001".into(),
+        model_name: "gcp_vertex_anthropic::projects/tensorzero-public/locations/us-east5/publishers/anthropic/models/claude-haiku-4-5@20251001".into(),
         model_provider_name: "gcp_vertex_anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -111,7 +111,7 @@ async fn get_providers() -> E2ETestProviders {
                 "model_id".to_string(),
                 "claude-haiku-4-5@20251001".to_string(),
             ),
-            ("location".to_string(), "us-central1".to_string()),
+            ("location".to_string(), "us-east5".to_string()),
             ("project_id".to_string(), "tensorzero-public".to_string()),
         ]),
         use_modal_headers: false,
