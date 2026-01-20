@@ -15,12 +15,12 @@ use std::sync::Arc;
 use tracing::Span;
 
 use super::{
-    RateLimitResource, RateLimitResourceUsage, RateLimitedRequest, RateLimitingConfig, ScopeInfo,
-    TicketBorrow, TicketBorrows,
+    RateLimitResource, RateLimitResourceUsage, RateLimitedRequest, RateLimitingBackend,
+    RateLimitingConfig, ScopeInfo, TicketBorrow, TicketBorrows,
 };
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::rate_limiting::{ConsumeTicketsRequest, DisabledRateLimitQueries, RateLimitQueries};
 use crate::db::valkey::ValkeyConnectionInfo;
-use crate::db::{ConsumeTicketsRequest, RateLimitQueries};
 use crate::error::{Error, ErrorDetails};
 
 /// Manager for rate limiting operations.
@@ -51,46 +51,71 @@ impl RateLimitingManager {
 
     /// Create a new RateLimitingManager by selecting the appropriate backend.
     ///
-    /// Backend selection priority:
-    /// 1. Valkey if enabled (TENSORZERO_VALKEY_URL is set)
-    /// 2. PostgreSQL if enabled (TENSORZERO_POSTGRES_URL is set)
-    /// 3. Error if rate limiting rules are configured but no backend is available
+    /// Backend selection is determined by `config.backend`:
+    /// - `Auto`: Valkey if available, otherwise Postgres
+    /// - `Postgres`: Force Postgres backend (error if unavailable)
+    /// - `Valkey`: Force Valkey backend (error if unavailable)
+    ///
+    /// If rate limiting rules are configured but no backend is available, returns an error.
     pub fn new_from_connections(
         config: Arc<RateLimitingConfig>,
         valkey_connection_info: &ValkeyConnectionInfo,
         postgres_connection_info: &PostgresConnectionInfo,
     ) -> Result<Self, Error> {
-        let client: Arc<dyn RateLimitQueries> = match (
-            valkey_connection_info,
-            postgres_connection_info,
-        ) {
-            (ValkeyConnectionInfo::Enabled { .. }, _) => {
-                tracing::info!("Using Valkey for rate limiting");
-                Arc::new(valkey_connection_info.clone())
-            }
-            (ValkeyConnectionInfo::Disabled, PostgresConnectionInfo::Enabled { .. }) => {
-                tracing::info!("Using PostgreSQL for rate limiting");
-                Arc::new(postgres_connection_info.clone())
-            }
-            (ValkeyConnectionInfo::Disabled, PostgresConnectionInfo::Disabled) => {
-                if config.enabled() && !config.rules().is_empty() {
-                    return Err(Error::new(ErrorDetails::Config {
-                            message: "Rate limiting is configured but no backend is available. \
-                                Please set either `TENSORZERO_VALKEY_URL` or `TENSORZERO_POSTGRES_URL` \
-                                environment variable, or disable rate limiting."
-                                .to_string(),
-                        }));
-                }
-                // Use disabled Postgres as a placeholder (won't be called since no rules)
-                Arc::new(postgres_connection_info.clone())
-            }
-            #[cfg(test)]
-            (ValkeyConnectionInfo::Disabled, PostgresConnectionInfo::Mock { .. }) => {
-                Arc::new(postgres_connection_info.clone())
-            }
-        };
+        let valkey_available =
+            matches!(valkey_connection_info, ValkeyConnectionInfo::Enabled { .. });
 
-        Ok(Self::new(config, client))
+        // Postgres is considered available if it is not disabled.
+        // In tests, it matches Mock as well.
+        let postgres_available =
+            !matches!(postgres_connection_info, PostgresConnectionInfo::Disabled);
+
+        // If the backend is explicitly configured, use it if it is available.
+        if config.backend == RateLimitingBackend::Valkey {
+            if valkey_available {
+                tracing::info!("Using Valkey for rate limiting");
+                return Ok(Self::new(config, Arc::new(valkey_connection_info.clone())));
+            }
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Rate limiting is configured to use Valkey, but Valkey is not available. Please check the environment variable `TENSORZERO_VALKEY_URL` is set.".to_string(),
+            }));
+        }
+
+        if config.backend == RateLimitingBackend::Postgres {
+            if postgres_available {
+                tracing::info!("Using Postgres for rate limiting");
+                return Ok(Self::new(
+                    config,
+                    Arc::new(postgres_connection_info.clone()),
+                ));
+            }
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Rate limiting is configured to use Postgres, but Postgres is not available. Please check the environment variable `TENSORZERO_POSTGRES_URL` is set.".to_string(),
+            }));
+        }
+
+        // Otherwise, pick Valkey and Postgres in this order.
+        if valkey_available {
+            tracing::info!("Using Valkey for rate limiting");
+            return Ok(Self::new(config, Arc::new(valkey_connection_info.clone())));
+        }
+        if postgres_available {
+            tracing::info!("Using Postgres for rate limiting");
+            return Ok(Self::new(
+                config,
+                Arc::new(postgres_connection_info.clone()),
+            ));
+        }
+
+        // No backend available - this is only an error if rate limiting is enabled and rules are configured
+        let rate_limiting_enabled = config.enabled() && !config.rules().is_empty();
+        if !rate_limiting_enabled {
+            return Ok(Self::new(config, Arc::new(DisabledRateLimitQueries)));
+        }
+
+        Err(Error::new(ErrorDetails::Config {
+            message: "No rate limiting backend is available and rate limiting rules are configured. Please set either `TENSORZERO_VALKEY_URL` or `TENSORZERO_POSTGRES_URL` environment variable, or disable rate limiting.".to_string(),
+        }))
     }
 
     /// Create a new, dummy RateLimitingManager for unit tests.
@@ -321,6 +346,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         });
         let manager = RateLimitingManager::new(config, Arc::new(PostgresConnectionInfo::Disabled));
 
@@ -435,6 +461,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: false,
+            backend: RateLimitingBackend::default(),
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -463,6 +490,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -488,6 +516,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -511,6 +540,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -544,6 +574,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -580,6 +611,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -616,6 +648,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);

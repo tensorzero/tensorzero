@@ -1015,7 +1015,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_rate_limiting_requires_postgres() {
+    async fn test_no_rate_limiting_does_not_require_postgres_or_valkey() {
         // Rate limiting enabled=false should not fail validation (no rules configured)
         let config_no_rules = Arc::new(Config {
             postgres: PostgresConfig {
@@ -1026,15 +1026,13 @@ mod tests {
             ..Default::default()
         });
 
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
-        let postgres_connection_info = PostgresConnectionInfo::Disabled;
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
 
         // This should succeed because rate limiting has no rules
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config_no_rules,
-            clickhouse_connection_info,
-            postgres_connection_info,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,

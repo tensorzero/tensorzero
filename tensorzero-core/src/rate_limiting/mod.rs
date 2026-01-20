@@ -35,10 +35,24 @@ pub use rate_limiting_manager::RateLimitingManager;
  *      to not add keys which could trample one another.
  */
 
+/// Specifies which backend to use for rate limiting.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RateLimitingBackend {
+    /// Automatically select: Valkey if available, otherwise Postgres
+    #[default]
+    Auto,
+    /// Force Postgres backend
+    Postgres,
+    /// Force Valkey backend
+    Valkey,
+}
+
 #[derive(Debug, Clone)]
 pub struct RateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     pub(crate) enabled: bool,
+    pub(crate) backend: RateLimitingBackend,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -47,6 +61,8 @@ pub struct UninitializedRateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
     pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) backend: RateLimitingBackend,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -64,6 +80,7 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
         Ok(Self {
             rules: config.rules,
             enabled: config.enabled,
+            backend: config.backend,
         })
     }
 }
@@ -71,10 +88,15 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
 impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
     fn from(config: &RateLimitingConfig) -> Self {
         // Destructure to ensure all fields are handled (compile error if field added/removed)
-        let RateLimitingConfig { rules, enabled } = config;
+        let RateLimitingConfig {
+            rules,
+            enabled,
+            backend,
+        } = config;
         Self {
             rules: rules.clone(),
             enabled: *enabled,
+            backend: *backend,
         }
     }
 }
@@ -88,6 +110,7 @@ impl Default for UninitializedRateLimitingConfig {
         Self {
             rules: Vec::new(),
             enabled: true,
+            backend: RateLimitingBackend::default(),
         }
     }
 }
@@ -97,6 +120,7 @@ impl Default for RateLimitingConfig {
         Self {
             rules: Vec::new(),
             enabled: true,
+            backend: RateLimitingBackend::default(),
         }
     }
 }
@@ -1385,12 +1409,14 @@ mod tests {
         let config_enabled = RateLimitingConfig {
             rules: vec![],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         assert!(config_enabled.enabled());
 
         let config_disabled = RateLimitingConfig {
             rules: vec![],
             enabled: false,
+            backend: RateLimitingBackend::default(),
         };
         assert!(!config_disabled.enabled());
 
@@ -1455,6 +1481,7 @@ mod tests {
         let uninitialized = UninitializedRateLimitingConfig {
             rules: vec![rule_priority_5, rule_always],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         let err_message = RateLimitingConfig::try_from(uninitialized)
             .unwrap_err()
@@ -1513,6 +1540,7 @@ mod tests {
         let config_numeric_priorities = RateLimitingConfig {
             rules: vec![rule_priority_3, rule_priority_7],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
 
         let active_limits = config_numeric_priorities.get_active_limits(&scope_info);
@@ -1539,6 +1567,7 @@ mod tests {
         let config_multiple_limits = RateLimitingConfig {
             rules: vec![rule_multiple_limits],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
 
         let active_limits = config_multiple_limits.get_active_limits(&scope_info);
@@ -1775,6 +1804,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         let resources = config_with_token.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -1794,6 +1824,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         let resources = config_model_only.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -1808,6 +1839,7 @@ mod tests {
                 scope: RateLimitingConfigScopes(vec![]),
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
+            backend: RateLimitingBackend::default(),
         };
         assert!(
             config_disabled

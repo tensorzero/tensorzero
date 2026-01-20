@@ -435,6 +435,7 @@ pub enum ClientBuilderMode {
         config_file: Option<PathBuf>,
         clickhouse_url: Option<String>,
         postgres_config: Option<PostgresConfig>,
+        valkey_url: Option<String>,
         /// A timeout for all TensorZero gateway processing.
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
@@ -543,6 +544,7 @@ impl ClientBuilder {
                 config_file,
                 clickhouse_url,
                 postgres_config,
+                valkey_url,
                 timeout,
                 verify_credentials,
                 allow_batch_writes,
@@ -601,8 +603,8 @@ impl ClientBuilder {
                     })?
                 };
 
-                // Set up Valkey connection from environment variable
-                let valkey_url = env::var("TENSORZERO_VALKEY_URL").ok();
+                // Set up Valkey connection from explicit URL or fall back to environment variable
+                let valkey_url = valkey_url.clone().or_else(|| env::var("TENSORZERO_VALKEY_URL").ok());
                 let valkey_connection_info = setup_valkey(valkey_url).await.map_err(|e| {
                     ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
                         source: e.into(),
@@ -1273,6 +1275,7 @@ mod tests {
             config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
             clickhouse_url: None,
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1301,6 +1304,7 @@ mod tests {
             config_file: Some(tmp_config.path().to_owned()),
             clickhouse_url: None,
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: false, // Skip credential verification
             allow_batch_writes: false,
@@ -1429,6 +1433,7 @@ mod tests {
             )),
             clickhouse_url: None,
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1451,6 +1456,7 @@ mod tests {
             config_file: None,
             clickhouse_url: None,
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1475,6 +1481,7 @@ mod tests {
             config_file: None,
             clickhouse_url: None,
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,

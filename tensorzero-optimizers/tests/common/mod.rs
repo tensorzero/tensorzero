@@ -84,6 +84,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             config_file: Some(config_path.clone()),
             clickhouse_url: Some(CLICKHOUSE_URL.clone()),
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 #[cfg(test)]
 use mockall::automock;
 
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::rate_limiting::{ActiveRateLimitKey, RateLimitInterval};
 
 #[async_trait]
@@ -58,4 +58,41 @@ pub struct ReturnTicketsRequest {
 pub struct ReturnTicketsReceipt {
     pub key: ActiveRateLimitKey,
     pub balance: u64,
+}
+
+/// Disabled implementation of RateLimitQueries (returns errors for all operations).
+/// This is used when rate limiting is disabled to catch any errors.
+pub struct DisabledRateLimitQueries;
+
+#[async_trait]
+impl RateLimitQueries for DisabledRateLimitQueries {
+    async fn consume_tickets(
+        &self,
+        _requests: &[ConsumeTicketsRequest],
+    ) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
+        Err(Error::new(ErrorDetails::Config {
+            message: "Rate limiting should be disabled but `consume_tickets` is called".to_string(),
+        }))
+    }
+
+    async fn return_tickets(
+        &self,
+        _requests: Vec<ReturnTicketsRequest>,
+    ) -> Result<Vec<ReturnTicketsReceipt>, Error> {
+        Err(Error::new(ErrorDetails::Config {
+            message: "Rate limiting should be disabled but `return_tickets` is called".to_string(),
+        }))
+    }
+
+    async fn get_balance(
+        &self,
+        _key: &str,
+        _capacity: u64,
+        _refill_amount: u64,
+        _refill_interval: RateLimitInterval,
+    ) -> Result<u64, Error> {
+        Err(Error::new(ErrorDetails::Config {
+            message: "Rate limiting should be disabled but `get_balance` is called".to_string(),
+        }))
+    }
 }

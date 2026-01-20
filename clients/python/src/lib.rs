@@ -661,12 +661,14 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, timeout=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, valkey_url=None, timeout=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
+    /// :param postgres_url: The URL of the PostgreSQL instance to use for rate limiting.
+    /// :param valkey_url: The URL of the Valkey instance to use for rate limiting.
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded(
@@ -674,6 +676,7 @@ impl TensorZeroGateway {
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
+        valkey_url: Option<String>,
         timeout: Option<f64>,
     ) -> PyResult<Py<TensorZeroGateway>> {
         warn_no_config(cls.py(), config_file)?;
@@ -685,6 +688,7 @@ impl TensorZeroGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
             postgres_config: postgres_url.map(PostgresConfig::Url),
+            valkey_url,
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -1868,12 +1872,14 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, timeout=None, async_setup=true))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, valkey_url=None, timeout=None, async_setup=true))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
+    /// :param postgres_url: The URL of the PostgreSQL instance to use for rate limiting.
+    /// :param valkey_url: The URL of the Valkey instance to use for rate limiting.
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :param async_setup: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
     /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway (or an `AsyncTensorZeroGateway` if `async_setup=False`).
@@ -1883,6 +1889,7 @@ impl AsyncTensorZeroGateway {
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
+        valkey_url: Option<String>,
         timeout: Option<f64>,
         async_setup: bool,
     ) -> PyResult<Py<PyAny>> {
@@ -1895,6 +1902,7 @@ impl AsyncTensorZeroGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
             postgres_config: postgres_url.map(PostgresConfig::Url),
+            valkey_url,
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
