@@ -679,6 +679,18 @@ model = "xai::grok-4-1-fast-non-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.xai-reasoning]
+type = "chat_completion"
+model = "grok-3-mini"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.xai-reasoning-usage]
+type = "chat_completion"
+model = "grok-4-fast-reasoning"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.hyperbolic]
 type = "chat_completion"
 model = "meta-llama/Meta-Llama-3-70B-Instruct"

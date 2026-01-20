@@ -101,12 +101,37 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
+    let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "xai-reasoning".to_string(),
+        model_name: "grok-3-mini".into(),
+        model_provider_name: "xai".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let reasoning_usage_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "xai-reasoning".to_string(),
+            model_name: "grok-3-mini".into(),
+            model_provider_name: "xai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "xai-reasoning-usage".to_string(),
+            model_name: "grok-4-fast-reasoning".into(),
+            model_provider_name: "xai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
-        reasoning_usage_inference: vec![],
+        reasoning_inference: reasoning_providers,
+        reasoning_usage_inference: reasoning_usage_providers,
         embeddings: vec![],
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: vec![],
