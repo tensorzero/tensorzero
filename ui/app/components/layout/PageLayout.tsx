@@ -30,45 +30,60 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 
 type CountValue = number | bigint | Promise<number | bigint>;
 
-interface PageHeaderProps {
-  eyebrow?: ReactNode;
-  heading?: string;
-  name?: string;
-  count?: CountValue;
-  children?: ReactNode;
-  tag?: ReactNode;
-}
-
-function CountDisplay({ count }: { count: CountValue }) {
+function CountDisplay({
+  count,
+  size = "lg",
+}: {
+  count: CountValue;
+  size?: "lg" | "md";
+}) {
   const resolvedCount = count instanceof Promise ? use(count) : count;
   return (
-    <span className="text-fg-muted text-2xl font-medium">
+    <span
+      className={cn(
+        "text-fg-muted font-medium",
+        size === "lg" ? "text-2xl" : "text-xl",
+      )}
+    >
       {resolvedCount.toLocaleString()}
     </span>
   );
 }
 
-const PageHeader: React.FC<PageHeaderProps> = ({
-  heading,
+interface PageHeaderProps {
+  eyebrow?: ReactNode;
+  heading?: string;
+  name?: string;
+  count?: CountValue;
+  tag?: ReactNode;
+  children?: ReactNode;
+}
+
+function PageHeader({
   eyebrow,
+  heading,
   name,
   count,
-  children,
   tag,
-}: PageHeaderProps) => {
+  children,
+}: PageHeaderProps) {
+  const title = heading ?? name;
+
   return (
     <div className="flex flex-col">
       <div className="flex flex-col gap-3">
-        {eyebrow !== undefined && (
+        {eyebrow && (
           <div className="text-fg-secondary text-sm font-normal">{eyebrow}</div>
         )}
         <div className="flex items-center gap-2">
-          {heading !== undefined && (
-            <h1 className="text-2xl font-medium">{heading}</h1>
-          )}
-          {name !== undefined && (
-            <h1 className="font-mono text-2xl leading-none font-medium">
-              {name}
+          {title && (
+            <h1
+              className={cn(
+                "text-2xl font-medium",
+                name && "font-mono leading-none",
+              )}
+            >
+              {title}
             </h1>
           )}
           {count !== undefined && (
@@ -76,16 +91,13 @@ const PageHeader: React.FC<PageHeaderProps> = ({
               <CountDisplay count={count} />
             </Suspense>
           )}
-
           {tag && <div className="ml-1 flex items-center">{tag}</div>}
         </div>
       </div>
-
-      {/* TODO Use wrapper for this instead - feels strange here */}
       {children && <div className="mt-8 flex flex-col gap-8">{children}</div>}
     </div>
   );
-};
+}
 
 const SectionsGroup: React.FC<React.ComponentProps<"div">> = ({
   children,
@@ -107,58 +119,46 @@ const SectionLayout: React.FC<React.ComponentProps<"section">> = ({
   </section>
 );
 
-interface SectionHeaderProps extends React.PropsWithChildren {
+interface SectionHeaderProps {
   heading: string;
   count?: CountValue;
-  badge?: {
-    name: string;
-    tooltip: string;
-  };
+  badge?: { name: string; tooltip: string };
+  children?: ReactNode;
 }
 
-function SectionCountDisplay({ count }: { count: CountValue }) {
-  const resolvedCount = count instanceof Promise ? use(count) : count;
-  return (
-    <span className="text-fg-muted text-xl font-medium">
-      {resolvedCount.toLocaleString()}
-    </span>
-  );
-}
-
-const SectionHeader: React.FC<SectionHeaderProps> = ({
+function SectionHeader({
   heading,
   count,
   badge,
   children,
-}) => (
-  <h2 className="flex items-center gap-2 text-xl font-medium">
-    {heading}
-
-    {count !== undefined && (
-      <Suspense fallback={<Skeleton className="h-6 w-12" />}>
-        <SectionCountDisplay count={count} />
-      </Suspense>
-    )}
-
-    {badge && (
-      <Tooltip delayDuration={0}>
-        <TooltipTrigger asChild>
-          <Badge
-            variant="outline"
-            className="ml-1 px-2 py-0.5 text-xs font-medium"
-          >
-            {badge.name}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="max-w-xs">{badge.tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    )}
-
-    {children}
-  </h2>
-);
+}: SectionHeaderProps) {
+  return (
+    <h2 className="flex items-center gap-2 text-xl font-medium">
+      {heading}
+      {count !== undefined && (
+        <Suspense fallback={<Skeleton className="h-6 w-12" />}>
+          <CountDisplay count={count} size="md" />
+        </Suspense>
+      )}
+      {badge && (
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="ml-1 px-2 py-0.5 text-xs font-medium"
+            >
+              {badge.name}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="max-w-xs">{badge.tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {children}
+    </h2>
+  );
+}
 
 export {
   PageHeader,
