@@ -74,9 +74,8 @@ pub enum OpenAICompatibleMessage {
 // Request Parameter Types
 // ============================================================================
 
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICompatibleResponseFormat {
     Text,
     JsonSchema { json_schema: JsonSchemaInfo },

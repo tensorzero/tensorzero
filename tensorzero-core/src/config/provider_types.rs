@@ -1,6 +1,5 @@
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use serde::{Deserialize, Serialize};
-use tensorzero_derive::TensorZeroDeserialize;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -165,10 +164,8 @@ pub struct GCPVertexAnthropicProviderTypeConfig {
     pub defaults: GCPDefaults,
 }
 
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
-#[serde(tag = "storage_type")]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "storage_type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GCPBatchConfigType {
     // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
     // to override the global provider-types batch config.

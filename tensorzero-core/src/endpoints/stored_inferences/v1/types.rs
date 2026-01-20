@@ -103,10 +103,9 @@ pub struct DemonstrationFeedbackFilter {
 
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "by")]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "by", rename_all = "snake_case")]
 pub enum OrderByTerm {
     // These titles become the names of the top-level OrderBy structs in the generated
     // schema, because it's flattened.
