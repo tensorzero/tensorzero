@@ -1265,7 +1265,7 @@ pub struct AnthropicMessageDelta {
     pub stop_sequence: Option<String>,
 }
 
-#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum AnthropicStreamMessage {
