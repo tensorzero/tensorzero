@@ -29,8 +29,9 @@ use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
 // =============================================================================
 
 /// Request body for running an evaluation.
-#[derive(Debug, Clone, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RunEvaluationRequest {
     /// The evaluation configuration (serialized)
     pub evaluation_config: EvaluationConfig,
@@ -73,8 +74,9 @@ fn default_inference_cache() -> String {
 }
 
 /// SSE event types for evaluation streaming.
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluationRunEvent {
     Start(EvaluationRunStartEvent),
@@ -84,8 +86,9 @@ pub enum EvaluationRunEvent {
     Complete(EvaluationRunCompleteEvent),
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(Debug, Clone, Serialize)]
 pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
@@ -96,8 +99,9 @@ pub struct EvaluationRunStartEvent {
     pub variant_name: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Debug, Clone, Serialize)]
 pub struct EvaluationRunSuccessEvent {
     pub evaluation_run_id: Uuid,
     pub datapoint: Value,
@@ -106,24 +110,27 @@ pub struct EvaluationRunSuccessEvent {
     pub evaluator_errors: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Debug, Clone, Serialize)]
 pub struct EvaluationRunErrorEvent {
     pub evaluation_run_id: Uuid,
     pub datapoint_id: Uuid,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(Debug, Clone, Serialize)]
 pub struct EvaluationRunFatalErrorEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluation_run_id: Option<Uuid>,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Debug, Clone, Serialize)]
 pub struct EvaluationRunCompleteEvent {
     pub evaluation_run_id: Uuid,
 }

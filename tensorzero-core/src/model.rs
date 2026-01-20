@@ -80,8 +80,9 @@ use crate::providers::{
     xai::XAIProvider,
 };
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
@@ -89,8 +90,9 @@ pub struct ModelConfig {
     pub skip_relay: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
@@ -826,14 +828,15 @@ fn wrap_provider_stream(
     )
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
@@ -846,14 +849,15 @@ pub struct UninitializedModelProvider {
     pub discard_unknown_chunks: bool,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
     pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
@@ -964,11 +968,11 @@ pub struct ModelProviderRequestInfo {
     pub extra_body: Option<ExtraBodyConfig>,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     #[serde(rename = "aws_bedrock")]
@@ -1136,8 +1140,9 @@ fn build_aws_provider_config(
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
@@ -1145,8 +1150,8 @@ pub enum HostedProviderKind {
     TGI,
 }
 
-#[derive(ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[derive(Clone, Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
@@ -1155,9 +1160,9 @@ pub enum HostedProviderKind {
 pub enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_base: Option<Url>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
         beta_structured_outputs: bool,
@@ -1166,18 +1171,18 @@ pub enum UninitializedProviderConfig {
     #[serde(rename = "aws_bedrock")]
     AWSBedrock {
         model_id: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         region: Option<CredentialLocationOrHardcoded>,
         /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         endpoint_url: Option<CredentialLocationOrHardcoded>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         access_key_id: Option<CredentialLocation>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         secret_access_key: Option<CredentialLocation>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         session_token: Option<CredentialLocation>,
     },
     #[strum(serialize = "aws_sagemaker")]
@@ -1185,25 +1190,25 @@ pub enum UninitializedProviderConfig {
     AWSSagemaker {
         endpoint_name: String,
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         region: Option<CredentialLocationOrHardcoded>,
         /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
         hosted_provider: HostedProviderKind,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         endpoint_url: Option<CredentialLocationOrHardcoded>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         access_key_id: Option<CredentialLocation>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         secret_access_key: Option<CredentialLocation>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         session_token: Option<CredentialLocation>,
     },
     Azure {
         deployment_id: String,
         endpoint: EndpointLocation,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "gcp_vertex_anthropic")]
@@ -1212,7 +1217,7 @@ pub enum UninitializedProviderConfig {
         model_id: String,
         location: String,
         project_id: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         credential_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "gcp_vertex_gemini")]
@@ -1222,46 +1227,46 @@ pub enum UninitializedProviderConfig {
         endpoint_id: Option<String>,
         location: String,
         project_id: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         credential_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "groq")]
     #[serde(rename = "groq")]
     Groq {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     Hyperbolic {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "fireworks")]
     #[serde(rename = "fireworks")]
     Fireworks {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
     Mistral {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     OpenAI {
         model_name: String,
         api_base: Option<Url>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
         api_type: OpenAIAPIType,
@@ -1272,12 +1277,12 @@ pub enum UninitializedProviderConfig {
     },
     OpenRouter {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     Together {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default = "crate::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
@@ -1285,34 +1290,34 @@ pub enum UninitializedProviderConfig {
     VLLM {
         model_name: String,
         api_base: Url,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     XAI {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     TGI {
         api_base: Url,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     SGLang {
         model_name: String,
         api_base: Url,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     DeepSeek {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
 }
@@ -2238,8 +2243,9 @@ impl ModelProvider {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -2255,16 +2261,17 @@ pub enum CredentialLocation {
 }
 
 /// Credential location with optional fallback support
-#[derive(Debug, PartialEq, Clone, Serialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
-    Single(#[ts(type = "string")] CredentialLocation),
+    Single(#[cfg_attr(feature = "ts-bindings", ts(type = "string"))] CredentialLocation),
     /// Credential location with fallback
     WithFallback {
-        #[ts(type = "string")]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
         default: CredentialLocation,
-        #[ts(type = "string")]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
         fallback: CredentialLocation,
     },
 }
@@ -2289,13 +2296,14 @@ impl CredentialLocationWithFallback {
 
 /// Credential location that also allows hardcoded string values.
 /// Used for non-sensitive fields like AWS region and endpoint_url.
-#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum CredentialLocationOrHardcoded {
     /// Hardcoded value (e.g., region = "us-east-1")
     Hardcoded(String),
     /// Standard credential location (env::, dynamic::, sdk, etc.)
-    #[ts(type = "string")]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     Location(CredentialLocation),
 }
 
@@ -2349,8 +2357,9 @@ impl Serialize for CredentialLocationOrHardcoded {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EndpointLocation {
     /// Environment variable containing the actual endpoint URL
     Env(String),

@@ -47,6 +47,7 @@ default = ["git"]
 # client can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero-core/e2e_tests", "dep:paste"]
 git = ["dep:git2", "tensorzero-core/git"]
+ts-bindings = ["tensorzero-core/ts-bindings", "tensorzero-optimizers/ts-bindings"]
 
 # Ignore the `pyo3` crate (used by our own `pyo3` feature above)
 [package.metadata.cargo-machete]

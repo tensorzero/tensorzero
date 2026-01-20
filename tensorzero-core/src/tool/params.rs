@@ -80,9 +80,10 @@ use super::wire::ToolChoice;
 /// ```
 ///
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[ts(optional_fields, export)]
+#[cfg_attr(feature = "ts-bindings", ts(optional_fields, export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]
 pub struct DynamicToolParams {

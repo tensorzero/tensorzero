@@ -22,3 +22,6 @@ tensorzero-auth = { path = "../../internal/tensorzero-auth" }
 
 [build-dependencies]
 napi-build = "2.3.0"
+
+[features]
+ts-bindings = ["tensorzero-core/ts-bindings", "tensorzero-auth/ts-bindings"]

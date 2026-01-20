@@ -34,8 +34,9 @@ use crate::{JobHandle, Optimizer};
 // TODO(shuyangli): revisit this and see if it should be u32::MAX.
 const DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS: u32 = u32::MAX;
 
-#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
     pub template_variant_name: String,
@@ -135,8 +136,9 @@ pub async fn launch_optimization_workflow(
         .await
 }
 
-#[derive(ts_rs::TS, Debug, Deserialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Debug, Deserialize)]
 pub struct LaunchOptimizationParams {
     pub train_samples: Vec<RenderedSample>,
     pub val_samples: Option<Vec<RenderedSample>>,

@@ -8,10 +8,6 @@ license.workspace = true
 [lints]
 workspace = true
 
-[features]
-e2e_tests = ["tensorzero/e2e_tests"]
-optimization_tests = ["e2e_tests"]
-
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
 evaluations = { path = "../evaluations" }
@@ -48,7 +44,12 @@ mime = { workspace = true }
 tracing = { workspace = true }
 
 # ts-rs
-ts-rs = { workspace = true }
+ts-rs = { workspace = true, optional = true }
+
+[features]
+e2e_tests = ["tensorzero/e2e_tests"]
+optimization_tests = ["e2e_tests"]
+ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings"]
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }

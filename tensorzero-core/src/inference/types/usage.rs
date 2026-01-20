@@ -3,8 +3,9 @@ use uuid::Uuid;
 
 /// The type of API used for a model inference.
 /// Used in raw usage reporting to help consumers interpret provider-specific usage data.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum ApiType {
     ChatCompletions,
@@ -15,8 +16,9 @@ pub enum ApiType {
 /// A single entry in the raw usage array, representing usage data from one model inference.
 /// This preserves the original provider-specific usage object for fields that TensorZero
 /// normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RawUsageEntry {
     pub model_inference_id: Uuid,
     pub provider_type: String,
@@ -40,8 +42,9 @@ pub fn raw_usage_entries_from_value(
 
 /// A single entry in the raw response array, representing raw response data from one model inference.
 /// This preserves the original provider-specific response string that TensorZero normalizes.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RawResponseEntry {
     pub model_inference_id: Uuid,
     pub provider_type: String,
@@ -49,8 +52,9 @@ pub struct RawResponseEntry {
     pub data: String,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,

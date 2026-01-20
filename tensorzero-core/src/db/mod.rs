@@ -67,9 +67,10 @@ pub trait SelectQueries {
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TimeWindow {
     Minute,
     Hour,
@@ -94,8 +95,9 @@ impl TimeWindow {
     }
 }
 
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelUsageTimePoint {
     pub period_start: DateTime<Utc>,
     pub model_name: String,
@@ -107,8 +109,9 @@ pub struct ModelUsageTimePoint {
     pub count: Option<u64>,
 }
 
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelLatencyDatapoint {
     pub model_name: String,
     // should be an array of quantiles_len u64
@@ -118,8 +121,9 @@ pub struct ModelLatencyDatapoint {
     pub count: u64,
 }
 
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EpisodeByIdRow {
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_u64")]
@@ -129,8 +133,9 @@ pub struct EpisodeByIdRow {
     pub last_inference_id: Uuid,
 }
 
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TableBoundsWithCount {
     pub first_id: Option<Uuid>,
     pub last_id: Option<Uuid>,
@@ -143,8 +148,9 @@ impl<T: SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Sen
 {
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct TableBounds {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,
