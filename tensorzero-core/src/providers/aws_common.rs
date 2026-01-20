@@ -1,5 +1,4 @@
-use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use aws_config::{Region, meta::region::RegionProviderChain};
 use aws_credential_types::Credentials;
@@ -7,13 +6,8 @@ use aws_credential_types::provider::ProvideCredentials;
 use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
 use aws_sigv4::sign::v4;
 use aws_smithy_runtime_api::client::identity::Identity;
-use aws_smithy_runtime_api::client::interceptors::Intercept;
-use aws_smithy_runtime_api::client::interceptors::context::AfterDeserializationInterceptorContextRef;
-use aws_smithy_runtime_api::client::interceptors::context::BeforeTransmitInterceptorContextMut;
-use aws_smithy_runtime_api::client::runtime_components::RuntimeComponents;
 use aws_smithy_runtime_api::client::stalled_stream_protection::StalledStreamProtectionConfig;
-use aws_smithy_types::body::SdkBody;
-use aws_smithy_types::config_bag::ConfigBag;
+use aws_smithy_types::event_stream::{Header, Message};
 use aws_types::SdkConfig;
 use reqwest::StatusCode;
 use secrecy::{ExposeSecret, SecretString};
@@ -21,17 +15,10 @@ use url::Url;
 
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    inference::types::{
-        ModelInferenceRequest, extra_body::FullExtraBodyConfig,
-        extra_headers::FullExtraHeadersConfig,
-    },
-    model::{
-        CredentialLocation, CredentialLocationOrHardcoded, ModelProvider, ModelProviderRequestInfo,
-    },
+    error::{Error, ErrorDetails},
+    http::TensorzeroHttpClient,
+    model::{CredentialLocation, CredentialLocationOrHardcoded},
 };
-
-use super::helpers::inject_extra_request_data;
 
 /// AWS endpoint configuration supporting static, env, and dynamic resolution.
 #[derive(Clone, Debug)]
@@ -114,14 +101,6 @@ impl AWSEndpointUrl {
                 }
                 CredentialLocation::None => Ok(None),
             },
-        }
-    }
-
-    /// Get static URL if available (for use at construction time).
-    pub fn get_static_url(&self) -> Option<&Url> {
-        match self {
-            AWSEndpointUrl::Static(url) => Some(url),
-            AWSEndpointUrl::Dynamic(_) => None,
         }
     }
 
@@ -216,19 +195,6 @@ impl AWSRegion {
                 CredentialLocation::None => Ok(None),
             },
         }
-    }
-
-    /// Get static region if available (for use at construction time).
-    pub fn get_static_region(&self) -> Option<&Region> {
-        match self {
-            AWSRegion::Static(region) => Some(region),
-            AWSRegion::Dynamic(_) | AWSRegion::Sdk => None,
-        }
-    }
-
-    /// Returns true if this region requires dynamic resolution at request time.
-    pub fn is_dynamic(&self) -> bool {
-        matches!(self, AWSRegion::Dynamic(_))
     }
 
     /// Resolve region at runtime (for dynamic regions).
@@ -417,97 +383,6 @@ impl AWSCredentials {
             }
         }
     }
-
-    /// Get static credentials if available (for use at construction time).
-    pub fn get_static_credentials(&self) -> Option<Credentials> {
-        match self {
-            AWSCredentials::Static {
-                access_key_id,
-                secret_access_key,
-                session_token,
-            } => Some(Credentials::new(
-                access_key_id.clone(),
-                secret_access_key.expose_secret().to_string(),
-                session_token
-                    .as_ref()
-                    .map(|st| st.expose_secret().to_string()),
-                None, // expiration
-                "tensorzero",
-            )),
-            AWSCredentials::Dynamic { .. } | AWSCredentials::Sdk => None,
-        }
-    }
-
-    /// Returns true if this credential requires dynamic resolution at request time.
-    pub fn is_dynamic(&self) -> bool {
-        matches!(self, AWSCredentials::Dynamic { .. })
-    }
-
-    /// Resolve credentials at runtime (for dynamic credentials).
-    pub fn resolve(&self, credentials: &InferenceCredentials) -> Result<Credentials, Error> {
-        match self {
-            AWSCredentials::Static {
-                access_key_id,
-                secret_access_key,
-                session_token,
-            } => Ok(Credentials::new(
-                access_key_id.clone(),
-                secret_access_key.expose_secret().to_string(),
-                session_token
-                    .as_ref()
-                    .map(|st| st.expose_secret().to_string()),
-                None,
-                "tensorzero",
-            )),
-            AWSCredentials::Dynamic {
-                access_key_id_key,
-                secret_access_key_key,
-                session_token_key,
-            } => {
-                let ak = credentials.get(access_key_id_key).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "aws".to_string(),
-                        message: format!(
-                            "Dynamic `access_key_id` with key `{access_key_id_key}` is missing"
-                        ),
-                    })
-                })?;
-                let sk = credentials.get(secret_access_key_key).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "aws".to_string(),
-                        message: format!("Dynamic `secret_access_key` with key `{secret_access_key_key}` is missing"),
-                    })
-                })?;
-                let st = session_token_key
-                    .as_ref()
-                    .map(|key| {
-                        credentials.get(key).ok_or_else(|| {
-                            Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: "aws".to_string(),
-                                message: format!(
-                                    "Dynamic `session_token` with key `{key}` is missing"
-                                ),
-                            })
-                        })
-                    })
-                    .transpose()?;
-
-                Ok(Credentials::new(
-                    ak.expose_secret().to_string(),
-                    sk.expose_secret().to_string(),
-                    st.map(|s| s.expose_secret().to_string()),
-                    None,
-                    "tensorzero",
-                ))
-            }
-            AWSCredentials::Sdk => {
-                // This should not be called at runtime - Sdk credentials are resolved at construction time
-                Err(Error::new(ErrorDetails::InternalError {
-                    message: "AWSCredentials::Sdk should be resolved at construction time, not at request time".to_string(),
-                }))
-            }
-        }
-    }
 }
 
 /// Validate that a credential location is allowed for AWS credentials.
@@ -569,11 +444,21 @@ fn parse_and_warn_endpoint(url_str: &str, provider_type: &str) -> Result<Url, Er
 fn warn_if_not_aws_domain(url: &Url) {
     if let Some(host) = url.host_str() {
         let host_lower = host.to_lowercase();
-        if !host_lower.ends_with(".amazonaws.com") && !host_lower.ends_with(".api.aws") {
+        // Check for all known AWS partition domain suffixes:
+        // - amazonaws.com (standard AWS)
+        // - amazonaws.com.cn (AWS China: cn-north-1, cn-northwest-1)
+        // - api.aws (newer AWS API endpoints)
+        // - c2s.ic.gov (AWS US ISO)
+        // - sc2s.sgov.gov (AWS US ISOB)
+        let is_aws_domain = host_lower.ends_with(".amazonaws.com")
+            || host_lower.ends_with(".amazonaws.com.cn")
+            || host_lower.ends_with(".api.aws")
+            || host_lower.ends_with(".c2s.ic.gov")
+            || host_lower.ends_with(".sc2s.sgov.gov");
+        if !is_aws_domain {
             tracing::warn!(
-                "AWS endpoint URL `{url}` does not appear to be an AWS domain \
-                 (expected *.amazonaws.com or *.api.aws). \
-                 Requests will be sent to this endpoint."
+                "AWS endpoint URL `{url}` does not appear to be an AWS domain (e.g. *.amazonaws.com). \
+                 TensorZero will route requests to this endpoint, but be careful: a malicious endpoint can exfiltrate data or credentials."
             );
         }
     }
@@ -614,6 +499,182 @@ pub async fn config_with_region(
         .load()
         .await;
     Ok(config)
+}
+
+/// Common configuration for AWS providers (Bedrock, SageMaker).
+///
+/// This struct holds the shared configuration fields and provides common
+/// methods for region and credential resolution.
+#[derive(Debug)]
+pub struct AWSProviderConfig {
+    pub sdk_config: SdkConfig,
+    pub region: Option<AWSRegion>,
+    pub endpoint_url: Option<AWSEndpointUrl>,
+    pub credentials: AWSCredentials,
+}
+
+impl AWSProviderConfig {
+    /// Create a new AWS provider config.
+    pub async fn new(
+        static_region: Option<Region>,
+        region: Option<AWSRegion>,
+        endpoint_url: Option<AWSEndpointUrl>,
+        credentials: AWSCredentials,
+        provider_type: &str,
+    ) -> Result<Self, Error> {
+        let sdk_config = config_with_region(provider_type, static_region).await?;
+        warn_if_credential_exfiltration_risk(&endpoint_url, &credentials, provider_type);
+        Ok(Self {
+            sdk_config,
+            region,
+            endpoint_url,
+            credentials,
+        })
+    }
+
+    /// Get the region for this request.
+    ///
+    /// For `AWSRegion::Static`, returns the configured region directly.
+    /// For `AWSRegion::Dynamic`, resolves the region from the request credentials.
+    /// For `AWSRegion::Sdk` or `None`, uses the region from the SDK config (auto-detected at startup).
+    pub fn get_region(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        provider_type: &str,
+    ) -> Result<Region, Error> {
+        match &self.region {
+            Some(AWSRegion::Static(region)) => Ok(region.clone()),
+            Some(AWSRegion::Dynamic(key_name)) => {
+                let region_str = dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicRegionNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Ok(Region::new(region_str.expose_secret().to_string()))
+            }
+            // For Sdk or None, use the region resolved by the SDK at construction time
+            Some(AWSRegion::Sdk) | None => self.sdk_config.region().cloned().ok_or_else(|| {
+                Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: None,
+                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                    message: "No region configured".to_string(),
+                    provider_type: provider_type.to_string(),
+                })
+            }),
+        }
+    }
+
+    /// Get the base URL for an AWS service.
+    ///
+    /// If `endpoint_url` is configured, resolves and returns it.
+    /// Otherwise, constructs the URL using the region and service subdomain.
+    pub fn get_base_url(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        service_subdomain: &str,
+        provider_type: &str,
+    ) -> Result<String, Error> {
+        if let Some(endpoint_url) = &self.endpoint_url {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
+            Ok(url.to_string().trim_end_matches('/').to_string())
+        } else {
+            let region = self.get_region(dynamic_api_keys, provider_type)?;
+            Ok(format!(
+                "https://{}.{}.amazonaws.com",
+                service_subdomain,
+                region.as_ref()
+            ))
+        }
+    }
+
+    /// Get credentials for this request.
+    pub async fn get_request_credentials(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        provider_type: &str,
+    ) -> Result<Credentials, Error> {
+        resolve_request_credentials(
+            &self.credentials,
+            &self.sdk_config,
+            dynamic_api_keys,
+            provider_type,
+        )
+        .await
+    }
+}
+
+/// Resolve credentials for an AWS request.
+///
+/// Handles static, dynamic, and SDK credential types. This is the shared
+/// implementation used by both Bedrock and SageMaker providers.
+pub async fn resolve_request_credentials(
+    credentials: &AWSCredentials,
+    sdk_config: &SdkConfig,
+    dynamic_api_keys: &InferenceCredentials,
+    provider_type: &str,
+) -> Result<Credentials, Error> {
+    match credentials {
+        AWSCredentials::Static {
+            access_key_id,
+            secret_access_key,
+            session_token,
+        } => {
+            // Use static credentials directly
+            Ok(Credentials::new(
+                access_key_id.clone(),
+                secret_access_key.expose_secret().to_string(),
+                session_token
+                    .as_ref()
+                    .map(|st| st.expose_secret().to_string()),
+                None,
+                "tensorzero",
+            ))
+        }
+        AWSCredentials::Dynamic {
+            access_key_id_key,
+            secret_access_key_key,
+            session_token_key,
+        } => {
+            // Resolve dynamic credentials from the request
+            let ak = dynamic_api_keys.get(access_key_id_key).ok_or_else(|| {
+                Error::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: "aws".to_string(),
+                    message: format!(
+                        "Dynamic `access_key_id` with key `{access_key_id_key}` is missing"
+                    ),
+                })
+            })?;
+            let sk = dynamic_api_keys.get(secret_access_key_key).ok_or_else(|| {
+                Error::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: "aws".to_string(),
+                    message: format!(
+                        "Dynamic `secret_access_key` with key `{secret_access_key_key}` is missing"
+                    ),
+                })
+            })?;
+            let st = session_token_key
+                .as_ref()
+                .map(|key| {
+                    dynamic_api_keys.get(key).ok_or_else(|| {
+                        Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: "aws".to_string(),
+                            message: format!("Dynamic `session_token` with key `{key}` is missing"),
+                        })
+                    })
+                })
+                .transpose()?;
+
+            Ok(Credentials::new(
+                ak.expose_secret().to_string(),
+                sk.expose_secret().to_string(),
+                st.map(|s| s.expose_secret().to_string()),
+                None,
+                "tensorzero",
+            ))
+        }
+        AWSCredentials::Sdk => get_credentials(sdk_config, provider_type).await,
+    }
 }
 
 /// Get fresh credentials from the SDK config.
@@ -719,7 +780,10 @@ pub fn sign_request(
         })?
         .into_parts();
 
-    // Build a new header map with the signing headers
+    // Build a new header map with the signing headers.
+    // We preserve existing headers (e.g., user-provided extra_headers) and only add
+    // signing headers that aren't already present. This allows users to override
+    // headers like x-amz-security-token for testing purposes.
     let mut signed_headers = headers.clone();
     for (name, value) in signing_instructions.headers() {
         let header_name =
@@ -741,186 +805,136 @@ pub fn sign_request(
                 provider_type: provider_type.to_string(),
             })
         })?;
-        signed_headers.insert(header_name, header_value);
+        // Only insert if the header isn't already present (preserve user-provided headers)
+        if let reqwest::header::Entry::Vacant(entry) = signed_headers.entry(header_name) {
+            entry.insert(header_value);
+        }
     }
 
     Ok(signed_headers)
 }
 
-#[derive(Debug)]
-pub struct TensorZeroInterceptor {
-    /// Captures the raw request from `modify_before_signing`.
-    /// After the request is executed, we use this to retrieve the raw request.
-    raw_request: Arc<Mutex<Option<String>>>,
-    /// Captures the raw response from `read_after_deserialization`.
-    /// After the request is executed, we use this to retrieve the raw response.
-    raw_response: Arc<Mutex<Option<String>>>,
-    extra_body: FullExtraBodyConfig,
-    extra_headers: FullExtraHeadersConfig,
-    model_provider_info: ModelProviderRequestInfo,
-    model_name: String,
+/// Response from sending an AWS request.
+pub struct AwsRequestResponse {
+    pub raw_response: String,
+    pub response_time: Duration,
 }
 
-pub struct InterceptorAndRawBody<P: Fn() -> Result<String, Error>, Q: Fn() -> Result<String, Error>>
-{
-    pub interceptor: TensorZeroInterceptor,
-    pub get_raw_request: P,
-    pub get_raw_response: Q,
+/// Send a signed AWS HTTP request and handle common error patterns.
+///
+/// This handles: header setup, request signing, sending, reading response,
+/// and status validation. Returns the raw response text on success.
+#[expect(clippy::too_many_arguments)]
+pub async fn send_aws_request(
+    http_client: &TensorzeroHttpClient,
+    url: &str,
+    extra_headers: http::HeaderMap,
+    body_bytes: Vec<u8>,
+    credentials: &Credentials,
+    region: &str,
+    service: &str,
+    provider_type: &str,
+    raw_request: &str,
+) -> Result<AwsRequestResponse, Error> {
+    // Build headers with content-type and accept
+    let mut headers = extra_headers;
+    headers.insert(
+        http::header::CONTENT_TYPE,
+        http::header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        http::header::ACCEPT,
+        http::header::HeaderValue::from_static("application/json"),
+    );
+
+    // Sign the request
+    let signed_headers = sign_request(
+        "POST",
+        url,
+        &headers,
+        &body_bytes,
+        credentials,
+        region,
+        service,
+        provider_type,
+    )?;
+
+    // Send request
+    let start_time = Instant::now();
+    let response = http_client
+        .post(url)
+        .headers(signed_headers)
+        .body(body_bytes)
+        .send()
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error sending request to AWS {service}: {e}"),
+                raw_request: Some(raw_request.to_string()),
+                raw_response: None,
+                provider_type: provider_type.to_string(),
+            })
+        })?;
+
+    let response_time = start_time.elapsed();
+    let status = response.status();
+    let raw_response = response.text().await.map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!("Error reading response from AWS {service}: {e}"),
+            raw_request: Some(raw_request.to_string()),
+            raw_response: None,
+            provider_type: provider_type.to_string(),
+        })
+    })?;
+
+    if !status.is_success() {
+        return Err(Error::new(ErrorDetails::InferenceServer {
+            message: format!("AWS {service} returned error status {status}: {raw_response}"),
+            raw_request: Some(raw_request.to_string()),
+            raw_response: Some(raw_response),
+            provider_type: provider_type.to_string(),
+        }));
+    }
+
+    Ok(AwsRequestResponse {
+        raw_response,
+        response_time,
+    })
 }
 
-impl Intercept for TensorZeroInterceptor {
-    fn name(&self) -> &'static str {
-        "TensorZeroInterceptor"
-    }
-    // This interceptor injects our 'extra_body' parameters into the request body,
-    // and captures the raw request.
-    fn modify_before_signing(
-        &self,
-        context: &mut BeforeTransmitInterceptorContextMut<'_>,
-        _runtime_components: &RuntimeComponents,
-        _cfg: &mut ConfigBag,
-    ) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
-        let http_request = context.request_mut();
-        let bytes = http_request.body().bytes().ok_or_else(|| {
-            Error::new(ErrorDetails::Serialization {
-                message: "Failed to get body from AWS request".to_string(),
-            })
-        })?;
-        let mut body_json: serde_json::Value = serde_json::from_slice(bytes).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Failed to deserialize AWS request body: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let headers = inject_extra_request_data(
-            &self.extra_body,
-            &self.extra_headers,
-            self.model_provider_info.clone(),
-            &self.model_name,
-            &mut body_json,
-        )?;
-        // Get a consistent order for use with the provider-proxy cache
-        if cfg!(feature = "e2e_tests") {
-            body_json.sort_all_objects();
-        }
+/// Check if a Smithy EventStream message is an exception.
+///
+/// AWS Smithy event streams can contain exception messages indicated by the
+/// `:message-type` header being set to "exception". This function checks for
+/// such exceptions and extracts the exception type and error message.
+///
+/// Returns `Some((exception_type, error_message))` if the message is an exception,
+/// `None` otherwise.
+///
+/// See https://smithy.io/2.0/aws/amazon-eventstream.html for details on the format.
+pub fn check_eventstream_exception(message: &Message) -> Option<(String, String)> {
+    let message_type = message
+        .headers()
+        .iter()
+        .find(|h: &&Header| h.name().as_str() == ":message-type")
+        .and_then(|h: &Header| h.value().as_string().ok())
+        .map(|s: &aws_smithy_types::str_bytes::StrBytes| s.as_str().to_owned());
 
-        let raw_request = serde_json::to_string(&body_json).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Failed to serialize AWS request body: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        // AWS inexplicably sets this header before calling this interceptor, so we need to update
-        // it ourselves (in case the body length changed)
-        http_request
-            .headers_mut()
-            .insert("content-length", raw_request.len().to_string());
-        *http_request.body_mut() = SdkBody::from(raw_request.clone());
-
-        // Capture the raw request for later use. Note that `modify_before_signing` may be
-        // called multiple times (due to internal aws sdk retries), so this will overwrite
-        // the Mutex to contain the latest raw request (which is what we want).
-        let body = self.raw_request.lock();
-        // Ignore poisoned lock, since we're overwriting it.
-        let mut body = match body {
-            Ok(body) => body,
-            Err(e) => e.into_inner(),
-        };
-        *body = Some(raw_request);
-
-        // We iterate over a reference and clone, since `header.into_iter()`
-        // produces (Option<HeaderName>, HeaderValue)
-        for (name, value) in &headers {
-            http_request
-                .headers_mut()
-                .insert(name.clone(), value.clone());
-        }
-        Ok(())
+    if message_type.as_deref() != Some("exception") {
+        return None;
     }
 
-    fn read_after_deserialization(
-        &self,
-        context: &AfterDeserializationInterceptorContextRef<'_>,
-        _runtime_components: &RuntimeComponents,
-        _cfg: &mut ConfigBag,
-    ) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
-        let bytes = context.response().body().bytes();
-        if let Some(bytes) = bytes {
-            let raw_response = self.raw_response.lock();
-            // Ignore poisoned lock, since we're overwriting it.
-            let mut body = match raw_response {
-                Ok(body) => body,
-                Err(e) => e.into_inner(),
-            };
-            *body = Some(String::from_utf8_lossy(bytes).into_owned());
-        }
-        Ok(())
-    }
-}
+    let exception_type = message
+        .headers()
+        .iter()
+        .find(|h: &&Header| h.name().as_str() == ":exception-type")
+        .and_then(|h: &Header| h.value().as_string().ok())
+        .map(|s: &aws_smithy_types::str_bytes::StrBytes| s.as_str().to_owned())
+        .unwrap_or_else(|| "unknown".to_string());
 
-/// Builds our custom interceptor to the request builder, which injects our 'extra_body' parameters into
-/// the request body.
-/// Returns the interceptor, and a function to retrieve the raw request.
-/// This awkward signature is due to the fact that we cannot call `send()` from a generic
-/// function, as one of the needed traits is private: https://github.com/awslabs/aws-sdk-rust/issues/987
-pub fn build_interceptor(
-    request: &ModelInferenceRequest<'_>,
-    model_provider: &ModelProvider,
-    model_name: String,
-) -> InterceptorAndRawBody<impl Fn() -> Result<String, Error>, impl Fn() -> Result<String, Error>> {
-    let raw_request = Arc::new(Mutex::new(None));
-    let raw_response = Arc::new(Mutex::new(None));
-    let extra_body = request.extra_body.clone();
-    let extra_headers = request.extra_headers.clone();
+    let error_message = String::from_utf8_lossy(message.payload()).to_string();
 
-    let interceptor = TensorZeroInterceptor {
-        raw_request: raw_request.clone(),
-        raw_response: raw_response.clone(),
-        extra_body,
-        extra_headers,
-        model_provider_info: model_provider.into(),
-        model_name,
-    };
-
-    InterceptorAndRawBody {
-        interceptor,
-        get_raw_request: move || {
-            let raw_request = raw_request
-                .lock()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Poisoned raw_request mutex for AWS request: {e:?}"),
-                    })
-                })?
-                .clone()
-                .ok_or_else(|| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: "Failed to get serialized AWS request".to_string(),
-                    })
-                })?;
-            Ok(raw_request)
-        },
-        get_raw_response: move || {
-            let raw_response = raw_response
-                .lock()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Poisoned raw_response mutex for AWS request: {e:?}"),
-                    })
-                })?
-                .clone()
-                .ok_or_else(|| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: "Failed to get serialized AWS response".to_string(),
-                    })
-                })?;
-            Ok(raw_response)
-        },
-    }
+    Some((exception_type, error_message))
 }
 
 #[cfg(test)]
@@ -1056,18 +1070,21 @@ mod tests {
         );
     }
 
-    // ===== AWSCredentials::resolve tests =====
+    // ===== resolve_request_credentials tests =====
 
-    #[test]
-    fn test_aws_credentials_resolve_static() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_static() {
         let creds = AWSCredentials::Static {
             access_key_id: "AKIATEST".to_string(),
             secret_access_key: SecretString::new("secretkey".to_string().into()),
             session_token: None,
         };
-        let credentials = make_credentials(HashMap::new());
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::new());
 
-        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
+            .await
+            .expect("resolve should succeed");
         assert_eq!(
             result.access_key_id(),
             "AKIATEST",
@@ -1075,16 +1092,19 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_static_with_session_token() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_static_with_session_token() {
         let creds = AWSCredentials::Static {
             access_key_id: "AKIATEST".to_string(),
             secret_access_key: SecretString::new("secretkey".to_string().into()),
             session_token: Some(SecretString::new("mysessiontoken".to_string().into())),
         };
-        let credentials = make_credentials(HashMap::new());
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::new());
 
-        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
+            .await
+            .expect("resolve should succeed");
         assert_eq!(
             result.session_token(),
             Some("mysessiontoken"),
@@ -1092,19 +1112,22 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_found() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_found() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: None,
         };
-        let credentials = make_credentials(HashMap::from([
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::from([
             ("aws_access_key", "AKIADYNAMIC"),
             ("aws_secret_key", "dynamicsecret"),
         ]));
 
-        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
+            .await
+            .expect("resolve should succeed");
         assert_eq!(
             result.access_key_id(),
             "AKIADYNAMIC",
@@ -1117,20 +1140,23 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_with_session_token() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_with_session_token() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: Some("aws_session_token".to_string()),
         };
-        let credentials = make_credentials(HashMap::from([
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::from([
             ("aws_access_key", "AKIADYNAMIC"),
             ("aws_secret_key", "dynamicsecret"),
             ("aws_session_token", "dynamicsession"),
         ]));
 
-        let result = creds.resolve(&credentials).expect("resolve should succeed");
+        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
+            .await
+            .expect("resolve should succeed");
         assert_eq!(
             result.session_token(),
             Some("dynamicsession"),
@@ -1138,16 +1164,19 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_missing_access_key() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_missing_access_key() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "missing_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: None,
         };
-        let credentials = make_credentials(HashMap::from([("aws_secret_key", "dynamicsecret")]));
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys =
+            make_credentials(HashMap::from([("aws_secret_key", "dynamicsecret")]));
 
-        let result = creds.resolve(&credentials);
+        let result =
+            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
         assert!(
             result.is_err(),
             "Should error when access_key_id is missing"
@@ -1159,16 +1188,18 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_missing_secret_key() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_missing_secret_key() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "missing_secret_key".to_string(),
             session_token_key: None,
         };
-        let credentials = make_credentials(HashMap::from([("aws_access_key", "AKIADYNAMIC")]));
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::from([("aws_access_key", "AKIADYNAMIC")]));
 
-        let result = creds.resolve(&credentials);
+        let result =
+            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
         assert!(
             result.is_err(),
             "Should error when secret_access_key is missing"
@@ -1180,19 +1211,21 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_dynamic_missing_session_token() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_dynamic_missing_session_token() {
         let creds = AWSCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: Some("missing_session".to_string()),
         };
-        let credentials = make_credentials(HashMap::from([
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::from([
             ("aws_access_key", "AKIADYNAMIC"),
             ("aws_secret_key", "dynamicsecret"),
         ]));
 
-        let result = creds.resolve(&credentials);
+        let result =
+            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
         assert!(
             result.is_err(),
             "Should error when session_token is missing"
@@ -1204,20 +1237,22 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_aws_credentials_resolve_sdk_errors() {
+    #[tokio::test]
+    async fn test_resolve_request_credentials_sdk_no_provider() {
         let creds = AWSCredentials::Sdk;
-        let credentials = make_credentials(HashMap::new());
+        let sdk_config = SdkConfig::builder().build();
+        let dynamic_api_keys = make_credentials(HashMap::new());
 
-        let result = creds.resolve(&credentials);
+        let result =
+            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
         assert!(
             result.is_err(),
-            "Sdk credentials should error when resolved at runtime"
+            "Sdk credentials should error when no credentials provider is configured"
         );
         let err = result.unwrap_err();
         assert!(
-            err.to_string().contains("construction time"),
-            "Error should explain Sdk is resolved at construction: {err}"
+            err.to_string().contains("No credentials provider"),
+            "Error should explain no provider is configured: {err}"
         );
     }
 
@@ -1413,49 +1448,165 @@ mod tests {
         warn_if_credential_exfiltration_risk(&None, &static_creds, "test");
     }
 
-    // ===== AWSRegion::is_dynamic tests =====
+    // ===== AWSProviderConfig::get_region tests =====
+
+    fn make_sdk_config_with_region(region: &str) -> SdkConfig {
+        SdkConfig::builder()
+            .region(Region::new(region.to_string()))
+            .build()
+    }
+
+    fn make_sdk_config_without_region() -> SdkConfig {
+        SdkConfig::builder().build()
+    }
 
     #[test]
-    fn test_aws_region_is_dynamic() {
-        assert!(
-            AWSRegion::Dynamic("key".to_string()).is_dynamic(),
-            "Dynamic region should return true"
-        );
-        assert!(
-            !AWSRegion::Static(Region::new("us-east-1")).is_dynamic(),
-            "Static region should return false"
-        );
-        assert!(
-            !AWSRegion::Sdk.is_dynamic(),
-            "Sdk region should return false"
+    fn test_get_region_with_static_region() {
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-west-2"),
+            region: Some(AWSRegion::Static(Region::new("eu-central-1"))),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config
+            .get_region(&credentials, "test_provider")
+            .expect("get_region should succeed");
+        assert_eq!(
+            result.as_ref(),
+            "eu-central-1",
+            "Static region should be returned directly, ignoring sdk_config region"
         );
     }
 
-    // ===== AWSCredentials::is_dynamic tests =====
+    #[test]
+    fn test_get_region_with_dynamic_region() {
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-west-2"),
+            region: Some(AWSRegion::Dynamic("aws_region".to_string())),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::from([("aws_region", "ap-northeast-1")]));
+
+        let result = config
+            .get_region(&credentials, "test_provider")
+            .expect("get_region should succeed");
+        assert_eq!(
+            result.as_ref(),
+            "ap-northeast-1",
+            "Dynamic region should be resolved from credentials"
+        );
+    }
 
     #[test]
-    fn test_aws_credentials_is_dynamic() {
+    fn test_get_region_with_dynamic_region_missing() {
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-west-2"),
+            region: Some(AWSRegion::Dynamic("missing_region".to_string())),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config.get_region(&credentials, "test_provider");
         assert!(
-            AWSCredentials::Dynamic {
-                access_key_id_key: "ak".to_string(),
-                secret_access_key_key: "sk".to_string(),
-                session_token_key: None,
-            }
-            .is_dynamic(),
-            "Dynamic credentials should return true"
+            result.is_err(),
+            "get_region should fail when dynamic region key is missing"
         );
+        let err = result.unwrap_err();
         assert!(
-            !AWSCredentials::Static {
-                access_key_id: "ak".to_string(),
-                secret_access_key: SecretString::new("sk".to_string().into()),
-                session_token: None,
-            }
-            .is_dynamic(),
-            "Static credentials should return false"
+            err.to_string().contains("missing_region"),
+            "Error should mention the missing key: {err}"
         );
+    }
+
+    #[test]
+    fn test_get_region_with_sdk_region_uses_sdk_config() {
+        // This is the key test for the bug fix:
+        // When region is Some(AWSRegion::Sdk), we should fall back to sdk_config.region()
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-east-1"),
+            region: Some(AWSRegion::Sdk),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config
+            .get_region(&credentials, "test_provider")
+            .expect("get_region should succeed with AWSRegion::Sdk");
+        assert_eq!(
+            result.as_ref(),
+            "us-east-1",
+            "AWSRegion::Sdk should fall back to sdk_config.region()"
+        );
+    }
+
+    #[test]
+    fn test_get_region_with_none_uses_sdk_config() {
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_with_region("us-west-1"),
+            region: None,
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config
+            .get_region(&credentials, "test_provider")
+            .expect("get_region should succeed with None region");
+        assert_eq!(
+            result.as_ref(),
+            "us-west-1",
+            "None region should fall back to sdk_config.region()"
+        );
+    }
+
+    #[test]
+    fn test_get_region_with_sdk_region_no_sdk_config_region() {
+        // When region is Sdk but sdk_config has no region, should error
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_without_region(),
+            region: Some(AWSRegion::Sdk),
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config.get_region(&credentials, "test_provider");
         assert!(
-            !AWSCredentials::Sdk.is_dynamic(),
-            "Sdk credentials should return false"
+            result.is_err(),
+            "get_region should fail when sdk_config has no region"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("No region configured"),
+            "Error should mention no region configured: {err}"
+        );
+    }
+
+    #[test]
+    fn test_get_region_with_none_no_sdk_config_region() {
+        // When region is None and sdk_config has no region, should error
+        let config = AWSProviderConfig {
+            sdk_config: make_sdk_config_without_region(),
+            region: None,
+            endpoint_url: None,
+            credentials: AWSCredentials::Sdk,
+        };
+        let credentials = make_credentials(HashMap::new());
+
+        let result = config.get_region(&credentials, "test_provider");
+        assert!(
+            result.is_err(),
+            "get_region should fail when sdk_config has no region"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("No region configured"),
+            "Error should mention no region configured: {err}"
         );
     }
 }
