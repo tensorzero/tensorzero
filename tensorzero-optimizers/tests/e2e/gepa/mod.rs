@@ -10,6 +10,7 @@ use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::datasets::v1::delete_dataset;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
@@ -175,6 +176,7 @@ pub async fn build_gateway_client(
         config,
         clickhouse_connection_info: clickhouse,
         postgres_connection_info: PostgresConnectionInfo::Disabled,
+        valkey_connection_info: ValkeyConnectionInfo::Disabled,
         http_client,
         timeout: Some(Duration::from_secs(timeout_secs)),
     })

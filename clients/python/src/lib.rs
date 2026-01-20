@@ -167,12 +167,13 @@ impl LocalHttpGateway {
 }
 
 #[pyfunction]
-#[pyo3(signature = (*, config_file, clickhouse_url, postgres_url, async_setup))]
+#[pyo3(signature = (*, config_file, clickhouse_url, postgres_url, valkey_url, async_setup))]
 fn _start_http_gateway(
     py: Python<'_>,
     config_file: Option<String>,
     clickhouse_url: Option<String>,
     postgres_url: Option<String>,
+    valkey_url: Option<String>,
     async_setup: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
     warn_no_config(py, config_file.as_deref())?;
@@ -181,6 +182,7 @@ fn _start_http_gateway(
             config_file,
             clickhouse_url,
             postgres_url,
+            valkey_url,
         )
         .await?;
         Ok(LocalHttpGateway {

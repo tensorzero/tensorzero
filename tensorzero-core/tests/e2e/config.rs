@@ -15,6 +15,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
 };
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::error::ErrorDetails;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::Text;
@@ -121,6 +122,7 @@ async fn test_from_components_basic() {
         config,
         clickhouse_connection_info,
         postgres_connection_info,
+        valkey_connection_info: ValkeyConnectionInfo::Disabled,
         http_client,
         timeout: Some(Duration::from_secs(60)),
     })
@@ -525,6 +527,7 @@ model = "test_model_{random_id}"
         &live_config,
         Some(CLICKHOUSE_URL.clone()),
         None,  // No Postgres
+        None,  // No Valkey
         false, // Don't verify credentials
         Some(Duration::from_secs(60)),
     ))
@@ -714,6 +717,7 @@ model = "test_model_{random_id}"
         &live_config,
         Some(CLICKHOUSE_URL.clone()),
         None,  // No Postgres
+        None,  // No Valkey
         false, // Don't verify credentials
         Some(Duration::from_secs(60)),
     ))
@@ -942,7 +946,8 @@ model = "test_model_{random_id}"
         retrieved_snapshot,
         &live_config,
         Some(CLICKHOUSE_URL.clone()),
-        None,
+        None, // No Postgres
+        None, // No Valkey
         false,
         Some(Duration::from_secs(60)),
     ))

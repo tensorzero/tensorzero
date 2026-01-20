@@ -264,6 +264,7 @@ mod tests {
     use crate::config::Config;
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::db::postgres::PostgresConnectionInfo;
+    use crate::db::valkey::ValkeyConnectionInfo;
     use crate::http::TensorzeroHttpClient;
     use tokio_util::task::TaskTracker;
 
@@ -278,8 +279,10 @@ mod tests {
             http_client,
             clickhouse_connection_info,
             postgres_connection_info,
+            ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
         )
+        .unwrap()
     }
 
     #[test]

@@ -19,8 +19,9 @@ use super::{
     TicketBorrow, TicketBorrows,
 };
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::valkey::ValkeyConnectionInfo;
 use crate::db::{ConsumeTicketsRequest, RateLimitQueries};
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 /// Manager for rate limiting operations.
 ///
@@ -43,21 +44,53 @@ impl std::fmt::Debug for RateLimitingManager {
 }
 
 impl RateLimitingManager {
-    /// Create a new RateLimitingManager
-    pub fn new(config: Arc<RateLimitingConfig>, client: PostgresConnectionInfo) -> Self {
-        Self {
-            config,
-            client: Arc::new(client),
-        }
+    /// Create a new RateLimitingManager with a database client
+    pub fn new(config: Arc<RateLimitingConfig>, client: Arc<dyn RateLimitQueries>) -> Self {
+        Self { config, client }
     }
 
-    /// Create a new RateLimitingManager with a custom client (for testing).
-    #[cfg(test)]
-    pub fn new_with_client(
+    /// Create a new RateLimitingManager by selecting the appropriate backend.
+    ///
+    /// Backend selection priority:
+    /// 1. Valkey if enabled (TENSORZERO_VALKEY_URL is set)
+    /// 2. PostgreSQL if enabled (TENSORZERO_POSTGRES_URL is set)
+    /// 3. Error if rate limiting rules are configured but no backend is available
+    pub fn new_from_connections(
         config: Arc<RateLimitingConfig>,
-        client: Arc<dyn RateLimitQueries>,
-    ) -> Self {
-        Self { config, client }
+        valkey_connection_info: &ValkeyConnectionInfo,
+        postgres_connection_info: &PostgresConnectionInfo,
+    ) -> Result<Self, Error> {
+        let client: Arc<dyn RateLimitQueries> = match (
+            valkey_connection_info,
+            postgres_connection_info,
+        ) {
+            (ValkeyConnectionInfo::Enabled { .. }, _) => {
+                tracing::info!("Using Valkey for rate limiting");
+                Arc::new(valkey_connection_info.clone())
+            }
+            (ValkeyConnectionInfo::Disabled, PostgresConnectionInfo::Enabled { .. }) => {
+                tracing::info!("Using PostgreSQL for rate limiting");
+                Arc::new(postgres_connection_info.clone())
+            }
+            (ValkeyConnectionInfo::Disabled, PostgresConnectionInfo::Disabled) => {
+                if config.enabled() && !config.rules().is_empty() {
+                    return Err(Error::new(ErrorDetails::Config {
+                            message: "Rate limiting is configured but no backend is available. \
+                                Please set either `TENSORZERO_VALKEY_URL` or `TENSORZERO_POSTGRES_URL` \
+                                environment variable, or disable rate limiting."
+                                .to_string(),
+                        }));
+                }
+                // Use disabled Postgres as a placeholder (won't be called since no rules)
+                Arc::new(postgres_connection_info.clone())
+            }
+            #[cfg(test)]
+            (ValkeyConnectionInfo::Disabled, PostgresConnectionInfo::Mock { .. }) => {
+                Arc::new(postgres_connection_info.clone())
+            }
+        };
+
+        Ok(Self::new(config, client))
     }
 
     /// Create a new, dummy RateLimitingManager for unit tests.
@@ -243,6 +276,7 @@ impl RateLimitingManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::postgres::PostgresConnectionInfo;
     use crate::db::{ConsumeTicketsReceipt, MockRateLimitQueries, ReturnTicketsReceipt};
     use crate::rate_limiting::{
         EstimatedRateLimitResourceUsage, RateLimit, RateLimitInterval, RateLimitingConfigPriority,
@@ -270,6 +304,13 @@ mod tests {
         }
     }
 
+    fn make_dummy_manager() -> RateLimitingManager {
+        RateLimitingManager::new(
+            Arc::new(RateLimitingConfig::default()),
+            Arc::new(PostgresConnectionInfo::Disabled),
+        )
+    }
+
     #[test]
     fn test_manager_is_empty_with_rules() {
         let rule = RateLimitingConfigRule {
@@ -281,7 +322,7 @@ mod tests {
             rules: vec![rule],
             enabled: true,
         });
-        let manager = RateLimitingManager::new(config, PostgresConnectionInfo::Disabled);
+        let manager = RateLimitingManager::new(config, Arc::new(PostgresConnectionInfo::Disabled));
 
         assert!(
             !manager.is_empty(),
@@ -291,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_shutdown_returns_ok() {
-        let manager = RateLimitingManager::new_dummy();
+        let manager = make_dummy_manager();
         let result = manager.shutdown();
         assert!(result.is_ok(), "Shutdown should return Ok");
     }
@@ -366,7 +407,7 @@ mod tests {
         // With empty rules, consume_tickets doesn't call the client
         let mock = MockRateLimitQueries::new();
         let config = Arc::new(RateLimitingConfig::default());
-        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
             tokens: 100,
@@ -395,7 +436,7 @@ mod tests {
             rules: vec![rule],
             enabled: false,
         });
-        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
             tokens: 100,
@@ -423,7 +464,7 @@ mod tests {
             rules: vec![rule],
             enabled: true,
         });
-        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
             tokens: 100,
@@ -448,7 +489,7 @@ mod tests {
             rules: vec![rule],
             enabled: true,
         });
-        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
             tokens: 100,
@@ -471,7 +512,7 @@ mod tests {
             rules: vec![rule],
             enabled: true,
         });
-        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
             tokens: 100,
@@ -504,7 +545,7 @@ mod tests {
             rules: vec![rule],
             enabled: true,
         });
-        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
             tokens: 100,
@@ -540,7 +581,7 @@ mod tests {
             rules: vec![rule],
             enabled: true,
         });
-        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
             tokens: 100,
@@ -576,7 +617,7 @@ mod tests {
             rules: vec![rule],
             enabled: true,
         });
-        let manager = Arc::new(RateLimitingManager::new_with_client(config, Arc::new(mock)));
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
         let request = MockRateLimitedRequest {
             tokens: 100,

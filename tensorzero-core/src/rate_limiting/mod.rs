@@ -24,12 +24,11 @@ pub use rate_limiting_manager::RateLimitingManager;
  *       a) use the ScopeInfo to determine which rate limit scopes apply
  *       b) estimate (conservatively) the resource consumption of the request
  *       c) consume tickets from the rate limit scopes
- *       d) actually attempt to consume the tickets from Postgres
+ *       d) actually attempt to consume the tickets from the database (Postgres or Valkey)
  *       e) check success, throw an error on failure, and return a TicketBorrow
  *   3. The caller calls `TicketBorrow::return_tickets` with the actual usage observed.
  *      This will figure out post-facto bookkeeping for over- or under-consumption.
- *   Important Note: the Postgres database has a string column `key`
- *      that is used to identify a particular active rate limit.
+ *   Important Note: the database identifies an active rate limit based on a string `key`.
  *      If two distinct rate limits have the same key, they will be treated as the same rate limit and will trample.
  *      If the key changes, the rate limit will be treated as a new rate limit.
  *      For these reasons, developers should be careful not to change the key serialization and be similarly careful
@@ -234,7 +233,7 @@ pub struct FailedRateLimit {
     pub scope_key: Vec<RateLimitingScopeKey>,
 }
 
-/// Since Postgres will tell us all borrows failed if any failed, we figure out which rate limits
+/// Since the database will tell us all borrows failed if any failed, we figure out which rate limits
 /// actually blocked the request and return an informative error.
 fn get_failed_rate_limits_err(
     requests: Vec<ConsumeTicketsRequest>,

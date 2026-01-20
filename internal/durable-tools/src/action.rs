@@ -56,8 +56,9 @@ pub async fn action(
                 app_state.http_client.clone(),
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
+                app_state.valkey_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
-            );
+            )?;
 
             let response = feedback(snapshot_app_state, *feedback_params, None).await?;
             Ok(ActionResponse::Feedback(response))

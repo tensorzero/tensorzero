@@ -192,7 +192,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 rate_limiting_manager: Arc::new(
                     tensorzero_core::rate_limiting::RateLimitingManager::new(
                         rate_limiting_config,
-                        PostgresConnectionInfo::Disabled,
+                        Arc::new(PostgresConnectionInfo::Disabled),
                     ),
                 ),
                 otlp_config: Default::default(),

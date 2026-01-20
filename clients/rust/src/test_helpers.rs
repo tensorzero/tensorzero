@@ -192,7 +192,8 @@ pub async fn start_http_gateway_with_unique_db(
     let (addr, shutdown_handle) = tensorzero_core::utils::gateway::start_openai_compatible_gateway(
         Some(config_path.to_string_lossy().to_string()),
         Some(clickhouse_url),
-        None,
+        None, // postgres_url
+        None, // valkey_url
     )
     .await
     .unwrap();
