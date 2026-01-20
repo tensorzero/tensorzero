@@ -253,6 +253,14 @@ model = "gcp-gemini-2.5-pro"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 500
 
+[functions.basic_test.variants.gcp-vertex-gemini-pro-thinking]
+type = "chat_completion"
+model = "gcp-gemini-2.5-pro-thinking"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 500
+# Set to minimum value to speed up tests and save tokens
+thinking_budget_tokens = 128
+
 [functions.basic_test.variants.gcp-vertex-gemini-flash-lite-tuned]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite-tuned"
@@ -816,12 +824,14 @@ type = "chat_completion"
 model = "claude-haiku-4-5-thinking"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
+thinking_budget_tokens = 1024
 
 [functions.basic_test.variants.gcp-vertex-anthropic-thinking]
 type = "chat_completion"
 model = "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
+thinking_budget_tokens = 1024
 
 [functions.basic_test.variants.openai-gpt-5-mini]
 type = "chat_completion"
@@ -829,7 +839,7 @@ model = "gpt-5-mini-responses"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 
-[functions.basic_test.variants.openai-gpt-5-mini-chat]
+[functions.basic_test.variants.openai-gpt-5-mini-chat-completions]
 type = "chat_completion"
 model = "openai::gpt-5-mini"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
