@@ -9,6 +9,7 @@ import {
   PageHeader,
   PageLayout,
   SectionLayout,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import BasicInfo from "./WorkflowEvaluationRunBasicInfo";
 import WorkflowEvaluationRunEpisodesTable from "./WorkflowEvaluationRunEpisodesTable";
@@ -90,7 +91,14 @@ export default function WorkflowEvaluationRunSummaryPage({
   return (
     <PageLayout>
       <PageHeader
-        label="Workflow Evaluation Run"
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Workflow Evaluations", href: "/workflow_evaluations" },
+              { label: "Runs" },
+            ]}
+          />
+        }
         name={workflowEvaluationRun.id}
       />
       <BasicInfo workflowEvaluationRun={workflowEvaluationRun} count={count} />

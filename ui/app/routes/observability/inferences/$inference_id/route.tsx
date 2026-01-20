@@ -15,7 +15,11 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
+import {
+  PageHeader,
+  PageLayout,
+  Breadcrumbs,
+} from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
@@ -242,7 +246,16 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           />
         }
         renderHeader={({ basicInfo, actionBar }) => (
-          <PageHeader label="Inference" name={inference.inference_id}>
+          <PageHeader
+            eyebrow={
+              <Breadcrumbs
+                segments={[
+                  { label: "Inferences", href: "/observability/inferences" },
+                ]}
+              />
+            }
+            name={inference.inference_id}
+          >
             {basicInfo}
             {actionBar}
           </PageHeader>

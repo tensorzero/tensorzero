@@ -18,6 +18,7 @@ import {
   SectionLayout,
   SectionsGroup,
   SectionHeader,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
 import { Suspense, use, useEffect, useState, useCallback } from "react";
@@ -341,7 +342,14 @@ export default function EpisodeDetailPage({
 
   return (
     <PageLayout>
-      <PageHeader label="Episode" name={episode_id}>
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[{ label: "Episodes", href: "/observability/episodes" }]}
+          />
+        }
+        name={episode_id}
+      >
         <ActionBar>
           <HumanFeedbackModal
             isOpen={isModalOpen}
