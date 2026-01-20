@@ -128,13 +128,18 @@ pub struct EvaluatorStatsResponse {
 pub struct DatapointResult {
     /// ID of the datapoint that was evaluated.
     pub datapoint_id: Uuid,
-    /// Whether the evaluation succeeded.
+    /// Whether the evaluation succeeded (inference + at least one evaluator ran).
     pub success: bool,
     /// Per-evaluator scores for this datapoint.
     /// Only populated for successful evaluations.
     #[serde(default)]
     pub evaluations: HashMap<String, Option<f64>>,
-    /// Error message if the evaluation failed.
+    /// Per-evaluator error messages for evaluators that failed on this datapoint.
+    /// A datapoint can have both successful evaluations and evaluator errors
+    /// if some evaluators succeeded while others failed.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub evaluator_errors: HashMap<String, String>,
+    /// Error message if the entire datapoint evaluation failed (e.g., inference error).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

@@ -527,7 +527,7 @@ impl TensorZeroClient for EmbeddedClient {
                 evaluation_stats.evaluation_infos.len() + evaluation_stats.evaluation_errors.len(),
             );
 
-            // Add successful evaluations
+            // Add successful evaluations (inference succeeded, some evaluators may have failed)
             for info in &evaluation_stats.evaluation_infos {
                 let evaluations: HashMap<String, Option<f64>> = info
                     .evaluations
@@ -545,16 +545,18 @@ impl TensorZeroClient for EmbeddedClient {
                     datapoint_id: info.datapoint.id(),
                     success: true,
                     evaluations,
+                    evaluator_errors: info.evaluator_errors.clone(),
                     error: None,
                 });
             }
 
-            // Add failed evaluations
+            // Add failed evaluations (inference or datapoint-level failure)
             for error in &evaluation_stats.evaluation_errors {
                 results.push(DatapointResult {
                     datapoint_id: error.datapoint_id,
                     success: false,
                     evaluations: HashMap::new(),
+                    evaluator_errors: HashMap::new(),
                     error: Some(error.message.clone()),
                 });
             }
