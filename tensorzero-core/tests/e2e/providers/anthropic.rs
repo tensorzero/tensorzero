@@ -160,7 +160,8 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         bad_auth_extra_headers,
         extra_body_inference: extra_body_providers,
-        reasoning_inference: vec![],
+        // TODO (#5680): we disabled Anthropic tests on JSON functions + reasoning because the prefill breaks
+        reasoning_inference: reasoning_providers.clone(),
         reasoning_usage_inference: reasoning_providers,
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
