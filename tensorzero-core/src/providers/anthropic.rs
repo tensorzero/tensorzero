@@ -1089,17 +1089,19 @@ fn convert_to_output(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct AnthropicUsage {
-    input_tokens: u32,
-    output_tokens: u32,
+    #[serde(default)]
+    input_tokens: Option<u32>,
+    #[serde(default)]
+    output_tokens: Option<u32>,
 }
 
 impl From<AnthropicUsage> for Usage {
     fn from(value: AnthropicUsage) -> Self {
         Usage {
-            input_tokens: Some(value.input_tokens),
-            output_tokens: Some(value.output_tokens),
+            input_tokens: value.input_tokens,
+            output_tokens: value.output_tokens,
         }
     }
 }
@@ -1199,6 +1201,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_request,
                 raw_response,
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
@@ -1583,18 +1586,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
 }
 
 fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
-    let input_tokens = usage_info
-        .get("input_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as u32;
-    let output_tokens = usage_info
-        .get("output_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as u32;
-    AnthropicUsage {
-        input_tokens,
-        output_tokens,
-    }
+    serde_json::from_value(usage_info.clone()).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -2326,14 +2318,25 @@ mod tests {
     #[test]
     fn test_anthropic_usage_to_usage() {
         let anthropic_usage = AnthropicUsage {
-            input_tokens: 100,
-            output_tokens: 50,
+            input_tokens: Some(100),
+            output_tokens: Some(50),
         };
 
         let usage: Usage = anthropic_usage.into();
 
         assert_eq!(usage.input_tokens, Some(100));
         assert_eq!(usage.output_tokens, Some(50));
+
+        // Test with None values
+        let anthropic_usage = AnthropicUsage {
+            input_tokens: None,
+            output_tokens: Some(100),
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(usage.input_tokens, None);
+        assert_eq!(usage.output_tokens, Some(100));
     }
 
     #[test]
@@ -2350,8 +2353,8 @@ mod tests {
             stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
             usage: AnthropicUsage {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: Some(100),
+                output_tokens: Some(50),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2434,8 +2437,8 @@ mod tests {
             stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
             usage: AnthropicUsage {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: Some(100),
+                output_tokens: Some(50),
             },
         };
         let request_body = AnthropicRequestBody {
@@ -2505,8 +2508,8 @@ mod tests {
             stop_reason: None,
             stop_sequence: None,
             usage: AnthropicUsage {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: Some(100),
+                output_tokens: Some(50),
             },
         };
         let request_body = AnthropicRequestBody {
@@ -2886,31 +2889,66 @@ mod tests {
             "output_tokens": 200
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 100);
-        assert_eq!(result.output_tokens, 200);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(200),
+            },
+            "both fields should be Some when present"
+        );
 
-        // Test with missing fields
+        // Test with missing output_tokens
         let usage_info = json!({
             "input_tokens": 50
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 50);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: Some(50),
+                output_tokens: None,
+            },
+            "output_tokens should be None when missing"
+        );
+
+        // Test with missing input_tokens (like Anthropic's message_delta)
+        let usage_info = json!({
+            "output_tokens": 100
+        });
+        let result = parse_usage_info(&usage_info);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: None,
+                output_tokens: Some(100),
+            },
+            "input_tokens should be None when missing"
+        );
 
         // Test with empty object
         let usage_info = json!({});
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: None,
+                output_tokens: None,
+            },
+            "both fields should be None for empty object"
+        );
 
-        // Test with non-numeric values
+        // Test with non-numeric values (falls back to default)
         let usage_info = json!({
             "input_tokens": "not a number",
             "output_tokens": true
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            AnthropicUsage::default(),
+            "non-numeric values should fall back to default"
+        );
     }
 
     #[test]

@@ -859,6 +859,7 @@ fn convert_converse_response(
             raw_response,
             usage,
             raw_usage,
+            relay_raw_response: None,
             provider_latency: latency,
             finish_reason: Some(convert_stop_reason(response.stop_reason)),
             id: model_inference_id,

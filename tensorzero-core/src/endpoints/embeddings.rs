@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::Extension;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
@@ -13,7 +13,10 @@ use crate::{
     endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
-    inference::types::Usage,
+    inference::types::{
+        Usage,
+        usage::{ApiType, RawResponseEntry},
+    },
     rate_limiting::{RateLimitingManager, ScopeInfo},
 };
 use tensorzero_auth::middleware::RequestApiKeyExtension;
@@ -35,6 +38,8 @@ pub struct EmbeddingsParams {
     pub credentials: InferenceCredentials,
     #[serde(default)]
     pub cache_options: CacheParamsOptions,
+    #[serde(default, rename = "tensorzero::include_raw_response")]
+    pub include_raw_response: bool,
 }
 
 #[instrument(name = "embeddings", skip_all, fields(model, num_inputs))]
@@ -98,22 +103,42 @@ pub async fn embeddings(
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: None,
         include_raw_usage: false, // not supported for embeddings endpoint (#5451)
+        include_raw_response: params.include_raw_response,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
         .await?;
     let usage = response.usage_considering_cached();
+    let tensorzero_raw_response = if params.include_raw_response && !response.cached {
+        Some(vec![RawResponseEntry {
+            model_inference_id: response.id,
+            provider_type: response.embedding_provider_name.to_string(),
+            api_type: ApiType::Embeddings,
+            data: response.raw_response.clone(),
+        }])
+    } else if params.include_raw_response {
+        Some(vec![]) // Empty array for cached responses
+    } else {
+        None
+    };
     Ok(EmbeddingResponse {
         embeddings: response.embeddings,
         usage,
         model: params.model_name,
+        tensorzero_raw_response,
     })
 }
 
+#[derive(Debug, Clone, Serialize)]
 pub struct EmbeddingResponse {
     pub embeddings: Vec<Embedding>,
     pub usage: Usage,
     pub model: String,
+    #[serde(
+        rename = "tensorzero::raw_response",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tensorzero_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 #[cfg(test)]
@@ -174,6 +199,7 @@ mod tests {
             dryrun: None,
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
+            include_raw_response: false,
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -210,6 +236,7 @@ mod tests {
             dryrun: None,
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
+            include_raw_response: false,
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();

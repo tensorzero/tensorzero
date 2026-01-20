@@ -3595,7 +3595,7 @@ dependencies = [
 
 [[package]]
 name = "mock-provider-api"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -4376,7 +4376,7 @@ dependencies = [
 
 [[package]]
 name = "provider-proxy"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6045,7 +6045,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "async-trait",
  "clap",
@@ -6195,7 +6195,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-derive"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "proc-macro2",
  "quote",

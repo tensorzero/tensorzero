@@ -649,6 +649,7 @@ impl InferenceProvider for DummyProvider {
                 api_type: ApiType::ChatCompletions,
                 data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
             }]),
+            relay_raw_response: None,
         })
     }
 
