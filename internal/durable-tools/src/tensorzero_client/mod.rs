@@ -42,7 +42,7 @@ pub use autopilot_client::{
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 use mockall::automock;
 
 /// Error type for TensorZero client operations.
@@ -168,7 +168,7 @@ pub struct RunEvaluationResponse {
 /// call inference and autopilot operations without directly depending on
 /// the concrete client type.
 #[async_trait]
-#[cfg_attr(test, automock)]
+#[cfg_attr(any(test, feature = "test-support"), automock)]
 pub trait TensorZeroClient: Send + Sync + 'static {
     /// Run inference with the given parameters.
     ///

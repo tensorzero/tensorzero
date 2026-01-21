@@ -1833,6 +1833,7 @@ dependencies = [
  "autopilot-client",
  "chrono",
  "durable",
+ "durable-tools",
  "durable-tools-spawn",
  "evaluations",
  "mockall",
