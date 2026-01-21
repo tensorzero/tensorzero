@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -10,7 +9,8 @@ import {
   useRouteLoaderData,
 } from "react-router";
 
-import { ConfigProvider } from "./context/config";
+import { EMPTY_CONFIG } from "./context/config";
+import type { UiConfig } from "./types/tensorzero";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
 import {
@@ -29,8 +29,10 @@ import {
   isInfraErrorData,
   isAuthenticationError,
   isGatewayConnectionError,
+  isClickHouseError,
   classifyError,
   getErrorLabel,
+  type ClassifiedError,
 } from "./utils/tensorzero/errors";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
@@ -57,7 +59,14 @@ export const links: Route.LinksFunction = () => [
 
 export const middleware: Route.MiddlewareFunction[] = [readOnlyMiddleware];
 
-export async function loader() {
+interface LoaderData {
+  config: UiConfig;
+  isReadOnly: boolean;
+  autopilotAvailable: boolean;
+  infraError: ClassifiedError | null;
+}
+
+export async function loader(): Promise<LoaderData> {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
   const isReadOnly = isReadOnlyMode();
@@ -67,20 +76,38 @@ export async function loader() {
       getConfig(),
       checkAutopilotAvailable(),
     ]);
-    return { config, isReadOnly, autopilotAvailable };
+    return { config, isReadOnly, autopilotAvailable, infraError: null };
   } catch (e) {
-    // Throw typed errors that ErrorBoundary can handle
+    // Graceful degradation for infrastructure errors:
+    // Return fallback state so UI renders with dismissible error dialog.
+    // Child routes will handle their own errors via their error boundaries.
     if (isGatewayConnectionError(e)) {
-      throw data(
-        { errorType: InfraErrorType.GatewayUnavailable },
-        { status: 503 },
-      );
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: { type: InfraErrorType.GatewayUnavailable },
+      };
     }
     if (isAuthenticationError(e)) {
-      throw data(
-        { errorType: InfraErrorType.GatewayAuthFailed },
-        { status: 401 },
-      );
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: { type: InfraErrorType.GatewayAuthFailed },
+      };
+    }
+    if (isClickHouseError(e)) {
+      const message = e instanceof Error ? e.message : undefined;
+      return {
+        config: EMPTY_CONFIG,
+        isReadOnly,
+        autopilotAvailable: false,
+        infraError: {
+          type: InfraErrorType.ClickHouseUnavailable,
+          message,
+        },
+      };
     }
     throw e;
   }
@@ -106,18 +133,34 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
-  const { config } = loaderData;
+  const { infraError } = loaderData;
+  const [dialogOpen, setDialogOpen] = React.useState(true);
+
+  // Reset dialog when infraError changes (component re-renders, not remounts)
+  React.useEffect(() => {
+    if (infraError) {
+      setDialogOpen(true);
+    }
+  }, [infraError]);
 
   return (
     <AppProviders loaderData={loaderData}>
-      <ConfigProvider value={config}>
-        <div className="fixed inset-0 flex">
-          <AppSidebar />
-          <ContentLayout>
-            <Outlet />
-          </ContentLayout>
-        </div>
-      </ConfigProvider>
+      <div className="fixed inset-0 flex">
+        <AppSidebar />
+        <ContentLayout>
+          <Outlet />
+        </ContentLayout>
+      </div>
+      {infraError && (
+        <ErrorDialog
+          open={dialogOpen}
+          onDismiss={() => setDialogOpen(false)}
+          onReopen={() => setDialogOpen(true)}
+          label={getErrorLabel(infraError.type)}
+        >
+          <ErrorContent error={infraError} />
+        </ErrorDialog>
+      )}
     </AppProviders>
   );
 }
@@ -131,7 +174,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     setOpen(true);
   }, [error]);
 
-  // Client 404s - show PageNotFound in content area
+  // Client 404s (page not found in React Router) - show in content area with sidebar
+  // Check that it's not an infrastructure error (those go through classifyError)
   if (isRouteErrorResponse(error) && error.status === 404) {
     if (!isInfraErrorData(error.data)) {
       return (
@@ -140,6 +184,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     }
   }
 
+  // All other errors use the dismissible modal pattern with sidebar visible
   const classified = classifyError(error);
   const label = getErrorLabel(classified.type);
 

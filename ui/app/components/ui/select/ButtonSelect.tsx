@@ -176,7 +176,7 @@ export function ButtonSelect({
               <CommandEmpty>{emptyMessage}</CommandEmpty>
               <ComboboxMenuItems
                 items={filteredItems}
-                selected={selected}
+                selectedValue={selected}
                 searchValue={searchValue}
                 onSelectItem={handleSelectItem}
                 showCreateOption={showCreateOption}

@@ -1,14 +1,6 @@
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
-import {
-  data,
-  isRouteErrorResponse,
-  Link,
-  redirect,
-  useFetcher,
-  useParams,
-} from "react-router";
+import { data, redirect, useFetcher } from "react-router";
 import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
 import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
@@ -20,6 +12,7 @@ import {
   SectionHeader,
   SectionLayout,
   SectionsGroup,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
 import {
@@ -639,7 +632,19 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader
-        label="Datapoint"
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Datasets", href: "/datasets" },
+              {
+                label: datapoint.dataset_name,
+                href: toDatasetUrl(datapoint.dataset_name),
+                isIdentifier: true,
+              },
+              { label: "Datapoints" },
+            ]}
+          />
+        }
         name={datapoint.id}
         tag={
           <>
@@ -781,73 +786,5 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         />
       )}
     </PageLayout>
-  );
-}
-
-function getUserFacingError(error: unknown): {
-  heading: string;
-  message: ReactNode;
-} {
-  if (isRouteErrorResponse(error)) {
-    switch (error.status) {
-      case 400:
-        return {
-          heading: `${error.status}: Bad Request`,
-          message: "Please try again later.",
-        };
-      case 401:
-        return {
-          heading: `${error.status}: Unauthorized`,
-          message: "You do not have permission to access this resource.",
-        };
-      case 403:
-        return {
-          heading: `${error.status}: Forbidden`,
-          message: "You do not have permission to access this resource.",
-        };
-      case 404:
-        return {
-          heading: `${error.status}: Not Found`,
-          message:
-            "The requested resource was not found. Please check the URL and try again.",
-        };
-      case 500:
-      default:
-        return {
-          heading: "An unknown error occurred",
-          message: "Please try again later.",
-        };
-    }
-  }
-  return {
-    heading: "An unknown error occurred",
-    message: "Please try again later.",
-  };
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  useEffect(() => {
-    logger.error(error);
-  }, [error]);
-  const { heading, message } = getUserFacingError(error);
-  const { dataset_name: datasetName } = useParams<{
-    dataset_name: string;
-    id: string;
-  }>();
-  return (
-    <div className="flex flex-col items-center justify-center md:h-full">
-      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
-        <h1 className="text-2xl font-bold">{heading}</h1>
-        {typeof message === "string" ? <p>{message}</p> : message}
-        {datasetName && (
-          <Link
-            to={toDatasetUrl(datasetName)}
-            className="font-bold text-red-800 hover:text-red-600"
-          >
-            Go back &rarr;
-          </Link>
-        )}
-      </div>
-    </div>
   );
 }

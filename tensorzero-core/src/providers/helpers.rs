@@ -1090,7 +1090,7 @@ mod tests {
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
-                extra_headers: None,
+                extra_headers: Default::default(),
             },
             "dummy_model",
             &mut body,
@@ -1126,7 +1126,7 @@ mod tests {
                 },
             },
             ModelProviderRequestInfo {
-                extra_headers: None,
+                extra_headers: Default::default(),
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
             },
@@ -1146,7 +1146,7 @@ mod tests {
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
-                extra_headers: None,
+                extra_headers: Default::default(),
             },
             "dummy_model",
             &mut "test".into(),
@@ -1288,7 +1288,7 @@ mod tests {
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
-                extra_headers: None,
+                extra_headers: Default::default(),
             },
             "dummy_model",
             &mut body,

@@ -61,3 +61,12 @@ print(response)
 - Inference caching also works for embeddings, using the same cache modes and options as chat completion inference.
   Caching works for single embeddings.
   Batch embedding requests (multiple inputs) will write to the cache but won't serve cached responses.
+
+## Enable prompt caching by model providers
+
+This guide focuses on caching by TensorZero.
+
+Separately, many model providers support some form of caching.
+Some of those are enabled automatically (e.g. OpenAI), whereas others require manual configuration (e.g. Anthropic).
+
+See the guides for [Anthropic](/integrations/model-providers/anthropic) and [AWS Bedrock](/integrations/model-providers/aws-bedrock) to learn more about enabling prompt caching at the model provider level.

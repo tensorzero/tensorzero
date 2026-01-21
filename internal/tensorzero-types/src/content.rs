@@ -10,7 +10,7 @@ use pyo3::types::PyModule;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tensorzero_derive::export_schema;
+use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
@@ -223,10 +223,11 @@ impl Unknown {
     }
 }
 
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[export_schema]
 pub enum ThoughtSummaryBlock {
     #[schemars(title = "ThoughtSummaryBlockSummaryText")]
@@ -236,12 +237,14 @@ pub enum ThoughtSummaryBlock {
 /// Struct that represents a model's reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+// Note: We don't use `get_all` because `extra_data` is `Value` which doesn't implement `IntoPyObject`.
+// The fields are exposed via a manual `#[pymethods]` impl below.
+#[cfg_attr(feature = "pyo3", pyclass)]
 #[export_schema]
 pub struct Thought {
     pub text: Option<String>,
-    /// An optional signature - currently, this is only used with Anthropic,
-    /// and is ignored by other providers.
+    /// An optional signature - used with Anthropic and OpenRouter for multi-turn
+    /// reasoning conversations. Other providers will ignore this field.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -255,4 +258,33 @@ pub struct Thought {
         skip_serializing_if = "Option::is_none"
     )]
     pub provider_type: Option<String>,
+    /// Provider-specific opaque data for multi-turn reasoning support.
+    /// For example, OpenRouter stores encrypted reasoning blocks with `{"format": "...", "encrypted": true}` structure.
+    /// Note: Not exposed to Python because `Value` doesn't implement `IntoPyObject`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_data: Option<Value>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyo3::pymethods]
+impl Thought {
+    #[getter]
+    fn text(&self) -> Option<String> {
+        self.text.clone()
+    }
+
+    #[getter]
+    fn signature(&self) -> Option<String> {
+        self.signature.clone()
+    }
+
+    #[getter]
+    fn summary(&self) -> Option<Vec<ThoughtSummaryBlock>> {
+        self.summary.clone()
+    }
+
+    #[getter]
+    fn provider_type(&self) -> Option<String> {
+        self.provider_type.clone()
+    }
 }

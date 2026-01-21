@@ -157,7 +157,6 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     "test-fine-tuned-model",
                     &ProviderTypesConfig::default(),
                     &ProviderTypeDefaultCredentials::default(),
-                    TensorzeroHttpClient::new_testing().unwrap(),
                     false,
                 )
                 .await
@@ -181,6 +180,8 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 function_type: FunctionType::Chat,
                 ..Default::default()
             };
+            let rate_limiting_config: Arc<tensorzero_core::rate_limiting::RateLimitingConfig> =
+                Arc::new(Default::default());
             let clients = InferenceClients {
                 http_client: client.clone(),
                 clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
@@ -188,7 +189,12 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 credentials: Arc::new(HashMap::new()),
                 cache_options: CacheOptions::default(),
                 tags: Arc::new(Default::default()),
-                rate_limiting_config: Arc::new(Default::default()),
+                rate_limiting_manager: Arc::new(
+                    tensorzero_core::rate_limiting::RateLimitingManager::new(
+                        rate_limiting_config,
+                        PostgresConnectionInfo::Disabled,
+                    ),
+                ),
                 otlp_config: Default::default(),
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
@@ -197,6 +203,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 },
                 relay: None,
                 include_raw_usage: false,
+                include_raw_response: false,
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_provider_api() {

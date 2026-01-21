@@ -70,7 +70,10 @@ export function useDatasetOptions({
         return allowCreation ? (
           <TablePlus size={16} className="text-blue-600" />
         ) : (
-          <Table size={16} className="text-fg-muted" />
+          <Table
+            size={16}
+            className="text-fg-muted group-data-[selected=true]:text-menu-highlight-icon"
+          />
         );
       }
       const exists = datasetsByName.has(item);
@@ -80,7 +83,12 @@ export function useDatasetOptions({
       if (isSelected && !exists) {
         return <TablePlus size={16} className="text-blue-600" />;
       }
-      return <Table size={16} className="text-fg-muted" />;
+      return (
+        <Table
+          size={16}
+          className="text-fg-muted group-data-[selected=true]:text-menu-highlight-icon"
+        />
+      );
     },
     [allowCreation, datasetsByName],
   );
@@ -91,7 +99,7 @@ export function useDatasetOptions({
       const dataset = datasetsByName.get(item);
       if (!dataset) return null;
       return (
-        <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1.5 py-0.5 font-mono text-xs">
+        <span className="bg-bg-tertiary text-fg-tertiary group-data-[selected=true]:bg-menu-highlight-badge group-data-[selected=true]:text-menu-highlight-badge-foreground shrink-0 rounded px-1.5 py-0.5 font-mono text-xs">
           {formatCompactNumber(dataset.count)}
         </span>
       );

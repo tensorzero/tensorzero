@@ -11,14 +11,23 @@
 import { createContext, useContext } from "react";
 import type { UiConfig } from "~/types/tensorzero";
 
-const ConfigContext = createContext<UiConfig | null>(null);
+/**
+ * Default empty config used when the gateway is unavailable.
+ * Components will see empty lists/objects rather than crashing.
+ */
+export const EMPTY_CONFIG: UiConfig = {
+  functions: {},
+  metrics: {},
+  tools: {},
+  evaluations: {},
+  model_names: [],
+  config_hash: "",
+};
 
-export function useConfig() {
-  const config = useContext(ConfigContext);
-  if (!config) {
-    throw new Error("useConfig must be used within a ConfigProvider");
-  }
-  return config;
+const ConfigContext = createContext<UiConfig>(EMPTY_CONFIG);
+
+export function useConfig(): UiConfig {
+  return useContext(ConfigContext);
 }
 
 /**
@@ -34,6 +43,7 @@ export function useFunctionConfig(functionName: string | null) {
   // eslint-disable-next-line no-restricted-syntax
   return config.functions[functionName] || null;
 }
+
 /**
  * Hook to get all function configs
  * @returns The function configuration object or null if not found

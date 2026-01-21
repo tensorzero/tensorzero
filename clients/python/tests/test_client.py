@@ -3387,7 +3387,7 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
 
     assert (
         str(exc_info.value)
-        == 'Failed to deserialize JSON to tensorzero_types::message::Input: messages[0].content[0]: invalid type: string "Invalid", expected internally tagged enum InputMessageContent at line 1 column 54'
+        == 'Failed to deserialize JSON to tensorzero_types::message::Input: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
     )
 
 

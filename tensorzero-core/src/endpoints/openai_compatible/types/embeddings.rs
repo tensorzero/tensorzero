@@ -8,12 +8,14 @@ use std::collections::HashMap;
 
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize, Serializer};
+use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::cache::CacheParamsOptions;
 use crate::embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput};
 use crate::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams as EmbeddingParams};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
+use crate::inference::types::usage::RawResponseEntry;
 
 const TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX: &str = "tensorzero::embedding_model_name::";
 
@@ -34,6 +36,8 @@ pub struct OpenAICompatibleEmbeddingParams {
     pub tensorzero_dryrun: Option<bool>,
     #[serde(rename = "tensorzero::cache_options")]
     pub tensorzero_cache_options: Option<CacheParamsOptions>,
+    #[serde(default, rename = "tensorzero::include_raw_response")]
+    pub tensorzero_include_raw_response: bool,
 }
 
 fn serialize_inference_credentials<S>(
@@ -73,22 +77,30 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
             credentials: params.tensorzero_credentials,
             dryrun: params.tensorzero_dryrun,
             cache_options: params.tensorzero_cache_options.unwrap_or_default(),
+            include_raw_response: params.tensorzero_include_raw_response,
         })
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "object", rename_all = "lowercase")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "object")]
+#[serde(rename_all = "lowercase")]
 pub enum OpenAIEmbeddingResponse {
     List {
         data: Vec<OpenAIEmbedding>,
         model: String,
         usage: Option<OpenAIEmbeddingUsage>,
+        #[serde(
+            rename = "tensorzero::raw_response",
+            skip_serializing_if = "Option::is_none"
+        )]
+        tensorzero_raw_response: Option<Vec<RawResponseEntry>>,
     },
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "object", rename_all = "lowercase")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "object")]
+#[serde(rename_all = "lowercase")]
 pub enum OpenAIEmbedding {
     Embedding { embedding: Embedding, index: usize },
 }
@@ -116,6 +128,7 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
                 prompt_tokens: response.usage.input_tokens,
                 total_tokens: response.usage.input_tokens, // there are no output tokens for embeddings
             }),
+            tensorzero_raw_response: response.tensorzero_raw_response,
         }
     }
 }
@@ -135,6 +148,7 @@ mod tests {
             tensorzero_credentials: InferenceCredentials::default(),
             tensorzero_dryrun: None,
             tensorzero_cache_options: None,
+            tensorzero_include_raw_response: false,
         };
         let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
         assert_eq!(param.model_name, "text-embedding-ada-002");
@@ -156,6 +170,7 @@ mod tests {
             tensorzero_credentials: InferenceCredentials::default(),
             tensorzero_dryrun: None,
             tensorzero_cache_options: None,
+            tensorzero_include_raw_response: false,
         };
         let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
         assert_eq!(param.model_name, "text-embedding-ada-002");

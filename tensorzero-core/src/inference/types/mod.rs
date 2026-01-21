@@ -79,7 +79,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tensorzero_derive::export_schema;
+use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 pub use tensorzero_types::{Input, InputMessage, InputMessageContent, TextKind, ToolCallWrapper};
 use uuid::Uuid;
 
@@ -138,7 +138,7 @@ pub use streams::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
     UnknownChunk, collect_chunks,
 };
-pub use usage::{ApiType, RawUsageEntry, Usage};
+pub use usage::{ApiType, RawResponseEntry, RawUsageEntry, Usage};
 
 /*
  * Data flow in TensorZero
@@ -732,6 +732,8 @@ impl RateLimitedInputContent for Thought {
             // not the internal model thoughts.
             summary: _,
             provider_type: _,
+            // We don't count extra_data towards token usage as it's opaque provider data
+            extra_data: _,
         } = self;
         text.as_ref().map_or(0, |text| get_estimated_tokens(text))
             + signature
@@ -874,9 +876,10 @@ impl RateLimitedInputContent for ContentBlock {
 
 /// The version of `ContentBlock` that is stored in ClickHouse.
 /// This is almost identical to `ContentBlock`, but without `File` data.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum StoredContentBlock {
     Text(Text),
     ToolCall(ToolCall),
@@ -889,9 +892,10 @@ pub enum StoredContentBlock {
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum ResolvedContentBlock {
     Text(Text),
     ToolCall(ToolCall),
@@ -944,9 +948,10 @@ enum ContentBlockOutputType {
 }
 
 /// Types of content blocks that can be returned by a model provider
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCall),
@@ -955,9 +960,10 @@ pub enum ContentBlockOutput {
 }
 
 /// Defines the types of content block that can come from a `chat` function
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[export_schema]
 pub enum ContentBlockChatOutput {
     #[schemars(title = "ContentBlockChatOutputText")]
@@ -1241,6 +1247,10 @@ pub struct ProviderInferenceResponse {
     /// Raw usage entries for `include_raw_usage` feature.
     /// Constructed from provider raw usage entries or passed through from relay.
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw response entries for `include_raw_response` feature.
+    /// Passed through from relay - when present, these should be used instead of
+    /// generating new entries from the model inference result.
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 impl ProviderInferenceResponse {
@@ -1293,6 +1303,9 @@ pub struct ModelInferenceResponse {
     pub finish_reason: Option<FinishReason>,
     /// Raw usage entries for `include_raw_usage` feature.
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw response entries passed through from gateway relay.
+    /// When present, these should be used instead of generating new entries.
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1319,6 +1332,9 @@ pub struct ModelInferenceResponseWithMetadata {
     pub finish_reason: Option<FinishReason>,
     /// Raw usage entries for `include_raw_usage` feature.
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw response entries passed through from relay.
+    /// When present, these should be used instead of generating new entries.
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1614,6 +1630,7 @@ impl ModelInferenceResponse {
             model_provider_name,
             cached,
             raw_usage: provider_inference_response.raw_usage,
+            relay_raw_response: provider_inference_response.relay_raw_response,
         }
     }
 
@@ -1639,8 +1656,9 @@ impl ModelInferenceResponse {
             finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
             cached: true,
-            // TensorZero cache hits are excluded from raw_usage list
+            // TensorZero cache hits are excluded from raw_usage and raw_response lists
             raw_usage: None,
+            relay_raw_response: None,
         }
     }
 }
@@ -1663,6 +1681,7 @@ impl ModelInferenceResponseWithMetadata {
             model_name,
             cached: model_inference_response.cached,
             raw_usage: model_inference_response.raw_usage,
+            relay_raw_response: model_inference_response.relay_raw_response,
         }
     }
 }
@@ -1747,6 +1766,7 @@ pub struct ProviderInferenceResponseArgs {
     pub raw_response: String,
     pub usage: Usage,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
     /// Time elapsed between making the request to the model provider and receiving the response.
     /// Important: this is NOT latency from the start of the TensorZero request.
     pub provider_latency: Latency,
@@ -1769,6 +1789,7 @@ impl ProviderInferenceResponse {
             provider_latency: args.provider_latency,
             finish_reason: args.finish_reason,
             raw_usage: args.raw_usage,
+            relay_raw_response: args.relay_raw_response,
         }
     }
 }
@@ -2302,6 +2323,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2351,6 +2373,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2403,6 +2426,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2451,6 +2475,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2519,6 +2544,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2605,6 +2631,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2700,6 +2727,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2751,6 +2779,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2826,6 +2855,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2883,6 +2913,7 @@ mod tests {
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -3080,6 +3111,7 @@ mod tests {
                 model_name: "test_model".into(),
                 cached,
                 raw_usage: None,
+                relay_raw_response: None,
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly
@@ -3317,6 +3349,7 @@ mod tests {
             cached: false,
             finish_reason: Some(FinishReason::Stop),
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let response_middle = ModelInferenceResponseWithMetadata {
@@ -3335,6 +3368,7 @@ mod tests {
             cached: false,
             finish_reason: Some(FinishReason::ToolCall),
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let response_newest = ModelInferenceResponseWithMetadata {
@@ -3353,6 +3387,7 @@ mod tests {
             cached: false,
             finish_reason: Some(FinishReason::Length),
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         // Test: passing results in order newest-first should still return newest's finish_reason

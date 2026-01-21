@@ -1,10 +1,10 @@
-use chrono::Duration;
 use sqlx::ConnectOptions;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tensorzero_core::db::postgres::{
     PostgresConnectionInfo, manual_run_postgres_migrations_with_url,
 };
 use tensorzero_core::db::{RateLimitQueries, ReturnTicketsRequest};
+use tensorzero_core::rate_limiting::RateLimitInterval;
 use tensorzero_core::{db::ConsumeTicketsRequest, rate_limiting::ActiveRateLimitKey};
 
 // ===== HELPER FUNCTIONS =====
@@ -14,16 +14,14 @@ fn create_consume_request(
     requested: u64,
     capacity: u64,
     refill_amount: u64,
-    refill_interval: Duration,
+    refill_interval: RateLimitInterval,
 ) -> ConsumeTicketsRequest {
     ConsumeTicketsRequest {
         key: ActiveRateLimitKey(key.to_string()),
         requested,
         capacity,
         refill_amount,
-        refill_interval: refill_interval
-            .try_into()
-            .expect("Failed to convert Duration to PgInterval"),
+        refill_interval,
     }
 }
 
@@ -32,16 +30,14 @@ fn create_return_request(
     returned: u64,
     capacity: u64,
     refill_amount: u64,
-    refill_interval: Duration,
+    refill_interval: RateLimitInterval,
 ) -> ReturnTicketsRequest {
     ReturnTicketsRequest {
         key: ActiveRateLimitKey(key.to_string()),
         returned,
         capacity,
         refill_amount,
-        refill_interval: refill_interval
-            .try_into()
-            .expect("Failed to convert Duration to PgInterval"),
+        refill_interval,
     }
 }
 
@@ -59,13 +55,13 @@ async fn test_atomic_multi_key_all_or_nothing(
     let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // First, consume some tokens from key1 to set up a scenario where key1 can succeed but key2 fails
-    let setup_request = create_consume_request("key1", 50, 100, 10, Duration::seconds(60));
+    let setup_request = create_consume_request("key1", 50, 100, 10, RateLimitInterval::Minute);
     conn.consume_tickets(&[setup_request]).await.unwrap();
 
     // Now create a batch where key1 can succeed (50 remaining) but key2 will fail (requesting more than capacity)
     let batch_requests = vec![
-        create_consume_request("key1", 30, 100, 10, Duration::seconds(60)), // Should succeed if isolated
-        create_consume_request("key2", 150, 100, 10, Duration::seconds(60)), // Will fail - exceeds capacity
+        create_consume_request("key1", 30, 100, 10, RateLimitInterval::Minute), // Should succeed if isolated
+        create_consume_request("key2", 150, 100, 10, RateLimitInterval::Minute), // Will fail - exceeds capacity
     ];
 
     let results = conn.consume_tickets(&batch_requests).await.unwrap();
@@ -79,14 +75,7 @@ async fn test_atomic_multi_key_all_or_nothing(
 
     // Verify key1 balance unchanged - no partial consumption
     let balance = conn
-        .get_balance(
-            "key1",
-            100,
-            10,
-            Duration::seconds(60)
-                .try_into()
-                .expect("Failed to convert Duration"),
-        )
+        .get_balance("key1", 100, 10, RateLimitInterval::Minute)
         .await
         .unwrap();
     assert_eq!(
@@ -116,14 +105,14 @@ async fn test_atomic_consistency_under_load(pool_opts: PgPoolOptions, conn_opts:
                         15,
                         100,
                         10,
-                        Duration::seconds(60),
+                        RateLimitInterval::Minute,
                     ),
                     create_consume_request(
                         &format!("unique_key_{i}"),
                         if i % 3 == 0 { 150 } else { 20 },
                         100,
                         10,
-                        Duration::seconds(60),
+                        RateLimitInterval::Minute,
                     ),
                 ];
                 conn_clone.consume_tickets(&requests).await.unwrap()
@@ -167,7 +156,7 @@ async fn test_race_condition_no_over_consumption(
             // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
-                let request = create_consume_request(key, 5, 100, 10, Duration::seconds(60));
+                let request = create_consume_request(key, 5, 100, 10, RateLimitInterval::Minute);
                 conn_clone.consume_tickets(&[request]).await.unwrap()
             })
         })
@@ -194,14 +183,7 @@ async fn test_race_condition_no_over_consumption(
 
     // Final balance should be 0
     let final_balance = conn
-        .get_balance(
-            key,
-            100,
-            10,
-            Duration::seconds(60)
-                .try_into()
-                .expect("Failed to convert Duration"),
-        )
+        .get_balance(key, 100, 10, RateLimitInterval::Minute)
         .await
         .unwrap();
     assert_eq!(
@@ -223,7 +205,7 @@ async fn test_race_condition_interleaved_consume_return(
     let key = "interleaved_test";
 
     // Set up initial state
-    let setup = create_consume_request(key, 50, 100, 10, Duration::seconds(60));
+    let setup = create_consume_request(key, 50, 100, 10, RateLimitInterval::Minute);
     conn.consume_tickets(&[setup]).await.unwrap();
 
     let mut consume_handles = Vec::new();
@@ -235,7 +217,7 @@ async fn test_race_condition_interleaved_consume_return(
         // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
         #[expect(clippy::disallowed_methods)]
         let handle = tokio::spawn(async move {
-            let request = create_consume_request(key, 10, 100, 10, Duration::seconds(60));
+            let request = create_consume_request(key, 10, 100, 10, RateLimitInterval::Minute);
             conn_clone.consume_tickets(&[request]).await.unwrap()
         });
         consume_handles.push(handle);
@@ -247,7 +229,7 @@ async fn test_race_condition_interleaved_consume_return(
         // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
         #[expect(clippy::disallowed_methods)]
         let handle = tokio::spawn(async move {
-            let request = create_return_request(key, 5, 100, 10, Duration::seconds(60));
+            let request = create_return_request(key, 5, 100, 10, RateLimitInterval::Minute);
             conn_clone.return_tickets(vec![request]).await.unwrap()
         });
         return_handles.push(handle);
@@ -262,14 +244,7 @@ async fn test_race_condition_interleaved_consume_return(
 
     // Final balance should be consistent and within bounds
     let final_balance = conn
-        .get_balance(
-            key,
-            100,
-            10,
-            Duration::seconds(60)
-                .try_into()
-                .expect("Failed to convert Duration"),
-        )
+        .get_balance(key, 100, 10, RateLimitInterval::Minute)
         .await
         .unwrap();
     assert!(
@@ -290,7 +265,7 @@ async fn test_rate_limit_lifecycle(pool_opts: PgPoolOptions, conn_opts: PgConnec
     let key = "lifecycle_test";
 
     // Phase 1: Initial consumption
-    let consume1 = create_consume_request(key, 60, 100, 10, Duration::seconds(60));
+    let consume1 = create_consume_request(key, 60, 100, 10, RateLimitInterval::Minute);
     let results = conn.consume_tickets(&[consume1]).await.unwrap();
     assert!(results[0].success);
     assert_eq!(results[0].tickets_consumed, 60);
@@ -298,31 +273,24 @@ async fn test_rate_limit_lifecycle(pool_opts: PgPoolOptions, conn_opts: PgConnec
 
     // Phase 2: Check balance
     let balance = conn
-        .get_balance(
-            key,
-            100,
-            10,
-            Duration::seconds(60)
-                .try_into()
-                .expect("Failed to convert Duration"),
-        )
+        .get_balance(key, 100, 10, RateLimitInterval::Minute)
         .await
         .unwrap();
     assert_eq!(balance, 40);
 
     // Phase 3: Partial return
-    let return_req = create_return_request(key, 20, 100, 10, Duration::seconds(60));
+    let return_req = create_return_request(key, 20, 100, 10, RateLimitInterval::Minute);
     let results = conn.return_tickets(vec![return_req]).await.unwrap();
     assert_eq!(results[0].balance, 60);
 
     // Phase 4: Consume at new balance
-    let consume2 = create_consume_request(key, 60, 100, 10, Duration::seconds(60));
+    let consume2 = create_consume_request(key, 60, 100, 10, RateLimitInterval::Minute);
     let results = conn.consume_tickets(&[consume2]).await.unwrap();
     assert!(results[0].success);
     assert_eq!(results[0].tickets_remaining, 0);
 
     // Phase 5: Should fail when empty
-    let consume3 = create_consume_request(key, 1, 100, 10, Duration::seconds(60));
+    let consume3 = create_consume_request(key, 1, 100, 10, RateLimitInterval::Minute);
     let results = conn.consume_tickets(&[consume3]).await.unwrap();
     assert!(!results[0].success);
     assert_eq!(results[0].tickets_consumed, 0);
@@ -337,27 +305,28 @@ async fn test_capacity_boundaries(pool_opts: PgPoolOptions, conn_opts: PgConnect
     let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // Test 1: Zero request (should always succeed)
-    let zero_req = create_consume_request("zero_test", 0, 50, 5, Duration::seconds(60));
+    let zero_req = create_consume_request("zero_test", 0, 50, 5, RateLimitInterval::Minute);
     let results = conn.consume_tickets(&[zero_req]).await.unwrap();
     assert!(results[0].success);
     assert_eq!(results[0].tickets_consumed, 0);
     assert_eq!(results[0].tickets_remaining, 50);
 
     // Test 2: Exactly at capacity
-    let at_capacity = create_consume_request("capacity_test", 75, 75, 5, Duration::seconds(60));
+    let at_capacity = create_consume_request("capacity_test", 75, 75, 5, RateLimitInterval::Minute);
     let results = conn.consume_tickets(&[at_capacity]).await.unwrap();
     assert!(results[0].success);
     assert_eq!(results[0].tickets_remaining, 0);
 
     // Test 3: Exceed capacity (should fail)
-    let exceed = create_consume_request("exceed_test", 101, 100, 5, Duration::seconds(60));
+    let exceed = create_consume_request("exceed_test", 101, 100, 5, RateLimitInterval::Minute);
     let results = conn.consume_tickets(&[exceed]).await.unwrap();
     assert!(!results[0].success);
     assert_eq!(results[0].tickets_consumed, 0);
     assert_eq!(results[0].tickets_remaining, 100);
 
     // Test 4: Return beyond capacity (should cap)
-    let return_beyond = create_return_request("return_test", 150, 100, 5, Duration::seconds(60));
+    let return_beyond =
+        create_return_request("return_test", 150, 100, 5, RateLimitInterval::Minute);
     let results = conn.return_tickets(vec![return_beyond]).await.unwrap();
     assert_eq!(results[0].balance, 100); // Capped at capacity
 }
@@ -372,56 +341,43 @@ async fn test_refill_mechanics(pool_opts: PgPoolOptions, conn_opts: PgConnectOpt
     let key = "refill_test";
 
     // Phase 1: Consume most tokens
-    let consume = create_consume_request(key, 80, 100, 30, Duration::milliseconds(100));
+    let consume = create_consume_request(key, 40, 100, 30, RateLimitInterval::Second);
     let results = conn.consume_tickets(&[consume]).await.unwrap();
-    assert_eq!(results[0].tickets_remaining, 20);
+    assert_eq!(results[0].tickets_remaining, 60);
 
-    // Phase 2: Wait for single refill
-    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+    // Phase 2: Wait for single refill (1 second + buffer)
+    tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
     let balance = conn
-        .get_balance(
-            key,
-            100,
-            30,
-            Duration::milliseconds(100)
-                .try_into()
-                .expect("Failed to convert Duration"),
-        )
+        .get_balance(key, 100, 30, RateLimitInterval::Second)
         .await
         .unwrap();
-    assert_eq!(balance, 50); // 20 + 30 refill
+    assert_eq!(balance, 90); // 60 + 30 refill
 
-    // Phase 3: Wait for multiple refills and verify capping
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await; // 3 more intervals
+    // Phase 3: Wait for another refill and verify capping (1 more second)
+    tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
     let balance = conn
-        .get_balance(
-            key,
-            100,
-            30,
-            Duration::milliseconds(100)
-                .try_into()
-                .expect("Failed to convert Duration"),
-        )
+        .get_balance(key, 100, 30, RateLimitInterval::Second)
         .await
         .unwrap();
     assert_eq!(balance, 100); // Should be capped at capacity
+}
 
-    // Phase 4: Test zero refill amount
+#[sqlx::test]
+async fn test_zero_refill_mechanics(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
+
     let zero_refill_key = "zero_refill";
     let consume_zero =
-        create_consume_request(zero_refill_key, 40, 100, 0, Duration::milliseconds(100));
+        create_consume_request(zero_refill_key, 40, 100, 0, RateLimitInterval::Second);
     conn.consume_tickets(&[consume_zero]).await.unwrap();
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
     let balance = conn
-        .get_balance(
-            zero_refill_key,
-            100,
-            0,
-            Duration::milliseconds(100)
-                .try_into()
-                .expect("Failed to convert Duration"),
-        )
+        .get_balance(zero_refill_key, 100, 0, RateLimitInterval::Second)
         .await
         .unwrap();
     assert_eq!(balance, 60); // No refill should occur
@@ -456,20 +412,13 @@ async fn test_new_bucket_behavior(pool_opts: PgPoolOptions, conn_opts: PgConnect
 
     // New bucket starts at capacity
     let balance = conn
-        .get_balance(
-            "new_bucket",
-            100,
-            10,
-            Duration::seconds(60)
-                .try_into()
-                .expect("Failed to convert Duration"),
-        )
+        .get_balance("new_bucket", 100, 10, RateLimitInterval::Minute)
         .await
         .unwrap();
     assert_eq!(balance, 100);
 
     // Returning to new bucket creates it at capacity (capped)
-    let return_req = create_return_request("return_new", 30, 100, 10, Duration::seconds(60));
+    let return_req = create_return_request("return_new", 30, 100, 10, RateLimitInterval::Minute);
     let results = conn.return_tickets(vec![return_req]).await.unwrap();
     assert_eq!(results[0].balance, 100); // Created at capacity, return is capped
 }
@@ -492,7 +441,7 @@ async fn test_concurrent_stress(pool_opts: PgPoolOptions, conn_opts: PgConnectOp
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 let key = format!("stress_key_{}", i % 10); // 10 different keys
-                let request = create_consume_request(&key, 15, 200, 10, Duration::seconds(60));
+                let request = create_consume_request(&key, 15, 200, 10, RateLimitInterval::Minute);
                 conn_clone.consume_tickets(&[request]).await.unwrap()
             })
         })
@@ -517,42 +466,6 @@ async fn test_concurrent_stress(pool_opts: PgPoolOptions, conn_opts: PgConnectOp
     );
 }
 
-// ===== INVALID INPUT TESTS =====
-
-#[sqlx::test]
-async fn test_zero_refill_interval_exception(
-    pool_opts: PgPoolOptions,
-    conn_opts: PgConnectOptions,
-) {
-    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
-        .await
-        .unwrap();
-    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
-    let conn = PostgresConnectionInfo::new_with_pool(pool);
-
-    // Test zero interval throws exception
-    let zero_interval_request =
-        create_consume_request("zero_interval", 10, 100, 10, Duration::zero());
-    let result = conn.consume_tickets(&[zero_interval_request]).await;
-    assert!(result.is_err(), "Zero interval should cause an error");
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("Refill interval must be positive"),
-        "Error should mention that refill interval must be positive"
-    );
-
-    // Test negative interval throws exception
-    let negative_interval_request =
-        create_consume_request("negative_interval", 10, 100, 10, Duration::seconds(-5));
-    let result = conn.consume_tickets(&[negative_interval_request]).await;
-    assert!(result.is_err(), "Negative interval should cause an error");
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("Refill interval must be positive"),
-        "Error should mention that refill interval must be positive"
-    );
-}
+// Note: Zero interval test was removed because RateLimitInterval is an enum
+// that only contains positive interval values (Second, Minute, Hour, Day, Week, Month).
+// The validation is now enforced at the type level.

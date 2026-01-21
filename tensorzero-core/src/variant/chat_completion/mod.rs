@@ -877,6 +877,7 @@ mod tests {
     use indexmap::IndexMap;
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     use super::*;
 
@@ -910,6 +911,7 @@ mod tests {
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::{DUMMY_JSON_RESPONSE_RAW, DummyProvider};
     use crate::providers::test_helpers::get_temperature_tool_config;
+    use crate::rate_limiting::RateLimitingManager;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
@@ -1295,7 +1297,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1304,6 +1306,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let system_template = get_system_template();
@@ -2013,11 +2016,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     json_result.model_inference_results[0].model_provider_name,
-                    "json_provider".into()
+                    Arc::<str>::from("json_provider")
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].model_name,
-                    "json".into()
+                    Arc::<str>::from("json")
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
@@ -2145,11 +2148,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     json_result.model_inference_results[0].model_provider_name,
-                    "json_provider".into()
+                    Arc::<str>::from("json_provider")
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].model_name,
-                    "json".into()
+                    Arc::<str>::from("json")
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
@@ -2270,11 +2273,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     json_result.model_inference_results[0].model_provider_name,
-                    "json_provider".into()
+                    Arc::<str>::from("json_provider")
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].model_name,
-                    "json".into()
+                    Arc::<str>::from("json")
                 );
                 let expected_inference_params = InferenceParams {
                     chat_completion: ChatCompletionInferenceParams {
@@ -2310,7 +2313,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2319,6 +2322,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let templates = Box::leak(Box::new(get_test_template_config().await));
         let schema_any = JSONSchema::from_value(json!({ "type": "object" })).unwrap();
@@ -2997,7 +3001,7 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.model, "gpt-4".into());
+        assert_eq!(exported.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.weight, Some(0.8));
         assert_eq!(exported.temperature, Some(0.7));
         assert_eq!(exported.top_p, Some(0.9));

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
@@ -141,9 +142,10 @@ pub struct OrderBy {
 }
 
 /// Filters for querying inferences.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[export_schema]
 pub enum InferenceFilter {
     /// Filter by the value of a float metric

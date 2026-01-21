@@ -5,10 +5,13 @@ import { TooltipProvider } from "~/components/ui/tooltip";
 import { Toaster } from "~/components/ui/toaster";
 import { ReadOnlyProvider } from "~/context/read-only";
 import { AutopilotAvailableProvider } from "~/context/autopilot-available";
+import { ConfigProvider, EMPTY_CONFIG } from "~/context/config";
+import type { UiConfig } from "~/types/tensorzero";
 
 export interface AppProvidersLoaderData {
   isReadOnly?: boolean;
   autopilotAvailable?: boolean;
+  config?: UiConfig;
 }
 
 interface AppProvidersProps {
@@ -28,9 +31,11 @@ export function AppProviders({ children, loaderData }: AppProvidersProps) {
           <AutopilotAvailableProvider
             value={loaderData?.autopilotAvailable ?? false}
           >
-            <SidebarProvider>
-              <TooltipProvider>{children}</TooltipProvider>
-            </SidebarProvider>
+            <ConfigProvider value={loaderData?.config ?? EMPTY_CONFIG}>
+              <SidebarProvider>
+                <TooltipProvider>{children}</TooltipProvider>
+              </SidebarProvider>
+            </ConfigProvider>
           </AutopilotAvailableProvider>
         </ReadOnlyProvider>
         <Toaster />

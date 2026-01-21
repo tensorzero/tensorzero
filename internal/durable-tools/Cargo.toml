@@ -11,10 +11,11 @@ workspace = true
 durable-tools-spawn.workspace = true
 durable.workspace = true
 tokio.workspace = true
-tokio-util = "0.7"
 async-trait = "0.1"
 serde.workspace = true
 serde_json.workspace = true
+serde_path_to_error.workspace = true
+tensorzero-derive = { path = "../tensorzero-derive" }
 schemars.workspace = true
 sqlx.workspace = true
 thiserror = "2"
@@ -25,7 +26,6 @@ chrono.workspace = true
 tensorzero.workspace = true
 url = "2"
 secrecy.workspace = true
-moka.workspace = true
 
 tensorzero-core.workspace = true
 evaluations = { path = "../../evaluations" }
