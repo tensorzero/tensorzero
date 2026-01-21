@@ -22,7 +22,9 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{ApiType, ContentBlockOutput, ProviderInferenceResponseArgs};
+use crate::inference::types::{
+    ApiType, ContentBlockOutput, ProviderInferenceResponseArgs, Thought,
+};
 use crate::inference::types::{
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -42,7 +44,7 @@ use super::chat_completions::{
 };
 use super::openai::{
     OpenAIEmbeddingUsage, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
-    SystemOrDeveloper, handle_openai_error, prepare_openai_messages, stream_openai,
+    StreamOptions, SystemOrDeveloper, handle_openai_error, prepare_openai_messages, stream_openai,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -639,6 +641,8 @@ struct AzureRequest<'a> {
     seed: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<StreamOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<ChatCompletionTool<'a>>>,
@@ -714,6 +718,13 @@ impl<'a> AzureRequest<'a> {
         )
         .await?;
         let (tools, tool_choice, _) = prepare_chat_completion_tools(request, true)?;
+        let stream_options = if request.stream {
+            Some(StreamOptions {
+                include_usage: true,
+            })
+        } else {
+            None
+        };
         let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,
@@ -723,6 +734,7 @@ impl<'a> AzureRequest<'a> {
             frequency_penalty: request.frequency_penalty,
             max_completion_tokens: request.max_tokens,
             stream: request.stream,
+            stream_options,
             response_format,
             seed: request.seed,
             tools,
@@ -832,6 +844,14 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -849,6 +869,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response,
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
@@ -1246,6 +1267,7 @@ mod tests {
             max_completion_tokens: None,
             seed: None,
             stream: false,
+            stream_options: None,
             response_format: None,
             tools: None,
             // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)

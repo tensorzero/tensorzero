@@ -4,10 +4,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { Suspense, type ReactNode } from "react";
-import { Await, useAsyncError } from "react-router";
+import { Suspense, use, type ReactNode } from "react";
 import { cn } from "~/utils/common";
 import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Breadcrumbs,
+  type BreadcrumbSegment,
+} from "~/components/layout/Breadcrumbs";
 
 const PageLayout: React.FC<React.ComponentProps<"div">> = ({
   children,
@@ -27,102 +30,86 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 
 type CountValue = number | bigint | Promise<number | bigint>;
 
+function CountDisplay({
+  count,
+  size = "lg",
+  className,
+}: {
+  count: CountValue;
+  size?: "lg" | "md";
+  className?: string;
+}) {
+  const resolvedCount = count instanceof Promise ? use(count) : count;
+  return (
+    <span
+      data-testid="count-display"
+      className={cn(
+        "text-fg-muted font-medium",
+        size === "lg" ? "text-2xl" : "text-xl",
+        className,
+      )}
+    >
+      {resolvedCount.toLocaleString()}
+    </span>
+  );
+}
+
 interface PageHeaderProps {
-  label?: string;
+  eyebrow?: ReactNode;
   heading?: string;
   name?: string;
   count?: CountValue;
-  icon?: ReactNode;
-  iconBg?: string;
-  children?: ReactNode;
   tag?: ReactNode;
+  children?: ReactNode;
 }
 
-// Error display for failed count load - shows "-" with tooltip
-function CountError() {
-  const error = useAsyncError();
-  const message =
-    error instanceof Error ? error.message : "Failed to load count";
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <h1 className="text-fg-muted cursor-help text-2xl font-medium">—</h1>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p className="text-red-600">{message}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function CountValue({ value }: { value: number | bigint }) {
-  return (
-    <h1 className="text-fg-muted text-2xl font-medium">
-      {value.toLocaleString()}
-    </h1>
-  );
-}
-
-function CountDisplay({ count }: { count: CountValue }) {
-  if (count instanceof Promise) {
-    return (
-      <Suspense fallback={<Skeleton className="h-8 w-24" />}>
-        <Await resolve={count} errorElement={<CountError />}>
-          {(resolvedCount) => <CountValue value={resolvedCount} />}
-        </Await>
-      </Suspense>
-    );
-  }
-  return <CountValue value={count} />;
-}
-
-const PageHeader: React.FC<PageHeaderProps> = ({
+function PageHeader({
+  eyebrow,
   heading,
-  label,
   name,
   count,
-  icon,
-  iconBg = "bg-none",
-  children,
   tag,
-}: PageHeaderProps) => {
+  children,
+}: PageHeaderProps) {
+  const title = heading ?? name;
+
   return (
     <div className="flex flex-col">
-      <div className="flex flex-col gap-2">
-        {label !== undefined && (
-          <div className="text-fg-secondary flex items-center gap-1.5 text-sm font-normal">
-            {icon && (
-              <span
-                className={`${iconBg} flex size-5 items-center justify-center rounded-sm`}
-              >
-                {icon}
-              </span>
-            )}
-
-            {label}
-          </div>
+      <div className="flex flex-col gap-3">
+        {eyebrow && (
+          <div className="text-fg-secondary text-sm font-normal">{eyebrow}</div>
         )}
-        <div className="flex items-center gap-2">
-          {heading !== undefined && (
-            <h1 className="text-2xl font-medium">{heading}</h1>
+        <div>
+          {title && (
+            <h1
+              className={cn(
+                "inline align-middle text-2xl font-medium",
+                !heading && name && "font-mono",
+              )}
+            >
+              {title}
+            </h1>
           )}
-          {name !== undefined && (
-            <span className="font-mono text-2xl leading-none font-medium">
-              {name}
+          {count !== undefined && (
+            <Suspense
+              fallback={
+                <Skeleton className="ml-2 inline-block h-6 w-16 align-middle" />
+              }
+            >
+              <CountDisplay count={count} className="ml-2 align-middle" />
+            </Suspense>
+          )}
+          {tag && (
+            <span className="ml-3 inline-flex items-center align-middle">
+              {tag}
             </span>
           )}
-          {count !== undefined && <CountDisplay count={count} />}
-
-          {tag}
         </div>
       </div>
-
-      {/* TODO Use wrapper for this instead - feels strange here */}
       {children && <div className="mt-8 flex flex-col gap-8">{children}</div>}
     </div>
   );
-};
+}
 
 const SectionsGroup: React.FC<React.ComponentProps<"div">> = ({
   children,
@@ -144,83 +131,53 @@ const SectionLayout: React.FC<React.ComponentProps<"section">> = ({
   </section>
 );
 
-interface SectionHeaderProps extends React.PropsWithChildren {
+interface SectionHeaderProps {
   heading: string;
   count?: CountValue;
-  badge?: {
-    name: string;
-    tooltip: string;
-  };
+  badge?: { name: string; tooltip: string };
+  children?: ReactNode;
 }
 
-// Error display for failed section count - shows "-" with tooltip
-function SectionCountError() {
-  const error = useAsyncError();
-  const message =
-    error instanceof Error ? error.message : "Failed to load count";
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="text-fg-muted cursor-help text-xl font-medium">—</span>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p className="text-red-600">{message}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function SectionCountValue({ value }: { value: number | bigint }) {
-  return (
-    <span className="text-fg-muted text-xl font-medium">
-      {value.toLocaleString()}
-    </span>
-  );
-}
-
-function SectionCountDisplay({ count }: { count: CountValue }) {
-  if (count instanceof Promise) {
-    return (
-      <Suspense fallback={<Skeleton className="h-6 w-12" />}>
-        <Await resolve={count} errorElement={<SectionCountError />}>
-          {(resolvedCount) => <SectionCountValue value={resolvedCount} />}
-        </Await>
-      </Suspense>
-    );
-  }
-  return <SectionCountValue value={count} />;
-}
-
-const SectionHeader: React.FC<SectionHeaderProps> = ({
+function SectionHeader({
   heading,
   count,
   badge,
   children,
-}) => (
-  <h2 className="flex items-center gap-2 text-xl font-medium">
-    {heading}
+}: SectionHeaderProps) {
+  return (
+    <h2 className="flex items-center gap-2 text-xl font-medium">
+      {heading}
+      {count !== undefined && (
+        <Suspense fallback={<Skeleton className="h-6 w-12" />}>
+          <CountDisplay count={count} size="md" />
+        </Suspense>
+      )}
+      {badge && (
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="ml-1 px-2 py-0.5 text-xs font-medium"
+            >
+              {badge.name}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="max-w-xs">{badge.tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {children}
+    </h2>
+  );
+}
 
-    {count !== undefined && <SectionCountDisplay count={count} />}
-
-    {badge && (
-      <Tooltip delayDuration={0}>
-        <TooltipTrigger asChild>
-          <Badge
-            variant="outline"
-            className="ml-1 px-2 py-0.5 text-xs font-medium"
-          >
-            {badge.name}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="max-w-xs">{badge.tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    )}
-
-    {children}
-  </h2>
-);
-
-export { PageHeader, SectionHeader, SectionLayout, SectionsGroup, PageLayout };
+export {
+  PageHeader,
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+  PageLayout,
+  Breadcrumbs,
+  type BreadcrumbSegment,
+};

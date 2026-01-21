@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use sqlx::postgres::types::PgInterval;
 
 use crate::{
@@ -19,6 +20,7 @@ pub struct BucketInfo {
     pub interval: PgInterval,
 }
 
+#[async_trait]
 impl RateLimitQueries for PostgresConnectionInfo {
     async fn consume_tickets(
         &self,
@@ -27,6 +29,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
         if requests.is_empty() {
             return Ok(vec![]);
         }
+
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
                 message: "Failed to consume tickets for rate limiting: PostgreSQL connection is disabled.".to_string(),
@@ -69,6 +72,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
         if requests.is_empty() {
             return Ok(vec![]);
         }
+
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
                 message: "PostgreSQL connection is disabled".to_string(),

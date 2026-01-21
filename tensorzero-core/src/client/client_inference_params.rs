@@ -20,7 +20,7 @@ use uuid::Uuid;
 // with just the `credentials` field adjusted to allow serialization.
 /// The expected payload is a JSON object with the following fields:
 #[derive(Clone, Debug, Deserialize, Serialize, Default, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct ClientInferenceParams {
     // The function name. Exactly one of `function_name` or `model_name` must be provided.
     pub function_name: Option<String>,
@@ -63,11 +63,17 @@ pub struct ClientInferenceParams {
     #[ts(type = "Map<string, string>")]
     pub credentials: HashMap<String, ClientSecretString>,
     pub cache_options: CacheParamsOptions,
+    /// DEPRECATED (#5697 / 2026.4+): Use `include_raw_response` instead.
     /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.
     /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
-    /// if the fuser/judge model failed
+    /// if the fuser/judge model failed.
     #[serde(default)]
     pub include_original_response: bool,
+    /// If `true`, add a `raw_response` field to the response, containing the raw string response from the model.
+    /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `raw_response`
+    /// if the fuser/judge model failed.
+    #[serde(default)]
+    pub include_raw_response: bool,
     /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
     #[serde(default)]
     pub include_raw_usage: bool,
@@ -137,6 +143,7 @@ impl TryFrom<ClientInferenceParams> for Params {
                 .collect(),
             cache_options: this.cache_options,
             include_original_response: this.include_original_response,
+            include_raw_response: this.include_raw_response,
             include_raw_usage: this.include_raw_usage,
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
@@ -166,6 +173,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials,
         cache_options,
         include_original_response,
+        include_raw_response,
         include_raw_usage,
         extra_body,
         extra_headers,
@@ -191,6 +199,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials: credentials.into_iter().map(|(k, v)| (k, v.0)).collect(),
         cache_options,
         include_original_response,
+        include_raw_response,
         include_raw_usage,
         extra_body,
         extra_headers,

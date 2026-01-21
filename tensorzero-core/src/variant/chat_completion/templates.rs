@@ -9,7 +9,7 @@ use crate::{
     config::{ErrorContext, PathWithContents, SchemaData, path::ResolvedTomlPathData},
     error::{Error, ErrorDetails},
     inference::types::Role,
-    jsonschema_util::StaticJSONSchema,
+    jsonschema_util::JSONSchema,
     variant::chat_completion::{
         TemplateWithSchema, UninitializedChatCompletionConfig, UninitializedInputWrappers,
     },
@@ -80,7 +80,7 @@ impl ChatTemplates {
     // is set.
     fn validate_wrapper(
         template_and_schema: Option<TemplateWithSchema>,
-        schema: Option<&StaticJSONSchema>,
+        schema: Option<&JSONSchema>,
         wrapper: Option<ResolvedTomlPathData>,
         error_prefix: &str,
         name: &str,

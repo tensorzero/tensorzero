@@ -479,7 +479,7 @@ pub fn stream_openrouter(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, None).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, None).await);
                         }
                     }
                 }
@@ -1698,6 +1698,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,

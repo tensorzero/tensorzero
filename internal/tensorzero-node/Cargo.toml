@@ -15,16 +15,10 @@ napi = { version = "2.12.2", default-features = false, features = [
     "tokio_rt",
 ] }
 napi-derive = "2.12.2"
-serde.workspace = true
 serde_json.workspace = true
-url.workspace = true
-uuid.workspace = true
 secrecy.workspace = true
-tensorzero = { path = "../../clients/rust" }
 tensorzero-core = { path = "../../tensorzero-core" }
 tensorzero-auth = { path = "../../internal/tensorzero-auth" }
-evaluations = { path = "../../evaluations" }
-ts-rs = { workspace = true }
 
 [build-dependencies]
 napi-build = "2.3.0"

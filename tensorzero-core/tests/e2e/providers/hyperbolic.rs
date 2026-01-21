@@ -14,7 +14,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "hyperbolic".to_string(),
-        model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_name: "openai/gpt-oss-20b".into(),
         model_provider_name: "hyperbolic".into(),
         credentials: HashMap::new(),
     }];
@@ -22,7 +22,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "hyperbolic-extra-body".to_string(),
-        model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_name: "openai/gpt-oss-20b".into(),
         model_provider_name: "hyperbolic".into(),
         credentials: HashMap::new(),
     }];
@@ -30,7 +30,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "hyperbolic-extra-headers".to_string(),
-        model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_name: "openai/gpt-oss-20b".into(),
         model_provider_name: "hyperbolic".into(),
         credentials: HashMap::new(),
     }];
@@ -38,7 +38,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "hyperbolic-dynamic".to_string(),
-        model_name: "meta-llama/Meta-Llama-3-70B-Instruct-dynamic".into(),
+        model_name: "openai/gpt-oss-20b-dynamic".into(),
         model_provider_name: "hyperbolic".into(),
         credentials,
     }];
@@ -46,7 +46,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "hyperbolic-shorthand".to_string(),
-        model_name: "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_name: "hyperbolic::openai/gpt-oss-20b".into(),
         model_provider_name: "hyperbolic".into(),
         credentials: HashMap::new(),
     }];
@@ -54,7 +54,7 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "hyperbolic".to_string(),
-        model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_name: "openai/gpt-oss-20b".into(),
         model_provider_name: "hyperbolic".into(),
         credentials: HashMap::new(),
     }];
@@ -62,17 +62,14 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "hyperbolic-shorthand".to_string(),
-        model_name: "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_name: "hyperbolic::openai/gpt-oss-20b".into(),
         model_provider_name: "hyperbolic".into(),
         credentials: HashMap::new(),
     }];
 
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "hyperbolic".to_string(),
-        model_info: HashMap::from([(
-            "model_name".to_string(),
-            "meta-llama/Meta-Llama-3-70B-Instruct".to_string(),
-        )]),
+        model_info: HashMap::from([("model_name".to_string(), "openai/gpt-oss-20b".to_string())]),
         use_modal_headers: false,
     }];
 
@@ -80,6 +77,7 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        reasoning_usage_inference: vec![],
         extra_body_inference: extra_body_providers,
         embeddings: vec![],
         inference_params_inference: standard_providers,

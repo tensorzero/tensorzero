@@ -30,7 +30,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::types::chat_completion_inference_params::ServiceTier;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
-use crate::inference::types::usage::RawUsageEntry;
+use crate::inference::types::usage::{RawResponseEntry, RawUsageEntry};
 use crate::inference::types::{
     Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage, InputMessageContent,
     RawText, Role, System, Template, Text, current_timestamp,
@@ -153,6 +153,11 @@ pub struct OpenAICompatibleParams {
     pub tensorzero_params: Option<InferenceParams>,
     #[serde(default, rename = "tensorzero::include_raw_usage")]
     pub tensorzero_include_raw_usage: bool,
+    /// DEPRECATED (#5697 / 2026.4+): Use `tensorzero::include_raw_response` instead.
+    #[serde(default, rename = "tensorzero::include_original_response")]
+    pub tensorzero_include_original_response: bool,
+    #[serde(default, rename = "tensorzero::include_raw_response")]
+    pub tensorzero_include_raw_response: bool,
     #[serde(flatten)]
     pub unknown_fields: HashMap<String, Value>,
 }
@@ -211,6 +216,11 @@ pub struct OpenAICompatibleResponse {
     pub usage: OpenAICompatibleUsage,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_usage: Option<Vec<RawUsageEntry>>,
+    /// DEPRECATED (#5697 / 2026.4+): Use `tensorzero_raw_response` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tensorzero_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 // ============================================================================
@@ -439,8 +449,9 @@ impl Params {
             // For now, we don't support internal inference for OpenAI compatible endpoint
             internal: false,
             tags: openai_compatible_params.tensorzero_tags,
-            // OpenAI compatible endpoint does not support 'include_original_response'
-            include_original_response: false,
+            include_original_response: openai_compatible_params
+                .tensorzero_include_original_response,
+            include_raw_response: openai_compatible_params.tensorzero_include_raw_response,
             include_raw_usage: openai_compatible_params.tensorzero_include_raw_usage,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
@@ -665,11 +676,28 @@ pub fn convert_openai_message_content(
     }
 }
 
-impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
-    fn from((inference_response, response_model_prefix): (InferenceResponse, String)) -> Self {
+impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse {
+    fn from(
+        (
+            inference_response,
+            response_model_prefix,
+            include_original_response,
+            include_raw_response,
+        ): (InferenceResponse, String, bool, bool),
+    ) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
                 let (content, tool_calls) = process_chat_content(response.content);
+                let tensorzero_original_response = if include_original_response {
+                    response.original_response
+                } else {
+                    None
+                };
+                let tensorzero_raw_response = if include_raw_response {
+                    response.raw_response
+                } else {
+                    None
+                };
 
                 OpenAICompatibleResponse {
                     id: response.inference_id.to_string(),
@@ -689,29 +717,46 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
                     tensorzero_raw_usage: response.raw_usage,
+                    tensorzero_original_response,
+                    tensorzero_raw_response,
                     episode_id: response.episode_id.to_string(),
                 }
             }
-            InferenceResponse::Json(response) => OpenAICompatibleResponse {
-                id: response.inference_id.to_string(),
-                choices: vec![OpenAICompatibleChoice {
-                    index: 0,
-                    finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
-                    message: OpenAICompatibleResponseMessage {
-                        content: response.output.raw,
-                        tool_calls: None,
-                        role: "assistant".to_string(),
-                    },
-                }],
-                created: current_timestamp() as u32,
-                model: format!("{response_model_prefix}{}", response.variant_name),
-                system_fingerprint: String::new(),
-                service_tier: None,
-                object: "chat.completion".to_string(),
-                usage: response.usage.into(),
-                tensorzero_raw_usage: response.raw_usage,
-                episode_id: response.episode_id.to_string(),
-            },
+            InferenceResponse::Json(response) => {
+                let tensorzero_original_response = if include_original_response {
+                    response.original_response
+                } else {
+                    None
+                };
+                let tensorzero_raw_response = if include_raw_response {
+                    response.raw_response
+                } else {
+                    None
+                };
+
+                OpenAICompatibleResponse {
+                    id: response.inference_id.to_string(),
+                    choices: vec![OpenAICompatibleChoice {
+                        index: 0,
+                        finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
+                        message: OpenAICompatibleResponseMessage {
+                            content: response.output.raw,
+                            tool_calls: None,
+                            role: "assistant".to_string(),
+                        },
+                    }],
+                    created: current_timestamp() as u32,
+                    model: format!("{response_model_prefix}{}", response.variant_name),
+                    system_fingerprint: String::new(),
+                    service_tier: None,
+                    object: "chat.completion".to_string(),
+                    usage: response.usage.into(),
+                    tensorzero_raw_usage: response.raw_usage,
+                    tensorzero_original_response,
+                    tensorzero_raw_response,
+                    episode_id: response.episode_id.to_string(),
+                }
+            }
         }
     }
 }

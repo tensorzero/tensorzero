@@ -681,6 +681,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: finish_reason.map(Into::into),
@@ -706,7 +707,7 @@ fn stream_together(
                 Err(e) => {
                     let message = e.to_string();
                     let mut raw_response = None;
-                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = e {
+                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = *e {
                         raw_response = resp.text().await.ok();
                     }
                     yield Err(ErrorDetails::InferenceServer {

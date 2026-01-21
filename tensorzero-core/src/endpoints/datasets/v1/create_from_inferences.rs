@@ -139,7 +139,7 @@ mod tests {
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{ContentBlockChatOutput, Text};
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::stored_inference::{StoredChatInferenceDatabase, StoredInferenceDatabase};
     use crate::tool::{ToolCallConfig, ToolCallConfigDatabaseInsert, ToolChoice};
     use std::collections::HashMap;
@@ -171,7 +171,7 @@ mod tests {
             Arc::new(FunctionConfig::Json(FunctionConfigJson {
                 variants: Default::default(),
                 schemas: SchemaData::default(),
-                output_schema: StaticJSONSchema::default(),
+                output_schema: JSONSchema::default(),
                 json_mode_tool_call_config: ToolCallConfig::default(),
                 description: None,
                 experimentation: ExperimentationConfig::default(),

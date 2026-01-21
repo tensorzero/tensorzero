@@ -262,6 +262,7 @@ impl OpenAIResponsesResponse<'_> {
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason,
@@ -1168,7 +1169,7 @@ pub fn stream_openai_responses(
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }

@@ -1,5 +1,6 @@
 import { StatusCodes as HttpStatusCode } from "http-status-codes";
 import { isRouteErrorResponse } from "react-router";
+import { z } from "zod";
 import { isErrorLike } from "~/utils/common";
 
 /**
@@ -23,22 +24,34 @@ export type InfraErrorType =
   (typeof InfraErrorType)[keyof typeof InfraErrorType];
 
 /**
+ * Zod schema for InfraErrorData - validates error data passed via React Router's `data()` helper.
+ * Uses discriminatedUnion for type-safe validation of each error variant.
+ */
+export const InfraErrorDataSchema = z.discriminatedUnion("errorType", [
+  z.object({ errorType: z.literal(InfraErrorType.GatewayUnavailable) }),
+  z.object({ errorType: z.literal(InfraErrorType.GatewayAuthFailed) }),
+  z.object({
+    errorType: z.literal(InfraErrorType.GatewayEndpointNotFound),
+    routeInfo: z.string(),
+  }),
+  z.object({
+    errorType: z.literal(InfraErrorType.ClickHouseUnavailable),
+    message: z.string().optional(),
+  }),
+  z.object({
+    errorType: z.literal(InfraErrorType.ServerError),
+    message: z.string().optional(),
+  }),
+]);
+
+/**
  * Discriminated union for error data passed via React Router's `data()` helper.
  * Each variant only includes fields relevant to that error type, enforcing
  * valid combinations at compile time.
+ *
+ * Inferred from InfraErrorDataSchema to ensure type and runtime validation stay in sync.
  */
-export type InfraErrorData =
-  | { errorType: typeof InfraErrorType.GatewayUnavailable }
-  | { errorType: typeof InfraErrorType.GatewayAuthFailed }
-  | {
-      errorType: typeof InfraErrorType.GatewayEndpointNotFound;
-      routeInfo: string;
-    }
-  | {
-      errorType: typeof InfraErrorType.ClickHouseUnavailable;
-      message?: string;
-    }
-  | { errorType: typeof InfraErrorType.ServerError; message?: string };
+export type InfraErrorData = z.infer<typeof InfraErrorDataSchema>;
 
 /**
  * Discriminated union for classified errors used in error rendering.
@@ -57,18 +70,36 @@ export type ClassifiedError =
       stack?: string;
     };
 
-/**
- * Type guard to check if a value is InfraErrorData.
- */
 export function isInfraErrorData(value: unknown): value is InfraErrorData {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "errorType" in value &&
-    typeof value.errorType === "string" &&
-    Object.values(InfraErrorType).includes(value.errorType as InfraErrorType)
-  );
+  return InfraErrorDataSchema.safeParse(value).success;
 }
+
+/**
+ * Zod schemas for serialized error validation.
+ * These validate error objects after they cross the React Router serialization boundary,
+ * where instanceof checks fail and we must rely on object properties.
+ */
+const SerializedGatewayConnectionErrorSchema = z.object({
+  name: z.literal("GatewayConnectionError"),
+});
+
+const SerializedAuthenticationErrorSchema = z.object({
+  name: z.literal("TensorZeroServerError"),
+  status: z.literal(401),
+});
+
+const SerializedRouteNotFoundErrorSchema = z.object({
+  message: z.string().refine((m) => m.startsWith("Route not found:")),
+});
+
+const SerializedClickHouseErrorSchema = z.object({
+  name: z.string().refine((n) => n.startsWith("ClickHouse")),
+});
+
+const SerializedAutopilotUnavailableErrorSchema = z.object({
+  name: z.literal("TensorZeroServerError"),
+  status: z.union([z.literal(501), z.literal(401)]),
+});
 
 /**
  * Error thrown when the UI cannot connect to the TensorZero gateway.
@@ -90,12 +121,7 @@ export function isGatewayConnectionError(
     return true;
   }
   // Check serialized object properties (works if thrown from server loader)
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "GatewayConnectionError"
-  );
+  return SerializedGatewayConnectionErrorSchema.safeParse(error).success;
 }
 
 export function isAuthenticationError(error: unknown): boolean {
@@ -103,14 +129,7 @@ export function isAuthenticationError(error: unknown): boolean {
     return error.status === 401;
   }
   // Check serialized object properties (works if thrown from server loader)
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "TensorZeroServerError" &&
-    "status" in error &&
-    error.status === 401
-  );
+  return SerializedAuthenticationErrorSchema.safeParse(error).success;
 }
 
 /**
@@ -125,20 +144,8 @@ export function isGatewayEndpointNotFoundError(error: unknown): boolean {
   if (error instanceof TensorZeroServerError.RouteNotFound) {
     return true;
   }
-
-  // Check message pattern - this works even after serialization
-  // The message format is: "Route not found: METHOD /path"
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string" &&
-    error.message.startsWith("Route not found:")
-  ) {
-    return true;
-  }
-
-  return false;
+  // Check serialized object properties (works if thrown from server loader)
+  return SerializedRouteNotFoundErrorSchema.safeParse(error).success;
 }
 
 /**
@@ -158,20 +165,8 @@ export function isClickHouseError(error: unknown): boolean {
   ) {
     return true;
   }
-
-  // Check serialized error name - all ClickHouse errors have names prefixed with "ClickHouse"
-  // This handles the serialization boundary where instanceof fails
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    typeof error.name === "string" &&
-    error.name.startsWith("ClickHouse")
-  ) {
-    return true;
-  }
-
-  return false;
+  // Check serialized object properties (works if thrown from server loader)
+  return SerializedClickHouseErrorSchema.safeParse(error).success;
 }
 
 /**
@@ -206,14 +201,7 @@ export function isAutopilotUnavailableError(error: unknown): boolean {
     return error.status === 501 || error.status === 401;
   }
   // Check serialized object properties (works if thrown from server loader)
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "TensorZeroServerError" &&
-    "status" in error &&
-    (error.status === 501 || error.status === 401)
-  );
+  return SerializedAutopilotUnavailableErrorSchema.safeParse(error).success;
 }
 
 export class TensorZeroServerError extends Error {

@@ -51,7 +51,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Unknown, Usage,
+    TextChunk, Thought, Unknown, Usage,
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
 };
 use crate::model::{Credential, ModelProvider};
@@ -1044,7 +1044,7 @@ pub fn stream_openai(
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -2713,6 +2713,14 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -2740,6 +2748,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),

@@ -345,7 +345,7 @@ pub fn stream_groq(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, None).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, None).await);
                         }
                     }
                 }
@@ -1357,6 +1357,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),

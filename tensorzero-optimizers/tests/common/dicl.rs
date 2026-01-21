@@ -83,7 +83,7 @@ pub async fn test_dicl_optimization_chat() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
@@ -367,7 +367,7 @@ pub async fn test_dicl_optimization_json() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
@@ -652,6 +652,7 @@ fn create_inference_params(
         credentials: Default::default(),
         cache_options: Default::default(),
         include_original_response: true,
+        include_raw_response: false,
         extra_body: Default::default(),
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
