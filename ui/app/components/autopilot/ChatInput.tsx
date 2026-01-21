@@ -49,6 +49,12 @@ export function ChatInput({
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);
   const pendingTextRef = useRef<string>("");
 
+  // Store callbacks in refs to avoid re-triggering the effect when they change
+  const onMessageSentRef = useRef(onMessageSent);
+  const onMessageFailedRef = useRef(onMessageFailed);
+  onMessageSentRef.current = onMessageSent;
+  onMessageFailedRef.current = onMessageFailed;
+
   const isSubmitting = fetcher.state === "submitting";
 
   // Reset idempotency cursor when session changes
@@ -89,15 +95,14 @@ export function ChatInput({
     if (fetcher.state === "idle" && fetcher.data) {
       const data = fetcher.data;
       if ("error" in data) {
-        onMessageFailed?.(new Error(data.error));
+        onMessageFailedRef.current?.(new Error(data.error));
       } else {
-        // Success - update idempotency ref, clear text, call callback
         previousUserMessageEventIdRef.current = data.event_id;
         setText("");
-        onMessageSent?.(data, pendingTextRef.current);
+        onMessageSentRef.current?.(data, pendingTextRef.current);
       }
     }
-  }, [fetcher.state, fetcher.data, onMessageSent, onMessageFailed]);
+  }, [fetcher.state, fetcher.data]);
 
   const handleSend = useCallback(() => {
     const trimmedText = text.trim();
