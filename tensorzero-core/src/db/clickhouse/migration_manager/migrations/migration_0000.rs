@@ -271,7 +271,7 @@ impl Migration for Migration0000<'_> {
             /* drop it here to ensure a truly clean start.*/\
             DROP TABLE IF EXISTS TensorZeroMigration{on_cluster_name} SYNC;
             /* Drop the database */\
-            DROP DATABASE IF EXISTS {database}{on_cluster_name};\
+            DROP DATABASE IF EXISTS \"{database}\"{on_cluster_name};\
             /* **CAREFUL: THIS WILL DELETE ALL DATA** */"
         )
     }

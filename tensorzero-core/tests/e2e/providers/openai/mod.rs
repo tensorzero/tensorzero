@@ -292,6 +292,7 @@ async fn get_providers() -> E2ETestProviders {
         // reasoning_inference: reasoning_providers,
         reasoning_inference: vec![],
         reasoning_usage_inference: reasoning_usage_providers,
+        cache_input_tokens_inference: standard_providers.clone(),
         embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,

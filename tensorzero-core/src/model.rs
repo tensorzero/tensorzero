@@ -2735,6 +2735,7 @@ impl ShorthandModelConfig for ModelConfig {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::sync::Arc;
 
     use crate::cache::CacheEnabledMode;
     use crate::config::with_skip_credential_validation;
@@ -3674,7 +3675,7 @@ mod tests {
             .await
             .unwrap()
             .expect("Missing dummy model");
-        assert_eq!(model_config.routing, vec!["dummy".into()]);
+        assert_eq!(model_config.routing, vec![Arc::<str>::from("dummy")]);
         let provider_config = &model_config.providers.get("dummy").unwrap().config;
         match provider_config {
             ProviderConfig::Dummy(provider) => assert_eq!(&*provider.model_name, "gpt-4o"),
