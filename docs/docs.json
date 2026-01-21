@@ -130,6 +130,7 @@
               "deployment/tensorzero-ui",
               "deployment/clickhouse",
               "deployment/postgres",
+              "deployment/valkey",
               "deployment/optimize-latency-and-throughput"
             ]
           },

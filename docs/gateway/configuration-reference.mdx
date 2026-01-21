@@ -4544,7 +4544,8 @@ There are no additional fields available for this type.
 
 The `[postgres]` section defines the configuration for PostgreSQL connectivity.
 
-PostgreSQL is required for certain TensorZero features including [rate limiting](/operations/enforce-custom-rate-limits/) and [Track-and-Stop experimentation](/experimentation/run-adaptive-ab-tests/).
+PostgreSQL is required for certain TensorZero features including [Track-and-Stop experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
+PostgreSQL can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey) is recommended for high-throughput deployments.
 You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environment variable.
 
 ### `connection_pool_size`
@@ -4564,7 +4565,7 @@ If `true`, the gateway will throw an error on startup if it fails to connect to 
 If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
 If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
 
-If you have features that require PostgreSQL (e.g. rate limiting, adaptive experimentation) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
+If you have features that require PostgreSQL (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
 
 ## `[rate_limiting]`
 
