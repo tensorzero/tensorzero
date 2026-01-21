@@ -1008,6 +1008,7 @@ async fn test_rate_limiting_time_intervals_streaming() {
 
 async fn test_rate_limiting_time_intervals_helper(stream: bool) {
     // Test different time intervals work correctly
+    // We use concurrent requests to avoid flakiness from token refill if the requests are not cached
     let id = Uuid::now_v7();
     let config = generate_rate_limit_config(&[&format!(
         r#"[[rate_limiting.rules]]
@@ -1022,16 +1023,22 @@ scope = [
         tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags = HashMap::from([(format!("test12_user_id_{id}"), "123".to_string())]);
 
-    // Should be able to make 2 requests per second
-    let result1 = make_request_with_tags(&client, tags.clone(), stream).await;
-    assert!(result1.is_ok());
+    // Launch 3 concurrent requests - exactly 2 should succeed due to capacity limit
+    let (result1, result2, result3) = futures::join!(
+        make_request_with_tags(&client, tags.clone(), stream),
+        make_request_with_tags(&client, tags.clone(), stream),
+        make_request_with_tags(&client, tags.clone(), stream),
+    );
 
-    let result2 = make_request_with_tags(&client, tags.clone(), stream).await;
-    assert!(result2.is_ok());
+    let results = [&result1, &result2, &result3];
+    let success_count = results.iter().filter(|r| r.is_ok()).count();
+    let failure_count = results.iter().filter(|r| r.is_err()).count();
 
-    // Third request should fail
-    let result3 = make_request_with_tags(&client, tags.clone(), stream).await;
-    assert_rate_limit_exceeded(result3);
+    assert_eq!(
+        success_count, 2,
+        "Should have exactly 2 successful requests (capacity = 2)"
+    );
+    assert_eq!(failure_count, 1, "Should have exactly 1 failed request");
 }
 
 #[tokio::test(flavor = "multi_thread")]
