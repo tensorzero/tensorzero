@@ -6,7 +6,8 @@
       {
         "ordinal": 0,
         "name": "get_resource_bucket_balance",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": "Expression"
       }
     ],
     "parameters": {
