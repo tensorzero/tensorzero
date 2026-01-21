@@ -178,6 +178,13 @@ impl TensorZeroClient for MockTensorZeroClient {
         Err(TensorZeroClientError::AutopilotUnavailable)
     }
 
+    async fn get_inferences(
+        &self,
+        _request: tensorzero::GetInferencesRequest,
+    ) -> Result<tensorzero::GetInferencesResponse, TensorZeroClientError> {
+        Err(TensorZeroClientError::AutopilotUnavailable)
+    }
+
     async fn launch_optimization_workflow(
         &self,
         _params: LaunchOptimizationWorkflowParams,

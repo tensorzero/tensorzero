@@ -15,9 +15,9 @@ use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
     FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
-    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
-    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
-    WriteConfigRequest, WriteConfigResponse,
+    GetInferencesRequest, GetInferencesResponse, InferenceOutput, InferenceResponse,
+    ListDatapointsRequest, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -443,6 +443,20 @@ impl TensorZeroClient for Client {
         ClientExt::list_inferences(self, request)
             .await
             .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn get_inferences(
+        &self,
+        request: GetInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        ClientExt::get_inferences(
+            self,
+            request.ids,
+            request.function_name,
+            request.output_source,
+        )
+        .await
+        .map_err(TensorZeroClientError::TensorZero)
     }
 
     // ========== Optimization Operations ==========
