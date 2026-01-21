@@ -15,4 +15,4 @@ export type EventPayload =
   | ({ type: "tool_call" } & AutopilotToolCall)
   | ({ type: "tool_call_authorization" } & ToolCallAuthorization)
   | { type: "tool_result"; tool_call_event_id: string; outcome: ToolOutcome }
-  | { type: "other" };
+  | { type: "unknown" };

@@ -179,7 +179,7 @@ function summarizeEvent(event: Event): EventSummary {
     case "error":
       // TODO: handle errors
       return {};
-    case "other":
+    case "unknown":
       return {};
     default:
       return {};
@@ -251,7 +251,7 @@ function renderEventTitle(event: Event) {
               </Tooltip>
             </span>
           );
-        case "other":
+        case "unknown":
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
@@ -284,7 +284,7 @@ function renderEventTitle(event: Event) {
     case "error":
       // TODO: handle errors better
       return "Error";
-    case "other":
+    case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
           <span>Unknown Event</span>
