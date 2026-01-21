@@ -6359,7 +6359,6 @@ dependencies = [
 name = "tensorzero-optimizers"
 version = "2026.1.2"
 dependencies = [
- "async-trait",
  "axum",
  "base64 0.22.1",
  "chrono",

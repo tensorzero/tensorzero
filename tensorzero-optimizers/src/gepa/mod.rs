@@ -1,6 +1,5 @@
 //! GEPA optimizer implementation
 
-use async_trait::async_trait;
 use futures::future::join_all;
 use rand::{SeedableRng, rngs::StdRng, seq::IteratorRandom};
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -46,7 +45,6 @@ pub struct GEPAVariant {
     pub config: UninitializedChatCompletionConfig,
 }
 
-#[async_trait]
 impl Optimizer for GEPAConfig {
     type Handle = GEPAJobHandle;
 
@@ -578,7 +576,6 @@ impl Optimizer for GEPAConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for GEPAJobHandle {
     async fn poll(
         &self,
