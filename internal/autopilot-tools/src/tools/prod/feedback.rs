@@ -15,8 +15,7 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the feedback tool (visible to LLM).
-#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FeedbackToolParams {
     /// The episode ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
     #[serde(default)]

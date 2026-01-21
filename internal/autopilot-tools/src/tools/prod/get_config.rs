@@ -13,8 +13,7 @@ use tensorzero::GetConfigResponse;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_config tool (visible to LLM).
-#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct GetConfigToolParams {}
 
 /// Tool for retrieving config snapshots.

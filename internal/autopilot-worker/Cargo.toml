@@ -7,7 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 # Internal crates
-durable-tools = { path = "../durable-tools" }
+durable-tools = { path = "../durable-tools", features = ["json-schema-bindings"] }
 tensorzero-core = { path = "../../tensorzero-core" }
 autopilot-client = { path = "../autopilot-client" }
 autopilot-tools = { path = "../autopilot-tools" }

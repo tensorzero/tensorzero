@@ -19,8 +19,7 @@ use tensorzero_core::optimization::{
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
-#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct LaunchOptimizationWorkflowToolParams {
     /// The function name to optimize.
     pub function_name: String,

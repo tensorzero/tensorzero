@@ -12,8 +12,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
 
 /// Parameters for the create_datapoints_from_inferences tool (visible to LLM).
-#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CreateDatapointsFromInferencesToolParams {
     /// The name of the dataset to create datapoints in.
     pub dataset_name: String,

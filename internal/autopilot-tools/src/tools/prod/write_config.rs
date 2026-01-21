@@ -16,8 +16,7 @@ use tensorzero_core::config::UninitializedConfig;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the write_config tool (visible to LLM).
-#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct WriteConfigToolParams {
     /// The config to write as a JSON object.
     pub config: Value,

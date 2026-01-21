@@ -13,8 +13,7 @@ use tensorzero::{UpdateDatapointRequest, UpdateDatapointsResponse};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the update_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct UpdateDatapointsToolParams {
     /// The name of the dataset containing the datapoints.
     pub dataset_name: String,
