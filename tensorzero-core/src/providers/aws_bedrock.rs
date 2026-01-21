@@ -268,9 +268,8 @@ impl InferenceProvider for AWSBedrockProvider {
         // Peek first chunk
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
 
-        // Handle JSON prefill for streaming
+        // Handle JSON prefill for streaming.
         if needs_json_prefill(&self.model_id, request) {
-            warn_bedrock_strict_json_mode(request.json_mode);
             prefill_json_chunk_response(chunk);
         }
 

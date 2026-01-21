@@ -334,13 +334,12 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
-        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
+        // Handle JSON prefill for streaming.
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
-            warn_gcp_vertex_anthropic_strict_json_mode(request.json_mode);
             prefill_json_chunk_response(chunk);
         }
         Ok((stream, raw_request))
