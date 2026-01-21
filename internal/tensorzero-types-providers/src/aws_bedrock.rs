@@ -433,16 +433,3 @@ pub struct MetadataEvent {
     #[serde(default)]
     pub metrics: Option<Metrics>,
 }
-
-// =============================================================================
-// Error Types
-// =============================================================================
-
-/// Error response from Bedrock API
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BedrockErrorResponse {
-    pub message: Option<String>,
-    #[serde(rename = "__type")]
-    pub error_type: Option<String>,
-}

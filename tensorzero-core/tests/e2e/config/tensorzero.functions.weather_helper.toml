@@ -253,6 +253,12 @@ model = "grok_4_1_fast_non_reasoning"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.weather_helper.variants.xai-reasoning]
+type = "chat_completion"
+model = "grok-3-mini"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 800
+
 # OpenRouter reasoning variants
 
 # Grok 3 Mini with `reasoning_effort`-based reasoning

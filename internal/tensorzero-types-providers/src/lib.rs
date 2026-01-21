@@ -4,3 +4,4 @@
 
 pub mod aws_bedrock;
 pub mod openrouter;
+pub mod xai;

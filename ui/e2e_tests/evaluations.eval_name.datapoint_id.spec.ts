@@ -7,7 +7,12 @@ test("should show the evaluation result datapoint detail page", async ({
     "/evaluations/entity_extraction/01939a16-b258-71e1-a467-183001c1952c?evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24%2C0196368e-53a8-7e82-a88d-db7086926d81",
   );
 
-  await expect(page.getByText("Datapoint", { exact: true })).toHaveCount(2);
+  // Verify breadcrumb shows "Results" for evaluation datapoint page
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Results", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("gpt4o_mini_initial_prompt")).toHaveCount(2);
   await expect(page.getByText("gpt4o_initial_prompt")).toHaveCount(2);
 
@@ -155,8 +160,12 @@ test("should be able to add a datapoint from the evaluation page", async ({
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
 
-  // Verify we can see the datapoint content
-  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+  // Verify we can see the datapoint page loaded (breadcrumb shows "Datapoints")
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Datapoints", { exact: true }),
+  ).toBeVisible();
 
   // Clean up: delete the dataset by going to the list datasets page
   await page.goto("/datasets");

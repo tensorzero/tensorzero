@@ -1,52 +1,44 @@
-use crate::http::TensorzeroHttpClient;
-use crate::inference::types::Latency;
-use crate::inference::{InferenceProvider, WrappedProvider};
-use crate::providers::aws_common::{
-    AWSCredentials, AWSEndpointUrl, AWSRegion, InterceptorAndRawBody, build_interceptor,
-    warn_if_credential_exfiltration_risk,
-};
-use crate::{
-    cache::ModelProviderRequest,
-    endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
-    inference::types::{
-        ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-    },
-    model::ModelProvider,
-};
-use aws_config::Region;
-use aws_sdk_sagemakerruntime::types::ResponseStream;
-use aws_smithy_types::error::display::DisplayErrorContext;
-use eventsource_stream::{EventStreamError, Eventsource};
+//! AWS SageMaker model provider using direct HTTP calls.
+
+use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
+use aws_types::region::Region;
+use bytes::BytesMut;
+use eventsource_stream::Eventsource;
 use futures::StreamExt;
 use serde::Serialize;
 use std::time::Instant;
 
-use super::aws_common;
-use crate::inference::TensorZeroEventError;
+use super::aws_common::{
+    AWSCredentials, AWSEndpointUrl, AWSProviderConfig, AWSRegion, check_eventstream_exception,
+    send_aws_request, sign_request,
+};
+use super::helpers::inject_extra_request_data;
+use crate::cache::ModelProviderRequest;
+use crate::endpoints::inference::InferenceCredentials;
+use crate::error::{Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
+use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::{
+    Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, batch::StartBatchProviderInferenceResponse,
+};
+use crate::inference::{InferenceProvider, TensorZeroEventError, WrappedProvider};
+use crate::model::ModelProvider;
+use eventsource_stream::EventStreamError;
 
 #[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Sagemaker";
 const PROVIDER_TYPE: &str = "aws_sagemaker";
 
-// NB: If you add `Clone` someday, you'll need to wrap client in Arc
+/// AWS SageMaker provider using direct HTTP calls.
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct AWSSagemakerProvider {
     endpoint_name: String,
     #[serde(skip)]
-    client: aws_sdk_sagemakerruntime::Client,
+    config: AWSProviderConfig,
     #[serde(skip)] // TODO: add a way to Serialize the WrappedProvider
     pub hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
-    #[serde(skip)]
-    base_config: aws_sdk_sagemakerruntime::config::Builder,
-    #[serde(skip)]
-    region: Option<AWSRegion>,
-    #[serde(skip)]
-    endpoint_url: Option<AWSEndpointUrl>,
-    #[serde(skip)]
-    credentials: AWSCredentials,
 }
 
 impl AWSSagemakerProvider {
@@ -58,62 +50,66 @@ impl AWSSagemakerProvider {
         endpoint_url: Option<AWSEndpointUrl>,
         credentials: AWSCredentials,
     ) -> Result<Self, Error> {
-        let config = aws_common::config_with_region(PROVIDER_TYPE, static_region).await?;
-
-        let mut config_builder = aws_sdk_sagemakerruntime::config::Builder::from(&config);
-
-        // Apply static endpoint URL at construction time
-        if let Some(ref ep) = endpoint_url
-            && let Some(url) = ep.get_static_url()
-        {
-            config_builder = config_builder.endpoint_url(url.as_str());
-        }
-
-        // Apply static credentials at construction time
-        if let Some(static_creds) = credentials.get_static_credentials() {
-            config_builder = config_builder.credentials_provider(static_creds);
-        }
-
-        // Warn about potential credential exfiltration risk
-        warn_if_credential_exfiltration_risk(&endpoint_url, &credentials, PROVIDER_TYPE);
-
-        let client = aws_sdk_sagemakerruntime::Client::from_conf(config_builder.clone().build());
-
-        Ok(Self {
-            endpoint_name,
-            client,
-            hosted_provider,
-            base_config: config_builder,
+        let config = AWSProviderConfig::new(
+            static_region,
             region,
             endpoint_url,
             credentials,
+            PROVIDER_TYPE,
+        )
+        .await?;
+
+        Ok(Self {
+            endpoint_name,
+            config,
+            hosted_provider,
         })
     }
+}
 
-    /// Apply dynamic region, endpoint URL, and/or credentials to a config builder.
-    fn apply_dynamic_overrides(
-        &self,
-        mut config: aws_sdk_sagemakerruntime::config::Builder,
-        dynamic_api_keys: &InferenceCredentials,
-    ) -> Result<aws_sdk_sagemakerruntime::config::Builder, Error> {
-        if let Some(region) = &self.region
-            && region.is_dynamic()
-        {
-            let resolved_region = region.resolve(dynamic_api_keys)?;
-            config = config.region(resolved_region);
-        }
-        if let Some(endpoint_url) = &self.endpoint_url
-            && matches!(endpoint_url, AWSEndpointUrl::Dynamic(_))
-        {
-            let url = endpoint_url.resolve(dynamic_api_keys)?;
-            config = config.endpoint_url(url.as_str());
-        }
-        if self.credentials.is_dynamic() {
-            let resolved_credentials = self.credentials.resolve(dynamic_api_keys)?;
-            config = config.credentials_provider(resolved_credentials);
-        }
-        Ok(config)
+/// Prepared request body ready for signing and sending
+struct PreparedSagemakerRequest {
+    raw_request: String,
+    body_bytes: Vec<u8>,
+    http_extra_headers: http::HeaderMap,
+}
+
+/// Prepare the request body: build request using hosted provider, serialize, inject extras
+async fn prepare_sagemaker_request<'a>(
+    request: ModelProviderRequest<'a>,
+    model_provider: &'a ModelProvider,
+    hosted_provider: &'a (dyn WrappedProvider + Send + Sync),
+) -> Result<PreparedSagemakerRequest, Error> {
+    // Build request body using WrappedProvider
+    let request_body = hosted_provider.make_body(request).await?;
+
+    // Inject extra body/headers
+    let mut body_json = request_body;
+    let http_extra_headers = inject_extra_request_data(
+        &request.request.extra_body,
+        &request.request.extra_headers,
+        model_provider,
+        request.model_name,
+        &mut body_json,
+    )?;
+
+    // Sort for consistent ordering in tests
+    if cfg!(feature = "e2e_tests") {
+        body_json.sort_all_objects();
     }
+
+    let raw_request = serde_json::to_string(&body_json).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize request: {e}"),
+        })
+    })?;
+    let body_bytes = raw_request.as_bytes().to_vec();
+
+    Ok(PreparedSagemakerRequest {
+        raw_request,
+        body_bytes,
+        http_extra_headers,
+    })
 }
 
 impl InferenceProvider for AWSSagemakerProvider {
@@ -124,79 +120,64 @@ impl InferenceProvider for AWSSagemakerProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = self.hosted_provider.make_body(request).await?;
-        let InterceptorAndRawBody {
-            interceptor,
-            get_raw_request,
-            get_raw_response,
-        } = build_interceptor(
-            request.request,
-            model_provider,
-            request.model_name.to_string(),
+        // Save references we need later (these are all Copy or references)
+        let inner_request = request.request;
+        let model_name = request.model_name;
+        let provider_name = request.provider_name;
+        let model_inference_id = request.model_inference_id;
+
+        // Prepare the request body
+        let PreparedSagemakerRequest {
+            raw_request,
+            body_bytes,
+            http_extra_headers,
+        } = prepare_sagemaker_request(request, model_provider, &*self.hosted_provider).await?;
+
+        // Build URL
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "runtime.sagemaker", PROVIDER_TYPE)?;
+        let url = format!(
+            "{}/endpoints/{}/invocations",
+            base_url,
+            urlencoding::encode(&self.endpoint_name)
         );
 
-        // Use our custom `reqwest::Client` when making requests to Sagemaker.
-        // This ensures that our HTTP proxy (TENSORZERO_E2E_PROXY) is used
-        // here when it's enabled.
-        let new_config = self
-            .base_config
-            .clone()
-            .http_client(super::aws_http_client::Client::new(http_client.clone()));
-        let new_config = self.apply_dynamic_overrides(new_config, dynamic_api_keys)?;
+        // Get credentials and region
+        let credentials = self
+            .config
+            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+            .await?;
+        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
-        let start_time = Instant::now();
-        let res = self
-            .client
-            .invoke_endpoint()
-            .endpoint_name(self.endpoint_name.clone())
-            .body(request_body.to_string().into_bytes().into())
-            .content_type("application/json")
-            .customize()
-            .config_override(new_config)
-            .interceptor(interceptor)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error sending request to AWS Sagemaker: {}",
-                        DisplayErrorContext(&e)
-                    ),
-                    raw_request: get_raw_request().ok(),
-                    raw_response: get_raw_response().ok(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+        // Send signed request
+        let aws_response = send_aws_request(
+            http_client,
+            &url,
+            http_extra_headers,
+            body_bytes,
+            &credentials,
+            region.as_ref(),
+            "sagemaker",
+            PROVIDER_TYPE,
+            &raw_request,
+        )
+        .await?;
 
         let latency = Latency::NonStreaming {
-            response_time: start_time.elapsed(),
+            response_time: aws_response.response_time,
         };
+        let raw_response = aws_response.raw_response;
 
-        let raw_request = get_raw_request()?;
-        let raw_response = res.body.ok_or_else(|| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: "Missing response body".to_string(),
-                raw_request: Some(raw_request.clone()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let raw_response_string = String::from_utf8(raw_response.into_inner()).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error converting raw response to string: {e}"),
-                raw_request: Some(raw_request.clone()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+        // Parse response using WrappedProvider
         self.hosted_provider.parse_response(
-            request.request,
+            inner_request,
             raw_request,
-            raw_response_string,
+            raw_response,
             latency,
-            request.model_name,
-            request.provider_name,
-            request.model_inference_id,
+            model_name,
+            provider_name,
+            model_inference_id,
         )
     }
 
@@ -207,101 +188,162 @@ impl InferenceProvider for AWSSagemakerProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = self.hosted_provider.make_body(request).await?;
+        // Save references we need later
+        let model_inference_id = request.model_inference_id;
 
-        let InterceptorAndRawBody {
-            interceptor,
-            get_raw_request,
-            get_raw_response,
-        } = build_interceptor(
-            request.request,
-            model_provider,
-            request.model_name.to_string(),
+        // Prepare the request body
+        let PreparedSagemakerRequest {
+            raw_request,
+            body_bytes,
+            http_extra_headers,
+        } = prepare_sagemaker_request(request, model_provider, &*self.hosted_provider).await?;
+
+        // Build URL for streaming endpoint
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "runtime.sagemaker", PROVIDER_TYPE)?;
+        let url = format!(
+            "{}/endpoints/{}/invocations-response-stream",
+            base_url,
+            urlencoding::encode(&self.endpoint_name)
         );
 
-        // See `infer` for more details
-        let new_config = self
-            .base_config
-            .clone()
-            .http_client(super::aws_http_client::Client::new(http_client.clone()));
-        let new_config = self.apply_dynamic_overrides(new_config, dynamic_api_keys)?;
+        // Get credentials and region
+        let credentials = self
+            .config
+            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+            .await?;
+        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
+        // Build headers
+        let mut headers = http_extra_headers;
+        headers.insert(
+            http::header::CONTENT_TYPE,
+            http::header::HeaderValue::from_static("application/json"),
+        );
+
+        // Sign the request
+        let signed_headers = sign_request(
+            "POST",
+            &url,
+            &headers,
+            &body_bytes,
+            &credentials,
+            region.as_ref(),
+            "sagemaker",
+            PROVIDER_TYPE,
+        )?;
+
+        // Send request
         let start_time = Instant::now();
-        let res = self
-            .client
-            .invoke_endpoint_with_response_stream()
-            .endpoint_name(self.endpoint_name.clone())
-            .body(request_body.to_string().into_bytes().into())
-            .content_type("application/json")
-            .customize()
-            .config_override(new_config)
-            .interceptor(interceptor)
+        let response = http_client
+            .post(&url)
+            .headers(signed_headers)
+            .body(body_bytes)
             .send()
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error sending request to AWS Sagemaker: {}",
-                        DisplayErrorContext(&e)
-                    ),
-                    raw_request: get_raw_request().ok(),
-                    raw_response: get_raw_response().ok(),
+                    message: format!("Error sending request to AWS Sagemaker: {e}"),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
-        let raw_request = get_raw_request()?;
+        let status = response.status();
+        if !status.is_success() {
+            let raw_response = response.text().await.unwrap_or_default();
+            return Err(Error::new(ErrorDetails::InferenceServer {
+                message: format!("AWS Sagemaker returned error status {status}: {raw_response}"),
+                raw_request: Some(raw_request),
+                raw_response: Some(raw_response),
+                provider_type: PROVIDER_TYPE.to_string(),
+            }));
+        }
 
-        let mut sdk_stream = res.body;
+        // Create the stream - decode Smithy EventStream, extract SSE payloads
+        let bytes_stream = response.bytes_stream();
         let raw_request_clone = raw_request.clone();
 
-        // We process the stream in two steps.
-        // First, we flatten the `aws_sdk_sagemakerruntime` stream into a stream of `Result<Vec<u8>, Error>`
-        // representing the raw bytes returned by the underlying Sagemaker container (from the internal `/invocations`)
+        // First, decode the outer Smithy EventStream and extract payload bytes
         let sagemaker_byte_stream = async_stream::stream! {
             let raw_request = raw_request_clone;
-            loop {
-                match sdk_stream.recv().await {
-                    Ok(Some(event)) =>  {
-                        match event {
-                            ResponseStream::PayloadPart(part) => {
-                                let bytes = part.bytes.ok_or_else(|| {
-                                    TensorZeroEventError::TensorZero(Error::new(ErrorDetails::InferenceServer {
-                                        message: "Sagemaker payload part is empty".to_string(),
-                                        provider_type: PROVIDER_TYPE.to_string(),
-                                        raw_request: Some(raw_request.clone()),
-                                        raw_response: None,
-                                    }))
-                                })?;
-                                yield Ok(bytes.into_inner());
+            let mut decoder = MessageFrameDecoder::new();
+            let mut buffer = BytesMut::new();
+            let mut bytes_stream = bytes_stream;
+
+            while let Some(chunk_result) = bytes_stream.next().await {
+                match chunk_result {
+                    Err(e) => {
+                        yield Err(TensorZeroEventError::TensorZero(Error::new(
+                            ErrorDetails::InferenceServer {
+                                message: format!("Error reading stream: {e}"),
+                                raw_request: Some(raw_request.clone()),
+                                raw_response: None,
+                                provider_type: PROVIDER_TYPE.to_string(),
                             }
-                            _ => {
-                                yield Err(TensorZeroEventError::TensorZero(Error::new(ErrorDetails::InferenceServer {
-                                    message: "Unexpected event type from Sagemaker".to_string(),
-                                    provider_type: PROVIDER_TYPE.to_string(),
-                                    raw_request: Some(raw_request.clone()),
-                                    raw_response: None,
-                                })));
+                        )));
+                        return;
+                    }
+                    Ok(chunk) => {
+                        buffer.extend_from_slice(&chunk);
+
+                        // Try to decode frames from the buffer
+                        loop {
+                            match decoder.decode_frame(&mut buffer) {
+                                Ok(DecodedFrame::Complete(message)) => {
+                                    // Check for exception messages using shared helper
+                                    if let Some((exception_type, error_message)) = check_eventstream_exception(&message) {
+                                        yield Err(TensorZeroEventError::TensorZero(Error::new(
+                                            ErrorDetails::InferenceServer {
+                                                message: format!("AWS Sagemaker streaming exception: {exception_type}"),
+                                                raw_request: Some(raw_request.clone()),
+                                                raw_response: Some(error_message),
+                                                provider_type: PROVIDER_TYPE.to_string(),
+                                            }
+                                        )));
+                                        return;
+                                    }
+
+                                    // Extract event type - should be PayloadPart for data
+                                    let event_type = message.headers().iter()
+                                        .find(|h| h.name().as_str() == ":event-type")
+                                        .and_then(|h| h.value().as_string().ok())
+                                        .map(|s| s.as_str().to_owned());
+
+                                    if event_type.as_deref() == Some("PayloadPart") {
+                                        // The payload contains the raw bytes from the hosted model
+                                        let payload = message.payload();
+                                        if !payload.is_empty() {
+                                            yield Ok(payload.to_vec());
+                                        }
+                                    }
+                                }
+                                Ok(DecodedFrame::Incomplete) => {
+                                    // Need more data
+                                    break;
+                                }
+                                Err(e) => {
+                                    yield Err(TensorZeroEventError::TensorZero(Error::new(
+                                        ErrorDetails::InferenceServer {
+                                            message: format!("Error decoding event stream frame: {e}"),
+                                            raw_request: Some(raw_request.clone()),
+                                            raw_response: None,
+                                            provider_type: PROVIDER_TYPE.to_string(),
+                                        }
+                                    )));
+                                    return;
+                                }
                             }
                         }
-                    }
-                    Ok(None) => break,
-                    Err(e) => {
-                        yield Err(TensorZeroEventError::TensorZero(Error::new(ErrorDetails::InferenceServer {
-                            raw_request: Some(raw_request.clone()),
-                            raw_response: None,
-                            message: e.to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                        })));
                     }
                 }
             }
         };
 
-        // Second, we convert this into a `reqwest_eventsource::Event` stream, using the underlying `eventsource_stream` crate
-        // to parse the raw byte stream into SEE events. We need to manually construct an `Open` event ourselves.
-        // While Sagemaker allows an arbitrary byte stream to be returned, we only support a few different 'wrapped' providers,
-        // (currently only the OpenAI provider targeting an ollama-based container), all of which currently produce an SSE event stream.
+        // Second, convert the byte stream to SSE events using eventsource_stream
+        // The payload bytes contain SSE text from the hosted model (OpenAI/TGI)
         let event_stream = futures::stream::iter([Ok(reqwest_eventsource::Event::Open)]).chain(
             sagemaker_byte_stream.eventsource().map(|r| match r {
                 Ok(msg) => Ok(reqwest_eventsource::Event::Message(msg)),
@@ -316,15 +358,18 @@ impl InferenceProvider for AWSSagemakerProvider {
                 },
             }),
         );
+
+        // Use WrappedProvider's stream_events to handle the inner SSE format
         let stream = self
             .hosted_provider
             .stream_events(
                 Box::pin(event_stream),
                 start_time.into(),
                 &raw_request,
-                request.model_inference_id,
+                model_inference_id,
             )
             .peekable();
+
         Ok((stream, raw_request))
     }
 
