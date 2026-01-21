@@ -110,6 +110,7 @@ pub struct E2ETestProviders {
     pub extra_body_inference: Vec<E2ETestProvider>,
     pub reasoning_inference: Vec<E2ETestProvider>,
     pub reasoning_usage_inference: Vec<E2ETestProvider>,
+    pub cache_input_tokens_inference: Vec<E2ETestProvider>,
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials_shorthand: Vec<E2ETestProvider>,
@@ -567,6 +568,22 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.reasoning_usage_inference;
             for provider in providers {
                 $crate::providers::commonv2::usage::test_reasoning_output_tokens_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_cache_input_tokens_non_streaming() {
+            let providers = $func().await.cache_input_tokens_inference;
+            for provider in providers {
+                $crate::providers::commonv2::cache_input_tokens::test_cache_input_tokens_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_cache_input_tokens_streaming() {
+            let providers = $func().await.cache_input_tokens_inference;
+            for provider in providers {
+                $crate::providers::commonv2::cache_input_tokens::test_cache_input_tokens_streaming_with_provider(provider).await;
             }
         }
 
