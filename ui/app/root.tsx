@@ -174,7 +174,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     setOpen(true);
   }, [error]);
 
-  // Client 404s - show PageNotFound in content area
+  // Client 404s (page not found in React Router) - show in content area with sidebar
+  // Check that it's not an infrastructure error (those go through classifyError)
   if (isRouteErrorResponse(error) && error.status === 404) {
     if (!isInfraErrorData(error.data)) {
       return (
@@ -183,6 +184,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     }
   }
 
+  // All other errors use the dismissible modal pattern with sidebar visible
   const classified = classifyError(error);
   const label = getErrorLabel(classified.type);
 

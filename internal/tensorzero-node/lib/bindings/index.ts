@@ -6,6 +6,8 @@ export * from "./AnthropicProvider";
 export * from "./ApiKeyPublicIdConfigScope";
 export * from "./ApiKeyPublicIdValueScope";
 export * from "./ApiType";
+export * from "./ApproveAllToolCallsGatewayRequest";
+export * from "./ApproveAllToolCallsResponse";
 export * from "./Arguments";
 export * from "./AutopilotSideInfo";
 export * from "./AutopilotStatus";

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -221,7 +222,7 @@ pub struct DemonstrationFeedbackRow {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]

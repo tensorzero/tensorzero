@@ -783,6 +783,7 @@ fn fireworks_to_tensorzero_chunk(
                 summary_text: None,
                 id: THINK_CHUNK_ID.to_string(),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }));
         }
         if let Some(text) = choice.delta.content {
@@ -803,6 +804,7 @@ fn fireworks_to_tensorzero_chunk(
                                 summary_text: None,
                                 id: thinking_state.get_id(),
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
                             }));
                         }
                     }
@@ -915,6 +917,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 signature: None,
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }));
         }
         if let Some(raw_text) = message.content {
@@ -926,6 +929,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                     signature: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             if !clean_text.is_empty() {

@@ -686,9 +686,13 @@ fn convert_converse_response(
         content = prefill_json_response(content)?;
     }
 
-    // Extract usage
+    // Extract usage - include cache tokens in input_tokens
+    // AWS Bedrock reports cache tokens separately from input_tokens
+    let total_input_tokens = response.usage.input_tokens as u32
+        + response.usage.cache_read_input_tokens.unwrap_or(0) as u32
+        + response.usage.cache_write_input_tokens.unwrap_or(0) as u32;
     let usage = Usage {
-        input_tokens: Some(response.usage.input_tokens as u32),
+        input_tokens: Some(total_input_tokens),
         output_tokens: Some(response.usage.output_tokens as u32),
     };
 
@@ -755,6 +759,7 @@ fn convert_response_content_block(
                     summary: None,
                     signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })))
             }
             ResponseReasoningContent::RedactedContent(_) => {
@@ -981,6 +986,7 @@ fn process_stream_event(
                                 summary_text: None,
                                 signature: None,
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
                             })],
                             None,
                             raw_message,
@@ -997,6 +1003,7 @@ fn process_stream_event(
                                 summary_text: None,
                                 signature: Some(signature),
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
                             })],
                             None,
                             raw_message,
@@ -1043,8 +1050,13 @@ fn process_stream_event(
                     )
                 });
 
+            // Include cache tokens in input_tokens
+            // AWS Bedrock reports cache tokens separately from input_tokens
+            let total_input_tokens = event.usage.input_tokens as u32
+                + event.usage.cache_read_input_tokens.unwrap_or(0) as u32
+                + event.usage.cache_write_input_tokens.unwrap_or(0) as u32;
             let usage = Some(Usage {
-                input_tokens: Some(event.usage.input_tokens as u32),
+                input_tokens: Some(total_input_tokens),
                 output_tokens: Some(event.usage.output_tokens as u32),
             });
 

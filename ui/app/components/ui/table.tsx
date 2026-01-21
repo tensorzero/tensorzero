@@ -1,6 +1,9 @@
 import * as React from "react";
+import { useAsyncError } from "react-router";
+import { AlertCircle } from "lucide-react";
 
 import { cn } from "~/utils/common";
+import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 
 const Table = React.forwardRef<
   HTMLTableElement,
@@ -130,14 +133,52 @@ const TableEmptyState = React.forwardRef<
 ));
 TableEmptyState.displayName = "TableEmptyState";
 
+interface TableAsyncErrorStateProps {
+  colSpan: number;
+  defaultMessage?: string;
+}
+
+/**
+ * Error state for tables using React Router's <Await> component.
+ * Must be rendered inside an <Await errorElement={...}> to access the async error.
+ * @throws Error if used outside of an <Await errorElement={...}> context
+ */
+function TableAsyncErrorState({
+  colSpan,
+  defaultMessage = "Failed to load data",
+}: TableAsyncErrorStateProps) {
+  const error = useAsyncError();
+
+  if (error === undefined) {
+    throw new Error(
+      "TableAsyncErrorState must be used inside an <Await errorElement={...}>",
+    );
+  }
+
+  const message = error instanceof Error ? error.message : defaultMessage;
+
+  return (
+    <TableRow>
+      <TableCell colSpan={colSpan}>
+        <TableErrorNotice
+          icon={AlertCircle}
+          title="Error loading data"
+          description={message}
+        />
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export {
   Table,
-  TableHeader,
+  TableAsyncErrorState,
   TableBody,
+  TableCaption,
+  TableCell,
+  TableEmptyState,
   TableFooter,
   TableHead,
+  TableHeader,
   TableRow,
-  TableCell,
-  TableCaption,
-  TableEmptyState,
 };
