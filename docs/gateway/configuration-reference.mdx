@@ -1409,7 +1409,7 @@ This field can be either a string for a single credential location, or an object
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
-[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+[models."openai/gpt-oss-20b".providers.hyperbolic]
 # ...
 type = "hyperbolic"
 api_key_location = "dynamic::hyperbolic_api_key"
@@ -1428,10 +1428,10 @@ Defines the model name to use with the Hyperbolic API.
 See [Hyperbolic's documentation](https://app.hyperbolic.xyz/models) for the list of available model names.
 
 ```toml title="tensorzero.toml"
-[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+[models."openai/gpt-oss-20b".providers.hyperbolic]
 # ...
 type = "hyperbolic"
-model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+model_name = "openai/gpt-oss-20b"
 # ...
 ```
 

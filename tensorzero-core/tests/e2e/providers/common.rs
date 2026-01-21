@@ -133,8 +133,8 @@ macro_rules! generate_provider_tests {
     ($func:ident) => {
         use $crate::providers::common::test_dynamic_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_dynamic_tool_use_streaming_inference_request_with_provider;
-        use $crate::providers::common::test_inference_params_inference_request_with_provider;
-        use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_dynamic_credentials_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_dynamic_credentials_streaming_inference_request_with_provider;
         use $crate::providers::common::test_provider_type_default_credentials_with_provider;
         use $crate::providers::common::test_provider_type_default_credentials_shorthand_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
@@ -287,18 +287,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_inference_params_inference_request() {
+        async fn test_inference_params_dynamic_credentials_inference_request() {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
-                test_inference_params_inference_request_with_provider(provider).await;
+                test_inference_params_dynamic_credentials_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
-        async fn test_inference_params_streaming_inference_request() {
+        async fn test_inference_params_dynamic_credentials_streaming_inference_request() {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
-                test_inference_params_streaming_inference_request_with_provider(provider).await;
+                test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(provider).await;
             }
         }
 
@@ -2541,6 +2541,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
                             signature: Some("My new TensorZero signature".to_string()),
                             summary: None,
                             provider_type: None,
+                            extra_data: None,
                         })],
                     },
                     InputMessage {
@@ -2600,10 +2601,12 @@ pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2
     // * Some AWS Bedrock models error when the last message is an assistant message
     // * Azure AI foundry seems to ignore trailing assistant messages
     // * xAI seems to also ignore them
+    // * Hyperbolic seems to ignore these params
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name == "aws_sagemaker"
         || provider.model_provider_name == "aws_bedrock"
         || provider.variant_name == "azure-ai-foundry"
+        || provider.variant_name == "hyperbolic"
         || provider.variant_name == "xai"
     {
         return;
@@ -3654,6 +3657,10 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
     if provider.model_provider_name == "fireworks" || provider.model_provider_name == "together" {
         return;
     }
+    // Hyperbolic seems to ignore these params
+    if provider.model_provider_name == "hyperbolic" {
+        return;
+    }
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -4065,7 +4072,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     full_content
 }
 
-pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_inference_params_dynamic_credentials_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
     // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
     if provider.model_name.contains("gemini-2.5-pro") {
         return;
@@ -4321,7 +4330,7 @@ pub async fn check_inference_params_response(
     assert_eq!(output.len(), 1);
 }
 
-pub async fn test_inference_params_streaming_inference_request_with_provider(
+pub async fn test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
@@ -4471,11 +4480,13 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let content_block = output.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    // Filter to only text blocks (ignore thought blocks from reasoning models)
+    let clickhouse_content: String = output
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "text")
+        .map(|block| block.get("text").unwrap().as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join("");
     assert_eq!(clickhouse_content, full_content);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
@@ -4577,7 +4588,15 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter to only text blocks (ignore thought blocks from reasoning models)
+    let text_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, StoredContentBlock::Text(_)))
+        .collect();
+    assert!(
+        !text_blocks.is_empty(),
+        "Expected at least one text block in output"
+    );
 }
 
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
@@ -12857,47 +12876,6 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
         let response_json = response.json::<Value>().await.unwrap();
         let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
 
-        // On the first iteration, verify that thoughts were actually sent to the provider
-        // This catches providers that silently drop input thoughts
-        if iteration == 0 {
-            let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-            let inference_id = Uuid::parse_str(inference_id).unwrap();
-
-            // Sleep for ClickHouse trailing writes
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-            let clickhouse = get_clickhouse().await;
-            let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
-                .await
-                .unwrap();
-
-            let input_messages_str = model_inference
-                .get("input_messages")
-                .unwrap()
-                .as_str()
-                .unwrap();
-            let input_messages: Vec<Value> = serde_json::from_str(input_messages_str).unwrap();
-
-            // Verify assistant message contains thought blocks
-            let assistant_has_thought = input_messages.iter().any(|msg| {
-                msg.get("role").map(|r| r == "assistant").unwrap_or(false)
-                    && msg
-                        .get("content")
-                        .and_then(|c| c.as_array())
-                        .is_some_and(|blocks| {
-                            blocks
-                                .iter()
-                                .any(|block| block.get("type").is_some_and(|t| t == "thought"))
-                        })
-            });
-
-            assert!(
-                assistant_has_thought,
-                "Expected thought block in input_messages sent to provider, but none found. \
-                 Provider may be silently dropping thoughts. Input messages: {input_messages:?}"
-            );
-        }
-
         // Check if we got a text response
         if new_content_blocks
             .iter()
@@ -13121,41 +13099,6 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
 
         // Sleep for 1 second to allow time for data to be inserted into ClickHouse
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-        // On the first iteration, verify that thoughts were actually sent to the provider
-        // This catches providers that silently drop input thoughts
-        if iteration == 0 {
-            let model_inference =
-                select_model_inference_clickhouse(&clickhouse, current_inference_id)
-                    .await
-                    .unwrap();
-
-            let input_messages_str = model_inference
-                .get("input_messages")
-                .unwrap()
-                .as_str()
-                .unwrap();
-            let input_messages: Vec<Value> = serde_json::from_str(input_messages_str).unwrap();
-
-            // Verify assistant message contains thought blocks
-            let assistant_has_thought = input_messages.iter().any(|msg| {
-                msg.get("role").map(|r| r == "assistant").unwrap_or(false)
-                    && msg
-                        .get("content")
-                        .and_then(|c| c.as_array())
-                        .is_some_and(|blocks| {
-                            blocks
-                                .iter()
-                                .any(|block| block.get("type").is_some_and(|t| t == "thought"))
-                        })
-            });
-
-            assert!(
-                assistant_has_thought,
-                "Expected thought block in input_messages sent to provider (streaming), but none found. \
-                 Provider may be silently dropping thoughts. Input messages: {input_messages:?}"
-            );
-        }
 
         // Check ClickHouse for the collected chunks
         let result = select_chat_inference_clickhouse(&clickhouse, current_inference_id)

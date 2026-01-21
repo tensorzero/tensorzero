@@ -6,6 +6,7 @@ use futures::future::try_join_all;
 use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 
 use super::helpers::{
@@ -632,8 +633,9 @@ fn prefill_json_message(messages: &mut Vec<AnthropicMessage>) {
     });
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 pub enum GCPVertexAnthropicContentBlock {
     Text {
         text: String,
@@ -681,6 +683,7 @@ fn convert_to_output(
             signature: Some(signature),
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         })),
         FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
@@ -688,6 +691,7 @@ fn convert_to_output(
                 signature: Some(data),
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }))
         }
         FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown(Unknown {

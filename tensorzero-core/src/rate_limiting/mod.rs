@@ -1,9 +1,9 @@
+use sqlx::postgres::types::PgInterval;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use axum::Extension;
 use serde::{Deserialize, Serialize, Serializer};
-use sqlx::postgres::types::PgInterval;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -304,7 +304,7 @@ impl ActiveRateLimit {
             key: self.get_key()?,
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
-            refill_interval: self.limit.interval.to_pg_interval(),
+            refill_interval: self.limit.interval,
             requested,
         })
     }
@@ -315,7 +315,7 @@ impl ActiveRateLimit {
             key: self.get_key()?,
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
-            refill_interval: self.limit.interval.to_pg_interval(),
+            refill_interval: self.limit.interval,
             returned,
         })
     }
@@ -442,7 +442,7 @@ impl EstimatedRateLimitResourceUsage {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -1676,14 +1676,7 @@ mod tests {
         assert_eq!(consume_request.requested, 50); // tokens usage
         assert_eq!(consume_request.capacity, 100);
         assert_eq!(consume_request.refill_amount, 10);
-        assert_eq!(
-            consume_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000
-            }
-        );
+        assert_eq!(consume_request.refill_interval, RateLimitInterval::Minute);
 
         // Test return tickets request for ModelInference resource
         let inference_limit = Arc::new(RateLimit {
@@ -1706,14 +1699,7 @@ mod tests {
         assert_eq!(return_request.returned, 3);
         assert_eq!(return_request.capacity, 20);
         assert_eq!(return_request.refill_amount, 5);
-        assert_eq!(
-            return_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 3_600_000_000
-            }
-        );
+        assert_eq!(return_request.refill_interval, RateLimitInterval::Hour);
 
         // Test consume tickets request for ModelInference resource
         let inference_consume_request = inference_active_limit
@@ -1724,11 +1710,7 @@ mod tests {
         assert_eq!(inference_consume_request.refill_amount, 5);
         assert_eq!(
             inference_consume_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 3_600_000_000
-            }
+            RateLimitInterval::Hour
         );
 
         // Test resource usage mapping works correctly
@@ -1844,11 +1826,7 @@ mod tests {
             key: key.clone(),
             capacity: 100,
             refill_amount: 10,
-            refill_interval: PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000,
-            },
+            refill_interval: RateLimitInterval::Minute,
             requested: 50,
         };
 
@@ -1887,11 +1865,7 @@ mod tests {
             key: key2.clone(),
             capacity: 100,
             refill_amount: 10,
-            refill_interval: PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000,
-            },
+            refill_interval: RateLimitInterval::Minute,
             requested: 50,
         };
 
@@ -2012,33 +1986,21 @@ mod tests {
                 key: key_tokens.clone(),
                 capacity: 100,
                 refill_amount: 10,
-                refill_interval: PgInterval {
-                    months: 0,
-                    days: 0,
-                    microseconds: 60_000_000,
-                },
+                refill_interval: RateLimitInterval::Minute,
                 requested: 80, // More than available (30)
             },
             ConsumeTicketsRequest {
                 key: key_inferences.clone(),
                 capacity: 50,
                 refill_amount: 5,
-                refill_interval: PgInterval {
-                    months: 0,
-                    days: 0,
-                    microseconds: 60_000_000,
-                },
+                refill_interval: RateLimitInterval::Minute,
                 requested: 10, // Less than available (20)
             },
             ConsumeTicketsRequest {
                 key: key_tokens_user2.clone(),
                 capacity: 1000,
                 refill_amount: 100,
-                refill_interval: PgInterval {
-                    months: 0,
-                    days: 0,
-                    microseconds: 3_600_000_000,
-                },
+                refill_interval: RateLimitInterval::Hour,
                 requested: 80, // Less than available (500)
             },
         ];

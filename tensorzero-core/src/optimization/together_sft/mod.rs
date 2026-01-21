@@ -4,6 +4,7 @@ use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use url::Url;
 
 // Default functions for hyperparameters
@@ -334,10 +335,11 @@ impl UninitializedTogetherSFTConfig {
 }
 
 // Nested configuration structs that match Together's API format
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[serde(tag = "lr_scheduler_type", rename_all = "snake_case")]
+#[serde(tag = "lr_scheduler_type")]
+#[serde(rename_all = "snake_case")]
 pub enum TogetherLRScheduler {
     Linear {
         #[serde(default)]
@@ -357,7 +359,7 @@ impl Default for TogetherLRScheduler {
     }
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "type")]
@@ -386,10 +388,11 @@ impl Default for TogetherTrainingType {
     }
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[serde(tag = "method", rename_all = "snake_case")]
+#[serde(tag = "method")]
+#[serde(rename_all = "snake_case")]
 pub enum TogetherTrainingMethod {
     #[serde(rename = "sft")]
     Sft {

@@ -247,6 +247,7 @@ fn validate_stored_output(stored_output: Option<&StoredOutput>) -> Result<(), St
                         signature,
                         summary,
                         provider_type: _,
+                        extra_data: _,
                     } = thought;
                     if text.is_none() && signature.is_none() && summary.is_none() {
                         return Err(format!(
@@ -310,6 +311,7 @@ fn validate_stored_input_messages(
                         signature,
                         summary,
                         provider_type: _,
+                        extra_data: _,
                     } = thought;
                     if text.is_none() && signature.is_none() && summary.is_none() {
                         return Err(format!(
@@ -965,6 +967,7 @@ mod tests {
                 summary: None,
                 provider_type: None,
                 signature: None,
+                extra_data: None,
             },
         )]));
 
@@ -988,6 +991,7 @@ mod tests {
                 summary: None,
                 provider_type: None,
                 signature: Some("encrypted_thinking_signature".to_string()),
+                extra_data: None,
             },
         )]));
 
@@ -1091,6 +1095,7 @@ mod tests {
                 summary: None,
                 provider_type: None,
                 signature: None,
+                extra_data: None,
             })],
         }];
 
@@ -1115,6 +1120,7 @@ mod tests {
                 summary: None,
                 provider_type: None,
                 signature: Some("encrypted_thinking_signature".to_string()),
+                extra_data: None,
             })],
         }];
 

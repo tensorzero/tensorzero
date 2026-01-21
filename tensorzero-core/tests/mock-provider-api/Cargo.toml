@@ -16,7 +16,7 @@ futures = { workspace = true }
 mimalloc = "0.1.48"
 serde_json = { workspace = true }
 tokio = { workspace = true }
-tower = { version = "0.5.2", features = ["util"] }
+tower = { version = "0.5.3", features = ["util"] }
 serde = { workspace = true }
 rand = { workspace = true }
 chrono = { workspace = true }

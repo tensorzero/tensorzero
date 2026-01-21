@@ -9,6 +9,7 @@ use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::{time::Instant, try_join};
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
@@ -624,8 +625,9 @@ impl TryFrom<DemonstrationToolCall> for ToolCall {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, PartialEq, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 enum DemonstrationContentBlock {
     Text(Text),
     ToolCall(DemonstrationToolCall),

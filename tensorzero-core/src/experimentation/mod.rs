@@ -4,8 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -113,8 +114,9 @@ impl Default for ExperimentationConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     Uniform(uniform::UniformConfig),
