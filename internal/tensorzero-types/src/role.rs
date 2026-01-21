@@ -3,8 +3,6 @@
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 
 /// Template variable name for system text in legacy templates.
 pub const SYSTEM_TEXT_TEMPLATE_VAR: &str = "system_text";
@@ -19,7 +17,7 @@ pub const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum Role {
     User,
     Assistant,

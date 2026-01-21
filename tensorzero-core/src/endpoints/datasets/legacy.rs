@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 use tensorzero_derive::TensorZeroDeserialize;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -1189,7 +1187,7 @@ pub struct InsertDatapointResponse {
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "LegacyDatapoint"))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum Datapoint {
     #[cfg_attr(feature = "json-schema-bindings", schemars(title = "DatapointChat"))]
     Chat(ChatInferenceDatapoint),
@@ -1564,7 +1562,7 @@ pub struct LegacyInsertJsonDatapointRequest {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1612,7 +1610,7 @@ impl std::fmt::Display for ChatInferenceDatapoint {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,

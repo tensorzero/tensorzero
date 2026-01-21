@@ -8,8 +8,6 @@ use crate::inference::types::extra_body::dynamic::ExtraBody;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
@@ -31,7 +29,7 @@ pub struct ExtraBodyReplacement {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExtraBodyReplacementKind {
     #[cfg_attr(
@@ -246,14 +244,12 @@ pub mod dynamic {
     #[cfg(feature = "json-schema-bindings")]
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
-    #[cfg(feature = "json-schema-bindings")]
-    use tensorzero_derive::export_schema;
 
     #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
     #[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
-    #[cfg_attr(feature = "json-schema-bindings", export_schema)]
+    #[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraBody {
         #[cfg_attr(

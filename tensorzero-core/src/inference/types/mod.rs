@@ -83,8 +83,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tensorzero_derive::TensorZeroDeserialize;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 pub use tensorzero_types::{Input, InputMessage, InputMessageContent, TextKind, ToolCallWrapper};
 use uuid::Uuid;
 
@@ -974,7 +972,7 @@ pub enum ContentBlockOutput {
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum ContentBlockChatOutput {
     #[cfg_attr(
         feature = "json-schema-bindings",
@@ -1438,7 +1436,7 @@ pub struct JsonInferenceResult {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {

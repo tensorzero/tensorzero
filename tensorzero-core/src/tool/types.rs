@@ -13,8 +13,6 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use strum::AsRefStr;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -366,7 +364,7 @@ pub struct ProviderToolScopeModelProvider {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
 pub enum ProviderToolScope {
     #[default]

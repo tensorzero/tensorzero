@@ -9,8 +9,6 @@ use crate::tool::{ToolCallWrapper, ToolResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tensorzero_derive::TensorZeroDeserialize;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
@@ -19,7 +17,7 @@ use tensorzero_derive::export_schema;
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
@@ -34,7 +32,7 @@ pub struct InputMessage {
     feature = "ts-bindings",
     ts(export, tag = "type", rename_all = "snake_case")
 )]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum InputMessageContent {
     #[cfg_attr(
         feature = "json-schema-bindings",
@@ -90,7 +88,7 @@ pub enum InputMessageContent {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct Input {
     /// System prompt of the input.
     #[serde(skip_serializing_if = "Option::is_none")]

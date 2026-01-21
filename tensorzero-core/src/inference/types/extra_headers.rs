@@ -87,14 +87,12 @@ pub mod dynamic {
     #[cfg(feature = "json-schema-bindings")]
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
-    #[cfg(feature = "json-schema-bindings")]
-    use tensorzero_derive::export_schema;
 
     #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
     #[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
-    #[cfg_attr(feature = "json-schema-bindings", export_schema)]
+    #[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraHeader {
         #[cfg_attr(

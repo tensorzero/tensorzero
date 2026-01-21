@@ -23,8 +23,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::ops::Deref;
 use tensorzero_derive::TensorZeroDeserialize;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -43,7 +41,7 @@ use pyo3::prelude::*;
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct StoredInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
@@ -107,7 +105,7 @@ impl StoredInput {
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
 pub struct StoredInputMessage {
     pub role: Role,
@@ -251,7 +249,7 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum StoredInputMessageContent {
     #[cfg_attr(
         feature = "json-schema-bindings",

@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_derive::TensorZeroDeserialize;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 pub use crate::db::clickhouse::query_builder::{
@@ -50,7 +48,7 @@ pub enum DatapointOrderByTerm {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct DatapointOrderBy {
     /// The property to order by.
     #[serde(flatten)]
@@ -65,7 +63,7 @@ pub struct DatapointOrderBy {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct UpdateDatapointsRequest {
     /// The datapoints to update.
     pub datapoints: Vec<UpdateDatapointRequest>,
@@ -81,7 +79,7 @@ pub struct UpdateDatapointsRequest {
     feature = "ts-bindings",
     ts(export, tag = "type", rename_all = "snake_case")
 )]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum UpdateDatapointRequest {
     /// Request to update a chat datapoint.
     #[cfg_attr(
@@ -102,7 +100,7 @@ pub enum UpdateDatapointRequest {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(
     feature = "json-schema-bindings",
     schemars(title = "UpdateChatDatapointRequestInternal")
@@ -271,7 +269,7 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct UpdateDynamicToolParamsRequest {
     /// A subset of static tools configured for the function that the inference is explicitly allowed to use.
     /// If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
@@ -317,7 +315,7 @@ parallel tool calls). If specified as a value, it will be set to the provided va
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(
     feature = "json-schema-bindings",
     schemars(title = "UpdateJsonDatapointRequestInternal")
@@ -430,7 +428,7 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct JsonDatapointOutputUpdate {
     /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
     ///
@@ -444,7 +442,7 @@ pub struct JsonDatapointOutputUpdate {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Default, Deserialize, Clone, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
@@ -460,7 +458,7 @@ be set to the provided value."))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct UpdateDatapointsResponse {
     /// The IDs of the datapoints that were updated.
     /// These are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests.
@@ -473,7 +471,7 @@ pub struct UpdateDatapointsResponse {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct UpdateDatapointsMetadataRequest {
     /// The datapoints to update metadata for.
     pub datapoints: Vec<UpdateDatapointMetadataRequest>,
@@ -484,7 +482,7 @@ pub struct UpdateDatapointsMetadataRequest {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct UpdateDatapointMetadataRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -500,7 +498,7 @@ pub struct UpdateDatapointMetadataRequest {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct ListDatapointsRequest {
     /// Optional function name to filter datapoints by.
     /// If provided, only datapoints from this function will be returned.
@@ -547,7 +545,7 @@ pub struct ListDatapointsRequest {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetDatapointsRequest {
     /// The IDs of the datapoints to retrieve. Required.
@@ -558,7 +556,7 @@ pub struct GetDatapointsRequest {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetDatapointsResponse {
     /// The retrieved datapoints.
@@ -582,7 +580,7 @@ pub struct CreateDatapointsFromInferenceRequest {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum CreateDatapointsFromInferenceRequestParams {
     /// Create datapoints from specific inference IDs.
     #[cfg_attr(
@@ -617,7 +615,7 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct CreateDatapointsResponse {
     /// The IDs of the newly-generated datapoints.
     pub ids: Vec<Uuid>,
@@ -629,7 +627,7 @@ pub struct CreateDatapointsResponse {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct CreateDatapointsRequest {
     /// The datapoints to create.
     pub datapoints: Vec<CreateDatapointRequest>,
@@ -641,7 +639,7 @@ pub struct CreateDatapointsRequest {
 #[derive(Debug, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(
     feature = "ts-bindings",
     ts(export, tag = "type", rename_all = "snake_case")
@@ -665,7 +663,7 @@ pub enum CreateDatapointRequest {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct CreateChatDatapointRequest {
     /// The function name for this datapoint. Required.
@@ -700,7 +698,7 @@ pub struct CreateChatDatapointRequest {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct CreateJsonDatapointRequest {
     /// The function name for this datapoint. Required.
@@ -734,7 +732,7 @@ pub struct CreateJsonDatapointRequest {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DeleteDatapointsRequest {
     /// The IDs of the datapoints to delete.
@@ -745,7 +743,7 @@ pub struct DeleteDatapointsRequest {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DeleteDatapointsResponse {
     /// The number of deleted datapoints.

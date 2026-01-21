@@ -4,8 +4,6 @@
 
 use object_store::path::Path;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -17,7 +15,7 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StorageKind {
     #[cfg_attr(
@@ -58,7 +56,7 @@ pub enum StorageKind {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoragePath {
     pub kind: StorageKind,

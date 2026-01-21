@@ -9,8 +9,6 @@ use mime::MediaType;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 use url::Url;
 
 /// Detail level for input images (affects fidelity and token cost)
@@ -19,7 +17,7 @@ use url::Url;
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum Detail {
     Low,
     High,
@@ -32,7 +30,7 @@ pub enum Detail {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct Base64File {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
@@ -261,7 +259,7 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct UrlFile {
     #[cfg_attr(feature = "json-schema-bindings", schemars(with = "String"))]
     pub url: Url,
@@ -309,7 +307,7 @@ impl<'de> Deserialize<'de> for UrlFile {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
@@ -371,7 +369,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ObjectStorageFile {
     #[serde(flatten)]
@@ -385,7 +383,7 @@ pub struct ObjectStorageFile {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct ObjectStorageError {
     #[serde(flatten)]
     pub file: ObjectStoragePointer,
@@ -399,7 +397,7 @@ pub struct ObjectStorageError {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum File {
     #[cfg_attr(feature = "json-schema-bindings", schemars(title = "FileUrlFile"))]
     Url(UrlFile),

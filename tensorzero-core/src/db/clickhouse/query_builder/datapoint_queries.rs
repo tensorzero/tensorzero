@@ -1,7 +1,5 @@
 use serde::Serialize;
 use tensorzero_derive::TensorZeroDeserialize;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{ClickhouseType, QueryParameter};
@@ -12,7 +10,7 @@ use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]

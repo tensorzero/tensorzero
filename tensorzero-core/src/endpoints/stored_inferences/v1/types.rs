@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 use crate::db::inferences::{
@@ -172,7 +170,7 @@ pub struct OrderBy {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum InferenceFilter {
     /// Filter by the value of a float metric
     #[cfg_attr(
@@ -237,7 +235,7 @@ pub enum InferenceFilter {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Deserialize, Default, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct ListInferencesRequest {
     /// Optional function name to filter inferences by.
     /// If provided, only inferences from this function will be returned.
@@ -366,7 +364,7 @@ impl ListInferencesRequest {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct GetInferencesRequest {
     /// The IDs of the inferences to retrieve. Required.
     pub ids: Vec<Uuid>,
@@ -390,7 +388,7 @@ pub struct GetInferencesRequest {
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,

@@ -10,8 +10,6 @@ use pyo3::types::PyModule;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tensorzero_derive::TensorZeroDeserialize;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -30,7 +28,7 @@ pub struct Arguments(
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct Template {
     pub name: String,
     #[cfg_attr(
@@ -45,7 +43,7 @@ pub struct Template {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum System {
     Text(String),
     #[cfg_attr(
@@ -69,7 +67,7 @@ pub enum System {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct Text {
     pub text: String,
 }
@@ -96,7 +94,7 @@ impl Text {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct RawText {
     pub value: String,
 }
@@ -122,7 +120,7 @@ impl RawText {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct Unknown {
     /// The underlying content block to be passed to the model provider.
     pub data: Value,
@@ -248,7 +246,7 @@ impl Unknown {
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum ThoughtSummaryBlock {
     #[cfg_attr(
         feature = "json-schema-bindings",
@@ -265,7 +263,7 @@ pub enum ThoughtSummaryBlock {
 // Note: We don't use `get_all` because `extra_data` is `Value` which doesn't implement `IntoPyObject`.
 // The fields are exposed via a manual `#[pymethods]` impl below.
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct Thought {
     pub text: Option<String>,
     /// An optional signature - used with Anthropic and OpenRouter for multi-turn

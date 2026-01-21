@@ -9,8 +9,6 @@
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(feature = "json-schema-bindings")]
-use tensorzero_derive::export_schema;
 
 /// In most cases, tool call arguments are a string.
 /// However, when looping back from an inference response, they will be an object.
@@ -34,7 +32,7 @@ where
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct ToolCall {
     pub id: String,
     pub name: String,
@@ -67,7 +65,7 @@ impl ToolCall {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct InferenceResponseToolCall {
     /// A Tool Call ID to match up with tool call responses. See #4058.
     pub id: String,
@@ -108,7 +106,7 @@ impl InferenceResponseToolCall {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(untagged)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum ToolCallWrapper {
     ToolCall(ToolCall), // the format we store in the database
     InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
@@ -157,7 +155,7 @@ impl From<ToolCallWrapper> for ToolCall {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
@@ -189,7 +187,7 @@ impl ToolResult {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "json-schema-bindings", export_schema)]
+#[cfg_attr(feature = "json-schema-bindings", tensorzero_derive::export_schema)]
 pub enum ToolChoice {
     None,
     #[default]
