@@ -122,7 +122,7 @@ mod tests {
         ContentBlockChatOutput, Input, InputMessage, InputMessageContent, JsonInferenceOutput,
         Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
     };
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::tool::{DynamicToolParams, ToolChoice};
     use serde_json::json;
     use std::collections::{HashMap, HashSet};
@@ -154,7 +154,7 @@ mod tests {
             Arc::new(FunctionConfig::Json(FunctionConfigJson {
                 variants: HashMap::new(),
                 schemas: SchemaData::default(),
-                output_schema: StaticJSONSchema::from_value(json!({
+                output_schema: JSONSchema::from_value(json!({
                     "type": "object",
                     "properties": {"value": {"type": "string"}},
                     "required": ["value"],

@@ -29,10 +29,8 @@ sqlx = { workspace = true }
 
 # Utilities
 anyhow.workspace = true
-thiserror.workspace = true
 uuid.workspace = true
 tracing.workspace = true
-url.workspace = true
 schemars.workspace = true
 
 [dev-dependencies]

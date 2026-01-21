@@ -1,14 +1,52 @@
 //! E2E tests for `include_raw_usage` cache behavior.
 //!
 //! Tests that cache hits are correctly excluded from raw_usage.
+//!
+//! The TensorZero native API tests use embedded gateway with unique databases
+//! for test isolation. The OpenAI-compatible tests use the shared HTTP gateway.
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
+use tensorzero::test_helpers::{
+    make_embedded_gateway_e2e_with_unique_db, start_http_gateway_with_unique_db,
+};
+use tensorzero::{
+    CacheParamsOptions, ClientInferenceParams, InferenceOutput, Input, InputMessage,
+    InputMessageContent,
+};
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::inference::types::usage::RawUsageEntry;
+use tensorzero_core::inference::types::{Arguments, Role, System, Text};
 use uuid::Uuid;
 
-use crate::common::get_gateway_endpoint;
+fn assert_raw_usage_entry(entry: &RawUsageEntry) {
+    assert!(
+        !entry.data.is_null(),
+        "raw_usage entry should have non-null data for OpenAI chat completions"
+    );
+    assert!(
+        entry.data.get("total_tokens").is_some(),
+        "raw_usage should include `total_tokens` for chat completions"
+    );
+    assert!(
+        entry
+            .data
+            .get("prompt_tokens_details")
+            .and_then(|d: &Value| d.get("cached_tokens"))
+            .is_some(),
+        "raw_usage should include `prompt_tokens_details.cached_tokens` for chat completions"
+    );
+    assert!(
+        entry
+            .data
+            .get("completion_tokens_details")
+            .and_then(|d: &Value| d.get("reasoning_tokens"))
+            .is_some(),
+        "raw_usage should include `completion_tokens_details.reasoning_tokens` for chat completions"
+    );
+}
 
 fn assert_openai_chat_usage_details(entry: &Value) {
     let data = entry.get("data").unwrap_or_else(|| {
@@ -40,309 +78,348 @@ fn assert_openai_chat_usage_details(entry: &Value) {
     );
 }
 
-/// Makes an inference request and returns the raw_usage array (panics if not present)
-async fn make_request_and_get_raw_usage(
-    function_name: &str,
-    variant_name: &str,
-    input_text: &str,
-    stream: bool,
-) -> Vec<Value> {
-    let episode_id = Uuid::now_v7();
-
-    let payload = json!({
-        "function_name": function_name,
-        "variant_name": variant_name,
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": input_text
-                }
-            ]
-        },
-        "stream": stream,
-        "include_raw_usage": true,
-        "cache_options": {
-            "enabled": "on",
-            "lookback_s": 60
-        }
-    });
-
-    if stream {
-        let mut chunks = Client::new()
-            .post(get_gateway_endpoint("/inference"))
-            .json(&payload)
-            .eventsource()
-            .unwrap();
-
-        let mut raw_usage: Vec<Value> = Vec::new();
-
-        while let Some(chunk) = chunks.next().await {
-            let chunk = chunk.unwrap();
-            let Event::Message(chunk) = chunk else {
-                continue;
-            };
-            if chunk.data == "[DONE]" {
-                break;
-            }
-
-            let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
-
-            // Accumulate raw_usage entries across all chunks
-            if let Some(ru) = chunk_json.get("raw_usage") {
-                raw_usage.extend(ru.as_array().expect("raw_usage should be an array").clone());
-            }
-        }
-
-        // Return whatever raw_usage was collected (may be empty for streaming with cache enabled)
-        raw_usage
-    } else {
-        let response = Client::new()
-            .post(get_gateway_endpoint("/inference"))
-            .json(&payload)
-            .send()
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let response_json: Value = response.json().await.unwrap();
-
-        // Get raw_usage at response level (sibling to usage)
-        let raw_usage = response_json
-            .get("raw_usage")
-            .expect("raw_usage should be present when include_raw_usage is true");
-        raw_usage
-            .as_array()
-            .expect("raw_usage should be an array")
-            .clone()
-    }
-}
-
-#[tokio::test]
+/// Tests cache behavior with embedded gateway (unique database for test isolation)
+#[tokio::test(flavor = "multi_thread")]
 async fn test_raw_usage_cache_behavior_non_streaming() {
-    // Use a fixed input for deterministic provider-proxy caching.
-    // Gateway cache (ClickHouse) is fresh each CI run, so first request will be a cache miss.
-    // See: https://github.com/tensorzero/tensorzero/issues/5380
+    // Use embedded gateway with unique database for test isolation
+    let client = make_embedded_gateway_e2e_with_unique_db("cache_non_streaming").await;
+
+    // Fixed input for deterministic provider-proxy caching
     let input = "raw_usage_non_streaming: What is 2+2?";
 
     // First request: should be a cache miss, raw_usage should have entries
-    let first_raw_usage =
-        make_request_and_get_raw_usage("weather_helper", "openai", input, false).await;
+    let first_response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: input.to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_usage: true,
+            cache_options: CacheParamsOptions {
+                enabled: CacheEnabledMode::On,
+                max_age_s: Some(60),
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
+    let InferenceOutput::NonStreaming(first_response) = first_response else {
+        panic!("Expected non-streaming response");
+    };
+
+    let first_raw_usage = first_response
+        .raw_usage()
+        .expect("raw_usage should be present when include_raw_usage is true");
     assert!(
         !first_raw_usage.is_empty(),
-        "First request (cache miss) should have at least one raw_usage entry, got {first_raw_usage:?}"
+        "First request (cache miss) should have at least one raw_usage entry"
     );
-    assert_openai_chat_usage_details(&first_raw_usage[0]);
+    assert_raw_usage_entry(&first_raw_usage[0]);
 
-    // Wait a moment for cache write to complete
+    // Wait for cache write to complete
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Second request with same input: should be a cache hit
-    // Cache hits should be EXCLUDED from raw_usage, but field should still be present as empty array
-    let second_raw_usage =
-        make_request_and_get_raw_usage("weather_helper", "openai", input, false).await;
+    let second_response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: input.to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_usage: true,
+            cache_options: CacheParamsOptions {
+                enabled: CacheEnabledMode::On,
+                max_age_s: Some(60),
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
+    let InferenceOutput::NonStreaming(second_response) = second_response else {
+        panic!("Expected non-streaming response");
+    };
+
+    let second_raw_usage = second_response
+        .raw_usage()
+        .expect("raw_usage should be present when include_raw_usage is true");
     assert!(
         second_raw_usage.is_empty(),
-        "Second request (cache hit) should have empty raw_usage array (cached responses excluded), got {second_raw_usage:?}"
+        "Second request (cache hit) should have empty raw_usage array, got {second_raw_usage:?}"
     );
 }
 
-#[tokio::test]
+/// Tests streaming cache behavior with embedded gateway (unique database for test isolation)
+#[tokio::test(flavor = "multi_thread")]
 async fn test_raw_usage_cache_behavior_streaming() {
-    // Use a fixed input for deterministic provider-proxy caching.
-    // Gateway cache (ClickHouse) is fresh each CI run, so first request will be a cache miss.
-    // See: https://github.com/tensorzero/tensorzero/issues/5380
+    // Use embedded gateway with unique database for test isolation
+    let client = make_embedded_gateway_e2e_with_unique_db("cache_streaming").await;
+
+    // Fixed input for deterministic provider-proxy caching
     let input = "raw_usage_streaming: What is 3+3?";
 
-    // First request: should be a cache miss
-    // For streaming with cache enabled, raw_usage may not be present in individual chunks
-    // (unlike non-streaming which includes it in the final response)
-    let first_raw_usage =
-        make_request_and_get_raw_usage("weather_helper", "openai", input, true).await;
+    // Helper to make streaming request and collect raw_usage
+    async fn make_streaming_request(
+        client: &tensorzero::Client,
+        input: &str,
+    ) -> Vec<RawUsageEntry> {
+        let response = client
+            .inference(ClientInferenceParams {
+                function_name: Some("weather_helper".to_string()),
+                variant_name: Some("openai".to_string()),
+                episode_id: Some(Uuid::now_v7()),
+                input: Input {
+                    system: Some(System::Template(Arguments({
+                        let mut args = Map::new();
+                        args.insert("assistant_name".to_string(), json!("TestBot"));
+                        args
+                    }))),
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: input.to_string(),
+                        })],
+                    }],
+                },
+                stream: Some(true),
+                include_raw_usage: true,
+                cache_options: CacheParamsOptions {
+                    enabled: CacheEnabledMode::On,
+                    max_age_s: Some(60),
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
 
-    // Note: For streaming, raw_usage includes the current streaming inference's usage
-    // when it completes. So we should have at least one entry.
+        let InferenceOutput::Streaming(mut stream) = response else {
+            panic!("Expected streaming response");
+        };
+
+        let mut raw_usage_entries = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.unwrap();
+            let entries = match &chunk {
+                tensorzero::InferenceResponseChunk::Chat(c) => c.raw_usage.as_ref(),
+                tensorzero::InferenceResponseChunk::Json(j) => j.raw_usage.as_ref(),
+            };
+            if let Some(entries) = entries {
+                raw_usage_entries.extend(entries.iter().cloned());
+            }
+        }
+        raw_usage_entries
+    }
+
+    // First request: should be a cache miss
+    let first_raw_usage = make_streaming_request(&client, input).await;
     assert!(
         !first_raw_usage.is_empty(),
         "First streaming request (cache miss) should have at least one raw_usage entry"
     );
-    assert_openai_chat_usage_details(&first_raw_usage[0]);
+    assert_raw_usage_entry(&first_raw_usage[0]);
 
     // Wait for cache write
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Second request: should be a cache hit
-    // raw_usage should be empty (cached responses are excluded)
-    let second_raw_usage =
-        make_request_and_get_raw_usage("weather_helper", "openai", input, true).await;
-
+    let second_raw_usage = make_streaming_request(&client, input).await;
     assert!(
         second_raw_usage.is_empty(),
         "Second streaming request (cache hit) should have empty raw_usage array, got {second_raw_usage:?}"
     );
 }
 
-#[tokio::test]
+/// Tests raw_usage with cache disabled using embedded gateway
+#[tokio::test(flavor = "multi_thread")]
 async fn test_raw_usage_cache_disabled() {
-    // Use a fixed input for deterministic provider-proxy caching.
-    // See: https://github.com/tensorzero/tensorzero/issues/5380
+    // Use embedded gateway with unique database for test isolation
+    let client = make_embedded_gateway_e2e_with_unique_db("cache_disabled").await;
+
     let input = "raw_usage_cache_disabled: What is 4+4?";
 
-    let episode_id = Uuid::now_v7();
-
-    // Request with cache disabled
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": "openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": input
-                }
-            ]
-        },
-        "stream": false,
-        "include_raw_usage": true,
-        "cache_options": {
-            "enabled": "off"
-        }
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: input.to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_usage: true,
+            cache_options: CacheParamsOptions {
+                enabled: CacheEnabledMode::Off,
+                max_age_s: None,
+            },
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
 
-    let response_json: Value = response.json().await.unwrap();
-
-    // With cache disabled, raw_usage should still work (at response level, sibling to usage)
-    let raw_usage = response_json.get("raw_usage");
-    assert!(
-        raw_usage.is_some(),
-        "raw_usage should be present even with cache disabled"
-    );
-
-    let raw_usage_array = raw_usage.unwrap().as_array().unwrap();
-    assert!(
-        !raw_usage_array.is_empty(),
-        "raw_usage should have entries when cache is disabled (no cache hits possible)"
-    );
-    assert_openai_chat_usage_details(&raw_usage_array[0]);
-}
-
-#[tokio::test]
-async fn test_raw_usage_cache_disabled_streaming() {
-    // Use a fixed input for deterministic provider-proxy caching.
-    // See: https://github.com/tensorzero/tensorzero/issues/5380
-    let input = "raw_usage_cache_disabled_streaming: What is 5+5?";
-
-    let episode_id = Uuid::now_v7();
-
-    // Request with cache disabled
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": "openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": input
-                }
-            ]
-        },
-        "stream": true,
-        "include_raw_usage": true,
-        "cache_options": {
-            "enabled": "off"
-        }
-    });
-
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
-
-    let mut raw_usage: Option<Vec<Value>> = None;
-
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.unwrap();
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
-            break;
-        }
-
-        let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
-        // Check for raw_usage at chunk level (sibling to usage)
-        if let Some(ru) = chunk_json.get("raw_usage") {
-            raw_usage = Some(ru.as_array().expect("raw_usage should be an array").clone());
-        }
-    }
-
-    let raw_usage = raw_usage.expect("Should have received a chunk with raw_usage");
-
-    // With cache disabled, raw_usage should have entries (no cache hits possible)
+    let raw_usage = response
+        .raw_usage()
+        .expect("raw_usage should be present when include_raw_usage is true");
     assert!(
         !raw_usage.is_empty(),
         "raw_usage should have entries when cache is disabled (no cache hits possible)"
     );
-    assert_openai_chat_usage_details(&raw_usage[0]);
+    assert_raw_usage_entry(&raw_usage[0]);
+}
+
+/// Tests streaming raw_usage with cache disabled using embedded gateway
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_usage_cache_disabled_streaming() {
+    // Use embedded gateway with unique database for test isolation
+    let client = make_embedded_gateway_e2e_with_unique_db("cache_disabled_streaming").await;
+
+    let input = "raw_usage_cache_disabled_streaming: What is 5+5?";
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: input.to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_usage: true,
+            cache_options: CacheParamsOptions {
+                enabled: CacheEnabledMode::Off,
+                max_age_s: None,
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
+
+    let mut raw_usage_entries = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+        let entries = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_usage.as_ref(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_usage.as_ref(),
+        };
+        if let Some(entries) = entries {
+            raw_usage_entries.extend(entries.iter().cloned());
+        }
+    }
+
+    // With cache disabled, raw_usage should have entries (no cache hits possible)
+    assert!(
+        !raw_usage_entries.is_empty(),
+        "raw_usage should have entries when cache is disabled (no cache hits possible)"
+    );
+    assert_raw_usage_entry(&raw_usage_entries[0]);
 }
 
 // ============================================================================
-// OpenAI-Compatible API Cache Tests
+// OpenAI-Compatible API Cache Tests (with unique HTTP gateway per test)
 // ============================================================================
 
 /// Helper to make OpenAI-compatible request and get tensorzero_raw_usage array
-async fn make_openai_request_and_get_raw_usage(input_text: &str, stream: bool) -> Vec<Value> {
+async fn make_openai_request_to_gateway(
+    base_url: &str,
+    input_text: &str,
+    stream: bool,
+) -> Vec<Value> {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model": "tensorzero::model_name::openai::gpt-5-nano",
+        "model": "tensorzero::function_name::weather_helper",
         "messages": [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "assistant_name": "TestBot"
+                        }
+                    }
+                ]
+            },
             {
                 "role": "user",
                 "content": input_text
             }
         ],
-        "params": {
-            "chat_completion": {
-                "reasoning_effort": "minimal"
-            }
-        },
         "stream": stream,
+        "tensorzero::variant_name": "openai",
         "tensorzero::episode_id": episode_id,
         "tensorzero::include_raw_usage": true,
         "tensorzero::cache_options": {
             "enabled": "on",
-            "lookback_s": 60
+            "max_age_s": 60
         }
     });
 
+    let url = format!("{base_url}/openai/v1/chat/completions");
+
     if stream {
         let mut chunks = Client::new()
-            .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+            .post(&url)
             .json(&payload)
             .eventsource()
             .unwrap();
 
-        let mut raw_usage: Option<Vec<Value>> = None;
+        // Collect raw_usage entries from all chunks, similar to native API
+        let mut raw_usage_entries: Vec<Value> = Vec::new();
 
         while let Some(chunk) = chunks.next().await {
             let chunk = chunk.unwrap();
@@ -355,19 +432,17 @@ async fn make_openai_request_and_get_raw_usage(input_text: &str, stream: bool) -
 
             let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
             // Check for tensorzero_raw_usage at chunk level (sibling to usage)
-            if let Some(ru) = chunk_json.get("tensorzero_raw_usage") {
-                raw_usage = Some(
-                    ru.as_array()
-                        .expect("tensorzero_raw_usage should be an array")
-                        .clone(),
-                );
+            if let Some(ru) = chunk_json.get("tensorzero_raw_usage")
+                && let Some(arr) = ru.as_array()
+            {
+                raw_usage_entries.extend(arr.iter().cloned());
             }
         }
 
-        raw_usage.expect("Should have received a chunk with tensorzero_raw_usage")
+        raw_usage_entries
     } else {
         let response = Client::new()
-            .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+            .post(&url)
             .json(&payload)
             .send()
             .await
@@ -388,15 +463,17 @@ async fn make_openai_request_and_get_raw_usage(input_text: &str, stream: bool) -
     }
 }
 
-#[tokio::test]
+/// Tests OpenAI-compatible cache behavior with HTTP gateway (unique database for test isolation)
+#[tokio::test(flavor = "multi_thread")]
 async fn test_raw_usage_cache_openai_compatible_non_streaming() {
-    // Use a fixed input for deterministic provider-proxy caching.
-    // Gateway cache (ClickHouse) is fresh each CI run, so first request will be a cache miss.
-    // See: https://github.com/tensorzero/tensorzero/issues/5380
+    // Start HTTP gateway with unique database
+    let (base_url, _shutdown_handle) =
+        start_http_gateway_with_unique_db("openai_cache_non_streaming").await;
+
     let input = "raw_usage_openai_non_streaming: What is 5+5?";
 
     // First request: should be a cache miss
-    let first_raw_usage = make_openai_request_and_get_raw_usage(input, false).await;
+    let first_raw_usage = make_openai_request_to_gateway(&base_url, input, false).await;
 
     assert!(
         !first_raw_usage.is_empty(),
@@ -409,7 +486,7 @@ async fn test_raw_usage_cache_openai_compatible_non_streaming() {
 
     // Second request: should be a cache hit
     // tensorzero_raw_usage should still be present but empty (field present as [])
-    let second_raw_usage = make_openai_request_and_get_raw_usage(input, false).await;
+    let second_raw_usage = make_openai_request_to_gateway(&base_url, input, false).await;
 
     assert!(
         second_raw_usage.is_empty(),
@@ -417,15 +494,17 @@ async fn test_raw_usage_cache_openai_compatible_non_streaming() {
     );
 }
 
-#[tokio::test]
+/// Tests OpenAI-compatible streaming cache behavior with HTTP gateway (unique database for test isolation)
+#[tokio::test(flavor = "multi_thread")]
 async fn test_raw_usage_cache_openai_compatible_streaming() {
-    // Use a fixed input for deterministic provider-proxy caching.
-    // Gateway cache (ClickHouse) is fresh each CI run, so first request will be a cache miss.
-    // See: https://github.com/tensorzero/tensorzero/issues/5380
+    // Start HTTP gateway with unique database
+    let (base_url, _shutdown_handle) =
+        start_http_gateway_with_unique_db("openai_cache_streaming").await;
+
     let input = "raw_usage_openai_streaming: What is 6+6?";
 
     // First request: should be a cache miss
-    let first_raw_usage = make_openai_request_and_get_raw_usage(input, true).await;
+    let first_raw_usage = make_openai_request_to_gateway(&base_url, input, true).await;
 
     assert!(
         !first_raw_usage.is_empty(),
@@ -438,7 +517,7 @@ async fn test_raw_usage_cache_openai_compatible_streaming() {
 
     // Second request: should be a cache hit
     // tensorzero_raw_usage should still be present but empty (field present as [])
-    let second_raw_usage = make_openai_request_and_get_raw_usage(input, true).await;
+    let second_raw_usage = make_openai_request_to_gateway(&base_url, input, true).await;
 
     assert!(
         second_raw_usage.is_empty(),

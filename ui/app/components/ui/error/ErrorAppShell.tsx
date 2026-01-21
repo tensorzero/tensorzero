@@ -1,10 +1,14 @@
 import { AppSidebar } from "~/components/layout/app.sidebar";
 import { ContentLayout } from "~/components/layout/ContentLayout";
-import { AppProviders } from "~/providers/app-providers";
+import {
+  AppProviders,
+  type AppProvidersLoaderData,
+} from "~/providers/app-providers";
 
 interface ErrorAppShellProps {
   content?: React.ReactNode;
   overlay?: React.ReactNode;
+  loaderData?: AppProvidersLoaderData;
 }
 
 /**
@@ -13,10 +17,15 @@ interface ErrorAppShellProps {
  *
  * @param content - Content to render inside ContentLayout (e.g., PageNotFound)
  * @param overlay - Content to render as an overlay on top (e.g., ErrorDialog)
+ * @param loaderData - Loader data to pass to providers for context (config, read-only, etc.)
  */
-export function ErrorAppShell({ content, overlay }: ErrorAppShellProps) {
+export function ErrorAppShell({
+  content,
+  overlay,
+  loaderData,
+}: ErrorAppShellProps) {
   return (
-    <AppProviders>
+    <AppProviders loaderData={loaderData}>
       <div className="fixed inset-0 flex">
         <AppSidebar />
         <ContentLayout>{content}</ContentLayout>

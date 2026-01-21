@@ -9,7 +9,7 @@ use axum::{
 };
 use moka::sync::Cache;
 use serde_json::json;
-use tracing::Instrument;
+use tracing::{Instrument, field::Empty};
 
 use crate::{
     key::{TensorZeroApiKey, TensorZeroAuthError},
@@ -53,6 +53,14 @@ pub async fn tensorzero_auth_middleware(
         return next.run(request).await;
     }
     let headers = request.headers();
+
+    let auth_span = tracing::info_span!(
+        "tensorzero_auth",
+        otel.name = "tensorzero_auth",
+        key.public_id = Empty,
+        key.organization = Empty,
+        key.workspace = Empty,
+    );
     // This block holds all of the actual authentication logic.
     // We use `.instrument` on this future, so that we don't include the '.next.run(request)' inside
     // of our `tensorzero_auth` OpenTelemetry span.
@@ -60,6 +68,7 @@ pub async fn tensorzero_auth_middleware(
         let Some(auth_header) = headers.get(http::header::AUTHORIZATION) else {
             return Err(TensorZeroAuthError::Middleware {
                 message: "Authorization header is required".to_string(),
+                key_info: None,
             });
         };
         let auth_header_value =
@@ -67,17 +76,25 @@ pub async fn tensorzero_auth_middleware(
                 .to_str()
                 .map_err(|e| TensorZeroAuthError::Middleware {
                     message: format!("Invalid authorization header: {e}"),
+                    key_info: None,
                 })?;
         let raw_api_key = auth_header_value.strip_prefix("Bearer ").ok_or_else(|| {
             TensorZeroAuthError::Middleware {
                 message: "Authorization header must start with 'Bearer '".to_string(),
+                key_info: None,
             }
         })?;
 
         let parsed_key = TensorZeroApiKey::parse(raw_api_key)?;
+
+        // Record the public ID immediately, in case we fail to look up the key in the database/cache
+        let span = tracing::Span::current();
+        span.record("key.public_id", parsed_key.get_public_id());
+
         let Some(pool) = &state.pool else {
             return Err(TensorZeroAuthError::Middleware {
                 message: "PostgreSQL connection is disabled".to_string(),
+                key_info: None,
             });
         };
 
@@ -87,11 +104,15 @@ pub async fn tensorzero_auth_middleware(
             if let Some(cached_result) = cache.get(&cache_key) {
                 return match cached_result {
                     AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
-                    AuthResult::Disabled(disabled_at) => Err(TensorZeroAuthError::Middleware {
-                        message: format!("API key was disabled at: {disabled_at}"),
-                    }),
+                    AuthResult::Disabled(disabled_at, key_info) => {
+                        Err(TensorZeroAuthError::Middleware {
+                            message: format!("API key was disabled at: {disabled_at}"),
+                            key_info: Some(Box::new(key_info)),
+                        })
+                    }
                     AuthResult::MissingKey => Err(TensorZeroAuthError::Middleware {
                         message: "Provided API key does not exist in the database".to_string(),
+                        key_info: None,
                     }),
                 };
             }
@@ -108,21 +129,22 @@ pub async fn tensorzero_auth_middleware(
 
         match postgres_key {
             AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
-            AuthResult::Disabled(disabled_at) => Err(TensorZeroAuthError::Middleware {
+            AuthResult::Disabled(disabled_at, key_info) => Err(TensorZeroAuthError::Middleware {
                 message: format!("API key was disabled at: {disabled_at}"),
+                key_info: Some(Box::new(key_info)),
             }),
             AuthResult::MissingKey => Err(TensorZeroAuthError::Middleware {
                 message: "Provided API key does not exist in the database".to_string(),
+                key_info: None,
             }),
         }
     }
-    .instrument(tracing::trace_span!(
-        "tensorzero_auth",
-        otel.name = "tensorzero_auth"
-    ));
+    .instrument(auth_span.clone());
 
     match do_auth.await {
         Ok((parsed_key, key_info)) => {
+            auth_span.record("key.organization", &key_info.organization);
+            auth_span.record("key.workspace", &key_info.workspace);
             request.extensions_mut().insert(RequestApiKeyExtension {
                 api_key: Arc::new(parsed_key),
                 key_info: key_info.clone(),
@@ -130,6 +152,14 @@ pub async fn tensorzero_auth_middleware(
             next.run(request).await
         }
         Err(e) => {
+            if let TensorZeroAuthError::Middleware {
+                key_info: Some(key_info),
+                ..
+            } = &e
+            {
+                auth_span.record("key.organization", &key_info.organization);
+                auth_span.record("key.workspace", &key_info.workspace);
+            }
             let message = e.to_string();
             let mut body = json!({
                 "error": format!("TensorZero authentication error: {message}"),

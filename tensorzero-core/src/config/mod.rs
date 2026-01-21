@@ -47,7 +47,7 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, ge
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::Usage;
 use crate::inference::types::storage::StorageKind;
-use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
+use crate::jsonschema_util::{JSONSchema, SchemaWithMetadata};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{
     CredentialLocationWithFallback, ModelConfig, ModelTable, UninitializedModelConfig,
@@ -1201,7 +1201,6 @@ impl Config {
                     &name,
                     &provider_types,
                     &provider_type_default_credentials,
-                    http_client.clone(),
                     relay_mode,
                 )
                 .await
@@ -1214,11 +1213,7 @@ impl Config {
         let loaded_embedding_models =
             try_join_all(embedding_models.into_iter().map(|(name, config)| async {
                 config
-                    .load(
-                        &provider_types,
-                        &provider_type_default_credentials,
-                        http_client.clone(),
-                    )
+                    .load(&provider_types, &provider_type_default_credentials)
                     .await
                     .map(|c| (name, c))
             }))
@@ -1838,9 +1833,9 @@ impl SchemaData {
     }
 
     pub(super) fn load(
-        user_schema: Option<StaticJSONSchema>,
-        assistant_schema: Option<StaticJSONSchema>,
-        system_schema: Option<StaticJSONSchema>,
+        user_schema: Option<JSONSchema>,
+        assistant_schema: Option<JSONSchema>,
+        system_schema: Option<JSONSchema>,
         schemas: UninitializedSchemas,
         function_name: &str,
     ) -> Result<Self, Error> {
@@ -1877,7 +1872,7 @@ impl SchemaData {
                 .insert(
                     name.clone(),
                     SchemaWithMetadata {
-                        schema: StaticJSONSchema::from_path(schema.path)?,
+                        schema: JSONSchema::from_path(schema.path)?,
                         legacy_definition: false,
                     },
                 )
@@ -1987,17 +1982,14 @@ impl UninitializedFunctionConfig {
                 propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
 
                 let schema_data = SchemaData::load(
-                    params
-                        .user_schema
-                        .map(StaticJSONSchema::from_path)
-                        .transpose()?,
+                    params.user_schema.map(JSONSchema::from_path).transpose()?,
                     params
                         .assistant_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params
                         .system_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params.schemas,
                     function_name,
@@ -2052,24 +2044,21 @@ impl UninitializedFunctionConfig {
                 propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
 
                 let schema_data = SchemaData::load(
-                    params
-                        .user_schema
-                        .map(StaticJSONSchema::from_path)
-                        .transpose()?,
+                    params.user_schema.map(JSONSchema::from_path).transpose()?,
                     params
                         .assistant_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params
                         .system_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params.schemas,
                     function_name,
                 )?;
                 let output_schema = match params.output_schema {
-                    Some(path) => StaticJSONSchema::from_path(path)?,
-                    None => StaticJSONSchema::default(),
+                    Some(path) => JSONSchema::from_path(path)?,
+                    None => JSONSchema::default(),
                 };
                 let json_mode_tool_call_config =
                     create_json_mode_tool_call_config(output_schema.clone());
@@ -2237,7 +2226,7 @@ pub struct UninitializedToolConfig {
 
 impl UninitializedToolConfig {
     pub fn load(self, key: String) -> Result<StaticToolConfig, Error> {
-        let parameters = StaticJSONSchema::from_path(self.parameters)?;
+        let parameters = JSONSchema::from_path(self.parameters)?;
         Ok(StaticToolConfig {
             name: self.name.unwrap_or_else(|| key.clone()),
             key,

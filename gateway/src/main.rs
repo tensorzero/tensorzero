@@ -20,6 +20,7 @@ use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_mi
 use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
+use tensorzero_core::feature_flags;
 use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
@@ -78,6 +79,10 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<(), ExitCode> {
     let args = GatewayArgs::parse();
+
+    // Initialize feature flags
+    feature_flags::init_flags().log_err_pretty("Failed to initialize feature flags")?;
+
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     // We start with empty headers and update them after loading the config

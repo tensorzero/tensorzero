@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import { data, redirect, useFetcher } from "react-router";
-import { toDatapointUrl } from "~/utils/urls";
+import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
 import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
@@ -12,6 +12,7 @@ import {
   SectionHeader,
   SectionLayout,
   SectionsGroup,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
 import {
@@ -631,7 +632,19 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader
-        label="Datapoint"
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Datasets", href: "/datasets" },
+              {
+                label: datapoint.dataset_name,
+                href: toDatasetUrl(datapoint.dataset_name),
+                isIdentifier: true,
+              },
+              { label: "Datapoints" },
+            ]}
+          />
+        }
         name={datapoint.id}
         tag={
           <>

@@ -12,30 +12,37 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * The expected payload is a JSON object with the following fields:
  */
 export type ClientInferenceParams = {
-  function_name: string | null;
-  model_name: string | null;
-  episode_id: string | null;
+  function_name?: string;
+  model_name?: string;
+  episode_id?: string;
   input: Input;
-  stream: boolean | null;
+  stream?: boolean;
   params: InferenceParams;
-  variant_name: string | null;
-  dryrun: boolean | null;
+  variant_name?: string;
+  dryrun?: boolean;
   internal: boolean;
   tags: { [key in string]?: string };
-  output_schema: JsonValue | null;
+  output_schema?: JsonValue;
   credentials: Map<string, string>;
   cache_options: CacheParamsOptions;
   /**
+   * DEPRECATED (#5697 / 2026.4+): Use `include_raw_response` instead.
    * If `true`, add an `original_response` field to the response, containing the raw string response from the model.
    * Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
-   * if the fuser/judge model failed
+   * if the fuser/judge model failed.
    */
   include_original_response: boolean;
+  /**
+   * If `true`, add a `raw_response` field to the response, containing the raw string response from the model.
+   * Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `raw_response`
+   * if the fuser/judge model failed.
+   */
+  include_raw_response: boolean;
   /**
    * If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
    */
   include_raw_usage: boolean;
-  internal_dynamic_variant_config: UninitializedVariantInfo | null;
+  internal_dynamic_variant_config?: UninitializedVariantInfo;
   /**
    * A subset of static tools configured for the function that the inference is allowed to use. Optional.
    * If not provided, all static tools are allowed.

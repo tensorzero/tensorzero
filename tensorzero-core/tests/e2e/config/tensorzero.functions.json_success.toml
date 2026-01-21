@@ -64,6 +64,33 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "on"
 max_tokens = 500
 
+[functions.json_success.variants.aws-bedrock-thinking]
+type = "chat_completion"
+model = "claude-sonnet-4-5-20250929-thinking-aws-bedrock"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
+[functions.json_success.variants.anthropic-haiku-4-5-thinking]
+type = "chat_completion"
+model = "claude-haiku-4-5-thinking"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
+[functions.json_success.variants.gcp-vertex-anthropic-thinking]
+type = "chat_completion"
+model = "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
 [functions.json_success.variants.aws-bedrock-implicit]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
@@ -226,6 +253,16 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "on"
 max_tokens = 500
 
+[functions.json_success.variants.gcp-vertex-gemini-pro-thinking]
+type = "chat_completion"
+model = "gcp-gemini-2.5-pro-thinking"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 500
+# Set to minimum value to speed up tests and save tokens
+thinking_budget_tokens = 128
+
 [functions.json_success.variants.gcp-vertex-gemini-pro-implicit]
 type = "chat_completion"
 model = "gcp-gemini-2.5-pro"
@@ -360,6 +397,14 @@ system_template = "../../../fixtures/config/functions/json_success/prompt/system
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
 max_tokens = 100
+
+[functions.json_success.variants.openai-gpt-5-mini]
+type = "chat_completion"
+model = "gpt-5-mini-responses"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
 
 [functions.json_success.variants.openai-responses-strict]
 type = "chat_completion"
@@ -715,3 +760,11 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
 max_tokens = 100
+
+[functions.json_success.variants.xai-reasoning]
+type = "chat_completion"
+model = "grok-3-mini"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 800

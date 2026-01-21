@@ -11,6 +11,7 @@ pub mod endpoints; // API endpoints
 pub mod error; // error handling
 pub mod evaluations; // evaluation
 pub mod experimentation;
+pub mod feature_flags;
 pub mod function; // types and methods for working with TensorZero functions
 pub mod howdy;
 pub mod http;

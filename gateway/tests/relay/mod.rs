@@ -3,4 +3,5 @@
 mod basic;
 mod credential_validation;
 mod extra_body;
+mod raw_response;
 mod raw_usage;

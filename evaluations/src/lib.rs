@@ -42,13 +42,11 @@ use tokio::{
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
-pub mod betting_confidence_sequences;
 pub mod cli;
 pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 pub mod stopping;
-pub mod topk;
 pub mod types;
 
 /// Buffer size for the mpsc channel used to stream evaluation updates.
@@ -742,6 +740,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         stream: Some(false),
         params: InferenceParams::default(),
         include_original_response: false,
+        include_raw_response: false,
         include_raw_usage: false,
         internal: true,
         extra_body: Default::default(),

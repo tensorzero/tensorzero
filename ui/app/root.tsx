@@ -6,12 +6,11 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
 } from "react-router";
 
-import { ConfigProvider, EMPTY_CONFIG } from "./context/config";
+import { EMPTY_CONFIG } from "./context/config";
 import type { UiConfig } from "./types/tensorzero";
-import { ReadOnlyProvider } from "./context/read-only";
-import { AutopilotAvailableProvider } from "./context/autopilot-available";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
 import {
@@ -29,8 +28,8 @@ import {
   InfraErrorType,
   isInfraErrorData,
   isAuthenticationError,
-  isClickHouseError,
   isGatewayConnectionError,
+  isClickHouseError,
   classifyError,
   getErrorLabel,
   type ClassifiedError,
@@ -134,45 +133,54 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
-  const { config, isReadOnly, autopilotAvailable, infraError } = loaderData;
+  const { infraError } = loaderData;
   const [dialogOpen, setDialogOpen] = React.useState(true);
 
+  // Reset dialog when infraError changes (component re-renders, not remounts)
+  React.useEffect(() => {
+    if (infraError) {
+      setDialogOpen(true);
+    }
+  }, [infraError]);
+
   return (
-    <AppProviders>
-      <ReadOnlyProvider value={isReadOnly}>
-        <AutopilotAvailableProvider value={autopilotAvailable}>
-          <ConfigProvider value={config}>
-            <div className="fixed inset-0 flex">
-              <AppSidebar />
-              <ContentLayout>
-                <Outlet />
-              </ContentLayout>
-            </div>
-            {infraError && (
-              <ErrorDialog
-                open={dialogOpen}
-                onDismiss={() => setDialogOpen(false)}
-                onReopen={() => setDialogOpen(true)}
-                label={getErrorLabel(infraError.type)}
-              >
-                <ErrorContent error={infraError} />
-              </ErrorDialog>
-            )}
-          </ConfigProvider>
-        </AutopilotAvailableProvider>
-      </ReadOnlyProvider>
+    <AppProviders loaderData={loaderData}>
+      <div className="fixed inset-0 flex">
+        <AppSidebar />
+        <ContentLayout>
+          <Outlet />
+        </ContentLayout>
+      </div>
+      {infraError && (
+        <ErrorDialog
+          open={dialogOpen}
+          onDismiss={() => setDialogOpen(false)}
+          onReopen={() => setDialogOpen(true)}
+          label={getErrorLabel(infraError.type)}
+        >
+          <ErrorContent error={infraError} />
+        </ErrorDialog>
+      )}
     </AppProviders>
   );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const [open, setOpen] = React.useState(true);
+  const rootLoaderData = useRouteLoaderData<typeof loader>("root");
+
+  // Reset dialog when error changes (component may re-render, not remount)
+  React.useEffect(() => {
+    setOpen(true);
+  }, [error]);
 
   // Client 404s (page not found in React Router) - show in content area with sidebar
   // Check that it's not an infrastructure error (those go through classifyError)
   if (isRouteErrorResponse(error) && error.status === 404) {
     if (!isInfraErrorData(error.data)) {
-      return <ErrorAppShell content={<PageNotFound />} />;
+      return (
+        <ErrorAppShell content={<PageNotFound />} loaderData={rootLoaderData} />
+      );
     }
   }
 
@@ -182,6 +190,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 
   return (
     <ErrorAppShell
+      loaderData={rootLoaderData}
       overlay={
         <ErrorDialog
           open={open}

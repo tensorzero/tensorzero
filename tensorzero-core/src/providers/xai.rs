@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::{Value, json};
+use tensorzero_types_providers::xai::{XAIResponse as XAIResponseGeneric, XAIUsage};
 use tokio::time::Instant;
 use url::Url;
 
@@ -21,7 +22,9 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, Thought, Usage,
+    batch::StartBatchProviderInferenceResponse,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
@@ -31,8 +34,8 @@ use crate::providers::openai::OpenAIMessagesConfig;
 use uuid::Uuid;
 
 use super::openai::{
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, StreamOptions, SystemOrDeveloper,
-    get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
+    OpenAIRequestMessage, OpenAIResponseChoice, StreamOptions, SystemOrDeveloper, get_chat_url,
+    handle_openai_error, prepare_openai_messages, stream_openai,
 };
 use crate::inference::TensorZeroEventError;
 use crate::providers::chat_completions::prepare_chat_completion_tools;
@@ -47,6 +50,26 @@ lazy_static! {
 
 const PROVIDER_NAME: &str = "xAI";
 pub const PROVIDER_TYPE: &str = "xai";
+
+type XAIResponse = XAIResponseGeneric<OpenAIResponseChoice>;
+
+impl From<XAIUsage> for Usage {
+    fn from(usage: XAIUsage) -> Self {
+        // Add `reasoning_tokens` to `completion_tokens` for total output tokens
+        let output_tokens = match (usage.completion_tokens, usage.completion_tokens_details) {
+            (Some(completion), Some(details)) => {
+                Some(completion + details.reasoning_tokens.unwrap_or(0))
+            }
+            (Some(completion), None) => Some(completion),
+            (None, Some(details)) => details.reasoning_tokens,
+            (None, None) => None,
+        };
+        Usage {
+            input_tokens: usage.prompt_tokens,
+            output_tokens,
+        }
+    }
+}
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
@@ -283,15 +306,16 @@ impl InferenceProvider for XAIProvider {
         )
         .await?;
 
-        let stream = stream_openai(
+        let inner_stream = stream_openai(
             PROVIDER_TYPE.to_string(),
             model_inference_id,
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
             None,
             &raw_request,
-        )
-        .peekable();
+        );
+        // Wrap with xAI-specific stream to add reasoning tokens to usage
+        let stream = stream_xai(inner_stream).peekable();
         Ok((stream, raw_request))
     }
 
@@ -494,7 +518,7 @@ impl XAIResponseFormat {
 }
 
 struct XAIResponseWithMetadata<'a> {
-    response: OpenAIResponse,
+    response: XAIResponse,
     raw_response: String,
     latency: Latency,
     raw_request: String,
@@ -541,6 +565,14 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -570,6 +602,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,
@@ -582,6 +615,43 @@ fn xai_usage_from_raw_response(raw_response: &str) -> Option<Value> {
     serde_json::from_str::<Value>(raw_response)
         .ok()
         .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
+}
+
+/// Extracts reasoning_tokens from a raw JSON response's completion_tokens_details
+fn extract_reasoning_tokens_from_raw(raw_response: &str) -> Option<u32> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("usage")
+                .and_then(|u| u.get("completion_tokens_details"))
+                .and_then(|d| d.get("reasoning_tokens"))
+                .and_then(|r| r.as_u64())
+                .map(|r| r as u32)
+        })
+}
+
+/// Wraps the OpenAI stream to add reasoning tokens to usage for xAI.
+/// xAI reports reasoning_tokens separately in completion_tokens_details,
+/// so we need to add them to output_tokens for accurate token counting.
+fn stream_xai(
+    inner_stream: ProviderInferenceResponseStreamInner,
+) -> ProviderInferenceResponseStreamInner {
+    Box::pin(
+        inner_stream.map(|result: Result<ProviderInferenceResponseChunk, Error>| {
+            result.map(|mut chunk| {
+                // If this chunk has usage, check for reasoning tokens in raw_response
+                if let Some(ref mut usage) = chunk.usage
+                    && let Some(reasoning_tokens) =
+                        extract_reasoning_tokens_from_raw(&chunk.raw_response)
+                {
+                    // Add reasoning tokens to output_tokens
+                    usage.output_tokens = Some(usage.output_tokens.unwrap_or(0) + reasoning_tokens);
+                }
+                chunk
+            })
+        }),
+    )
 }
 
 #[cfg(test)]
@@ -600,7 +670,7 @@ mod tests {
         ChatCompletionToolChoice, ChatCompletionToolType,
     };
     use crate::providers::openai::{
-        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
@@ -744,7 +814,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_xai_response_with_metadata_try_into() {
-        let valid_response = OpenAIResponse {
+        let valid_response = XAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
                 message: OpenAIResponseMessage {
@@ -754,9 +824,10 @@ mod tests {
                 },
                 finish_reason: OpenAIFinishReason::Stop,
             }],
-            usage: OpenAIUsage {
+            usage: XAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {

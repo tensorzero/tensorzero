@@ -21,7 +21,7 @@ use tensorzero_core::inference::types::batch::{
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, FinishReason, JsonInferenceOutput, StoredInput, Usage,
 };
-use tensorzero_core::jsonschema_util::StaticJSONSchema;
+use tensorzero_core::jsonschema_util::JSONSchema;
 use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
@@ -568,7 +568,7 @@ async fn test_write_read_completed_batch_inference_json() {
         status,
         errors: vec![],
     });
-    let output_schema = StaticJSONSchema::from_value(json!({
+    let output_schema = JSONSchema::from_value(json!({
         "type": "object",
         "properties": {
             "answer": {
