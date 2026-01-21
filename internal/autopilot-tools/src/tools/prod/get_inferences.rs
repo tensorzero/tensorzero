@@ -6,10 +6,19 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::Schema;
+use schemars::{JsonSchema, Schema};
+use serde::{Deserialize, Serialize};
 use tensorzero::{GetInferencesRequest, GetInferencesResponse};
 
 use autopilot_client::AutopilotSideInfo;
+
+/// Parameters for the get_inferences tool (visible to LLM).
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GetInferencesToolParams {
+    /// Request parameters for getting inferences by ID.
+    #[serde(flatten)]
+    pub request: GetInferencesRequest,
+}
 
 /// Tool for getting specific inferences by their IDs.
 ///
@@ -21,7 +30,7 @@ pub struct GetInferencesTool;
 impl ToolMetadata for GetInferencesTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GetInferencesResponse;
-    type LlmParams = GetInferencesRequest;
+    type LlmParams = GetInferencesToolParams;
 
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("get_inferences")
@@ -77,7 +86,7 @@ impl SimpleTool for GetInferencesTool {
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         ctx.client()
-            .get_inferences(llm_params)
+            .get_inferences(llm_params.request)
             .await
             .map_err(|e| AutopilotToolError::client_error("get_inferences", e).into())
     }

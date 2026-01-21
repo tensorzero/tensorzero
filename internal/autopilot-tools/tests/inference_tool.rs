@@ -16,8 +16,8 @@ use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 use autopilot_tools::tools::{
-    GetInferencesTool, InferenceTool, InferenceToolParams, ListInferencesTool,
-    ListInferencesToolParams,
+    GetInferencesTool, GetInferencesToolParams, InferenceTool, InferenceToolParams,
+    ListInferencesTool, ListInferencesToolParams,
 };
 use common::{MockTensorZeroClient, create_mock_chat_response};
 
@@ -286,10 +286,12 @@ async fn test_get_inferences_tool_basic(pool: PgPool) {
         inferences: vec![inference],
     };
 
-    let llm_params = GetInferencesRequest {
-        ids: vec![inference_id],
-        function_name: None,
-        output_source: InferenceOutputSource::Inference,
+    let llm_params = GetInferencesToolParams {
+        request: GetInferencesRequest {
+            ids: vec![inference_id],
+            function_name: None,
+            output_source: InferenceOutputSource::Inference,
+        },
     };
 
     let side_info = AutopilotSideInfo {
@@ -335,10 +337,12 @@ async fn test_get_inferences_tool_with_function_name(pool: PgPool) {
         inferences: vec![inference],
     };
 
-    let llm_params = GetInferencesRequest {
-        ids: vec![inference_id],
-        function_name: Some("specific_function".to_string()),
-        output_source: InferenceOutputSource::Inference,
+    let llm_params = GetInferencesToolParams {
+        request: GetInferencesRequest {
+            ids: vec![inference_id],
+            function_name: Some("specific_function".to_string()),
+            output_source: InferenceOutputSource::Inference,
+        },
     };
 
     let side_info = AutopilotSideInfo {
@@ -380,10 +384,12 @@ async fn test_get_inferences_tool_with_output_source(pool: PgPool) {
         inferences: vec![inference],
     };
 
-    let llm_params = GetInferencesRequest {
-        ids: vec![inference_id],
-        function_name: None,
-        output_source: InferenceOutputSource::Demonstration,
+    let llm_params = GetInferencesToolParams {
+        request: GetInferencesRequest {
+            ids: vec![inference_id],
+            function_name: None,
+            output_source: InferenceOutputSource::Demonstration,
+        },
     };
 
     let side_info = AutopilotSideInfo {
@@ -418,10 +424,12 @@ async fn test_get_inferences_tool_with_output_source(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_get_inferences_tool_error(pool: PgPool) {
-    let llm_params = GetInferencesRequest {
-        ids: vec![Uuid::now_v7()],
-        function_name: None,
-        output_source: InferenceOutputSource::Inference,
+    let llm_params = GetInferencesToolParams {
+        request: GetInferencesRequest {
+            ids: vec![Uuid::now_v7()],
+            function_name: None,
+            output_source: InferenceOutputSource::Inference,
+        },
     };
 
     let side_info = AutopilotSideInfo {

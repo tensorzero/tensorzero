@@ -29,7 +29,7 @@ pub use feedback::{FeedbackTool, FeedbackToolParams};
 pub use get_config::{GetConfigTool, GetConfigToolParams};
 pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
 pub use get_feedback_by_variant::{GetFeedbackByVariantTool, GetFeedbackByVariantToolParams};
-pub use get_inferences::GetInferencesTool;
+pub use get_inferences::{GetInferencesTool, GetInferencesToolParams};
 pub use get_latest_feedback_by_metric::{
     GetLatestFeedbackByMetricTool, GetLatestFeedbackByMetricToolParams,
 };
