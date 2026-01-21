@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import { data, redirect, useFetcher } from "react-router";
-import { toDatapointUrl } from "~/utils/urls";
+import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
 import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
