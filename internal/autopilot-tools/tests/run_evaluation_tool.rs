@@ -307,12 +307,17 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     evaluations_1.insert("accuracy".to_string(), Some(0.9));
     evaluations_1.insert("quality".to_string(), Some(0.85));
 
+    // Datapoint 2: inference succeeded, but one evaluator failed (quality)
+    // This is the scenario where evaluator_errors is populated
     let mut evaluations_2 = HashMap::new();
     evaluations_2.insert("accuracy".to_string(), Some(0.8));
-    evaluations_2.insert("quality".to_string(), None); // evaluator returned no score
+    // Note: quality evaluator failed, so it's not in evaluations
 
-    let mut evaluator_errors_3 = HashMap::new();
-    evaluator_errors_3.insert("quality".to_string(), "Evaluator timeout".to_string());
+    let mut evaluator_errors_2 = HashMap::new();
+    evaluator_errors_2.insert("quality".to_string(), "Evaluator timeout".to_string());
+
+    // Datapoint 3: inference failed entirely
+    // When success=false, evaluator_errors is always empty (per client_ext.rs implementation)
 
     let datapoint_results = vec![
         DatapointResult {
@@ -326,14 +331,14 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
             datapoint_id: datapoint_id_2,
             success: true,
             evaluations: evaluations_2,
-            evaluator_errors: HashMap::new(),
+            evaluator_errors: evaluator_errors_2,
             error: None,
         },
         DatapointResult {
             datapoint_id: datapoint_id_3,
             success: false,
             evaluations: HashMap::new(),
-            evaluator_errors: evaluator_errors_3,
+            evaluator_errors: HashMap::new(), // Always empty when success=false
             error: Some("Inference failed".to_string()),
         },
     ];
@@ -445,7 +450,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
         "should have 3 datapoint results"
     );
 
-    // Verify first datapoint (successful)
+    // Verify first datapoint (fully successful)
     let dp1 = &datapoint_results[0];
     assert!(dp1.success, "first datapoint should be successful");
     assert_eq!(
@@ -453,8 +458,28 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
         Some(&Some(0.9)),
         "first datapoint accuracy should be 0.9"
     );
+    assert!(
+        dp1.evaluator_errors.is_empty(),
+        "first datapoint should have no evaluator errors"
+    );
 
-    // Verify third datapoint (failed)
+    // Verify second datapoint (inference succeeded, but one evaluator failed)
+    let dp2 = &datapoint_results[1];
+    assert!(
+        dp2.success,
+        "second datapoint should be successful (inference succeeded)"
+    );
+    assert_eq!(
+        dp2.evaluations.get("accuracy"),
+        Some(&Some(0.8)),
+        "second datapoint accuracy should be 0.8"
+    );
+    assert!(
+        dp2.evaluator_errors.contains_key("quality"),
+        "second datapoint should have evaluator error for quality"
+    );
+
+    // Verify third datapoint (inference failed)
     let dp3 = &datapoint_results[2];
     assert!(!dp3.success, "third datapoint should have failed");
     assert!(
@@ -462,7 +487,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
         "third datapoint should have an error message"
     );
     assert!(
-        dp3.evaluator_errors.contains_key("quality"),
-        "third datapoint should have evaluator error for quality"
+        dp3.evaluator_errors.is_empty(),
+        "failed datapoint should have empty evaluator_errors (per API semantics)"
     );
 }
