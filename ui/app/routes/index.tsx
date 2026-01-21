@@ -50,9 +50,9 @@ function DirectoryCard({
   return (
     <Link to={source} className="block">
       <Card className="border-border hover:border-border-hover group flex w-full flex-row items-center gap-3 rounded-xl border p-4 hover:shadow-[0_0_0_3px_rgba(0,0,0,0.05)]">
-        <div className="bg-bg-tertiary h-8 w-8 rounded-lg p-2 transition-colors group-hover:bg-orange-50 dark:group-hover:bg-orange-900">
+        <div className="bg-bg-tertiary group-hover:bg-card-highlight h-8 w-8 rounded-lg p-2 transition-colors">
           <Icon
-            className="text-fg-secondary transition-colors group-hover:text-orange-600 dark:group-hover:text-orange-200"
+            className="text-fg-secondary group-hover:text-card-highlight-icon transition-colors"
             size={16}
           />
         </div>
