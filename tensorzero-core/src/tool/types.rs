@@ -13,7 +13,6 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use strum::AsRefStr;
-use tensorzero_derive::TensorZeroDeserialize;
 #[cfg(feature = "json-schema-bindings")]
 use tensorzero_derive::export_schema;
 
@@ -287,7 +286,7 @@ impl fmt::Display for OpenAICustomTool {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
