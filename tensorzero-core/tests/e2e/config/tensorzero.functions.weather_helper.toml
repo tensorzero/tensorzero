@@ -252,3 +252,21 @@ type = "chat_completion"
 model = "grok-3-mini"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 800
+
+# OpenRouter reasoning variants
+
+# Grok 3 Mini with `reasoning_effort`-based reasoning
+[functions.weather_helper.variants.openrouter-grok-reasoning]
+type = "chat_completion"
+model = "grok-3-mini-openrouter"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 2048
+reasoning_effort = "low"
+
+# Claude Haiku 4.5 with `thinking_budget_tokens`-based reasoning
+[functions.weather_helper.variants.openrouter-claude-reasoning]
+type = "chat_completion"
+model = "claude-haiku-4-5-openrouter"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 2048
+thinking_budget_tokens = 1024

@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 use std::{io::Write, path::PathBuf};
 use tempfile::NamedTempFile;
 use toml::de::DeTable;
@@ -116,7 +117,7 @@ async fn test_config_from_toml_table_valid() {
         .await
         .expect("Error getting embedding model")
         .unwrap();
-    assert_eq!(embedding_model.routing, vec!["openai".into()]);
+    assert_eq!(embedding_model.routing, vec![Arc::<str>::from("openai")]);
     assert_eq!(embedding_model.providers.len(), 1);
     let provider = embedding_model.providers.get("openai").unwrap();
     assert!(matches!(provider.inner, EmbeddingProviderConfig::OpenAI(_)));
@@ -131,7 +132,10 @@ async fn test_config_from_toml_table_valid() {
             assert_eq!(json_config.variants.len(), 7);
             match &json_config.variants["anthropic_promptA"].inner {
                 VariantConfig::ChatCompletion(chat_config) => {
-                    assert_eq!(chat_config.model(), &"anthropic::claude-3.5-sonnet".into());
+                    assert_eq!(
+                        chat_config.model(),
+                        &Arc::<str>::from("anthropic::claude-3.5-sonnet")
+                    );
                     assert_eq!(chat_config.weight(), Some(1.0));
                     assert_eq!(
                         chat_config

@@ -14,4 +14,4 @@ export type ToolOutcome =
       error: JsonValue;
     }
   | { type: "missing" }
-  | { type: "other" };
+  | { type: "unknown" };

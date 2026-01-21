@@ -237,7 +237,7 @@ const mixedEvents: Event[] = [
         type: "tool_result",
         tool_call_event_id: "other-tool-call-event-id",
         outcome: {
-          type: "other",
+          type: "unknown",
         },
       },
     },
@@ -267,7 +267,7 @@ const mixedEvents: Event[] = [
       session_id: sessionId,
       created_at: "",
       payload: {
-        type: "other",
+        type: "unknown",
       },
     },
     10,

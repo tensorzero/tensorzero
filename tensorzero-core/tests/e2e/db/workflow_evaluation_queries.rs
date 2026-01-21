@@ -386,7 +386,7 @@ async fn test_get_workflow_evaluation_run_statistics_nonexistent_run() {
     let clickhouse = get_clickhouse().await;
 
     // Use a random UUID that doesn't exist
-    let run_id = uuid::Uuid::new_v4();
+    let run_id = uuid::Uuid::now_v7();
 
     let result = clickhouse
         .get_workflow_evaluation_run_statistics(run_id, None)

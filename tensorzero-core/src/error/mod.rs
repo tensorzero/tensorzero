@@ -1745,6 +1745,17 @@ impl From<autopilot_client::AutopilotError> for Error {
                     status_code: None,
                 })
             }
+            autopilot_client::AutopilotError::PartialSpawnFailure { errors, .. } => {
+                let failed_ids: Vec<_> = errors.iter().map(|(id, _)| id.to_string()).collect();
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!(
+                        "Failed to spawn {} approved tool call(s): {}",
+                        errors.len(),
+                        failed_ids.join(", ")
+                    ),
+                    status_code: None,
+                })
+            }
         }
     }
 }

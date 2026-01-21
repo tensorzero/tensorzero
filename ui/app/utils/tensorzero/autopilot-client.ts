@@ -1,5 +1,7 @@
 import { BaseTensorZeroClient } from "./base-client";
 import type {
+  ApproveAllToolCallsGatewayRequest,
+  ApproveAllToolCallsResponse,
   CreateEventGatewayRequest,
   CreateEventResponse,
   ListEventsParams,
@@ -73,6 +75,26 @@ export class AutopilotClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as CreateEventResponse;
+  }
+
+  /**
+   * Approves all pending tool calls for a session up to a specified event ID.
+   * This atomically approves all pending tool calls with event IDs <= last_tool_call_event_id.
+   */
+  async approveAllToolCalls(
+    sessionId: string,
+    request: ApproveAllToolCallsGatewayRequest,
+  ): Promise<ApproveAllToolCallsResponse> {
+    const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/actions/approve_all`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ApproveAllToolCallsResponse;
   }
 
   /**

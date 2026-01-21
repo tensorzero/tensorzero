@@ -456,6 +456,28 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "strict"
 max_tokens = 100
 
+# OpenRouter reasoning variants
+
+# Grok 3 Mini with `reasoning_effort`-based reasoning
+[functions.json_success.variants.openrouter-grok-reasoning]
+type = "chat_completion"
+model = "grok-3-mini-openrouter"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+reasoning_effort = "low"
+
+# Claude Haiku 4.5 with `thinking_budget_tokens`-based reasoning
+[functions.json_success.variants.openrouter-claude-reasoning]
+type = "chat_completion"
+model = "claude-haiku-4-5-openrouter"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
 [functions.json_success.variants.tgi]
 type = "chat_completion"
 model = "phi-3.5-mini-instruct-tgi"

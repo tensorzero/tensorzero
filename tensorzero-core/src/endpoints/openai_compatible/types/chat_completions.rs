@@ -10,6 +10,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
@@ -58,7 +59,7 @@ pub struct OpenAICompatibleAssistantMessage {
     pub tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, PartialEq, TensorZeroDeserialize)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
 pub enum OpenAICompatibleMessage {
@@ -74,8 +75,7 @@ pub enum OpenAICompatibleMessage {
 // ============================================================================
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICompatibleResponseFormat {
     Text,
     JsonSchema { json_schema: JsonSchemaInfo },
@@ -227,8 +227,9 @@ pub struct OpenAICompatibleResponse {
 // Content Block Types
 // ============================================================================
 
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
+#[derive(Debug, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
 pub enum OpenAICompatibleContentBlock {
     Text(TextContent),
     ImageUrl {

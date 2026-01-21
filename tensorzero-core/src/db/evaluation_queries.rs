@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 
 use chrono::{DateTime, Utc};
 #[cfg(test)]
@@ -170,8 +171,9 @@ pub struct JsonEvaluationResultRow {
 }
 
 /// Evaluation result row that can represent either chat or JSON function output.
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum EvaluationResultRow {
     Chat(ChatEvaluationResultRow),
