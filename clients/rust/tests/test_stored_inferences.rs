@@ -1,37 +1,44 @@
 #![cfg(feature = "e2e_tests")]
 #![expect(clippy::unwrap_used)]
-use reqwest::Client as HttpClient;
+#![expect(clippy::unreachable)]
 use serde_json::json;
-use tensorzero::test_helpers::get_gateway_endpoint;
-use tensorzero::{Client, ClientExt, InferenceOutputSource, ListInferencesRequest};
+use tensorzero::{
+    Client, ClientExt, ClientInferenceParams, InferenceOutput, InferenceOutputSource, Input,
+    InputMessage, InputMessageContent, ListInferencesRequest, Role, System,
+};
+use tensorzero_core::inference::types::{Arguments, Text};
 use uuid::Uuid;
 
-// Helper function to create test inferences
-async fn create_test_inference(_client: &Client) -> Uuid {
-    let payload = json!({
-        "function_name": "basic_test",
-        "input": {
-            "system": {"assistant_name": "Assistant"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Hello"
-                }
-            ]
-        },
-        "stream": false,
-    });
-
-    let response = HttpClient::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+// Helper function to create test inferences using the client
+// This ensures embedded gateway tests write and read through the same ClickHouse connection
+async fn create_test_inference(client: &Client) -> Uuid {
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            input: Input {
+                system: Some(System::Template(Arguments(
+                    json!({"assistant_name": "Assistant"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    let response_json: serde_json::Value = response.json().await.unwrap();
-    let inference_id_str = response_json["inference_id"].as_str().unwrap();
-    Uuid::parse_str(inference_id_str).unwrap()
+    match response {
+        InferenceOutput::NonStreaming(r) => r.inference_id(),
+        InferenceOutput::Streaming(_) => unreachable!("Expected non-streaming response"),
+    }
 }
 
 // ============================================================================
@@ -455,32 +462,35 @@ tensorzero::make_gateway_test_functions!(test_list_inferences_with_ordering);
 
 /// Test listing inferences with tags filter
 async fn test_list_inferences_with_tag_filter(client: Client) {
-    // Create an inference with a specific tag
-    let payload = json!({
-        "function_name": "basic_test",
-        "input": {
-            "system": {"assistant_name": "Assistant"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Hello with tags"
-                }
-            ]
-        },
-        "stream": false,
-        "tags": {
-            "test_key": "test_value"
-        }
-    });
+    // Create an inference with a specific tag using the client
+    let mut tags = std::collections::HashMap::new();
+    tags.insert("test_key".to_string(), "test_value".to_string());
 
-    let _response = HttpClient::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let _response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            input: Input {
+                system: Some(System::Template(Arguments(
+                    json!({"assistant_name": "Assistant"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello with tags".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            tags,
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    // Wait a bit for the inferences to be written to the database
+    // Wait for async writes to be visible
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     // First get existing inferences to find one with tags
