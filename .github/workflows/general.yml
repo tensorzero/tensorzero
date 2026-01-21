@@ -918,7 +918,10 @@ jobs:
     name: "Postgres tests"
     permissions:
       contents: read
+      # Permission to download artifacts and for rust-cache
       actions: read
+      # Permission to fetch GitHub OIDC token authentication for Namespace login
+      id-token: write
     runs-on: ubuntu-latest
     needs: [build-gateway-container]
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}

@@ -1,5 +1,16 @@
 -- TODO(#5691): Add indexes for substring search on input/output JSONB columns
 
+-- Extract timestamp from UUIDv7
+-- UUIDv7 stores milliseconds since Unix epoch in the first 48 bits
+CREATE OR REPLACE FUNCTION tensorzero.uuid_v7_to_timestamp(p_uuid UUID)
+RETURNS TIMESTAMPTZ AS $$
+BEGIN
+    RETURN to_timestamp(
+        ('x' || substring(replace(p_uuid::text, '-', ''), 1, 12))::bit(48)::bigint / 1000.0
+    ) AT TIME ZONE 'UTC';
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+
 -- chat_inferences (partitioned by day)
 CREATE TABLE tensorzero.chat_inferences (
     id UUID NOT NULL,
@@ -20,7 +31,7 @@ CREATE TABLE tensorzero.chat_inferences (
     tool_choice TEXT,
     parallel_tool_calls BOOLEAN,
     snapshot_hash BYTEA,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
 
@@ -47,7 +58,7 @@ CREATE TABLE tensorzero.json_inferences (
     extra_body JSONB NOT NULL DEFAULT '[]',
     auxiliary_content JSONB NOT NULL,
     snapshot_hash BYTEA,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
 

@@ -68,7 +68,7 @@ fi
 
 # Chat Inferences
 # Note: input, output, tool_params, inference_params are JSONB in our schema
-# created_at is derived from the UUIDv7 timestamp (first 48 bits = ms since epoch)
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
 load_jsonl "chat_inference_examples.jsonl" "tensorzero.chat_inferences" "
 INSERT INTO tensorzero.chat_inferences (
     id, function_name, variant_name, episode_id,
@@ -95,15 +95,14 @@ SELECT
     j->'allowed_tools',
     j->>'tool_choice',
     (j->>'parallel_tool_calls')::boolean,
-    -- Extract timestamp from UUIDv7: first 48 bits are milliseconds since Unix epoch
-    to_timestamp((('x' || substring(replace(j->>'id', '-', ''), 1, 12))::bit(48)::bigint) / 1000.0) AT TIME ZONE 'UTC'
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
 FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id, created_at) DO NOTHING;
 "
 
 # JSON Inferences
 # Note: input, output, output_schema, inference_params, auxiliary_content are JSONB in our schema
-# created_at is derived from the UUIDv7 timestamp (first 48 bits = ms since epoch)
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
 load_jsonl "json_inference_examples.jsonl" "tensorzero.json_inferences" "
 INSERT INTO tensorzero.json_inferences (
     id, function_name, variant_name, episode_id,
@@ -124,8 +123,7 @@ SELECT
     COALESCE(j->'tags', '{}')::jsonb,
     COALESCE(j->'extra_body', '[]')::jsonb,
     COALESCE(j->'auxiliary_content', '{}')::jsonb,
-    -- Extract timestamp from UUIDv7: first 48 bits are milliseconds since Unix epoch
-    to_timestamp((('x' || substring(replace(j->>'id', '-', ''), 1, 12))::bit(48)::bigint) / 1000.0) AT TIME ZONE 'UTC'
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
 FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id, created_at) DO NOTHING;
 "
@@ -142,4 +140,3 @@ UNION ALL
 SELECT 'json_inferences', count(*) FROM tensorzero.json_inferences
 ORDER BY table_name;
 EOF
->>>>>>> Conflict 1 of 1 ends

@@ -32,7 +32,7 @@
   - Use `.push()` for trusted SQL fragments (table names, SQL keywords).
   - Use `.push_bind()` for user-provided values (prevents SQL injection, handles types).
   - Use `.build_query_scalar()` for scalar results, `.build()` for row results.
-- For static queries, use `sqlx::query!` or `sqlx::query()` directly.
+- For static queries, use `sqlx::query!` directly.
 
 # Python Dependencies
 

@@ -86,7 +86,7 @@ async fn throughput_by_variant(
     function_name: &str,
     time_window: TimeWindow,
     max_periods: u32,
-) -> Result<Vec<VariantThroughput>, sqlx::Error> {
+) -> Result<Vec<VariantThroughput>, Error> {
     let rows = if time_window == TimeWindow::Cumulative {
         // For cumulative, return all-time data grouped by variant with fixed epoch start
         let mut qb = QueryBuilder::new(
@@ -98,7 +98,9 @@ async fn throughput_by_variant(
                 SELECT variant_name FROM tensorzero.chat_inferences WHERE function_name = ",
         );
         qb.push_bind(function_name);
-        qb.push(" UNION ALL SELECT variant_name FROM tensorzero.json_inferences WHERE function_name = ");
+        qb.push(
+            " UNION ALL SELECT variant_name FROM tensorzero.json_inferences WHERE function_name = ",
+        );
         qb.push_bind(function_name);
         qb.push(") AS combined GROUP BY variant_name ORDER BY variant_name DESC");
 
@@ -139,35 +141,30 @@ async fn throughput_by_variant(
         qb.build().fetch_all(pool).await?
     };
 
-    Ok(rows
+    let variant_throughputs = rows
         .into_iter()
         .map(|row| {
             let period_start_str: String = row.get("period_start");
             let period_start = DateTime::parse_from_rfc3339(&period_start_str)
                 .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|e| {
-                    tracing::warn!(
-                        period_start_str,
-                        error = %e,
-                        "Failed to parse period_start as RFC3339, falling back to epoch"
-                    );
-                    DateTime::UNIX_EPOCH
-                });
+                .map_err(|err| {
+                    Error::new(ErrorDetails::PostgresResult {
+                        result_type: "variant_throughput",
+                        message: format!(
+                            "Failed to parse `period_start` value `{period_start_str}`: {err}"
+                        ),
+                    })
+                })?;
             let variant_name: String = row.get("variant_name");
             let count: i32 = row.get("count");
-            VariantThroughput {
+            Ok(VariantThroughput {
                 period_start,
                 variant_name,
                 count: count as u32,
-            }
+            })
         })
-        .collect())
-}
-
-fn map_sqlx_error(e: sqlx::Error) -> Error {
-    Error::new(ErrorDetails::PostgresQuery {
-        message: e.to_string(),
-    })
+        .collect::<Result<Vec<VariantThroughput>, Error>>()?;
+    Ok(variant_throughputs)
 }
 
 #[async_trait]
@@ -184,7 +181,7 @@ impl InferenceCountQueries for PostgresConnectionInfo {
             params.variant_name,
         )
         .await
-        .map_err(map_sqlx_error)?;
+        .map_err(Error::from)?;
         Ok(count as u64)
     }
 
@@ -200,7 +197,7 @@ impl InferenceCountQueries for PostgresConnectionInfo {
             params.variant_name,
         )
         .await
-        .map_err(map_sqlx_error)
+        .map_err(Error::from)
     }
 
     async fn count_inferences_with_feedback(
@@ -241,7 +238,7 @@ impl InferenceCountQueries for PostgresConnectionInfo {
             .build_query_scalar()
             .fetch_one(pool)
             .await
-            .map_err(map_sqlx_error)?;
+            .map_err(Error::from)?;
 
         Ok(count as u64)
     }
@@ -258,7 +255,6 @@ impl InferenceCountQueries for PostgresConnectionInfo {
             params.max_periods,
         )
         .await
-        .map_err(map_sqlx_error)
     }
 
     async fn list_functions_with_inference_count(
@@ -283,7 +279,7 @@ impl InferenceCountQueries for PostgresConnectionInfo {
         )
         .fetch_all(pool)
         .await
-        .map_err(map_sqlx_error)?;
+        .map_err(Error::from)?;
 
         let results = rows
             .into_iter()
