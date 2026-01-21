@@ -2579,7 +2579,7 @@ mod tests {
 
         let response: OpenAIResponsesResponse = serde_json::from_str(json).unwrap();
         let generic_request = ModelInferenceRequest {
-            inference_id: uuid::Uuid::new_v4(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![],
             system: None,
             temperature: None,
@@ -2678,7 +2678,7 @@ mod tests {
 
         let response: OpenAIResponsesResponse = serde_json::from_str(json).unwrap();
         let generic_request = ModelInferenceRequest {
-            inference_id: uuid::Uuid::new_v4(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![],
             system: None,
             temperature: None,

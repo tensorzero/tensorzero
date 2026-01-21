@@ -23,7 +23,7 @@
 //! let response = client.create_event(
 //!     Uuid::nil(),
 //!     CreateEventRequest {
-//!         deployment_id: Uuid::new_v4(),
+//!         deployment_id: Uuid::now_v7(),
 //!         tensorzero_version: "2025.1.0".to_string(),
 //!         payload: EventPayload::Message(InputMessage {
 //!             role: Role::User,
