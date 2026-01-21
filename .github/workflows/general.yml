@@ -700,6 +700,8 @@ jobs:
       - name: Run cargo-deny
         run: cargo deny check
 
+  # TODO(#5744): This job runs Postgres and Valkey rate limiting tests in addition to
+  # ClickHouse tests. Refactor to separate these into dedicated test jobs.
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
     permissions:
@@ -801,6 +803,10 @@ jobs:
         run: |
           echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
           echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+
+      - name: Set Valkey URL for tests
+        run: |
+          echo "TENSORZERO_VALKEY_URL=redis://localhost:6379" >> $GITHUB_ENV
 
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |

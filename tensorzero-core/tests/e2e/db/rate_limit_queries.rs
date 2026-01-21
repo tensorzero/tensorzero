@@ -2,6 +2,9 @@
 //!
 //! Each test function accepts a connection implementing `RateLimitQueries` and a `test_id`
 //! to namespace keys and prevent interference between parallel tests.
+//!
+//! TODO(#5744): These tests currently run as part of the ClickHouse test job, but they
+//! don't depend on ClickHouse. Refactor CI to run Postgres and Valkey tests separately.
 
 use tensorzero_core::db::{ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest};
 use tensorzero_core::rate_limiting::{ActiveRateLimitKey, RateLimitInterval};
