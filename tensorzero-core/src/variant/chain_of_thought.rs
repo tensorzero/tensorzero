@@ -293,6 +293,7 @@ fn parse_thinking_output(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_prepare_thinking_output_schema() {
@@ -455,7 +456,7 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.inner.model, "gpt-4".into());
+        assert_eq!(exported.inner.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.inner.weight, Some(0.8));
         assert_eq!(exported.inner.temperature, Some(0.7));
         assert_eq!(exported.inner.max_tokens, Some(150));
