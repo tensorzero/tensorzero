@@ -11533,13 +11533,27 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // Include randomness in the prompt to force a cache miss for the first request
     let randomness = Uuid::now_v7();
 
-    // Always disable thinking to avoid token consumption from internal reasoning
-    let params = json!({
-        "chat_completion": {
-            "max_tokens": max_tokens,
-            "thinking_budget_tokens": 0
-        }
-    });
+    // Try to disable thinking to avoid token consumption from internal reasoning.
+    // Anthropic providers don't support `thinking_budget_tokens: 0` (minimum is 1024),
+    // so we omit it for those providers - not including the parameter disables thinking.
+    let is_anthropic_provider = matches!(
+        provider.model_provider_name.as_str(),
+        "anthropic" | "gcp_vertex_anthropic" | "aws_bedrock"
+    );
+    let params = if is_anthropic_provider {
+        json!({
+            "chat_completion": {
+                "max_tokens": max_tokens
+            }
+        })
+    } else {
+        json!({
+            "chat_completion": {
+                "max_tokens": max_tokens,
+                "thinking_budget_tokens": 0
+            }
+        })
+    };
 
     let payload = json!({
         "function_name": "basic_test",
