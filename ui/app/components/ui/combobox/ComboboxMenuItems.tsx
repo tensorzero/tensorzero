@@ -60,7 +60,9 @@ export function ComboboxMenuItems({
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   {getPrefix?.(item.value, isSelected)}
-                  <span className="truncate font-mono">{item.label}</span>
+                  <span className="truncate font-mono" title={item.label}>
+                    {item.label}
+                  </span>
                 </div>
                 {getSuffix?.(item.value)}
               </CommandItem>
