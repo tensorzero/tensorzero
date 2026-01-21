@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tensorzero.tensorzero_auth_api_key SET disabled_at = $1, updated_at = $1 WHERE public_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Bpchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de73ec8849cec7fae89692bcbc79e2dc2cef1ee523f28d7893aaec76c3a7fef3"
+}

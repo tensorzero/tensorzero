@@ -1,17 +1,19 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT bucket_key_returned as key_returned, final_balance\n             FROM return_multiple_resource_tickets($1, $2, $3, $4, $5)",
+  "query": "SELECT bucket_key_returned as key_returned, final_balance\n             FROM tensorzero.return_multiple_resource_tickets($1, $2, $3, $4, $5)",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "key_returned",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 1,
         "name": "final_balance",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -28,5 +30,5 @@
       null
     ]
   },
-  "hash": "1975ecaf2913207959a4951af399535d3c8846a3cfa39f7d16724a9bd81f0f0e"
+  "hash": "bd28103da7e4ca7a9db0c78dc9692bf6e89d5ecea5ef594f83676971b1845c6c"
 }

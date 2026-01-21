@@ -20,10 +20,10 @@ impl ExperimentationQueries for PostgresConnectionInfo {
 
         let response = sqlx::query_as!(
             CheckAndSetVariantResponse,
-            r"INSERT INTO variant_by_episode(function_name, episode_id, variant_name)
+            r"INSERT INTO tensorzero.variant_by_episode(function_name, episode_id, variant_name)
                     VALUES ($1, $2, $3)
                     ON CONFLICT (function_name, episode_id) DO UPDATE
-                    SET variant_name = variant_by_episode.variant_name -- A no-op to enable RETURNING
+                    SET variant_name = tensorzero.variant_by_episode.variant_name -- A no-op to enable RETURNING
                     RETURNING variant_name;",
             &function_name,
             &episode_id,

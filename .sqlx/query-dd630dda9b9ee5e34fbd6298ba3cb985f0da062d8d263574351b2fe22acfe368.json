@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE tensorzero_auth_api_key\n           SET description = $1, updated_at = NOW()\n           WHERE public_id = $2\n           RETURNING public_id, organization, workspace, description, created_at, disabled_at",
+  "query": "SELECT public_id, organization, workspace, description, created_at, disabled_at FROM tensorzero.tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Bpchar",
         "origin": {
           "Table": {
-            "table": "tensorzero_auth_api_key",
+            "table": "tensorzero.tensorzero_auth_api_key",
             "name": "public_id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "tensorzero_auth_api_key",
+            "table": "tensorzero.tensorzero_auth_api_key",
             "name": "organization"
           }
         }
@@ -31,7 +31,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "tensorzero_auth_api_key",
+            "table": "tensorzero.tensorzero_auth_api_key",
             "name": "workspace"
           }
         }
@@ -42,7 +42,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "tensorzero_auth_api_key",
+            "table": "tensorzero.tensorzero_auth_api_key",
             "name": "description"
           }
         }
@@ -53,7 +53,7 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "tensorzero_auth_api_key",
+            "table": "tensorzero.tensorzero_auth_api_key",
             "name": "created_at"
           }
         }
@@ -64,7 +64,7 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "tensorzero_auth_api_key",
+            "table": "tensorzero.tensorzero_auth_api_key",
             "name": "disabled_at"
           }
         }
@@ -73,7 +73,8 @@
     "parameters": {
       "Left": [
         "Text",
-        "Bpchar"
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
@@ -85,5 +86,5 @@
       true
     ]
   },
-  "hash": "aba97737d0a90f98bc608f419687f97f62ed3f827144033c6b3cdf19b158cad6"
+  "hash": "dd630dda9b9ee5e34fbd6298ba3cb985f0da062d8d263574351b2fe22acfe368"
 }

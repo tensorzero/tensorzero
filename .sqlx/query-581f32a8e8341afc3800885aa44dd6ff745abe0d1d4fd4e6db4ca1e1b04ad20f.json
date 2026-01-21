@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tensorzero.variant_by_episode(function_name, episode_id, variant_name)\n                    VALUES ($1, $2, $3)\n                    ON CONFLICT (function_name, episode_id) DO UPDATE\n                    SET variant_name = tensorzero.variant_by_episode.variant_name -- A no-op to enable RETURNING\n                    RETURNING variant_name;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "variant_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.variant_by_episode",
+            "name": "variant_name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "581f32a8e8341afc3800885aa44dd6ff745abe0d1d4fd4e6db4ca1e1b04ad20f"
+}
