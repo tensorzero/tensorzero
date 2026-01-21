@@ -253,4 +253,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/autopilot/v1/sessions/{session_id}/events/stream",
             get(endpoints::internal::autopilot::stream_events_handler),
         )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/actions/approve_all",
+            post(endpoints::internal::autopilot::approve_all_tool_calls_handler),
+        )
 }

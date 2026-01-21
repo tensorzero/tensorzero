@@ -1,4 +1,5 @@
 import { Link, type RouteHandle, Await, useAsyncError } from "react-router";
+import { LayoutErrorBoundary } from "~/components/ui/error";
 import * as React from "react";
 import { Card } from "~/components/ui/card";
 import { PageLayout } from "~/components/layout/PageLayout";
@@ -127,7 +128,6 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 export async function loader() {
   const httpClient = getTensorZeroClient();
 
-  // Create the promises
   const countsInfoPromise = httpClient.listFunctionsWithInferenceCount();
   const episodesPromise = httpClient.queryEpisodeTableBounds();
   const datasetMetadataPromise = httpClient.listDatasets({});
@@ -142,7 +142,6 @@ export async function loader() {
     .countDistinctModelsUsed()
     .then((response) => response.model_count);
 
-  // Create derived promises - these will be stable references
   const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
     const total = countsInfo.reduce(
       (acc, curr) => acc + curr.inference_count,
@@ -180,7 +179,6 @@ export async function loader() {
     (runs) => `evaluations, ${runs} runs`,
   );
 
-  // We need to create a special promise for the inference evaluations that includes the config count
   const inferenceEvaluationsDesc = Promise.all([
     configPromise,
     numEvaluationRunsPromise,
@@ -363,4 +361,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </div>
     </PageLayout>
   );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <LayoutErrorBoundary error={error} />;
 }

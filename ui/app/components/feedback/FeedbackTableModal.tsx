@@ -29,7 +29,7 @@ export function CommentModal({ feedback }: FeedbackTableModalProps) {
 
   return (
     <PageLayout>
-      <PageHeader label="Comment" name={feedback.id} />
+      <PageHeader eyebrow="Comment" name={feedback.id} />
 
       <SectionsGroup>
         <SectionLayout>
@@ -56,7 +56,7 @@ export function DemonstrationModal({ feedback }: FeedbackTableModalProps) {
 
   return (
     <PageLayout>
-      <PageHeader label="Demonstration" name={feedback.id} />
+      <PageHeader eyebrow="Demonstration" name={feedback.id} />
 
       <SectionsGroup>
         <SectionLayout>

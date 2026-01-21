@@ -6,6 +6,7 @@ import {
   classifyError,
   getErrorLabel,
 } from "~/utils/tensorzero/errors";
+import { logger } from "~/utils/logger";
 
 interface LayoutErrorBoundaryProps {
   error: unknown;
@@ -18,6 +19,10 @@ interface LayoutErrorBoundaryProps {
  */
 export function LayoutErrorBoundary({ error }: LayoutErrorBoundaryProps) {
   const [dialogOpen, setDialogOpen] = React.useState(true);
+
+  React.useEffect(() => {
+    logger.error(error);
+  }, [error]);
 
   // Infra errors -> dismissible dialog
   if (isInfraError(error)) {

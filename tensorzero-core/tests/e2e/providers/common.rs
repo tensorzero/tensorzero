@@ -106,18 +106,15 @@ pub struct EmbeddingTestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
-
     pub bad_auth_extra_headers: Vec<E2ETestProvider>,
     pub extra_body_inference: Vec<E2ETestProvider>,
-
     pub reasoning_inference: Vec<E2ETestProvider>,
-
+    pub reasoning_usage_inference: Vec<E2ETestProvider>,
+    pub cache_input_tokens_inference: Vec<E2ETestProvider>,
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
-
     pub provider_type_default_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials_shorthand: Vec<E2ETestProvider>,
     pub credential_fallbacks: Vec<ModelTestProvider>,
-
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -125,11 +122,9 @@ pub struct E2ETestProviders {
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
     pub json_mode_off_inference: Vec<E2ETestProvider>,
-
     pub image_inference: Vec<E2ETestProvider>,
     pub pdf_inference: Vec<E2ETestProvider>,
     pub input_audio: Vec<E2ETestProvider>,
-
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
 }
@@ -139,8 +134,8 @@ macro_rules! generate_provider_tests {
     ($func:ident) => {
         use $crate::providers::common::test_dynamic_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_dynamic_tool_use_streaming_inference_request_with_provider;
-        use $crate::providers::common::test_inference_params_inference_request_with_provider;
-        use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_dynamic_credentials_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_dynamic_credentials_streaming_inference_request_with_provider;
         use $crate::providers::common::test_provider_type_default_credentials_with_provider;
         use $crate::providers::common::test_provider_type_default_credentials_shorthand_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
@@ -200,8 +195,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
         use $crate::providers::embeddings::test_single_token_array_with_provider;
         use $crate::providers::embeddings::test_batch_token_arrays_semantic_similarity_with_provider;
-        use $crate::providers::common::test_multi_turn_thought_non_streaming_with_provider;
-        use $crate::providers::common::test_multi_turn_thought_streaming_with_provider;
+        use $crate::providers::common::test_reasoning_multi_turn_thought_non_streaming_with_provider;
+        use $crate::providers::common::test_reasoning_multi_turn_thought_streaming_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -218,7 +213,6 @@ macro_rules! generate_provider_tests {
                 test_assistant_prefill_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_warn_ignored_thought_block() {
@@ -237,7 +231,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_streaming_reasoning_inference_request_simple() {
             let providers = $func().await.reasoning_inference;
@@ -253,7 +246,6 @@ macro_rules! generate_provider_tests {
                 test_bad_auth_extra_headers_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_shorthand_inference_request() {
@@ -296,22 +288,20 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_inference_params_inference_request() {
+        async fn test_inference_params_dynamic_credentials_inference_request() {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
-                test_inference_params_inference_request_with_provider(provider).await;
+                test_inference_params_dynamic_credentials_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
-        async fn test_inference_params_streaming_inference_request() {
+        async fn test_inference_params_dynamic_credentials_streaming_inference_request() {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
-                test_inference_params_streaming_inference_request_with_provider(provider).await;
+                test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_provider_type_default_credentials() {
@@ -320,7 +310,6 @@ macro_rules! generate_provider_tests {
                 test_provider_type_default_credentials_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_provider_type_default_credentials_shorthand() {
@@ -342,7 +331,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_used_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -350,7 +338,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_auto_used_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_used_streaming_inference_request() {
@@ -360,7 +347,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_unused_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -368,7 +354,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_auto_unused_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request() {
@@ -378,7 +363,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_required_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -386,7 +370,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_required_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_required_streaming_inference_request() {
@@ -396,7 +379,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_none_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -404,7 +386,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_none_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_none_streaming_inference_request() {
@@ -414,7 +395,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_tool_choice_specific_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -422,7 +402,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_tool_choice_specific_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_tool_choice_specific_streaming_inference_request() {
@@ -432,7 +411,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_use_allowed_tools_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -440,7 +418,6 @@ macro_rules! generate_provider_tests {
                 test_tool_use_allowed_tools_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_use_allowed_tools_streaming_inference_request() {
@@ -450,7 +427,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_tool_multi_turn_inference_request() {
             let providers = $func().await.tool_multi_turn_inference;
@@ -458,7 +434,6 @@ macro_rules! generate_provider_tests {
                 test_tool_multi_turn_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_tool_multi_turn_streaming_inference_request() {
@@ -492,7 +467,6 @@ macro_rules! generate_provider_tests {
         }
         tensorzero::make_gateway_test_functions!(test_dynamic_tool_use_streaming_inference_request);
 
-
         #[tokio::test]
         async fn test_parallel_tool_use_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
@@ -500,7 +474,6 @@ macro_rules! generate_provider_tests {
                 test_parallel_tool_use_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_parallel_tool_use_streaming_inference_request() {
@@ -510,7 +483,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_json_mode_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -518,7 +490,6 @@ macro_rules! generate_provider_tests {
                 test_json_mode_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_reasoning_inference_request_json_mode() {
@@ -528,7 +499,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_streaming_reasoning_inference_request_json_mode() {
             let providers = $func().await.reasoning_inference;
@@ -537,7 +507,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_dynamic_json_mode_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -545,7 +514,6 @@ macro_rules! generate_provider_tests {
                 test_dynamic_json_mode_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_json_mode_streaming_inference_request() {
@@ -587,6 +555,38 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_reasoning_output_tokens_non_streaming() {
+            let providers = $func().await.reasoning_usage_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_reasoning_output_tokens_streaming() {
+            let providers = $func().await.reasoning_usage_inference;
+            for provider in providers {
+                $crate::providers::commonv2::usage::test_reasoning_output_tokens_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_cache_input_tokens_non_streaming() {
+            let providers = $func().await.cache_input_tokens_inference;
+            for provider in providers {
+                $crate::providers::commonv2::cache_input_tokens::test_cache_input_tokens_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_cache_input_tokens_streaming() {
+            let providers = $func().await.cache_input_tokens_inference;
+            for provider in providers {
+                $crate::providers::commonv2::cache_input_tokens::test_cache_input_tokens_streaming_with_provider(provider).await;
+            }
+        }
+
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
@@ -594,7 +594,6 @@ macro_rules! generate_provider_tests {
                 test_image_inference_with_provider_filesystem(provider).await;
             }
         }
-
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_url_inference_store_filesystem() {
@@ -604,7 +603,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_amazon_s3() {
             let providers = $func().await.image_inference;
@@ -612,7 +610,6 @@ macro_rules! generate_provider_tests {
                 test_image_inference_with_provider_amazon_s3(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_extra_body() {
@@ -630,7 +627,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_short_inference_request() {
             let providers = $func().await.simple_inference;
@@ -639,7 +635,6 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
         #[tokio::test]
         async fn test_multi_turn_parallel_tool_use_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
@@ -647,7 +642,6 @@ macro_rules! generate_provider_tests {
                 test_multi_turn_parallel_tool_use_inference_request_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_multi_turn_parallel_tool_use_streaming_inference_request() {
@@ -658,18 +652,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_multi_turn_thought_non_streaming() {
+        async fn test_reasoning_multi_turn_thought_non_streaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_multi_turn_thought_non_streaming_with_provider(provider).await;
+                test_reasoning_multi_turn_thought_non_streaming_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
-        async fn test_multi_turn_thought_streaming() {
+        async fn test_reasoning_multi_turn_thought_streaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_multi_turn_thought_streaming_with_provider(provider).await;
+                test_reasoning_multi_turn_thought_streaming_with_provider(provider).await;
             }
         }
 
@@ -696,7 +690,6 @@ macro_rules! generate_provider_tests {
                 test_basic_embedding_with_provider(provider).await;
             }
         }
-
 
         #[tokio::test]
         async fn test_bulk_embedding() {
@@ -2402,9 +2395,14 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             assert!(!res["error"].as_str().unwrap().is_empty());
         }
         "aws_bedrock" => {
+            // HTTP/2 may reject Content-Length mismatch at send time vs HTTP/1.1 getting "Bad Request"
             assert!(
                 res["error"].as_str().unwrap().contains("Bad Request")
-                    || res["error"].as_str().unwrap().contains("ConnectorError"),
+                    || res["error"].as_str().unwrap().contains("ConnectorError")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .contains("error sending request"),
                 "Unexpected error: {res}"
             );
         }
@@ -2550,6 +2548,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
                             signature: Some("My new TensorZero signature".to_string()),
                             summary: None,
                             provider_type: None,
+                            extra_data: None,
                         })],
                     },
                     InputMessage {
@@ -2606,13 +2605,15 @@ pub async fn test_warn_ignored_thought_block_with_provider(
 pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
     // * Mistral doesn't support assistant prefill
     // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
-    // * Some AWS bedrock models error when the last message is an assistant message
+    // * Some AWS Bedrock models error when the last message is an assistant message
     // * Azure AI foundry seems to ignore trailing assistant messages
     // * xAI seems to also ignore them
+    // * Hyperbolic seems to ignore these params
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name == "aws_sagemaker"
         || provider.model_provider_name == "aws_bedrock"
         || provider.variant_name == "azure-ai-foundry"
+        || provider.variant_name == "hyperbolic"
         || provider.variant_name == "xai"
     {
         return;
@@ -3663,6 +3664,10 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
     if provider.model_provider_name == "fireworks" || provider.model_provider_name == "together" {
         return;
     }
+    // Hyperbolic seems to ignore these params
+    if provider.model_provider_name == "hyperbolic" {
+        return;
+    }
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -4074,7 +4079,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     full_content
 }
 
-pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_inference_params_dynamic_credentials_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
     // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
     if provider.model_name.contains("gemini-2.5-pro") {
         return;
@@ -4152,8 +4159,20 @@ pub async fn check_inference_params_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 1);
+    // Some providers return thought blocks - filter them out since this test doesn't care about thoughts
+    let content: Vec<_> = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        content.len(),
+        1,
+        "Expected exactly one non-thought content block"
+    );
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -4318,7 +4337,7 @@ pub async fn check_inference_params_response(
     assert_eq!(output.len(), 1);
 }
 
-pub async fn test_inference_params_streaming_inference_request_with_provider(
+pub async fn test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
@@ -4407,10 +4426,13 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        if !content_blocks.is_empty() {
-            let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+        // Filter out thought blocks and collect text content
+        for content_block in content_blocks {
+            if content_block.get("type").unwrap().as_str().unwrap() == "text"
+                && let Some(text) = content_block.get("text").and_then(|t| t.as_str())
+            {
+                full_content.push_str(text);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -4465,11 +4487,13 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let content_block = output.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    // Filter to only text blocks (ignore thought blocks from reasoning models)
+    let clickhouse_content: String = output
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "text")
+        .map(|block| block.get("text").unwrap().as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join("");
     assert_eq!(clickhouse_content, full_content);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
@@ -4571,7 +4595,15 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter to only text blocks (ignore thought blocks from reasoning models)
+    let text_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, StoredContentBlock::Text(_)))
+        .collect();
+    assert!(
+        !text_blocks.is_empty(),
+        "Expected at least one text block in output"
+    );
 }
 
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
@@ -8558,8 +8590,20 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 1);
+    // Some providers return thought blocks - filter them out since this test doesn't care about thoughts
+    let content: Vec<_> = response_json
+        .get("content")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        content.len(),
+        1,
+        "Expected exactly one non-thought content block"
+    );
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -8622,7 +8666,16 @@ pub async fn check_tool_use_multi_turn_inference_response(
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let content_blocks: Vec<_> = content_blocks
+        .into_iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        content_blocks.len(),
+        1,
+        "Expected exactly one non-thought content block in ClickHouse output"
+    );
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -8732,7 +8785,16 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let output: Vec<_> = output
+        .into_iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect();
+    assert_eq!(
+        output.len(),
+        1,
+        "Expected exactly one non-thought content block in ModelInference output"
+    );
     let first = output.first().unwrap();
     match first {
         StoredContentBlock::Text(text) => {
@@ -8848,10 +8910,13 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         assert_eq!(chunk_episode_id, episode_id);
 
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
-        if !content_blocks.is_empty() {
-            let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+        // Filter out thought blocks and collect text content
+        for content_block in content_blocks {
+            if content_block.get("type").unwrap().as_str().unwrap() == "text"
+                && let Some(text) = content_block.get("text").and_then(|t| t.as_str())
+            {
+                full_content.push_str(text);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -8928,7 +8993,16 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let output: Vec<_> = output
+        .into_iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect();
+    assert_eq!(
+        output.len(),
+        1,
+        "Expected exactly one non-thought content block in ClickHouse output"
+    );
     let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -9032,7 +9106,16 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter out thought blocks since this test doesn't care about them
+    let output: Vec<_> = output
+        .into_iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect();
+    assert_eq!(
+        output.len(),
+        1,
+        "Expected exactly one non-thought content block in ModelInference output"
+    );
     let first = output.first().unwrap();
     match first {
         StoredContentBlock::Text(text) => {
@@ -12679,7 +12762,9 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
     assert!(content.to_lowercase().contains("tokyo"));
 }
 
-pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
+    provider: E2ETestProvider,
+) {
     if provider.variant_name == "together-deepseek-r1" {
         // This produces invalid tool calls within text blocks (e.g 🛠\u{fe0f}\n\n```json\n{\n  \"too)
         return;
@@ -12743,12 +12828,12 @@ pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETe
         "Expected a tool call block in the content blocks: {content_blocks:?}"
     );
 
-    let tool_id = content_blocks
+    // Collect ALL tool call IDs - Anthropic requires a tool_result for every tool_use
+    let tool_ids: Vec<&str> = content_blocks
         .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap()["id"]
-        .as_str()
-        .unwrap();
+        .filter(|block| block["type"] == "tool_call")
+        .map(|block| block["id"].as_str().unwrap())
+        .collect();
 
     let tensorzero_content_blocks = content_blocks.clone();
 
@@ -12763,41 +12848,83 @@ pub async fn test_multi_turn_thought_non_streaming_with_provider(provider: E2ETe
         }),
     ];
 
+    // Provide a tool result for each tool call
+    let tool_results: Vec<Value> = tool_ids
+        .iter()
+        .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+        .collect();
+
     new_messages.push(serde_json::json!({
         "role": "user",
-        "content": [{"type": "tool_result", "name": "My result", "result": "13", "id": tool_id}],
+        "content": tool_results,
     }));
 
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "AskJeeves"},
-            "messages": new_messages
-        },
-        "stream": false,
-    });
-    println!("New payload: {payload}");
+    // Loop until we get a text response (some models may make multiple tool calls)
+    let max_iterations = 5;
+    for iteration in 0..max_iterations {
+        let payload = json!({
+            "function_name": "weather_helper",
+            "variant_name": provider.variant_name,
+            "episode_id": episode_id,
+            "input": {
+                "system": {"assistant_name": "AskJeeves"},
+                "messages": new_messages
+            },
+            "stream": false,
+        });
+        println!("Payload (iteration {iteration}): {payload}");
 
-    let response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    let response_json = response.json::<Value>().await.unwrap();
-    let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
-    assert!(
-        new_content_blocks
+        let response = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
+        let response_json = response.json::<Value>().await.unwrap();
+        let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+
+        // Check if we got a text response
+        if new_content_blocks
             .iter()
-            .any(|block| block["type"] == "text"),
-        "Expected at least one text block in the new content blocks: {new_content_blocks:?}"
-    );
-    // Don't bother checking ClickHouse, as we do that in lots of other tests
+            .any(|block| block["type"] == "text")
+        {
+            // Success - we got a text response
+            return;
+        }
+
+        // If not, check if we got more tool calls and provide results
+        let new_tool_ids: Vec<&str> = new_content_blocks
+            .iter()
+            .filter(|block| block["type"] == "tool_call")
+            .map(|block| block["id"].as_str().unwrap())
+            .collect();
+
+        assert!(
+            !new_tool_ids.is_empty(),
+            "Expected either a text block or tool call in response: {new_content_blocks:?}"
+        );
+
+        // Add assistant response and tool results for the next iteration
+        new_messages.push(serde_json::json!({
+            "role": "assistant",
+            "content": new_content_blocks,
+        }));
+
+        let tool_results: Vec<Value> = new_tool_ids
+            .iter()
+            .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+            .collect();
+
+        new_messages.push(serde_json::json!({
+            "role": "user",
+            "content": tool_results,
+        }));
+    }
+
+    panic!("Did not receive a text response after {max_iterations} iterations of tool calls");
 }
 
-pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
     if provider.variant_name == "fireworks-deepseek" {
         // This either times out or returns "Internal Server Error"
         return;
@@ -12805,6 +12932,11 @@ pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestPr
 
     // TODO: https://github.com/tensorzero/tensorzero/issues/5270
     if provider.variant_name == "together-deepseek-r1" {
+        return;
+    }
+
+    // TODO: https://github.com/tensorzero/tensorzero/issues/5270
+    if provider.variant_name == "deepseek-reasoner" {
         return;
     }
 
@@ -12865,7 +12997,7 @@ pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestPr
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse
+    // Check ClickHouse for the collected chunks from the first request
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -12891,4 +13023,131 @@ pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestPr
             .any(|block| block["type"] == "tool_call"),
         "Expected a tool call block in the content blocks: {clickhouse_content_blocks:?}"
     );
+
+    // Now make a second streaming request with tool results (multi-turn)
+    // Collect ALL tool call IDs - Anthropic requires a tool_result for every tool_use
+    let tool_ids: Vec<&str> = clickhouse_content_blocks
+        .iter()
+        .filter(|block| block["type"] == "tool_call")
+        .map(|block| block["id"].as_str().unwrap())
+        .collect();
+
+    let mut new_messages = vec![
+        serde_json::json!({
+            "role": "user",
+            "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+        }),
+        serde_json::json!({
+            "role": "assistant",
+            "content": clickhouse_content_blocks,
+        }),
+    ];
+
+    // Provide a tool result for each tool call
+    let tool_results: Vec<Value> = tool_ids
+        .iter()
+        .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+        .collect();
+
+    new_messages.push(serde_json::json!({
+        "role": "user",
+        "content": tool_results,
+    }));
+
+    // Loop until we get a text response (some models may make multiple tool calls)
+    let max_iterations = 5;
+    for iteration in 0..max_iterations {
+        let payload = json!({
+            "function_name": "weather_helper",
+            "variant_name": provider.variant_name,
+            "episode_id": episode_id,
+            "input": {
+                "system": {"assistant_name": "AskJeeves"},
+                "messages": new_messages
+            },
+            "stream": true,
+        });
+        println!("Payload (iteration {iteration}): {payload}");
+
+        let mut event_source = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .eventsource()
+            .unwrap();
+        let mut chunks = vec![];
+        while let Some(event) = event_source.next().await {
+            let event = event.unwrap();
+            match event {
+                Event::Open => continue,
+                Event::Message(message) => {
+                    if message.data == "[DONE]" {
+                        break;
+                    }
+                    chunks.push(message.data);
+                }
+            }
+        }
+
+        // Validate we got chunks and extract inference_id
+        let mut current_inference_id = None;
+        for chunk in &chunks {
+            let chunk_json: Value = serde_json::from_str(chunk).unwrap();
+            println!("Chunk (iteration {iteration}): {chunk_json}");
+            current_inference_id = Some(
+                chunk_json
+                    .get("inference_id")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            );
+        }
+        let current_inference_id = current_inference_id.unwrap().parse::<Uuid>().unwrap();
+
+        // Sleep for 1 second to allow time for data to be inserted into ClickHouse
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        // Check ClickHouse for the collected chunks
+        let result = select_chat_inference_clickhouse(&clickhouse, current_inference_id)
+            .await
+            .unwrap();
+        let content_blocks_str = result.get("output").unwrap().as_str().unwrap();
+        let content_blocks: Vec<Value> = serde_json::from_str(content_blocks_str).unwrap();
+
+        // Check if we got a text response
+        if content_blocks.iter().any(|block| block["type"] == "text") {
+            // Success - we got a text response
+            return;
+        }
+
+        // If not, check if we got more tool calls and provide results
+        let new_tool_ids: Vec<&str> = content_blocks
+            .iter()
+            .filter(|block| block["type"] == "tool_call")
+            .map(|block| block["id"].as_str().unwrap())
+            .collect();
+
+        assert!(
+            !new_tool_ids.is_empty(),
+            "Expected either a text block or tool call in response: {content_blocks:?}"
+        );
+
+        // Add assistant response and tool results for the next iteration
+        new_messages.push(serde_json::json!({
+            "role": "assistant",
+            "content": content_blocks,
+        }));
+
+        let tool_results: Vec<Value> = new_tool_ids
+            .iter()
+            .map(|id| serde_json::json!({"type": "tool_result", "name": "My result", "result": "13", "id": id}))
+            .collect();
+
+        new_messages.push(serde_json::json!({
+            "role": "user",
+            "content": tool_results,
+        }));
+    }
+
+    panic!("Did not receive a text response after {max_iterations} iterations of tool calls");
 }

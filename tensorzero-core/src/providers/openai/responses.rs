@@ -202,6 +202,7 @@ impl OpenAIResponsesResponse<'_> {
                         signature: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                         summary: None,
+                        extra_data: None,
                     };
 
                     if let Some(encrypted_content) = encrypted_content {
@@ -262,6 +263,7 @@ impl OpenAIResponsesResponse<'_> {
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason,
@@ -1297,6 +1299,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 summary_id: Some(summary_index.to_string()),
                 summary_text: Some(delta),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             })],
             None,
             raw_message,
@@ -2578,7 +2581,7 @@ mod tests {
 
         let response: OpenAIResponsesResponse = serde_json::from_str(json).unwrap();
         let generic_request = ModelInferenceRequest {
-            inference_id: uuid::Uuid::new_v4(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![],
             system: None,
             temperature: None,
@@ -2677,7 +2680,7 @@ mod tests {
 
         let response: OpenAIResponsesResponse = serde_json::from_str(json).unwrap();
         let generic_request = ModelInferenceRequest {
-            inference_id: uuid::Uuid::new_v4(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![],
             system: None,
             temperature: None,

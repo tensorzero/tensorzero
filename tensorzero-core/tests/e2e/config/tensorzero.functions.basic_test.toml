@@ -92,6 +92,12 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 max_tokens = 100
 extra_body = [{ pointer = "/inferenceConfig/temperature", value = 0.123 }]
 
+[functions.basic_test.variants.aws-bedrock-dynamic-region]
+type = "chat_completion"
+model = "claude-3-haiku-aws-bedrock-dynamic-region"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.aws-bedrock-extra-headers]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
@@ -246,6 +252,14 @@ type = "chat_completion"
 model = "gcp-gemini-2.5-pro"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 500
+
+[functions.basic_test.variants.gcp-vertex-gemini-pro-thinking]
+type = "chat_completion"
+model = "gcp-gemini-2.5-pro-thinking"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 500
+# Set to minimum value to speed up tests and save tokens
+thinking_budget_tokens = 128
 
 [functions.basic_test.variants.gcp-vertex-gemini-flash-lite-tuned]
 type = "chat_completion"
@@ -665,22 +679,34 @@ model = "xai::grok-4-1-fast-non-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.xai-reasoning]
+type = "chat_completion"
+model = "grok-3-mini"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.xai-reasoning-usage]
+type = "chat_completion"
+model = "grok-4-fast-reasoning"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.hyperbolic]
 type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct"
+model = "openai/gpt-oss-20b"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.hyperbolic-extra-body]
 type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct"
+model = "openai/gpt-oss-20b"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.hyperbolic-extra-headers]
 type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct"
+model = "openai/gpt-oss-20b"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [
@@ -689,13 +715,13 @@ extra_headers = [
 
 [functions.basic_test.variants.hyperbolic-dynamic]
 type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct-dynamic"
+model = "openai/gpt-oss-20b-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.hyperbolic-shorthand]
 type = "chat_completion"
-model = "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct"
+model = "hyperbolic::openai/gpt-oss-20b"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -802,3 +828,61 @@ model = "gpt-4o-mini-2024-07-18"
 embedding_model = "openai::text-embedding-3-small"
 k = 3
 max_tokens = 100
+
+## Reasoning variants for usage tests
+
+[functions.basic_test.variants.anthropic-haiku-4-5-thinking]
+type = "chat_completion"
+model = "claude-haiku-4-5-thinking"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
+[functions.basic_test.variants.gcp-vertex-anthropic-thinking]
+type = "chat_completion"
+model = "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
+[functions.basic_test.variants.openai-gpt-5-mini]
+type = "chat_completion"
+model = "gpt-5-mini-responses"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+
+[functions.basic_test.variants.openai-gpt-5-mini-chat-completions]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+
+[functions.basic_test.variants.openai-gpt-5-responses]
+type = "chat_completion"
+model = "responses-gpt-5"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+
+[functions.basic_test.variants.azure-gpt-5-mini]
+type = "chat_completion"
+model = "gpt-5-mini-azure"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+
+# OpenRouter reasoning variants
+
+# Grok 3 Mini with effort-based reasoning
+[functions.basic_test.variants.openrouter-grok-reasoning]
+type = "chat_completion"
+model = "grok-3-mini-openrouter"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+reasoning_effort = "low"
+
+# Claude Haiku 4.5 with max_tokens-based reasoning
+[functions.basic_test.variants.openrouter-claude-reasoning]
+type = "chat_completion"
+model = "claude-haiku-4-5-openrouter"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+thinking_budget_tokens = 1024

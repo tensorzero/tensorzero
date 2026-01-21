@@ -38,6 +38,17 @@ pub fn raw_usage_entries_from_value(
     }]
 }
 
+/// A single entry in the raw response array, representing raw response data from one model inference.
+/// This preserves the original provider-specific response string that TensorZero normalizes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct RawResponseEntry {
+    pub model_inference_id: Uuid,
+    pub provider_type: String,
+    pub api_type: ApiType,
+    pub data: String,
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct Usage {
@@ -96,8 +107,9 @@ where
                 (Some(current_value), Some(chunk_value)) => {
                     if current_value > chunk_value {
                         tracing::warn!(
-                            "Unexpected non-cumulative `input_tokens` in streaming response ({current_value}) > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+                            "Unexpected non-cumulative `input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
                         );
+                        debug_assert!(false, "Unexpected non-cumulative `input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
                     }
 
                     if current_value < chunk_value {
@@ -114,8 +126,9 @@ where
                 (Some(current_value), Some(chunk_value)) => {
                     if current_value > chunk_value {
                         tracing::warn!(
-                            "Unexpected non-cumulative `output_tokens` in streaming response ({current_value}) > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+                            "Unexpected non-cumulative `output_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
                         );
+                        debug_assert!(false, "Unexpected non-cumulative `output_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
                     }
 
                     if current_value < chunk_value {
@@ -356,10 +369,10 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "Unexpected non-cumulative")]
     fn test_aggregate_usage_from_single_streaming_model_inference_non_cumulative_uses_max() {
-        let logs_contain = crate::utils::testing::capture_logs();
-        // Tests the edge case where a later chunk has a smaller value
-        // The function should use the max (and log a warning)
+        // Tests the edge case where a later chunk has a smaller value.
+        // This triggers a debug_assert! because it indicates unexpected provider behavior.
         let chunks = vec![
             Usage {
                 input_tokens: Some(100),
@@ -370,26 +383,8 @@ mod tests {
                 output_tokens: Some(30), // Smaller than previous (unexpected)
             },
         ];
-        let result = aggregate_usage_from_single_streaming_model_inference(chunks);
-        assert_eq!(
-            result.input_tokens,
-            Some(100),
-            "should use max input_tokens even when later chunk is smaller"
-        );
-        assert_eq!(
-            result.output_tokens,
-            Some(50),
-            "should use max output_tokens even when later chunk is smaller"
-        );
-        // Verify warnings were logged for non-cumulative values
-        assert!(
-            logs_contain("Unexpected non-cumulative `input_tokens`"),
-            "should log warning for non-cumulative input_tokens"
-        );
-        assert!(
-            logs_contain("Unexpected non-cumulative `output_tokens`"),
-            "should log warning for non-cumulative output_tokens"
-        );
+        // This will panic due to debug_assert! when non-cumulative values are detected
+        let _ = aggregate_usage_from_single_streaming_model_inference(chunks);
     }
 
     // Tests for aggregate_usage_across_model_inferences
@@ -515,5 +510,46 @@ mod tests {
         let result = aggregate_usage_across_model_inferences(usages);
         assert_eq!(result.input_tokens, None, "all None should result in None");
         assert_eq!(result.output_tokens, None, "all None should result in None");
+    }
+
+    #[test]
+    fn test_aggregate_usage_from_single_streaming_model_inference_anthropic_pattern() {
+        // Simulates real Anthropic streaming behavior where:
+        // - message_start sends input_tokens and initial output_tokens
+        // - message_delta sends only output_tokens (input_tokens is not present)
+        // This should NOT trigger the non-cumulative warning.
+        let logs_contain = crate::utils::testing::capture_logs();
+
+        let chunks = vec![
+            // message_start chunk: has both input_tokens and output_tokens
+            Usage {
+                input_tokens: Some(69),
+                output_tokens: Some(1),
+            },
+            // message_delta chunk: only output_tokens, no input_tokens
+            Usage {
+                input_tokens: None,
+                output_tokens: Some(100),
+            },
+        ];
+
+        let result = aggregate_usage_from_single_streaming_model_inference(chunks);
+
+        assert_eq!(
+            result.input_tokens,
+            Some(69),
+            "input_tokens should be 69 from first chunk"
+        );
+        assert_eq!(
+            result.output_tokens,
+            Some(100),
+            "output_tokens should be 100 (max of cumulative values)"
+        );
+
+        // Verify NO warning was logged (this was the bug being fixed)
+        assert!(
+            !logs_contain("Unexpected non-cumulative"),
+            "should NOT log a warning for Anthropic-style streaming where input_tokens is only in first chunk"
+        );
     }
 }

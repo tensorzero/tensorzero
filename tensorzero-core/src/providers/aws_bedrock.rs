@@ -1,29 +1,21 @@
-use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
-use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
-use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
-use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
-use aws_sdk_bedrockruntime::types::{
-    AnyToolChoice, AutoToolChoice, ContentBlock as BedrockContentBlock, ContentBlockDelta,
-    ContentBlockStart, ConversationRole, ConverseOutput as ConverseOutputType,
-    ConverseStreamOutput as ConverseStreamOutputType, DocumentBlock, DocumentFormat,
-    DocumentSource, ImageBlock, ImageFormat, ImageSource, InferenceConfiguration, Message,
-    ReasoningContentBlock, ReasoningContentBlockDelta, ReasoningTextBlock, SpecificToolChoice,
-    StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice, ToolConfiguration,
-    ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification, ToolUseBlock,
-};
-use aws_smithy_types::{Document, Number, error::display::DisplayErrorContext};
+//! AWS Bedrock model provider using direct HTTP calls to the Converse API.
+
+use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
 use aws_types::region::Region;
+use bytes::BytesMut;
 use futures::StreamExt;
 use futures::future::try_join_all;
 use reqwest::StatusCode;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::aws_common::{self, InterceptorAndRawBody, build_interceptor};
-use super::helpers::peek_first_chunk;
+use super::aws_common::{
+    AWSCredentials, AWSEndpointUrl, AWSProviderConfig, AWSRegion, check_eventstream_exception,
+    send_aws_request, sign_request,
+};
+use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
@@ -40,149 +32,54 @@ use crate::inference::types::{
     ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
     ModelInferenceRequest, ModelInferenceRequestJsonMode, ObjectStorageFile,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Role,
-    Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+    Role as TensorZeroRole, Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
-use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use crate::tool::{
+    FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice as TensorZeroToolChoice,
+};
+use tensorzero_types_providers::aws_bedrock::{
+    self as types, AdditionalModelRequestFields, ContentBlock as BedrockContentBlock,
+    ContentBlockDelta, ContentBlockDeltaEvent, ContentBlockStart, ContentBlockStartEvent,
+    ConverseRequest, ConverseResponse, InferenceConfig, Message, MessageStopEvent, MetadataEvent,
+    ResponseContentBlock, ResponseReasoningContent, Role, StopReason, SystemContentBlock,
+    ThinkingConfig, ThinkingType, Tool, ToolChoice, ToolConfig, ToolInputSchema, ToolResultContent,
+    ToolSpec,
+};
 use uuid::Uuid;
 
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
-// NB: If you add `Clone` someday, you'll need to wrap client in Arc
+/// AWS Bedrock provider using direct HTTP calls.
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
-    client: aws_sdk_bedrockruntime::Client,
-}
-
-fn apply_inference_params(
-    bedrock_request: ConverseFluentBuilder,
-    inference_params: &ChatCompletionInferenceParamsV2,
-) -> ConverseFluentBuilder {
-    let mut bedrock_request = bedrock_request;
-    let ChatCompletionInferenceParamsV2 {
-        reasoning_effort,
-        service_tier,
-        thinking_budget_tokens,
-        verbosity,
-    } = inference_params;
-
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking` for this provider."),
-        );
-    }
-
-    if let Some(budget_tokens) = thinking_budget_tokens {
-        let existing_fields = bedrock_request
-            .get_additional_model_request_fields()
-            .clone();
-        let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
-        bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
-    }
-
-    if service_tier.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
-    }
-
-    if verbosity.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
-    }
-
-    bedrock_request
-}
-
-fn apply_inference_params_stream(
-    bedrock_request: ConverseStreamFluentBuilder,
-    inference_params: &ChatCompletionInferenceParamsV2,
-) -> ConverseStreamFluentBuilder {
-    let mut bedrock_request = bedrock_request;
-    let ChatCompletionInferenceParamsV2 {
-        reasoning_effort,
-        service_tier,
-        thinking_budget_tokens,
-        verbosity,
-    } = inference_params;
-
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking` for this provider."),
-        );
-    }
-
-    if let Some(budget_tokens) = thinking_budget_tokens {
-        let existing_fields = bedrock_request
-            .get_additional_model_request_fields()
-            .clone();
-        let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
-        bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
-    }
-
-    if service_tier.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
-    }
-
-    if verbosity.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
-    }
-
-    bedrock_request
-}
-
-fn build_bedrock_additional_fields(existing: Option<Document>, budget_tokens: i32) -> Document {
-    let mut fields = match existing {
-        Some(Document::Object(map)) => map,
-        Some(_) => {
-            tracing::warn!(
-                "Existing AWS Bedrock `additional_model_request_fields` is not an object; overriding to attach thinking config."
-            );
-            HashMap::new()
-        }
-        None => HashMap::new(),
-    };
-
-    let mut thinking = HashMap::new();
-    thinking.insert("type".to_string(), Document::String("enabled".to_string()));
-    thinking.insert(
-        "budget_tokens".to_string(),
-        Document::Number(number_from_i32(budget_tokens)),
-    );
-
-    fields.insert("thinking".to_string(), Document::Object(thinking));
-    Document::Object(fields)
-}
-
-fn number_from_i32(value: i32) -> Number {
-    if value >= 0 {
-        Number::PosInt(value as u64)
-    } else {
-        Number::NegInt(value as i64)
-    }
+    config: AWSProviderConfig,
 }
 
 impl AWSBedrockProvider {
     pub async fn new(
         model_id: String,
-        region: Option<Region>,
-        http_client: TensorzeroHttpClient,
+        static_region: Option<Region>,
+        region: Option<AWSRegion>,
+        endpoint_url: Option<AWSEndpointUrl>,
+        credentials: AWSCredentials,
     ) -> Result<Self, Error> {
-        let config = aws_sdk_bedrockruntime::config::Builder::from(
-            &aws_common::config_with_region(PROVIDER_TYPE, region).await?,
+        let config = AWSProviderConfig::new(
+            static_region,
+            region,
+            endpoint_url,
+            credentials,
+            PROVIDER_TYPE,
         )
-        .http_client(super::aws_http_client::Client::new(http_client))
-        .build();
-        let client = aws_sdk_bedrockruntime::Client::from_conf(config);
+        .await?;
 
-        Ok(Self { model_id, client })
+        Ok(Self { model_id, config })
     }
 
     pub fn model_id(&self) -> &str {
@@ -200,138 +97,78 @@ impl InferenceProvider for AWSBedrockProvider {
             otlp_config: _,
             model_inference_id,
         }: ModelProviderRequest<'a>,
-        // We've already taken in this client when the provider was constructed
-        _http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        http_client: &'a TensorzeroHttpClient,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        // TODO (#55): add support for guardrails and additional fields
+        // Prepare the request body
+        let PreparedRequestBody {
+            raw_request,
+            body_bytes,
+            http_extra_headers,
+        } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
-        let mut messages: Vec<Message> =
-            try_join_all(request.messages.iter().map(message_from_request_message))
-                .await?
-                .into_iter()
-                .filter(|m| !m.content.is_empty())
-                .collect();
-        if self.model_id.contains("claude")
-            && request.function_type == FunctionType::Json
-            && matches!(
-                request.json_mode,
-                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-            )
-        {
-            prefill_json_message(&mut messages).await?;
-        }
+        // Build URL
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "bedrock-runtime", PROVIDER_TYPE)?;
+        let url = format!(
+            "{}/model/{}/converse",
+            base_url,
+            urlencoding::encode(&self.model_id)
+        );
 
-        let mut inference_config = InferenceConfiguration::builder();
-        // TODO (#55): add support for top_p, stop_sequences, etc.
-        if let Some(max_tokens) = request.max_tokens {
-            inference_config = inference_config.max_tokens(max_tokens as i32);
-        }
-        if let Some(temperature) = request.temperature {
-            inference_config = inference_config.temperature(temperature);
-        }
-        if let Some(top_p) = request.top_p {
-            inference_config = inference_config.top_p(top_p);
-        }
-        if let Some(stop_sequences) = request.stop_sequences.to_owned() {
-            inference_config =
-                inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
-        }
-        let inference_config = inference_config.build();
+        // Get credentials and region
+        let credentials = self
+            .config
+            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+            .await?;
+        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
-        let mut bedrock_request = self
-            .client
-            .converse()
-            .model_id(&self.model_id)
-            .set_messages(Some(messages))
-            .inference_config(inference_config);
-
-        if let Some(system) = &request.system {
-            // AWS Bedrock does not support system message "" so we remove it
-            if !system.is_empty() {
-                let system_block = SystemContentBlock::Text(system.clone());
-                bedrock_request = bedrock_request.system(system_block);
-            }
-        }
-
-        if let Some(tool_config) = &request.tool_config
-            && !matches!(tool_config.tool_choice, ToolChoice::None)
-        {
-            let tools: Vec<Tool> = tool_config
-                .strict_tools_available()?
-                .map(Tool::try_from)
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let tool_choice: AWSBedrockToolChoice =
-                tool_choice_to_aws_bedrock(tool_config.tool_choice.clone())?;
-
-            let aws_bedrock_tool_config = ToolConfiguration::builder()
-                .set_tools(Some(tools))
-                .tool_choice(tool_choice)
-                .build()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: None,
-                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                        message: format!(
-                            "Error configuring AWS Bedrock tool config: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-
-            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
-        }
-
-        bedrock_request = apply_inference_params(bedrock_request, &request.inference_params_v2);
-
-        let InterceptorAndRawBody {
-            interceptor,
-            get_raw_request,
-            get_raw_response,
-        } = build_interceptor(request, model_provider, model_name.to_string());
-
-        let start_time = Instant::now();
-        let output = bedrock_request
-            .customize()
-            .interceptor(interceptor)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error sending request to AWS Bedrock: {:?}",
-                        DisplayErrorContext(&e)
-                    ),
-                    raw_request: get_raw_request().ok(),
-                    raw_response: get_raw_response().ok(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+        // Send signed request
+        let aws_response = send_aws_request(
+            http_client,
+            &url,
+            http_extra_headers,
+            body_bytes,
+            &credentials,
+            region.as_ref(),
+            "bedrock",
+            PROVIDER_TYPE,
+            &raw_request,
+        )
+        .await?;
 
         let latency = Latency::NonStreaming {
-            response_time: start_time.elapsed(),
+            response_time: aws_response.response_time,
         };
+        let raw_response = aws_response.raw_response;
 
-        let raw_request = get_raw_request()?;
-        let raw_response = get_raw_response()?;
+        // Parse response
+        let response: ConverseResponse = serde_json::from_str(&raw_response).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error parsing response from AWS Bedrock: {e}"),
+                raw_request: Some(raw_request.clone()),
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
 
-        ConverseOutputWithMetadata {
-            output,
+        // Convert response to ProviderInferenceResponse
+        convert_converse_response(
+            response,
             latency,
             raw_request,
             raw_response,
-            system: request.system.clone(),
-            input_messages: request.messages.clone(),
-            model_id: &self.model_id,
-            function_type: &request.function_type,
-            json_mode: &request.json_mode,
+            ResponseContext {
+                system: request.system.clone(),
+                input_messages: request.messages.clone(),
+                model_id: &self.model_id,
+                function_type: &request.function_type,
+                json_mode: request.json_mode,
+            },
             model_inference_id,
-        }
-        .try_into()
+        )
     }
 
     async fn infer_stream<'a>(
@@ -343,130 +180,96 @@ impl InferenceProvider for AWSBedrockProvider {
             otlp_config: _,
             model_inference_id,
         }: ModelProviderRequest<'a>,
-        // We've already taken in this client when the provider was constructed
-        _http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        http_client: &'a TensorzeroHttpClient,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        // TODO (#55): add support for guardrails and additional fields
+        // Prepare the request body
+        let PreparedRequestBody {
+            raw_request,
+            body_bytes,
+            http_extra_headers,
+        } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
-        let mut messages: Vec<Message> =
-            try_join_all(request.messages.iter().map(message_from_request_message))
-                .await?
-                .into_iter()
-                .collect();
+        // Build URL for streaming endpoint
+        let base_url =
+            self.config
+                .get_base_url(dynamic_api_keys, "bedrock-runtime", PROVIDER_TYPE)?;
+        let url = format!(
+            "{}/model/{}/converse-stream",
+            base_url,
+            urlencoding::encode(&self.model_id)
+        );
 
-        if self.model_id.contains("claude")
-            && request.function_type == FunctionType::Json
-            && matches!(
-                request.json_mode,
-                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-            )
-        {
-            prefill_json_message(&mut messages).await?;
-        }
+        // Get credentials and region
+        let credentials = self
+            .config
+            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+            .await?;
+        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
-        let mut inference_config = InferenceConfiguration::builder();
-        // TODO (#55): add support for top_p, stop_sequences, etc.
-        if let Some(max_tokens) = request.max_tokens {
-            inference_config = inference_config.max_tokens(max_tokens as i32);
-        }
-        if let Some(temperature) = request.temperature {
-            inference_config = inference_config.temperature(temperature);
-        }
-        if let Some(top_p) = request.top_p {
-            inference_config = inference_config.top_p(top_p);
-        }
-        if let Some(stop_sequences) = request.stop_sequences.to_owned() {
-            inference_config =
-                inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
-        }
-        let inference_config = inference_config.build();
+        // Build headers
+        let mut headers = http_extra_headers;
+        headers.insert(
+            http::header::CONTENT_TYPE,
+            http::header::HeaderValue::from_static("application/json"),
+        );
 
-        let mut bedrock_request = self
-            .client
-            .converse_stream()
-            .model_id(&self.model_id)
-            .set_messages(Some(messages))
-            .inference_config(inference_config);
+        // Sign the request
+        let signed_headers = sign_request(
+            "POST",
+            &url,
+            &headers,
+            &body_bytes,
+            &credentials,
+            region.as_ref(),
+            "bedrock",
+            PROVIDER_TYPE,
+        )?;
 
-        if let Some(system) = &request.system {
-            // AWS Bedrock does not support system message "" so we remove it
-            if !system.is_empty() {
-                let system_block = SystemContentBlock::Text(system.clone());
-                bedrock_request = bedrock_request.system(system_block);
-            }
-        }
-
-        if let Some(tool_config) = &request.tool_config
-            && !matches!(tool_config.tool_choice, ToolChoice::None)
-        {
-            let tools: Vec<Tool> = tool_config
-                .strict_tools_available()?
-                .map(Tool::try_from)
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let tool_choice: AWSBedrockToolChoice =
-                tool_choice_to_aws_bedrock(tool_config.tool_choice.clone())?;
-
-            let aws_bedrock_tool_config = ToolConfiguration::builder()
-                .set_tools(Some(tools))
-                .tool_choice(tool_choice)
-                .build()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: None,
-                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                        message: format!(
-                            "Error configuring AWS Bedrock tool config: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-
-            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
-        }
-
-        bedrock_request =
-            apply_inference_params_stream(bedrock_request, &request.inference_params_v2);
-
-        let InterceptorAndRawBody {
-            interceptor,
-            get_raw_request,
-            get_raw_response,
-        } = build_interceptor(request, model_provider, model_name.to_string());
-
+        // Send request
         let start_time = Instant::now();
-        let stream = bedrock_request
-            .customize()
-            .interceptor(interceptor)
+        let response = http_client
+            .post(&url)
+            .headers(signed_headers)
+            .body(body_bytes)
             .send()
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error sending request to AWS Bedrock: {}",
-                        DisplayErrorContext(&e)
-                    ),
-                    raw_request: get_raw_request().ok(),
-                    raw_response: get_raw_response().ok(),
+                    message: format!("Error sending request to AWS Bedrock: {e}"),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
-        let raw_request = get_raw_request()?;
+        let status = response.status();
+        if !status.is_success() {
+            let raw_response = response.text().await.unwrap_or_default();
+            return Err(Error::new(ErrorDetails::InferenceServer {
+                message: format!("AWS Bedrock returned error status {status}: {raw_response}"),
+                raw_request: Some(raw_request),
+                raw_response: Some(raw_response),
+                provider_type: PROVIDER_TYPE.to_string(),
+            }));
+        }
 
-        let mut stream = stream_bedrock(stream, start_time, model_inference_id).peekable();
+        // Create the stream
+        let bytes_stream = response.bytes_stream();
+        let mut stream = stream_bedrock(
+            bytes_stream,
+            start_time,
+            model_inference_id,
+            raw_request.clone(),
+        )
+        .peekable();
+
+        // Peek first chunk
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
-        if self.model_id.contains("claude")
-            && matches!(
-                request.json_mode,
-                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-            )
-            && matches!(request.function_type, FunctionType::Json)
-        {
+
+        // Handle JSON prefill for streaming
+        if needs_json_prefill(&self.model_id, request) {
             prefill_json_chunk_response(chunk);
         }
 
@@ -480,7 +283,7 @@ impl InferenceProvider for AWSBedrockProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "AWS Bedrock".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -498,319 +301,254 @@ impl InferenceProvider for AWSBedrockProvider {
     }
 }
 
-fn stream_bedrock(
-    mut stream: ConverseStreamOutput,
-    start_time: Instant,
-    model_inference_id: Uuid,
-) -> ProviderInferenceResponseStreamInner {
-    Box::pin(async_stream::stream! {
-        let mut current_tool_id : Option<String> = None;
+// =============================================================================
+// Request Building
+// =============================================================================
 
-        loop {
-            let ev = stream.stream.recv().await;
+/// Prepared request body ready for signing and sending
+struct PreparedRequestBody {
+    raw_request: String,
+    body_bytes: Vec<u8>,
+    http_extra_headers: http::HeaderMap,
+}
 
-            match ev {
-                Err(e) => {
-                    yield Err(ErrorDetails::InferenceServer {
-                        raw_request: None,
-                        raw_response: None,
-                        message: e.to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
+/// Prepare the request body: build converse request, apply JSON prefill, serialize, inject extras
+async fn prepare_request_body(
+    model_id: &str,
+    request: &ModelInferenceRequest<'_>,
+    model_provider: &ModelProvider,
+    model_name: &str,
+) -> Result<PreparedRequestBody, Error> {
+    // Build the request body
+    let mut converse_request =
+        build_converse_request(request, &request.inference_params_v2).await?;
 
-                    }.into());
-                }
-                Ok(ev) => match ev {
-                    None => break,
-                    Some(output) => {
-                        // NOTE: AWS Bedrock returns usage (ConverseStreamMetadataEvent) AFTER MessageStop.
+    // Add JSON prefill for Claude models in JSON mode
+    if needs_json_prefill(model_id, request) {
+        prefill_json_converse_request(&mut converse_request);
+    }
 
-                        // Convert the event to a tensorzero stream message
-                        let stream_message = bedrock_to_tensorzero_stream_message(output, start_time.elapsed(), &mut current_tool_id, model_inference_id);
+    // Serialize to JSON
+    let mut body_json = serde_json::to_value(&converse_request).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize request: {e}"),
+        })
+    })?;
 
-                        match stream_message {
-                            Ok(None) => {},
-                            Ok(Some(stream_message)) => yield Ok(stream_message),
-                            Err(e) => yield Err(e),
-                        }
-                    }
-                }
-            }
-        }
+    // Inject extra body/headers
+    let http_extra_headers = inject_extra_request_data(
+        &request.extra_body,
+        &request.extra_headers,
+        model_provider,
+        model_name,
+        &mut body_json,
+    )?;
+
+    // Sort for consistent ordering in tests
+    if cfg!(feature = "e2e_tests") {
+        body_json.sort_all_objects();
+    }
+
+    let raw_request = serde_json::to_string(&body_json).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize request: {e}"),
+        })
+    })?;
+    let body_bytes = raw_request.as_bytes().to_vec();
+
+    Ok(PreparedRequestBody {
+        raw_request,
+        body_bytes,
+        http_extra_headers,
     })
 }
 
-fn bedrock_to_tensorzero_stream_message(
-    output: ConverseStreamOutputType,
-    message_latency: Duration,
-    current_tool_id: &mut Option<String>,
-    model_inference_id: Uuid,
-) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
-    match output {
-        ConverseStreamOutputType::ContentBlockDelta(message) => {
-            let raw_message = serialize_aws_bedrock_struct(&message)?;
+/// Build a ConverseRequest from a ModelInferenceRequest
+async fn build_converse_request(
+    request: &ModelInferenceRequest<'_>,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) -> Result<ConverseRequest, Error> {
+    // Convert messages
+    let messages: Vec<Message> = try_join_all(request.messages.iter().map(convert_request_message))
+        .await?
+        .into_iter()
+        .filter(|m| !m.content.is_empty())
+        .collect();
 
-            match message.delta {
-                Some(delta) => match delta {
-                    ContentBlockDelta::Text(text) => Ok(Some(ProviderInferenceResponseChunk::new(
-                        vec![ContentBlockChunk::Text(TextChunk {
-                            text,
-                            id: message.content_block_index.to_string(),
-                        })],
-                        None,
-                        raw_message,
-                        message_latency,
-                        None,
-                    ))),
-                    ContentBlockDelta::ToolUse(tool_use) => {
-                        Ok(Some(ProviderInferenceResponseChunk::new(
-                            // Take the current tool name and ID and use them to create a ToolCallChunk
-                            // This is necessary because the ToolCallChunk must always contain the tool name and ID
-                            // even though AWS Bedrock only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
-                            vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                                raw_name: None,
-                                id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                                    message: "Got InputJsonDelta chunk from AWS Bedrock without current tool id being set by a ToolUse".to_string(),
-                                    provider_type: PROVIDER_TYPE.to_string(),
-                                    raw_request: None,
-                                    raw_response: None,
-                                }))?,
-                                raw_arguments: tool_use.input,
-                            })],
-                            None,
-                            raw_message,
-                            message_latency,
-                            None,
-                        )))
-                    }
-                    ContentBlockDelta::ReasoningContent(reasoning_content) => {
-                        match &reasoning_content {
-                            ReasoningContentBlockDelta::Text(_)
-                            | ReasoningContentBlockDelta::Signature(_) => {
-                                Ok(Some(ProviderInferenceResponseChunk::new(
-                                    vec![ContentBlockChunk::Thought(ThoughtChunk {
-                                        id: message.content_block_index.to_string(),
-                                        text: reasoning_content.as_text().ok().cloned(),
-                                        summary_id: None,
-                                        summary_text: None,
-                                        signature: reasoning_content.as_signature().ok().cloned(),
-                                        provider_type: Some(PROVIDER_TYPE.to_string()),
-                                    })],
-                                    None,
-                                    raw_message,
-                                    message_latency,
-                                    None,
-                                )))
-                            }
-                            ReasoningContentBlockDelta::RedactedContent(_) => {
-                                tracing::warn!(
-                                    "The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks."
-                                );
-                                Ok(None)
-                            }
-                            _ => {
-                                tracing::warn!(
-                                    "The TensorZero Gateway received an unknown reasoning content block (supported reasoning formats: `Text`, `Signature`, `RedactedContent`) from AWS Bedrock, so we're discarding the content block. Please reach out to our team and we'll quickly collaborate on a solution."
-                                );
-                                Ok(None)
-                            }
-                        }
-                    }
-                    _ => Err(ErrorDetails::InferenceServer {
-                        raw_request: None,
-                        raw_response: None,
-                        message: "Unsupported content block delta type for AWS Bedrock".to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    }
-                    .into()),
-                },
-                None => Ok(None),
-            }
+    // Build inference config
+    let inference_config = Some(InferenceConfig {
+        max_tokens: request.max_tokens.map(|t| t as i32),
+        temperature: request.temperature,
+        top_p: request.top_p,
+        stop_sequences: request
+            .stop_sequences
+            .as_ref()
+            .map(|s| s.iter().cloned().collect()),
+    });
+
+    // Build system prompt
+    let system = request
+        .system
+        .as_ref()
+        .filter(|s| !s.is_empty())
+        .map(|s| vec![SystemContentBlock::Text { text: s.clone() }]);
+
+    // Build tool config
+    let tool_config = if let Some(tc) = &request.tool_config {
+        if matches!(tc.tool_choice, TensorZeroToolChoice::None) {
+            None
+        } else {
+            let tools: Vec<Tool> = tc.strict_tools_available()?.map(convert_tool).collect();
+
+            let tool_choice = convert_tool_choice(tc.tool_choice.clone());
+
+            Some(ToolConfig {
+                tools,
+                tool_choice: Some(tool_choice),
+            })
         }
-        ConverseStreamOutputType::ContentBlockStart(message) => {
-            let raw_message = serialize_aws_bedrock_struct(&message)?;
+    } else {
+        None
+    };
 
-            match message.start {
-                None => Ok(None),
-                Some(ContentBlockStart::ToolUse(tool_use)) => {
-                    // This is a new tool call, update the ID for future chunks
-                    *current_tool_id = Some(tool_use.tool_use_id.clone());
-                    Ok(Some(ProviderInferenceResponseChunk::new(
-                        vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                            id: tool_use.tool_use_id,
-                            raw_name: Some(tool_use.name),
-                            raw_arguments: String::new(),
-                        })],
-                        None,
-                        raw_message,
-                        message_latency,
-                        None,
-                    )))
-                }
-                _ => Err(ErrorDetails::InferenceServer {
-                    raw_request: None,
-                    raw_response: None,
-                    message: "Unsupported content block start type for AWS Bedrock".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                }
-                .into()),
-            }
-        }
-        ConverseStreamOutputType::ContentBlockStop(_) => Ok(None),
-        ConverseStreamOutputType::MessageStart(_) => Ok(None),
-        ConverseStreamOutputType::MessageStop(message_stop) => {
-            let raw_message = serialize_aws_bedrock_struct(&message_stop)?;
-            Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![],
-                None,
-                raw_message,
-                message_latency,
-                aws_stop_reason_to_tensorzero_finish_reason(message_stop.stop_reason),
-            )))
-        }
-        ConverseStreamOutputType::Metadata(message) => {
-            let raw_message = serialize_aws_bedrock_struct(&message)?;
+    // Build additional model request fields (for thinking, etc.) and warn about unsupported params
+    let additional_model_request_fields = apply_inference_params(inference_params);
 
-            // Note: There are other types of metadata (e.g. traces) but for now we're only interested in usage
+    Ok(ConverseRequest {
+        messages,
+        system,
+        inference_config,
+        tool_config,
+        additional_model_request_fields,
+    })
+}
 
-            match message.usage {
-                None => Ok(None),
-                Some(aws_usage) => {
-                    // Manually construct JSON since AWS SDK types don't implement Serialize.
-                    // In streaming mode, we don't have access to the raw JSON response - the AWS SDK
-                    // deserializes events internally and only gives us typed structs. Unlike
-                    // non-streaming where we can parse `raw_response`, here we must reconstruct
-                    // the usage object from the struct fields. If AWS adds new fields to TokenUsage,
-                    // they'll need to be added here manually.
-                    //
-                    // https://github.com/tensorzero/tensorzero/issues/5492
-                    let raw_usage = Some(raw_usage_entries_from_value(
-                        model_inference_id,
-                        PROVIDER_TYPE,
-                        ApiType::ChatCompletions,
-                        serde_json::json!({
-                            "input_tokens": aws_usage.input_tokens,
-                            "output_tokens": aws_usage.output_tokens,
-                            "total_tokens": aws_usage.total_tokens,
-                            "cache_read_input_tokens": aws_usage.cache_read_input_tokens,
-                            "cache_write_input_tokens": aws_usage.cache_write_input_tokens,
-                        }),
-                    ));
+/// Check if JSON prefill is needed for Claude models
+fn needs_json_prefill(model_id: &str, request: &ModelInferenceRequest<'_>) -> bool {
+    needs_json_prefill_raw(model_id, &request.function_type, request.json_mode)
+}
 
-                    let usage = Some(Usage {
-                        input_tokens: Some(aws_usage.input_tokens as u32),
-                        output_tokens: Some(aws_usage.output_tokens as u32),
-                    });
+/// Check if JSON prefill is needed (raw parameter version)
+fn needs_json_prefill_raw(
+    model_id: &str,
+    function_type: &FunctionType,
+    json_mode: ModelInferenceRequestJsonMode,
+) -> bool {
+    model_id.contains("claude")
+        && matches!(function_type, FunctionType::Json)
+        && matches!(
+            json_mode,
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
+        )
+}
 
-                    Ok(Some(ProviderInferenceResponseChunk::new_with_raw_usage(
-                        vec![],
-                        usage,
-                        raw_message,
-                        message_latency,
-                        None,
-                        raw_usage,
-                    )))
-                }
-            }
-        }
-        _ => Err(ErrorDetails::InferenceServer {
-            raw_request: None,
-            raw_response: None,
-            message: "Unknown event type from AWS Bedrock".to_string(),
-            provider_type: PROVIDER_TYPE.to_string(),
-        }
-        .into()),
+/// Apply inference params and build additional model request fields.
+/// Uses destructuring to ensure all params are handled when new ones are added.
+fn apply_inference_params(
+    inference_params: &ChatCompletionInferenceParamsV2,
+) -> Option<AdditionalModelRequestFields> {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        service_tier,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking` for this provider."),
+        );
     }
-}
 
-fn role_to_conversation_role(role: Role) -> ConversationRole {
-    match role {
-        Role::User => ConversationRole::User,
-        Role::Assistant => ConversationRole::Assistant,
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
+
+    // Build additional model request fields for thinking
+    thinking_budget_tokens.map(|budget_tokens| AdditionalModelRequestFields {
+        thinking: Some(ThinkingConfig {
+            thinking_type: ThinkingType::Enabled,
+            budget_tokens,
+        }),
+    })
 }
 
-/// Prefill messages for AWS Bedrock when conditions are met
-async fn prefill_json_message(messages: &mut Vec<Message>) -> Result<(), Error> {
-    // Add a JSON-prefill message for AWS Bedrock's JSON mode
-    messages.push(
-        message_from_request_message(&RequestMessage {
-            role: Role::Assistant,
-            content: vec![ContentBlock::Text(Text {
-                text: "Here is the JSON requested:\n{".to_string(),
-            })],
-        })
-        .await?,
-    );
-    Ok(())
+/// Add JSON prefill message to the request
+fn prefill_json_converse_request(request: &mut ConverseRequest) {
+    request.messages.push(Message {
+        role: Role::Assistant,
+        content: vec![BedrockContentBlock::Text(types::TextBlock {
+            text: "Here is the JSON requested:\n{".to_string(),
+        })],
+    });
 }
 
-async fn bedrock_content_block_from_content_block(
+/// Convert a TensorZero RequestMessage to a Bedrock Message
+async fn convert_request_message(message: &RequestMessage) -> Result<Message, Error> {
+    let role = match message.role {
+        TensorZeroRole::User => Role::User,
+        TensorZeroRole::Assistant => Role::Assistant,
+    };
+
+    let content: Vec<BedrockContentBlock> =
+        try_join_all(message.content.iter().map(convert_content_block_to_bedrock))
+            .await?
+            .into_iter()
+            .flatten()
+            .collect();
+
+    Ok(Message { role, content })
+}
+
+/// Convert a TensorZero ContentBlock to a Bedrock ContentBlock
+async fn convert_content_block_to_bedrock(
     block: &ContentBlock,
 ) -> Result<Option<BedrockContentBlock>, Error> {
     match block {
-        ContentBlock::Text(Text { text }) => Ok(Some(BedrockContentBlock::Text(text.clone()))),
+        ContentBlock::Text(Text { text }) => {
+            Ok(Some(BedrockContentBlock::Text(types::TextBlock {
+                text: text.clone(),
+            })))
+        }
         ContentBlock::ToolCall(tool_call) => {
-            // Convert the tool call arguments from String to JSON Value...
-            let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    raw_request: None,
-                    raw_response: Some(tool_call.arguments.clone()),
-                    status_code: Some(StatusCode::BAD_REQUEST),
-                    message: format!(
-                        "Error parsing tool call arguments as JSON Value: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
-
-            // ...then convert the JSON Value to an AWS SDK Document
-            let input = serde_json::from_value(input).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    raw_request: None,
-                    raw_response: None,
-                    message: format!(
-                        "Error converting tool call arguments to AWS SDK Document: {e}"
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
-
-            let tool_use_block = ToolUseBlock::builder()
-                .name(tool_call.name.clone())
-                .input(input)
-                .tool_use_id(tool_call.id.clone())
-                .build()
-                .map_err(|_| {
+            let input: serde_json::Value =
+                serde_json::from_str(&tool_call.arguments).map_err(|e| {
                     Error::new(ErrorDetails::InferenceClient {
                         raw_request: None,
-                        raw_response: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: "Error serializing tool call block".to_string(),
+                        message: format!(
+                            "Error parsing tool call arguments as JSON: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?;
 
-            Ok(Some(BedrockContentBlock::ToolUse(tool_use_block)))
+            Ok(Some(BedrockContentBlock::ToolUse(types::ToolUseBlock {
+                tool_use: types::ToolUseData {
+                    tool_use_id: tool_call.id.clone(),
+                    name: tool_call.name.clone(),
+                    input,
+                },
+            })))
         }
-        ContentBlock::ToolResult(tool_result) => {
-            let tool_result_block = ToolResultBlock::builder()
-                .tool_use_id(tool_result.id.clone())
-                .content(ToolResultContentBlock::Text(tool_result.result.clone()))
-                // NOTE: The AWS Bedrock SDK doesn't include `name` in the ToolResultBlock
-                .build()
-                .map_err(|_| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: None,
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: "Error serializing tool result block".to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-
-            Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
-        }
+        ContentBlock::ToolResult(tool_result) => Ok(Some(BedrockContentBlock::ToolResult(
+            types::ToolResultBlock {
+                tool_result: types::ToolResultData {
+                    tool_use_id: tool_result.id.clone(),
+                    content: vec![ToolResultContent::Text {
+                        text: tool_result.result.clone(),
+                    }],
+                },
+            },
+        ))),
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
             let ObjectStorageFile { file, data } = &*resolved_file;
@@ -819,73 +557,44 @@ async fn bedrock_content_block_from_content_block(
                     "The image detail parameter is not supported by AWS Bedrock. The `detail` field will be ignored."
                 );
             }
-            let file_bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    raw_request: None,
-                    raw_response: None,
-                    status_code: Some(StatusCode::BAD_REQUEST),
-                    message: format!("File was not valid base64: {e:?}"),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+
             if file.mime_type.type_() == mime::IMAGE {
-                let image_block = ImageBlock::builder()
-                    .format(ImageFormat::from(file.mime_type.subtype()))
-                    .source(ImageSource::Bytes(file_bytes.into()))
-                    .build()
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InferenceClient {
-                            raw_request: None,
-                            raw_response: None,
-                            status_code: Some(StatusCode::BAD_REQUEST),
-                            message: format!("Error serializing image block: {e:?}"),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                        })
-                    })?;
-                Ok(Some(BedrockContentBlock::Image(image_block)))
+                Ok(Some(BedrockContentBlock::Image(types::ImageBlock {
+                    image: types::ImageSource {
+                        format: file.mime_type.subtype().to_string(),
+                        source: types::ImageSourceData {
+                            bytes: data.clone(),
+                        },
+                    },
+                })))
             } else {
-                // Best-effort attempt to produce an AWS DocumentFormat, as their API doesn't support mime types
                 let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
                     Error::new(ErrorDetails::InvalidMessage {
                         message: format!("Mime type {} has no filetype suffix", file.mime_type),
                     })
                 })?;
-                let document_format = DocumentFormat::from(suffix);
-                let document = DocumentBlock::builder()
-                    .format(document_format)
-                    // TODO: Should we allow the user to specify the file name?
-                    .name("input")
-                    .source(DocumentSource::Bytes(file_bytes.into()))
-                    .build()
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InferenceClient {
-                            raw_request: None,
-                            raw_response: None,
-                            status_code: Some(StatusCode::BAD_REQUEST),
-                            message: format!("Error serializing document block: {e:?}"),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                        })
-                    })?;
-                Ok(Some(BedrockContentBlock::Document(document)))
+                Ok(Some(BedrockContentBlock::Document(types::DocumentBlock {
+                    document: types::DocumentSource {
+                        format: suffix.to_string(),
+                        name: "input".to_string(),
+                        source: types::DocumentSourceData {
+                            bytes: data.clone(),
+                        },
+                    },
+                })))
             }
         }
         ContentBlock::Thought(thought) => {
             if let Some(text) = &thought.text {
-                let mut builder = ReasoningTextBlock::builder().text(text);
-                if let Some(signature) = &thought.signature {
-                    builder = builder.signature(signature);
-                }
-                let block = builder.build().map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: None,
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error serializing reasoning text block: {e:?}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
                 Ok(Some(BedrockContentBlock::ReasoningContent(
-                    ReasoningContentBlock::ReasoningText(block),
+                    types::ReasoningContentBlock {
+                        reasoning_content: types::ReasoningContent::ReasoningText(
+                            types::ReasoningText {
+                                text: text.clone(),
+                                signature: thought.signature.clone(),
+                            },
+                        ),
+                    },
                 )))
             } else if thought.signature.is_some() {
                 tracing::warn!(
@@ -893,7 +602,6 @@ async fn bedrock_content_block_from_content_block(
                 );
                 Ok(None)
             } else {
-                // We have a thought block with no text or signature, so just ignore it
                 tracing::warn!(
                     "The gateway received a reasoning content block with neither text nor signature. This is unsupported, so we'll drop it."
                 );
@@ -907,18 +615,131 @@ async fn bedrock_content_block_from_content_block(
     }
 }
 
-fn bedrock_content_block_to_output(
-    block: BedrockContentBlock,
+/// Convert a FunctionToolConfig to a Bedrock Tool
+fn convert_tool(tool_config: &FunctionToolConfig) -> Tool {
+    Tool {
+        tool_spec: ToolSpec {
+            name: tool_config.name().to_string(),
+            description: tool_config.description().to_string(),
+            input_schema: ToolInputSchema {
+                json: tool_config.parameters().clone(),
+            },
+        },
+    }
+}
+
+/// Convert a TensorZero ToolChoice to a Bedrock ToolChoice.
+/// Note: ToolChoice::None is filtered out in build_converse_request before calling this function.
+fn convert_tool_choice(choice: TensorZeroToolChoice) -> ToolChoice {
+    match choice {
+        TensorZeroToolChoice::Auto | TensorZeroToolChoice::None => {
+            ToolChoice::Auto(types::AutoToolChoice {})
+        }
+        TensorZeroToolChoice::Required => ToolChoice::Any(types::AnyToolChoice {}),
+        TensorZeroToolChoice::Specific(name) => {
+            ToolChoice::Tool(types::SpecificToolChoice { name })
+        }
+    }
+}
+
+// =============================================================================
+// Response Conversion
+// =============================================================================
+
+/// Context needed for response conversion
+struct ResponseContext<'a> {
+    system: Option<String>,
+    input_messages: Vec<RequestMessage>,
+    model_id: &'a str,
+    function_type: &'a FunctionType,
+    json_mode: ModelInferenceRequestJsonMode,
+}
+
+/// Convert a ConverseResponse to a ProviderInferenceResponse
+fn convert_converse_response(
+    response: ConverseResponse,
+    latency: Latency,
+    raw_request: String,
+    raw_response: String,
+    ctx: ResponseContext<'_>,
+    model_inference_id: Uuid,
+) -> Result<ProviderInferenceResponse, Error> {
+    let message = response.output.message.ok_or_else(|| {
+        Error::new(ErrorDetails::InferenceServer {
+            raw_request: None,
+            raw_response: Some(raw_response.clone()),
+            message: "AWS Bedrock returned an empty message.".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+
+    // Convert content blocks
+    let mut content: Vec<ContentBlockOutput> = message
+        .content
+        .into_iter()
+        .map(convert_response_content_block)
+        .filter_map(Result::transpose)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Apply JSON prefill adjustment
+    if needs_json_prefill_raw(ctx.model_id, ctx.function_type, ctx.json_mode) {
+        content = prefill_json_response(content)?;
+    }
+
+    // Extract usage - include cache tokens in input_tokens
+    // AWS Bedrock reports cache tokens separately from input_tokens
+    let total_input_tokens = response.usage.input_tokens as u32
+        + response.usage.cache_read_input_tokens.unwrap_or(0) as u32
+        + response.usage.cache_write_input_tokens.unwrap_or(0) as u32;
+    let usage = Usage {
+        input_tokens: Some(total_input_tokens),
+        output_tokens: Some(response.usage.output_tokens as u32),
+    };
+
+    // Extract raw usage from response
+    let raw_usage = extract_raw_usage_from_response(&raw_response).map(|value| {
+        raw_usage_entries_from_value(
+            model_inference_id,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+            value,
+        )
+    });
+
+    Ok(ProviderInferenceResponse::new(
+        ProviderInferenceResponseArgs {
+            output: content,
+            system: ctx.system,
+            input_messages: ctx.input_messages,
+            raw_request,
+            raw_response,
+            usage,
+            raw_usage,
+            relay_raw_response: None,
+            provider_latency: latency,
+            finish_reason: Some(convert_stop_reason(response.stop_reason)),
+            id: model_inference_id,
+        },
+    ))
+}
+
+/// Convert a Bedrock response content block to a TensorZero ContentBlockOutput
+fn convert_response_content_block(
+    block: ResponseContentBlock,
 ) -> Result<Option<ContentBlockOutput>, Error> {
     match block {
-        BedrockContentBlock::Text(text) => Ok(Some(text.into())),
-        BedrockContentBlock::ToolUse(tool_use) => {
-            let arguments = serde_json::to_string(&tool_use.input).map_err(|e| {
+        ResponseContentBlock::Text(text) => Ok(Some(text.into())),
+        ResponseContentBlock::ToolUse {
+            tool_use_id,
+            name,
+            input,
+        } => {
+            let arguments = serde_json::to_string(&input).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     raw_request: None,
                     raw_response: None,
                     message: format!(
-                        "Error parsing tool call arguments from AWS Bedrock: {}",
+                        "Error serializing tool call arguments: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -926,280 +747,332 @@ fn bedrock_content_block_to_output(
             })?;
 
             Ok(Some(ContentBlockOutput::ToolCall(ToolCall {
-                name: tool_use.name,
+                name,
                 arguments,
-                id: tool_use.tool_use_id,
+                id: tool_use_id,
             })))
         }
-        BedrockContentBlock::ReasoningContent(reasoning_content) => match reasoning_content {
-            ReasoningContentBlock::ReasoningText(reasoning_text) => {
+        ResponseContentBlock::ReasoningContent(reasoning) => match reasoning {
+            ResponseReasoningContent::ReasoningText { text, signature } => {
                 Ok(Some(ContentBlockOutput::Thought(Thought {
-                    text: Some(reasoning_text.text.clone()),
+                    text: Some(text),
                     summary: None,
-                    signature: reasoning_text.signature().map(ToString::to_string),
+                    signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })))
             }
-            ReasoningContentBlock::RedactedContent(_) => {
+            ResponseReasoningContent::RedactedContent(_) => {
                 tracing::warn!(
-                    "The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks."
-                );
-                Ok(None)
-            }
-            _ => {
-                tracing::warn!(
-                    "The TensorZero Gateway received an unknown reasoning content block (supported reasoning formats: `Text`, `Signature`, `RedactedContent`) from AWS Bedrock, so we're discarding the content block. Please reach out to our team and we'll quickly collaborate on a solution."
+                    "The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet."
                 );
                 Ok(None)
             }
         },
-
-        _ => Err(Error::new(ErrorDetails::TypeConversion {
-            message: format!(
-                "The TensorZero Gateway received an unknown content block from AWS Bedrock ({}), so we're discarding it. Please reach out to our team and we'll quickly collaborate on a solution.",
-                std::any::type_name_of_val(&block)
-            ),
-        })),
     }
 }
 
-// `Message` is a foreign type, so we cannot write an `impl` block on it
-async fn message_from_request_message(message: &RequestMessage) -> Result<Message, Error> {
-    let role = role_to_conversation_role(message.role);
-    let content: Vec<BedrockContentBlock> = try_join_all(
-        message
-            .content
-            .iter()
-            .map(bedrock_content_block_from_content_block),
-    )
-    .await?
-    .into_iter()
-    .flatten()
-    .collect();
-    let mut message_builder = Message::builder().role(role).set_content(Some(vec![]));
-    for block in content {
-        message_builder = message_builder.content(block);
-    }
-    let message = message_builder.build().map_err(|e| {
-        Error::new(ErrorDetails::InvalidMessage {
-            message: e.to_string(),
-        })
-    })?;
-
-    Ok(message)
-}
-
-#[derive(Debug)]
-#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-struct ConverseOutputWithMetadata<'a> {
-    output: ConverseOutput,
-    latency: Latency,
-    raw_request: String,
-    raw_response: String,
-    system: Option<String>,
-    input_messages: Vec<RequestMessage>,
-    model_id: &'a str,
-    function_type: &'a FunctionType,
-    json_mode: &'a ModelInferenceRequestJsonMode,
-    model_inference_id: Uuid,
-}
-
-#[expect(clippy::unnecessary_wraps)]
-fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Option<FinishReason> {
+/// Convert a Bedrock StopReason to a TensorZero FinishReason
+fn convert_stop_reason(stop_reason: StopReason) -> FinishReason {
     match stop_reason {
-        StopReason::ContentFiltered => Some(FinishReason::ContentFilter),
-        StopReason::EndTurn => Some(FinishReason::Stop),
-        StopReason::GuardrailIntervened => Some(FinishReason::ContentFilter),
-        StopReason::MaxTokens => Some(FinishReason::Length),
-        StopReason::StopSequence => Some(FinishReason::StopSequence),
-        StopReason::ToolUse => Some(FinishReason::ToolCall),
-        _ => Some(FinishReason::Unknown),
-    }
-}
-
-impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
-    type Error = Error;
-
-    fn try_from(value: ConverseOutputWithMetadata) -> Result<Self, Self::Error> {
-        let ConverseOutputWithMetadata {
-            output,
-            latency,
-            raw_request,
-            raw_response,
-            system,
-            input_messages,
-            model_id,
-            function_type,
-            json_mode,
-            model_inference_id,
-        } = value;
-        let message = match output.output {
-            Some(ConverseOutputType::Message(message)) => Some(message),
-            _ => {
-                return Err(ErrorDetails::InferenceServer {
-                    raw_request: None,
-                    raw_response: Some(raw_response.clone()),
-                    message: "AWS Bedrock returned an unknown output type.".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                }
-                .into());
-            }
-        };
-
-        let mut content: Vec<ContentBlockOutput> = message
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    raw_request: None,
-                    raw_response: Some(raw_response.clone()),
-                    message: "AWS Bedrock returned an empty message.".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .content
-            .into_iter()
-            .map(bedrock_content_block_to_output)
-            .filter_map(Result::transpose)
-            .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
-
-        if model_id.contains("claude")
-            && *function_type == FunctionType::Json
-            && (*json_mode == ModelInferenceRequestJsonMode::Strict
-                || *json_mode == ModelInferenceRequestJsonMode::On)
-        {
-            content = prefill_json_response(content)?;
+        StopReason::EndTurn => FinishReason::Stop,
+        StopReason::ToolUse => FinishReason::ToolCall,
+        StopReason::MaxTokens => FinishReason::Length,
+        StopReason::StopSequence => FinishReason::StopSequence,
+        StopReason::ContentFiltered | StopReason::GuardrailIntervened => {
+            FinishReason::ContentFilter
         }
-
-        let aws_usage = output.usage.ok_or_else(|| {
-            Error::new(ErrorDetails::InferenceServer {
-                raw_request: None,
-                raw_response: Some(raw_response.clone()),
-                message: "AWS Bedrock returned a message without usage information.".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        let raw_usage = aws_bedrock_usage_from_raw_response(&raw_response).map(|value| {
-            raw_usage_entries_from_value(
-                model_inference_id,
-                PROVIDER_TYPE,
-                ApiType::ChatCompletions,
-                value,
-            )
-        });
-
-        let usage = Usage {
-            input_tokens: Some(aws_usage.input_tokens as u32),
-            output_tokens: Some(aws_usage.output_tokens as u32),
-        };
-        Ok(ProviderInferenceResponse::new(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages,
-                raw_request,
-                raw_response,
-                usage,
-                raw_usage,
-                provider_latency: latency,
-                finish_reason: aws_stop_reason_to_tensorzero_finish_reason(output.stop_reason),
-                id: model_inference_id,
-            },
-        ))
+        StopReason::Unknown => FinishReason::Unknown,
     }
 }
 
-/// Serialize a struct to a JSON string.
-///
-/// This is necessary because the AWS SDK doesn't implement Serialize.
-/// Therefore, we construct this unusual JSON object to store the raw output
-///
-/// This feature request has been pending since 2022:
-/// https://github.com/awslabs/aws-sdk-rust/issues/645
-fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String, Error> {
-    serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)})).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            raw_request: None,
-            raw_response: Some(format!("{output:?}")),
-            message: format!(
-                "Error parsing response from AWS Bedrock: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-            provider_type: PROVIDER_TYPE.to_string(),
-        })
-    })
-}
-
-fn aws_bedrock_usage_from_raw_response(raw_response: &str) -> Option<serde_json::Value> {
+/// Extract raw usage from response JSON
+fn extract_raw_usage_from_response(raw_response: &str) -> Option<serde_json::Value> {
     serde_json::from_str::<serde_json::Value>(raw_response)
         .ok()
         .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
-impl TryFrom<&FunctionToolConfig> for Tool {
-    type Error = Error;
+// =============================================================================
+// Streaming
+// =============================================================================
 
-    fn try_from(tool_config: &FunctionToolConfig) -> Result<Self, Error> {
-        let tool_input_schema = ToolInputSchema::Json(
-            serde_json::from_value(tool_config.parameters().clone()).map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    raw_request: None,
-                    raw_response: Some(format!("{:?}", tool_config.parameters())),
-                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message: format!(
-                        "Error parsing tool input schema: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?,
-        );
+/// Create a stream that processes the Bedrock event stream
+fn stream_bedrock<S>(
+    bytes_stream: S,
+    start_time: Instant,
+    model_inference_id: Uuid,
+    raw_request: String,
+) -> ProviderInferenceResponseStreamInner
+where
+    S: futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + Unpin + 'static,
+{
+    Box::pin(async_stream::stream! {
+        let mut decoder = MessageFrameDecoder::new();
+        let mut buffer = BytesMut::new();
+        let mut current_tool_id: Option<String> = None;
+        let mut bytes_stream = bytes_stream;
 
-        let tool_spec = ToolSpecification::builder()
-            .name(tool_config.name())
-            .description(tool_config.description())
-            .input_schema(tool_input_schema)
-            .build()
-            .map_err(|_| {
-                Error::new(ErrorDetails::InferenceClient {
-                    raw_request: None,
-                    raw_response: Some(format!("{:?}", tool_config.parameters())),
-                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message: "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
-                        .to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+        while let Some(chunk_result) = bytes_stream.next().await {
+            match chunk_result {
+                Err(e) => {
+                    yield Err(ErrorDetails::InferenceServer {
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: None,
+                        message: format!("Error reading stream: {e}"),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    }.into());
+                    return;
+                }
+                Ok(chunk) => {
+                    buffer.extend_from_slice(&chunk);
 
-        Ok(Tool::ToolSpec(tool_spec))
-    }
+                    // Try to decode frames from the buffer
+                    loop {
+                        match decoder.decode_frame(&mut buffer) {
+                            Ok(DecodedFrame::Complete(message)) => {
+                                // Check for exception messages using shared helper
+                                if let Some((exception_type, error_message)) = check_eventstream_exception(&message) {
+                                    yield Err(ErrorDetails::InferenceServer {
+                                        raw_request: Some(raw_request.clone()),
+                                        raw_response: Some(error_message),
+                                        message: format!("AWS Bedrock streaming exception: {exception_type}"),
+                                        provider_type: PROVIDER_TYPE.to_string(),
+                                    }.into());
+                                    return;
+                                }
+
+                                // Extract event type from headers for normal events
+                                let event_type = message.headers().iter()
+                                    .find(|h| h.name().as_str() == ":event-type")
+                                    .and_then(|h| h.value().as_string().ok())
+                                    .map(|s| s.as_str().to_owned());
+
+                                // Parse the JSON payload
+                                let payload = message.payload();
+                                let message_latency = start_time.elapsed();
+
+                                match process_stream_event(
+                                    event_type.as_deref(),
+                                    payload,
+                                    message_latency,
+                                    &mut current_tool_id,
+                                    model_inference_id,
+                                ) {
+                                    Ok(None) => {},
+                                    Ok(Some(chunk)) => yield Ok(chunk),
+                                    Err(e) => yield Err(e),
+                                }
+                            }
+                            Ok(DecodedFrame::Incomplete) => {
+                                // Need more data
+                                break;
+                            }
+                            Err(e) => {
+                                yield Err(ErrorDetails::InferenceServer {
+                                    raw_request: Some(raw_request.clone()),
+                                    raw_response: None,
+                                    message: format!("Error decoding event stream frame: {e}"),
+                                    provider_type: PROVIDER_TYPE.to_string(),
+                                }.into());
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
 }
 
-fn tool_choice_to_aws_bedrock(tool_choice: ToolChoice) -> Result<AWSBedrockToolChoice, Error> {
-    match tool_choice {
-        // Workaround for AWS Bedrock API limitation: they don't support explicitly specifying "none"
-        // for tool choice. Instead, we return Auto but the request construction will ensure
-        // that no tools are sent in the request payload. This achieves the same effect
-        // as explicitly telling the model not to use tools, since without any tools
-        // being provided, the model cannot make tool calls.
-        ToolChoice::None => Ok(AWSBedrockToolChoice::Auto(AutoToolChoice::builder().build())),
-        ToolChoice::Auto => Ok(AWSBedrockToolChoice::Auto(
-            AutoToolChoice::builder().build(),
-        )),
-        ToolChoice::Required => Ok(AWSBedrockToolChoice::Any(AnyToolChoice::builder().build())),
-        ToolChoice::Specific(tool_name) => Ok(AWSBedrockToolChoice::Tool(
-            SpecificToolChoice::builder()
-                .name(tool_name)
-                .build()
-                .map_err(|_| Error::new(ErrorDetails::InferenceClient {
-                    raw_request: None,
-                    raw_response: None,
-                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message:
-                        "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
-                            .to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                }))?,
-        )),
+/// Parse a stream event payload into a typed struct
+fn parse_stream_event<T: serde::de::DeserializeOwned>(
+    payload: &[u8],
+    event_name: &str,
+    raw_message: &str,
+) -> Result<T, Error> {
+    serde_json::from_slice(payload).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            raw_request: None,
+            raw_response: Some(raw_message.to_string()),
+            message: format!("Error parsing {event_name}: {e}"),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })
+}
+
+/// Process a single stream event
+fn process_stream_event(
+    event_type: Option<&str>,
+    payload: &[u8],
+    message_latency: Duration,
+    current_tool_id: &mut Option<String>,
+    model_inference_id: Uuid,
+) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
+    let raw_message = String::from_utf8_lossy(payload).to_string();
+
+    match event_type {
+        Some("messageStart") => {
+            // Just signals start of message, no content to yield
+            Ok(None)
+        }
+        Some("contentBlockStart") => {
+            let event: ContentBlockStartEvent =
+                parse_stream_event(payload, "contentBlockStart", &raw_message)?;
+
+            match event.start {
+                Some(ContentBlockStart::ToolUse { tool_use_id, name }) => {
+                    *current_tool_id = Some(tool_use_id.clone());
+                    Ok(Some(ProviderInferenceResponseChunk::new(
+                        vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                            id: tool_use_id,
+                            raw_name: Some(name),
+                            raw_arguments: String::new(),
+                        })],
+                        None,
+                        raw_message,
+                        message_latency,
+                        None,
+                    )))
+                }
+                None => Ok(None),
+            }
+        }
+        Some("contentBlockDelta") => {
+            let event: ContentBlockDeltaEvent =
+                parse_stream_event(payload, "contentBlockDelta", &raw_message)?;
+
+            match event.delta {
+                Some(ContentBlockDelta::Text(text)) => {
+                    Ok(Some(ProviderInferenceResponseChunk::new(
+                        vec![ContentBlockChunk::Text(TextChunk {
+                            text,
+                            id: event.content_block_index.to_string(),
+                        })],
+                        None,
+                        raw_message,
+                        message_latency,
+                        None,
+                    )))
+                }
+                Some(ContentBlockDelta::ToolUse { input }) => {
+                    let tool_id = current_tool_id.clone().ok_or_else(|| {
+                        Error::new(ErrorDetails::InferenceServer {
+                            message: "Got tool use delta without current tool id".to_string(),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                            raw_request: None,
+                            raw_response: None,
+                        })
+                    })?;
+                    Ok(Some(ProviderInferenceResponseChunk::new(
+                        vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                            id: tool_id,
+                            raw_name: None,
+                            raw_arguments: input,
+                        })],
+                        None,
+                        raw_message,
+                        message_latency,
+                        None,
+                    )))
+                }
+                Some(ContentBlockDelta::ReasoningContent(reasoning)) => match reasoning {
+                    types::ReasoningDelta::Text(text) => {
+                        Ok(Some(ProviderInferenceResponseChunk::new(
+                            vec![ContentBlockChunk::Thought(ThoughtChunk {
+                                id: event.content_block_index.to_string(),
+                                text: Some(text),
+                                summary_id: None,
+                                summary_text: None,
+                                signature: None,
+                                provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
+                            })],
+                            None,
+                            raw_message,
+                            message_latency,
+                            None,
+                        )))
+                    }
+                    types::ReasoningDelta::Signature(signature) => {
+                        Ok(Some(ProviderInferenceResponseChunk::new(
+                            vec![ContentBlockChunk::Thought(ThoughtChunk {
+                                id: event.content_block_index.to_string(),
+                                text: None,
+                                summary_id: None,
+                                summary_text: None,
+                                signature: Some(signature),
+                                provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
+                            })],
+                            None,
+                            raw_message,
+                            message_latency,
+                            None,
+                        )))
+                    }
+                    types::ReasoningDelta::RedactedContent(_) => {
+                        tracing::warn!(
+                            "The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet."
+                        );
+                        Ok(None)
+                    }
+                },
+                None => Ok(None),
+            }
+        }
+        Some("contentBlockStop") => Ok(None),
+        Some("messageStop") => {
+            let event: MessageStopEvent = parse_stream_event(payload, "messageStop", &raw_message)?;
+
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![],
+                None,
+                raw_message,
+                message_latency,
+                Some(convert_stop_reason(event.stop_reason)),
+            )))
+        }
+        Some("metadata") => {
+            // Parse into typed struct for structured usage
+            let event: MetadataEvent = parse_stream_event(payload, "metadata", &raw_message)?;
+
+            // Extract raw usage directly from the JSON payload
+            let raw_usage = serde_json::from_slice::<serde_json::Value>(payload)
+                .ok()
+                .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
+                .map(|usage_value| {
+                    raw_usage_entries_from_value(
+                        model_inference_id,
+                        PROVIDER_TYPE,
+                        ApiType::ChatCompletions,
+                        usage_value,
+                    )
+                });
+
+            // Include cache tokens in input_tokens
+            // AWS Bedrock reports cache tokens separately from input_tokens
+            let total_input_tokens = event.usage.input_tokens as u32
+                + event.usage.cache_read_input_tokens.unwrap_or(0) as u32
+                + event.usage.cache_write_input_tokens.unwrap_or(0) as u32;
+            let usage = Some(Usage {
+                input_tokens: Some(total_input_tokens),
+                output_tokens: Some(event.usage.output_tokens as u32),
+            });
+
+            Ok(Some(ProviderInferenceResponseChunk::new_with_raw_usage(
+                vec![],
+                usage,
+                raw_message,
+                message_latency,
+                None,
+                raw_usage,
+            )))
+        }
+        _ => {
+            tracing::warn!("Unknown event type from AWS Bedrock: {:?}", event_type);
+            Ok(None)
+        }
     }
 }
 
@@ -1207,6 +1080,7 @@ fn tool_choice_to_aws_bedrock(tool_choice: ToolChoice) -> Result<AWSBedrockToolC
 mod tests {
     use super::*;
     use crate::utils::testing::reset_capture_logs;
+
     #[tokio::test]
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -1214,7 +1088,9 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("uk-hogwarts-1")),
-            TensorzeroHttpClient::new_testing().unwrap(),
+            None,
+            None,
+            AWSCredentials::Sdk,
         )
         .await
         .unwrap();
@@ -1228,7 +1104,9 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("uk-hogwarts-1")),
-            TensorzeroHttpClient::new_testing().unwrap(),
+            None,
+            None,
+            AWSCredentials::Sdk,
         )
         .await
         .unwrap();
@@ -1243,13 +1121,10 @@ mod tests {
         // We use 'nextest' as our runner, so each test runs in its own process
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
-        let err = AWSBedrockProvider::new(
-            "test".to_string(),
-            None,
-            TensorzeroHttpClient::new_testing().unwrap(),
-        )
-        .await
-        .expect_err("AWS bedrock provider should fail when it cannot detect region");
+        let err =
+            AWSBedrockProvider::new("test".to_string(), None, None, None, AWSCredentials::Sdk)
+                .await
+                .expect_err("AWS Bedrock provider should fail when it cannot detect region");
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to determine AWS region."),
@@ -1263,7 +1138,9 @@ mod tests {
         AWSBedrockProvider::new(
             "test".to_string(),
             Some(Region::new("me-shire-2")),
-            TensorzeroHttpClient::new_testing().unwrap(),
+            None,
+            None,
+            AWSCredentials::Sdk,
         )
         .await
         .unwrap();

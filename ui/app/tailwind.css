@@ -150,6 +150,15 @@
   --color-orange-900: hsl(var(--orange-900));
   --color-orange-950: hsl(var(--orange-950));
 
+  --color-menu-highlight: hsl(var(--menu-highlight));
+  --color-menu-highlight-foreground: hsl(var(--menu-highlight-foreground));
+  --color-menu-highlight-icon: hsl(var(--menu-highlight-icon));
+  --color-menu-highlight-badge: hsl(var(--menu-highlight-badge));
+  --color-menu-highlight-badge-foreground: hsl(
+    var(--menu-highlight-badge-foreground)
+  );
+
+
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
 
@@ -322,6 +331,13 @@
     --orange-800: 13 87% 34%;
     --orange-900: 13 83% 28%;
     --orange-950: 11 89% 15%;
+
+    /* Menu highlight colors */
+    --menu-highlight: var(--orange-50);
+    --menu-highlight-foreground: var(--orange-900);
+    --menu-highlight-icon: var(--orange-800);
+    --menu-highlight-badge: var(--orange-100);
+    --menu-highlight-badge-foreground: var(--orange-800);
   }
 
   .dark {
@@ -363,6 +379,13 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Menu highlight colors (dark mode) */
+    --menu-highlight: var(--orange-900);
+    --menu-highlight-foreground: var(--orange-100);
+    --menu-highlight-icon: var(--orange-200);
+    --menu-highlight-badge: var(--orange-800);
+    --menu-highlight-badge-foreground: var(--orange-200);
   }
 }
 

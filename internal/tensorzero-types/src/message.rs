@@ -9,7 +9,7 @@ use crate::tool::{ToolCallWrapper, ToolResult};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tensorzero_derive::export_schema;
+use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
@@ -22,8 +22,9 @@ pub struct InputMessage {
     pub content: Vec<InputMessageContent>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 #[export_schema]
 pub enum InputMessageContent {

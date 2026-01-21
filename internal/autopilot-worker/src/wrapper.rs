@@ -14,6 +14,7 @@ use durable_tools::{
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
@@ -364,8 +365,9 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
 }
 
 /// This is the type that we write in ToolOutcome::Failure for tool errors.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "kind")]
 pub enum ToolFailure {
     Control { message: String },
     Serialization { message: String },

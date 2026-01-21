@@ -60,11 +60,11 @@ function TableItemTime({ timestamp }: TableItemTimeProps) {
 }
 
 interface TableItemTextProps {
-  text: string | null;
+  text?: string;
 }
 
 function TableItemText({ text }: TableItemTextProps) {
-  if (text === null) {
+  if (text === undefined) {
     return <span className="text-fg-muted">—</span>;
   } else {
     return <span className="whitespace-nowrap">{text}</span>;
