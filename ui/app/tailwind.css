@@ -334,14 +334,12 @@
     --orange-900: 13 83% 28%;
     --orange-950: 11 89% 15%;
 
-    /* Menu highlight colors */
+    /* Highlight colors */
     --menu-highlight: var(--orange-50);
     --menu-highlight-foreground: var(--orange-900);
     --menu-highlight-icon: var(--orange-800);
     --menu-highlight-badge: var(--orange-100);
     --menu-highlight-badge-foreground: var(--orange-800);
-
-    /* Card highlight colors */
     --card-highlight: var(--orange-50);
     --card-highlight-icon: var(--orange-600);
   }
@@ -386,14 +384,12 @@
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
 
-    /* Menu highlight colors (dark mode) */
+    /* Highlight colors (dark mode) */
     --menu-highlight: var(--orange-900);
     --menu-highlight-foreground: var(--orange-100);
     --menu-highlight-icon: var(--orange-200);
     --menu-highlight-badge: var(--orange-800);
     --menu-highlight-badge-foreground: var(--orange-200);
-
-    /* Card highlight colors (dark mode) */
     --card-highlight: var(--orange-900);
     --card-highlight-icon: var(--orange-200);
   }
