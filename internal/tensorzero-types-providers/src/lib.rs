@@ -3,3 +3,4 @@
 //! This crate contains serde types for communicating with external model provider APIs.
 
 pub mod aws_bedrock;
+pub mod xai;

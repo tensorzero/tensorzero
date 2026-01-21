@@ -24,8 +24,9 @@ import {
   SectionLayout,
   SectionsGroup,
   SectionHeader,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
-import { getFunctionTypeIcon } from "~/utils/icon";
+import { FunctionTypeBadge } from "~/components/function/FunctionSelector";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { TimeWindow } from "~/types/tensorzero";
@@ -269,10 +270,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Functions", href: "/observability/functions" },
+            ]}
+          />
+        }
         name={function_name}
-        label={`${function_config.type} · Function`}
-        icon={getFunctionTypeIcon(function_config.type).icon}
-        iconBg={getFunctionTypeIcon(function_config.type).iconBg}
+        tag={<FunctionTypeBadge type={function_config.type} />}
       >
         <BasicInfo functionConfig={function_config} />
       </PageHeader>

@@ -485,6 +485,20 @@ type = "xai"
 model_name = "grok-4-1-fast-non-reasoning"
 api_key_location = "dynamic::xai_api_key"
 
+[models."grok-3-mini"]
+routing = ["xai"]
+
+[models."grok-3-mini".providers.xai]
+type = "xai"
+model_name = "grok-3-mini"
+
+[models."grok-4-fast-reasoning"]
+routing = ["xai"]
+
+[models."grok-4-fast-reasoning".providers.xai]
+type = "xai"
+model_name = "grok-4-fast-reasoning"
+
 [models."openai/gpt-oss-20b"]
 routing = ["hyperbolic"]
 

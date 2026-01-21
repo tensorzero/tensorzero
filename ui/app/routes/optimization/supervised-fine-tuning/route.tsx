@@ -11,6 +11,7 @@ import {
   PageHeader,
   PageLayout,
   SectionLayout,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { SFTFormValuesSchema, type SFTFormValues } from "./types";
 import {
@@ -149,25 +150,38 @@ function SupervisedFineTuningImpl(props: LoaderData) {
     </PageLayout>
   ) : (
     <PageLayout>
-      <PageHeader label="Supervised Fine-Tuning Job" heading={formData?.jobId}>
-        <div className="flex items-center gap-2">
-          <Badge
-            variant={
-              jobInfo.status === "pending"
-                ? "default"
-                : jobInfo.status === "completed"
-                  ? "secondary"
-                  : "destructive"
-            }
-            className="capitalize"
-          >
-            {jobInfo.status === "pending" ? "running" : jobInfo.status}
-          </Badge>
-          {formData?.model.provider && (
-            <ModelBadge provider={formData.model.provider} />
-          )}
-        </div>
-      </PageHeader>
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              {
+                label: "Supervised Fine-Tuning",
+                href: "/optimization/supervised-fine-tuning",
+              },
+            ]}
+          />
+        }
+        name={formData?.jobId}
+        tag={
+          <div className="flex items-center gap-2">
+            <Badge
+              variant={
+                jobInfo.status === "pending"
+                  ? "default"
+                  : jobInfo.status === "completed"
+                    ? "secondary"
+                    : "destructive"
+              }
+              className="capitalize"
+            >
+              {jobInfo.status === "pending" ? "running" : jobInfo.status}
+            </Badge>
+            {formData?.model.provider && (
+              <ModelBadge provider={formData.model.provider} />
+            )}
+          </div>
+        }
+      />
 
       <FineTuningStatus
         status={jobInfo}
