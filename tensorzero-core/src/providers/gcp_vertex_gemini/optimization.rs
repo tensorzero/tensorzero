@@ -376,7 +376,7 @@ mod tests {
             "state": "JOB_STATE_SUCCEEDED",
             "createTime": "1620000000",
             "tunedModel": {
-                "model": "projects/test-project/locations/us-central1/models/gemini-1.5-flash-001-tuned-12345",
+                "model": "projects/test-project/locations/us-central1/models/gemini-2.5-flash-001-tuned-12345",
                 "endpoint": "projects/test-project/locations/us-central1/endpoints/67890"
             },
             "tuning_data_statistics": {
@@ -402,7 +402,7 @@ mod tests {
             "state": "JOB_STATE_SUCCEEDED",
             "createTime": "1620000000",
             "tunedModel": {
-                "model": "projects/test-project/locations/us-central1/models/gemini-1.5-flash-001-tuned-12345"
+                "model": "projects/test-project/locations/us-central1/models/gemini-2.5-flash-001-tuned-12345"
                 // No endpoint field
             },
             "tuning_data_statistics": {
@@ -502,7 +502,7 @@ mod tests {
             "state": "JOB_STATE_PENDING",
             "createTime": "1620000000",
             "tunedModel": {
-                "model": "projects/test-project/locations/us-central1/models/gemini-1.5-flash-001-tuned-12345"
+                "model": "projects/test-project/locations/us-central1/models/gemini-2.5-flash-001-tuned-12345"
                 // No endpoint field - this is the key part of the test
             },
             "tuning_data_statistics": {

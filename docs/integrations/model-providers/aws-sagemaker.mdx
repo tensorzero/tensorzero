@@ -61,8 +61,10 @@ Alternatively, you can use `hosted_provider = "tgi"` if you had deployed TGI ins
 You can specify the endpoint's `region` explicitly, or use `region = "sdk"` to auto-detect region with the AWS SDK.
 
 <Note>
-  If you're using AWS China regions (`cn-north-1`, `cn-northwest-1`) or AWS GovCloud, you must also specify the `endpoint_url` field since these partitions use different DNS suffixes.
-  For example: `endpoint_url = "https://runtime.sagemaker.cn-north-1.amazonaws.com.cn"`
+  If you're using AWS China regions (`cn-north-1`, `cn-northwest-1`) or AWS
+  GovCloud, you must also specify the `endpoint_url` field since these
+  partitions use different DNS suffixes. For example: `endpoint_url =
+  "https://runtime.sagemaker.cn-north-1.amazonaws.com.cn"`
 </Note>
 
 See the [Configuration Reference](/gateway/configuration-reference/) for optional fields.

@@ -17,19 +17,11 @@ crate::generate_batch_inference_tests!(get_providers);
 crate::generate_unified_mock_batch_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    // TODO - fine-tune a better model and add it back to our tests
-    let _tuned = E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "gcp-vertex-gemini-flash-lite-tuned".to_string(),
-        model_name: "gemini-2.0-flash-lite-tuned".into(),
-        model_provider_name: "gcp_vertex_gemini".into(),
-        credentials: HashMap::new(),
-    };
     let standard_providers = vec![
         E2ETestProvider {
             supports_batch_inference: true,
             variant_name: "gcp-vertex-gemini-flash".to_string(),
-            model_name: "gemini-2.0-flash-001".into(),
+            model_name: "gcp-gemini-2.5-flash".into(),
             model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -46,7 +38,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: true,
             variant_name: "gcp-vertex-gemini-flash".to_string(),
-            model_name: "gemini-2.0-flash-001".into(),
+            model_name: "gcp-gemini-2.5-flash".into(),
             model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -70,7 +62,7 @@ async fn get_providers() -> E2ETestProviders {
     let pdf_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp_vertex_gemini".to_string(),
-        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite".into(),
+        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -86,7 +78,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-gemini-flash-extra-body".to_string(),
-        model_name: "gemini-2.0-flash-001".into(),
+        model_name: "gcp-gemini-2.5-flash".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -94,7 +86,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-gemini-flash-extra-headers".to_string(),
-        model_name: "gemini-2.0-flash-001".into(),
+        model_name: "gcp-gemini-2.5-flash".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -103,7 +95,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: true,
             variant_name: "gcp-vertex-gemini-flash".to_string(),
-            model_name: "gemini-2.0-flash-001".into(),
+            model_name: "gcp-gemini-2.5-flash".into(),
             model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -124,7 +116,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "gcp-vertex-gemini-flash-strict".to_string(),
-            model_name: "gemini-2.0-flash-001".into(),
+            model_name: "gcp-gemini-2.5-flash".into(),
             model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -133,7 +125,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp_vertex_gemini_flash_json_mode_off".to_string(),
-        model_name: "gemini-2.0-flash-001".into(),
+        model_name: "gcp-gemini-2.5-flash".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -141,7 +133,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp_vertex_gemini_shorthand".to_string(),
-        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001".into(),
+        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -149,7 +141,7 @@ async fn get_providers() -> E2ETestProviders {
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "gcp_vertex_gemini".to_string(),
         model_info: HashMap::from([
-            ("model_id".to_string(), "gemini-2.0-flash-001".to_string()),
+            ("model_id".to_string(), "gemini-2.5-flash".to_string()),
             ("location".to_string(), "us-central1".to_string()),
             ("project_id".to_string(), "tensorzero-public".to_string()),
         ]),
