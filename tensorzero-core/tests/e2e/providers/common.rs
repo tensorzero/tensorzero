@@ -889,7 +889,7 @@ routing = ["gcp_vertex_anthropic"]
 [models.claude-haiku-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
 type = "gcp_vertex_anthropic"
 model_id = "claude-haiku-4-5@20251001"
-location = "us-central1"
+location = "us-east5"
 project_id = "tensorzero-public"
 
 [functions.image_test.variants.aws-bedrock]
