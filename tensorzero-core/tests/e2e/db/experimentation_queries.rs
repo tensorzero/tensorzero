@@ -10,11 +10,11 @@ use uuid::Uuid;
 // ===== HELPER FUNCTIONS =====
 
 fn generate_function_name(prefix: &str) -> String {
-    format!("{}_func_{}", prefix, Uuid::new_v4())
+    format!("{}_func_{}", prefix, Uuid::now_v7())
 }
 
 fn generate_variant_name(prefix: &str) -> String {
-    format!("{}_variant_{}", prefix, Uuid::new_v4())
+    format!("{}_variant_{}", prefix, Uuid::now_v7())
 }
 
 async fn verify_variant_stored(
