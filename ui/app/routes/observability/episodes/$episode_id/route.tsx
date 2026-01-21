@@ -3,8 +3,9 @@ import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
+  Await,
   data,
-  isRouteErrorResponse,
+  useAsyncError,
   useNavigate,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
@@ -18,15 +19,15 @@ import {
   SectionLayout,
   SectionsGroup,
   SectionHeader,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { Suspense, use, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
-import { logger } from "~/utils/logger";
 import type {
   StoredInference,
   FeedbackRow,
@@ -41,6 +42,8 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertCircle } from "lucide-react";
 
 export type InferencesData = {
   inferences: StoredInference[];
@@ -95,31 +98,33 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const tensorZeroClient = getTensorZeroClient();
 
-  // Start count queries early - these will be streamed to section headers
-  const numInferencesPromise = tensorZeroClient
-    .getEpisodeInferenceCount(episode_id)
-    .then((response) => response.inference_count);
+  // Check if episode exists by getting inference count upfront
+  const inferenceCountResponse =
+    await tensorZeroClient.getEpisodeInferenceCount(episode_id);
+  const numInferences = inferenceCountResponse.inference_count;
+
+  // Convert to number for comparison - JSON returns number, types may vary
+  if (Number(numInferences) === 0) {
+    throw data(`Episode "${episode_id}" not found`, { status: 404 });
+  }
+
+  // Count is already fetched, wrap in resolved promise for streaming
+  const numInferencesPromise = Promise.resolve(numInferences);
   const numFeedbacksPromise =
     tensorZeroClient.countFeedbackByTargetId(episode_id);
 
   // Stream inferences data - will be resolved in the component
-  // Throws error if no inferences found (episode doesn't exist)
   const inferencesDataPromise: Promise<InferencesData> =
     listInferencesWithPagination({
       episode_id,
       before: beforeInference ?? undefined,
       after: afterInference ?? undefined,
       limit,
-    }).then((result) => {
-      if (result.inferences.length === 0) {
-        throw Error(`Episode not found`);
-      }
-      return {
-        inferences: result.inferences,
-        hasNextPage: result.hasNextPage,
-        hasPreviousPage: result.hasPreviousPage,
-      };
-    });
+    }).then((result) => ({
+      inferences: result.inferences,
+      hasNextPage: result.hasNextPage,
+      hasPreviousPage: result.hasPreviousPage,
+    }));
 
   // Stream feedback data - will be resolved in the component
   // If there is a freshly inserted feedback, ClickHouse may take some time to
@@ -169,8 +174,8 @@ type FeedbackActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
 
-function InferencePagination({ data }: { data: Promise<InferencesData> }) {
-  const { inferences, hasNextPage, hasPreviousPage } = use(data);
+function InferencePaginationContent({ data }: { data: InferencesData }) {
+  const { inferences, hasNextPage, hasPreviousPage } = data;
   const navigate = useNavigate();
 
   const topInference = inferences.at(0);
@@ -202,18 +207,50 @@ function InferencePagination({ data }: { data: Promise<InferencesData> }) {
   );
 }
 
+function FeedbackTableHeaders() {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead>ID</TableHead>
+        <TableHead>Metric</TableHead>
+        <TableHead>Value</TableHead>
+        <TableHead>Tags</TableHead>
+        <TableHead>Time</TableHead>
+      </TableRow>
+    </TableHeader>
+  );
+}
+
+function FeedbackSectionError() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load feedback";
+
+  return (
+    <>
+      <Table>
+        <FeedbackTableHeaders />
+        <TableBody>
+          <TableRow>
+            <TableCell colSpan={5}>
+              <TableErrorNotice
+                icon={AlertCircle}
+                title="Error loading data"
+                description={message}
+              />
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <PageButtons disabled />
+    </>
+  );
+}
+
 function FeedbackTableSkeleton() {
   return (
     <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>ID</TableHead>
-          <TableHead>Metric</TableHead>
-          <TableHead>Value</TableHead>
-          <TableHead>Tags</TableHead>
-          <TableHead>Time</TableHead>
-        </TableRow>
-      </TableHeader>
+      <FeedbackTableHeaders />
       <TableBody>
         {Array.from({ length: 5 }).map((_, i) => (
           <TableRow key={i}>
@@ -239,8 +276,8 @@ function FeedbackTableSkeleton() {
   );
 }
 
-function FeedbackSection({ data }: { data: Promise<FeedbackData> }) {
-  const { feedbacks, bounds, latestFeedbackByMetric } = use(data);
+function FeedbackSectionContent({ data }: { data: FeedbackData }) {
+  const { feedbacks, bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
@@ -341,7 +378,14 @@ export default function EpisodeDetailPage({
 
   return (
     <PageLayout>
-      <PageHeader label="Episode" name={episode_id}>
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[{ label: "Episodes", href: "/observability/episodes" }]}
+          />
+        }
+        name={episode_id}
+      >
         <ActionBar>
           <HumanFeedbackModal
             isOpen={isModalOpen}
@@ -380,17 +424,15 @@ export default function EpisodeDetailPage({
             onCloseSheet={handleCloseSheet}
             openSheetInferenceId={openSheetInferenceId}
           />
-          <Suspense
-            fallback={
-              <PageButtons
-                onPreviousPage={() => {}}
-                onNextPage={() => {}}
-                disablePrevious
-                disableNext
-              />
-            }
-          >
-            <InferencePagination data={inferencesData} />
+          <Suspense fallback={<PageButtons disabled />}>
+            <Await
+              resolve={inferencesData}
+              errorElement={<PageButtons disabled />}
+            >
+              {(resolvedData) => (
+                <InferencePaginationContent data={resolvedData} />
+              )}
+            </Await>
           </Suspense>
         </SectionLayout>
 
@@ -408,47 +450,19 @@ export default function EpisodeDetailPage({
             fallback={
               <>
                 <FeedbackTableSkeleton />
-                <PageButtons
-                  onPreviousPage={() => {}}
-                  onNextPage={() => {}}
-                  disablePrevious
-                  disableNext
-                />
+                <PageButtons disabled />
               </>
             }
           >
-            <FeedbackSection data={feedbackData} />
+            <Await
+              resolve={feedbackData}
+              errorElement={<FeedbackSectionError />}
+            >
+              {(resolvedData) => <FeedbackSectionContent data={resolvedData} />}
+            </Await>
           </Suspense>
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

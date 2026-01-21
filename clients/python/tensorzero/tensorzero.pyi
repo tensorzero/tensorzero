@@ -554,6 +554,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         otlp_traces_extra_attributes: Optional[Dict[str, str]] = None,
         otlp_traces_extra_resources: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
+        include_raw_response: Optional[bool] = None,
         include_raw_usage: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
@@ -592,7 +593,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                                              Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-attributes-".
         :param otlp_traces_extra_resources: If set, attaches custom HTTP headers to OTLP trace exports for this request.
                                             Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-resources-".
-        :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
+        :param include_original_response: DEPRECATED. Use `include_raw_response` instead.
+        :param include_raw_response: If set, include raw provider-specific response data from all model inferences.
         :param include_raw_usage: If set, include raw provider-specific usage data in the response.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
@@ -1107,6 +1109,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         otlp_traces_extra_attributes: Optional[Dict[str, str]] = None,
         otlp_traces_extra_resources: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
+        include_raw_response: Optional[bool] = None,
         include_raw_usage: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
@@ -1145,7 +1148,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                                              Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-attributes-".
         :param otlp_traces_extra_resources: If set, attaches custom HTTP headers to OTLP trace exports for this request.
                                             Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-resources-".
-        :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
+        :param include_original_response: DEPRECATED. Use `include_raw_response` instead.
+        :param include_raw_response: If set, include raw provider-specific response data from all model inferences.
         :param include_raw_usage: If set, include raw provider-specific usage data in the response.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.

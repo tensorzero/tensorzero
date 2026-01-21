@@ -573,6 +573,7 @@ mod tests {
             usage: Usage::default(),
             raw_usage: None,
             original_response: None,
+            raw_response: None,
             finish_reason: None,
         })
     }
@@ -1020,6 +1021,7 @@ mod tests {
             signature: Some("encrypted-blob".to_string()),
             summary: None,
             provider_type: Some("anthropic".to_string()),
+            extra_data: None,
         })];
 
         strip_signatures_from_chat_output(&mut blocks);
@@ -1056,6 +1058,7 @@ mod tests {
                     text: "Summary".to_string(),
                 }]),
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockChatOutput::Text(Text {
                 text: "World".to_string(),
@@ -1106,6 +1109,7 @@ mod tests {
                 signature: Some("sig1".to_string()),
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockChatOutput::Thought(Thought {
                 text: Some("Second thought".to_string()),
@@ -1114,6 +1118,7 @@ mod tests {
                     text: "A summary".to_string(),
                 }]),
                 provider_type: Some("anthropic".to_string()),
+                extra_data: None,
             }),
         ];
 
@@ -1155,6 +1160,7 @@ mod tests {
             signature: None,
             summary: None,
             provider_type: None,
+            extra_data: None,
         })];
 
         strip_signatures_from_chat_output(&mut blocks);
@@ -1187,6 +1193,7 @@ mod tests {
                     signature: Some("user-sig".to_string()),
                     summary: None,
                     provider_type: None,
+                    extra_data: None,
                 })],
             }],
             system: None,

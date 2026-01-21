@@ -423,6 +423,7 @@ fn make_stream_from_non_stream(
                         summary_id: None,
                         summary_text: None,
                         provider_type: thought.provider_type,
+                        extra_data: thought.extra_data,
                     });
                     id += 1;
                     Ok(chunk)
@@ -438,10 +439,11 @@ fn make_stream_from_non_stream(
             Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: content_blocks,
                 provider_latency,
-                raw_response: chat.original_response.unwrap_or_default(),
+                raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: chat.finish_reason,
                 usage,
                 raw_usage: raw_usage_entries.clone(),
+                raw_response: None, // Not used for fused stream chunks
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -449,8 +451,9 @@ fn make_stream_from_non_stream(
             thought: None,
             usage,
             raw_usage: raw_usage_entries,
+            raw_response: None, // Not used for fused stream chunks
             provider_latency,
-            raw_response: json.original_response.unwrap_or_default(),
+            raw_chunk: String::new(), // No actual streaming data for fake streams
             finish_reason: json.finish_reason,
         })),
     };
@@ -941,6 +944,7 @@ impl FuserConfig {
 mod tests {
     use crate::rate_limiting::ScopeInfo;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     use tokio_stream::StreamExt;
     use uuid::Uuid;
@@ -1176,6 +1180,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1210,6 +1215,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1263,6 +1269,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1300,6 +1307,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1378,6 +1386,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1412,6 +1421,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1477,6 +1487,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1751,12 +1762,14 @@ mod tests {
                         signature: Some("my_first_signature".into()),
                         summary: None,
                         provider_type: Some("my_first_provider_type".into()),
+                        extra_data: None,
                     }),
                     ContentBlockChatOutput::Thought(Thought {
                         text: Some("My second thought".into()),
                         signature: Some("my_second_signature".into()),
                         summary: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                         id: "456".into(),
@@ -1806,6 +1819,7 @@ mod tests {
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some("my_first_provider_type".into()),
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         id: "2".into(),
@@ -1814,6 +1828,7 @@ mod tests {
                         summary_id: None,
                         summary_text: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::ToolCall(ToolCallChunk {
                         id: "456".into(),
@@ -1830,8 +1845,9 @@ mod tests {
                     output_tokens: Some(20),
                 }),
                 raw_usage: None,
+                raw_response: None,
                 provider_latency: None,
-                raw_response: "My raw response".to_string(),
+                raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: Some(FinishReason::Length),
             })),]
         );
@@ -1869,7 +1885,7 @@ mod tests {
             exported.candidates,
             vec!["variant1".to_string(), "variant2".to_string()]
         );
-        assert_eq!(exported.fuser.inner.model, "gpt-4".into());
+        assert_eq!(exported.fuser.inner.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.fuser.inner.temperature, Some(0.3));
     }
 
@@ -1897,7 +1913,7 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.fuser.inner.model, "fuser-model".into());
+        assert_eq!(exported.fuser.inner.model, Arc::<str>::from("fuser-model"));
         assert_eq!(exported.fuser.inner.temperature, Some(0.1));
         assert_eq!(exported.fuser.inner.max_tokens, Some(50));
         assert_eq!(exported.fuser.inner.seed, Some(99));

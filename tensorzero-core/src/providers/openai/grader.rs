@@ -3,11 +3,13 @@ use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tensorzero_derive::TensorZeroDeserialize;
 
-#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum OpenAIGrader {
     /// Binary string comparison grader (returns 1 for match, 0 for no match)
     StringCheck {

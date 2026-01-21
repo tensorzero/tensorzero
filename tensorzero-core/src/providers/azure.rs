@@ -850,6 +850,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 signature: None,
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }));
         }
         if let Some(text) = message.content {
@@ -869,6 +870,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response,
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),

@@ -70,6 +70,14 @@ pub async fn chat_completions_handler(
         );
     }
     let include_raw_usage = openai_compatible_params.tensorzero_include_raw_usage;
+    let include_original_response = openai_compatible_params.tensorzero_include_original_response;
+    let include_raw_response = openai_compatible_params.tensorzero_include_raw_response;
+
+    if include_original_response {
+        tracing::warn!(
+            "The `tensorzero::include_original_response` parameter is deprecated. Use `tensorzero::include_raw_response` instead."
+        );
+    }
 
     // Check if user explicitly set include_usage to false
     let explicit_include_usage = openai_compatible_params
@@ -125,8 +133,12 @@ pub async fn chat_completions_handler(
 
     match response {
         InferenceOutput::NonStreaming(response) => {
-            let openai_compatible_response =
-                OpenAICompatibleResponse::from((response, response_model_prefix));
+            let openai_compatible_response = OpenAICompatibleResponse::from((
+                response,
+                response_model_prefix,
+                include_original_response,
+                include_raw_response,
+            ));
             Ok(Json(openai_compatible_response).into_response())
         }
         InferenceOutput::Streaming(stream) => {
@@ -135,6 +147,8 @@ pub async fn chat_completions_handler(
                 response_model_prefix,
                 include_usage,
                 include_raw_usage,
+                include_original_response,
+                include_raw_response,
             );
             Ok(Sse::new(openai_compatible_stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())

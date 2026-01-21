@@ -47,7 +47,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
 
   return (
     <PageLayout>
-      <PageHeader label="Model Inference" name={inference.id}>
+      <PageHeader eyebrow="Model Inference" name={inference.id}>
         <BasicInfoLayout>
           <BasicInfoItem>
             <BasicInfoItemTitle>Model</BasicInfoItemTitle>

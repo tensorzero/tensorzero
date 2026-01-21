@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::time::Duration;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use url::Url;
 
@@ -43,6 +44,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
+use crate::utils::deprecation_warning;
 use uuid::Uuid;
 
 use super::helpers::convert_stream_error;
@@ -51,13 +53,74 @@ use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_t
 lazy_static! {
     static ref ANTHROPIC_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
-        Url::parse("https://api.anthropic.com/v1/messages")
+        Url::parse("https://api.anthropic.com/v1/")
             .expect("Failed to parse ANTHROPIC_DEFAULT_BASE_URL")
     };
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
 pub const PROVIDER_TYPE: &str = "anthropic";
+
+/// Checks if the api_base ends with `/messages` and warns if it does.
+/// This mirrors the OpenAI pattern in `check_api_base_suffix`.
+fn check_api_base_suffix(api_base: &Url) {
+    let path = api_base.path();
+    if path.ends_with("/messages") || path.ends_with("/messages/") {
+        // IMPORTANT: After the deprecation period, we should still keep `check_api_base_suffix` but change the warning message.
+        // See OpenAI's `check_api_base_suffix` for more details.
+        // Deprecation #5668: https://github.com/tensorzero/tensorzero/issues/5668
+        deprecation_warning(&format!(
+            "The gateway automatically appends `/messages` to the `api_base`. \
+            You provided `{api_base}` which includes the `/messages` suffix. \
+            Please remove the `/messages` suffix from `api_base`. \
+            The suffix will be stripped automatically for now, but this behavior \
+            may be removed in a future release."
+        ));
+    }
+}
+
+/// Normalizes an api_base by stripping the `/messages` suffix if present.
+/// Returns the normalized URL.
+fn normalize_api_base(mut api_base: Url) -> Url {
+    let path = api_base.path().to_string();
+    if path.ends_with("/messages") {
+        let new_path = &path[..path.len() - "/messages".len()];
+        // Ensure trailing slash
+        let new_path = if new_path.ends_with('/') {
+            new_path.to_string()
+        } else {
+            format!("{new_path}/")
+        };
+        api_base.set_path(&new_path);
+        api_base
+    } else if path.ends_with("/messages/") {
+        let new_path = &path[..path.len() - "/messages/".len()];
+        // Ensure trailing slash
+        let new_path = if new_path.ends_with('/') {
+            new_path.to_string()
+        } else {
+            format!("{new_path}/")
+        };
+        api_base.set_path(&new_path);
+        api_base
+    } else {
+        api_base
+    }
+}
+
+/// Constructs the messages URL by appending `/messages` to the base URL.
+/// This mirrors the OpenAI pattern in `get_chat_url`.
+fn get_messages_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("messages").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
@@ -76,9 +139,15 @@ impl AnthropicProvider {
         credentials: AnthropicCredentials,
         beta_structured_outputs: bool,
     ) -> Self {
+        // Check and normalize api_base if provided
+        let normalized_api_base = api_base.map(|url| {
+            check_api_base_suffix(&url);
+            normalize_api_base(url)
+        });
+
         AnthropicProvider {
             model_name,
-            api_base,
+            api_base: normalized_api_base,
             credentials,
             beta_structured_outputs,
         }
@@ -92,6 +161,10 @@ impl AnthropicProvider {
         self.api_base
             .as_ref()
             .unwrap_or(&ANTHROPIC_DEFAULT_BASE_URL)
+    }
+
+    fn messages_url(&self) -> Result<Url, Error> {
+        get_messages_url(self.base_url())
     }
 }
 
@@ -195,8 +268,9 @@ impl InferenceProvider for AnthropicProvider {
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
+        let request_url = self.messages_url()?;
         let mut builder = http_client
-            .post(self.base_url().as_ref())
+            .post(request_url.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
@@ -297,8 +371,9 @@ impl InferenceProvider for AnthropicProvider {
         })?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
+        let request_url = self.messages_url()?;
         let mut builder = http_client
-            .post(self.base_url().as_ref())
+            .post(request_url.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
@@ -1020,8 +1095,9 @@ pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseC
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlock {
     Text {
         text: String,
@@ -1072,6 +1148,7 @@ fn convert_to_output(
             signature: Some(signature),
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         })),
         FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
@@ -1079,6 +1156,7 @@ fn convert_to_output(
                 signature: Some(data),
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }))
         }
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown(Unknown {
@@ -1089,17 +1167,40 @@ fn convert_to_output(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct AnthropicUsage {
-    input_tokens: u32,
-    output_tokens: u32,
+    #[serde(default)]
+    input_tokens: Option<u32>,
+    #[serde(default)]
+    output_tokens: Option<u32>,
+    /// Number of input tokens used to create a new cache entry
+    #[serde(default)]
+    cache_creation_input_tokens: Option<u32>,
+    /// Number of input tokens read from cache
+    #[serde(default)]
+    cache_read_input_tokens: Option<u32>,
 }
 
 impl From<AnthropicUsage> for Usage {
     fn from(value: AnthropicUsage) -> Self {
+        // Anthropic reports cache tokens separately from input_tokens.
+        // We need to add them back to get the total input token count.
+        let total_input_tokens = match (
+            value.input_tokens,
+            value.cache_creation_input_tokens,
+            value.cache_read_input_tokens,
+        ) {
+            (None, None, None) => None,
+            _ => Some(
+                value.input_tokens.unwrap_or(0)
+                    + value.cache_creation_input_tokens.unwrap_or(0)
+                    + value.cache_read_input_tokens.unwrap_or(0),
+            ),
+        };
+
         Usage {
-            input_tokens: Some(value.input_tokens),
-            output_tokens: Some(value.output_tokens),
+            input_tokens: total_input_tokens,
+            output_tokens: value.output_tokens,
         }
     }
 }
@@ -1199,6 +1300,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_request,
                 raw_response,
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
@@ -1243,8 +1345,9 @@ pub(super) fn handle_anthropic_error(
     }
 }
 
-#[derive(Deserialize, Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlockDelta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
@@ -1355,6 +1458,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1371,6 +1475,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1424,6 +1529,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(provider_type.to_string()),
+                    extra_data: None,
                 })],
                 None,
                 raw_message,
@@ -1439,6 +1545,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1583,18 +1690,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
 }
 
 fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
-    let input_tokens = usage_info
-        .get("input_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as u32;
-    let output_tokens = usage_info
-        .get("output_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as u32;
-    AnthropicUsage {
-        input_tokens,
-        output_tokens,
-    }
+    serde_json::from_value(usage_info.clone()).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -2326,14 +2422,47 @@ mod tests {
     #[test]
     fn test_anthropic_usage_to_usage() {
         let anthropic_usage = AnthropicUsage {
-            input_tokens: 100,
-            output_tokens: 50,
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            ..Default::default()
         };
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, Some(100));
-        assert_eq!(usage.output_tokens, Some(50));
+        assert_eq!(usage.input_tokens, Some(100), "input_tokens should match");
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
+
+        // Test with None values
+        let anthropic_usage = AnthropicUsage {
+            input_tokens: None,
+            output_tokens: Some(100),
+            ..Default::default()
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(
+            usage.input_tokens, None,
+            "input_tokens should be None when not provided"
+        );
+        assert_eq!(usage.output_tokens, Some(100), "output_tokens should match");
+
+        // Test with cache tokens
+        let anthropic_usage = AnthropicUsage {
+            input_tokens: Some(10),
+            output_tokens: Some(50),
+            cache_creation_input_tokens: Some(100),
+            cache_read_input_tokens: Some(200),
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(
+            usage.input_tokens,
+            Some(310),
+            "input_tokens should include cache tokens (10 + 100 + 200)"
+        );
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
     }
 
     #[test]
@@ -2350,8 +2479,9 @@ mod tests {
             stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
             usage: AnthropicUsage {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2434,8 +2564,9 @@ mod tests {
             stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
             usage: AnthropicUsage {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let request_body = AnthropicRequestBody {
@@ -2505,8 +2636,9 @@ mod tests {
             stop_reason: None,
             stop_sequence: None,
             usage: AnthropicUsage {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let request_body = AnthropicRequestBody {
@@ -2886,44 +3018,84 @@ mod tests {
             "output_tokens": 200
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 100);
-        assert_eq!(result.output_tokens, 200);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(200),
+                ..Default::default()
+            },
+            "both fields should be Some when present"
+        );
 
-        // Test with missing fields
+        // Test with missing output_tokens
         let usage_info = json!({
             "input_tokens": 50
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 50);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: Some(50),
+                output_tokens: None,
+                ..Default::default()
+            },
+            "output_tokens should be None when missing"
+        );
+
+        // Test with missing input_tokens (like Anthropic's message_delta)
+        let usage_info = json!({
+            "output_tokens": 100
+        });
+        let result = parse_usage_info(&usage_info);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: None,
+                output_tokens: Some(100),
+                ..Default::default()
+            },
+            "input_tokens should be None when missing"
+        );
 
         // Test with empty object
         let usage_info = json!({});
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: None,
+                output_tokens: None,
+                ..Default::default()
+            },
+            "both fields should be None for empty object"
+        );
 
-        // Test with non-numeric values
+        // Test with non-numeric values (falls back to default)
         let usage_info = json!({
             "input_tokens": "not a number",
             "output_tokens": true
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            AnthropicUsage::default(),
+            "non-numeric values should fall back to default"
+        );
     }
 
     #[test]
     fn test_anthropic_base_url() {
         assert_eq!(
             ANTHROPIC_DEFAULT_BASE_URL.as_str(),
-            "https://api.anthropic.com/v1/messages"
+            "https://api.anthropic.com/v1/",
+            "Default base URL should be the API root without /messages"
         );
     }
 
     #[test]
     fn test_anthropic_provider_custom_api_base() {
-        let custom_url = Url::parse("https://example.com/custom").unwrap();
+        let custom_url = Url::parse("https://example.com/custom/").unwrap();
         let provider = AnthropicProvider::new(
             "claude".to_string(),
             Some(custom_url.clone()),
@@ -2931,7 +3103,16 @@ mod tests {
             false,
         );
 
-        assert_eq!(provider.base_url(), &custom_url);
+        assert_eq!(
+            provider.base_url(),
+            &custom_url,
+            "Custom api_base should be stored as-is"
+        );
+        assert_eq!(
+            provider.messages_url().unwrap().as_str(),
+            "https://example.com/custom/messages",
+            "messages_url() should append /messages to custom base URL"
+        );
     }
 
     #[test]
@@ -2945,7 +3126,145 @@ mod tests {
 
         assert_eq!(
             provider.base_url().as_str(),
-            ANTHROPIC_DEFAULT_BASE_URL.as_str()
+            "https://api.anthropic.com/v1/",
+            "Default base URL should be the API root"
+        );
+        assert_eq!(
+            provider.messages_url().unwrap().as_str(),
+            "https://api.anthropic.com/v1/messages",
+            "messages_url() should return URL with /messages appended"
+        );
+    }
+
+    #[test]
+    fn test_get_messages_url() {
+        // Test with URL with trailing slash
+        let base_url = Url::parse("https://api.anthropic.com/v1/").unwrap();
+        let messages_url = get_messages_url(&base_url).unwrap();
+        assert_eq!(
+            messages_url.as_str(),
+            "https://api.anthropic.com/v1/messages",
+            "Should append /messages to base URL with trailing slash"
+        );
+
+        // Test with URL without trailing slash
+        let base_url = Url::parse("https://api.anthropic.com/v1").unwrap();
+        let messages_url = get_messages_url(&base_url).unwrap();
+        assert_eq!(
+            messages_url.as_str(),
+            "https://api.anthropic.com/v1/messages",
+            "Should append /messages to base URL without trailing slash"
+        );
+
+        // Test with custom base URL
+        let base_url = Url::parse("https://example.com/anthropic/v1/").unwrap();
+        let messages_url = get_messages_url(&base_url).unwrap();
+        assert_eq!(
+            messages_url.as_str(),
+            "https://example.com/anthropic/v1/messages",
+            "Should work with custom base URLs"
+        );
+    }
+
+    #[test]
+    fn test_check_api_base_suffix() {
+        let logs_contain = capture_logs();
+
+        // Valid cases (should not warn)
+        check_api_base_suffix(&Url::parse("https://api.anthropic.com/v1/").unwrap());
+        check_api_base_suffix(&Url::parse("https://api.anthropic.com/v1").unwrap());
+        check_api_base_suffix(&Url::parse("https://example.com/anthropic/").unwrap());
+
+        // Invalid cases (should warn with deprecation)
+        let url1 = Url::parse("https://api.anthropic.com/v1/messages").unwrap();
+        check_api_base_suffix(&url1);
+        assert!(
+            logs_contain("Deprecation Warning"),
+            "Should emit deprecation warning for URL ending with /messages"
+        );
+        assert!(
+            logs_contain("automatically appends `/messages`"),
+            "Warning should mention automatic appending"
+        );
+
+        let url2 = Url::parse("https://api.anthropic.com/v1/messages/").unwrap();
+        check_api_base_suffix(&url2);
+        assert!(
+            logs_contain(url2.as_ref()),
+            "Warning should include the problematic URL"
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_base() {
+        // Test URL ending with /messages
+        let url = Url::parse("https://api.anthropic.com/v1/messages").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://api.anthropic.com/v1/",
+            "Should strip /messages and add trailing slash"
+        );
+
+        // Test URL ending with /messages/
+        let url = Url::parse("https://api.anthropic.com/v1/messages/").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://api.anthropic.com/v1/",
+            "Should strip /messages/ and preserve trailing slash"
+        );
+
+        // Test URL without /messages suffix (should remain unchanged)
+        let url = Url::parse("https://api.anthropic.com/v1/").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://api.anthropic.com/v1/",
+            "Should not modify URL without /messages suffix"
+        );
+
+        // Test custom URL with /messages
+        let url = Url::parse("https://example.com/anthropic/v1/messages").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://example.com/anthropic/v1/",
+            "Should work with custom URLs"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_provider_normalizes_api_base_with_messages() {
+        let logs_contain = capture_logs();
+
+        // Create provider with api_base that includes /messages
+        let url_with_messages = Url::parse("https://example.com/v1/messages").unwrap();
+        let provider = AnthropicProvider::new(
+            "claude".to_string(),
+            Some(url_with_messages),
+            AnthropicCredentials::None,
+            false,
+        );
+
+        // Verify the stored api_base is normalized
+        assert_eq!(
+            provider.base_url().as_str(),
+            "https://example.com/v1/",
+            "Provider should store normalized base URL without /messages"
+        );
+
+        // Verify messages_url() returns the correct full URL
+        assert_eq!(
+            provider.messages_url().unwrap().as_str(),
+            "https://example.com/v1/messages",
+            "messages_url() should return URL with /messages appended"
+        );
+
+        // Verify deprecation warning was emitted
+        assert!(
+            logs_contain("Deprecation Warning"),
+            "Should emit deprecation warning when api_base includes /messages"
         );
     }
 

@@ -377,6 +377,7 @@ async fn process_embedding_batch(
         scope_info: ScopeInfo::new(tags.clone(), None),
         relay: None,
         include_raw_usage: false,
+        include_raw_response: false,
     };
 
     let response = embedding_model_config

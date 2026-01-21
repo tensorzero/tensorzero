@@ -16,9 +16,9 @@ use uuid::Uuid;
 use crate::StreamUpdate;
 use crate::error::AutopilotError;
 use crate::types::{
-    AutopilotToolCall, CreateEventRequest, CreateEventResponse, ErrorResponse, Event, EventPayload,
-    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
-    StreamEventsParams, ToolCallAuthorizationStatus,
+    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotToolCall, CreateEventRequest,
+    CreateEventResponse, ErrorResponse, Event, EventPayload, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
@@ -449,6 +449,64 @@ impl AutopilotClient {
         if let Some(tool_call_event_id) = tool_call_event_id {
             self.handle_tool_call_authorization(session_id, tool_call_event_id)
                 .await?;
+        }
+
+        Ok(body)
+    }
+
+    /// Approves all pending tool calls for a session up to a specified event ID.
+    ///
+    /// This atomically approves all pending tool calls with event IDs <= `last_tool_call_event_id`.
+    /// The `last_tool_call_event_id` parameter prevents race conditions where new tool calls
+    /// arrive after the client fetched the list.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The session is not found (404)
+    /// - The caller doesn't have access to the session (403)
+    /// - The deployment_id doesn't match the session (400)
+    /// - The last_tool_call_event_id is not found in the session (404)
+    pub async fn approve_all_tool_calls(
+        &self,
+        session_id: Uuid,
+        request: ApproveAllToolCallsRequest,
+    ) -> Result<ApproveAllToolCallsResponse, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/actions/approve-all"))?;
+        let response = self
+            .http_client
+            .post(url)
+            .headers(self.auth_headers())
+            .json(&request)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let body: ApproveAllToolCallsResponse = response.json().await?;
+
+        // Spawn durable tasks for each approved tool call
+        let mut spawn_errors: Vec<(Uuid, Box<AutopilotError>)> = Vec::new();
+        for tool_call_event_id in &body.tool_call_event_ids {
+            if let Err(e) = self
+                .handle_tool_call_authorization(session_id, *tool_call_event_id)
+                .await
+            {
+                tracing::error!(
+                    session_id = %session_id,
+                    tool_call_event_id = %tool_call_event_id,
+                    error = %e,
+                    "Failed to spawn task for approved tool call"
+                );
+                spawn_errors.push((*tool_call_event_id, Box::new(e)));
+            }
+        }
+
+        if !spawn_errors.is_empty() {
+            return Err(AutopilotError::PartialSpawnFailure {
+                response: body,
+                errors: spawn_errors,
+            });
         }
 
         Ok(body)

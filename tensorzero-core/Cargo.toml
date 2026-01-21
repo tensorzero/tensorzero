@@ -13,7 +13,6 @@ exclude = ["tests/", "fixtures/"]
 e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests"]
 optimization_tests = ["e2e_tests"]
 pyo3 = ["dep:pyo3", "tensorzero-types/pyo3"]
-git = ["dep:git2"]
 
 [[test]]
 name = "e2e"
@@ -28,14 +27,17 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
-aws-smithy-types = { version = "1.3.3", features = [
+aws-smithy-types = { version = "1.3.6", features = [
     "serde-deserialize",
     "serde-serialize",
 ] }
 aws-types = "1.3.6"
-aws-credential-types = { version = "1.2.2", features = ["hardcoded-credentials"] }
+aws-credential-types = { version = "1.2.2", features = [
+    "hardcoded-credentials",
+] }
 aws-sigv4 = "1.3"
 aws-smithy-eventstream = "0.60"
+aws-smithy-runtime-api = "1.10.0"
 axum = { workspace = true }
 backon = { version = "1.6.0", features = ["tokio-sleep"] }
 blake3 = { workspace = true }
@@ -47,7 +49,7 @@ futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
-jsonschema = "0.38.1"
+jsonschema = "0.40.0"
 jsonwebtoken = { version = "10.2", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.3"
@@ -81,16 +83,10 @@ tensorzero-types = { path = "../internal/tensorzero-types" }
 tensorzero-types-providers = { path = "../internal/tensorzero-types-providers" }
 minijinja-utils = { path = "../internal/minijinja-utils" }
 clap = { workspace = true }
-aws-sdk-sagemakerruntime = { version = "1.93.0", features = [
-    "behavior-version-latest",
-    "rt-tokio",
-    "default-https-client",
-], default-features = false }
-aws-smithy-runtime-api = "1.9.1"
 eventsource-stream = "0.2.3"
 opentelemetry_sdk = "0.31.0"
 opentelemetry = "0.31.0"
-tracing-opentelemetry = "0.32.0"
+tracing-opentelemetry = "0.32.1"
 opentelemetry-otlp = { version = "0.31.0", features = [
     "grpc-tonic",
     "tls",
@@ -126,12 +122,13 @@ urlencoding = "2.1.3"
 http-body = "1.0.1"
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
 autopilot-client = { path = "../internal/autopilot-client" }
-git2 = { workspace = true, optional = true }
 schemars = { workspace = true, features = ["uuid1"] }
+git2 = { workspace = true }
 opentelemetry-http = "0.31.0"
 # durable.workspace = true
 regex = { workspace = true }
 dashmap = "6.1.0"
+redis = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.21.0"
@@ -146,6 +143,7 @@ gag = "1.0.0"
 log = "0.4.29"
 mockall = "0.14"
 tensorzero-unsafe-helpers = { path = "../internal/tensorzero-unsafe-helpers" }
+redis-test = { workspace = true }
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"] }

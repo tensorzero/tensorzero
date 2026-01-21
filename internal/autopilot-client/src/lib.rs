@@ -23,7 +23,7 @@
 //! let response = client.create_event(
 //!     Uuid::nil(),
 //!     CreateEventRequest {
-//!         deployment_id: Uuid::new_v4(),
+//!         deployment_id: Uuid::now_v7(),
 //!         tensorzero_version: "2025.1.0".to_string(),
 //!         payload: EventPayload::Message(InputMessage {
 //!             role: Role::User,
@@ -49,11 +49,12 @@ pub use client::{
 };
 pub use error::AutopilotError;
 pub use types::{
-    AutopilotSideInfo, AutopilotStatus, AutopilotToolCall, AutopilotToolResult, Base64File,
-    CreateEventRequest, CreateEventResponse, ErrorDetail, ErrorResponse, Event, EventPayload, File,
-    InputMessage, InputMessageContent, ListEventsParams, ListEventsResponse, ListSessionsParams,
-    ListSessionsResponse, ObjectStoragePointer, OptimizationWorkflowSideInfo, RawText, Role,
-    Session, StatusUpdate, StreamEventsParams, StreamUpdate, Template, Text, Thought,
-    ToolCallAuthorization, ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper,
-    ToolOutcome, Unknown, UrlFile,
+    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotSideInfo, AutopilotStatus,
+    AutopilotToolCall, AutopilotToolResult, Base64File, CreateEventRequest, CreateEventResponse,
+    ErrorDetail, ErrorResponse, Event, EventPayload, File, InputMessage, InputMessageContent,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    ObjectStoragePointer, OptimizationWorkflowSideInfo, RawText, Role, Session, StatusUpdate,
+    StreamEventsParams, StreamUpdate, Template, Text, Thought, ToolCallAuthorization,
+    ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper, ToolOutcome, Unknown,
+    UrlFile,
 };

@@ -21,6 +21,44 @@ services:
       start_interval: 1s
       timeout: 1s
 
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: tensorzero
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready -U postgres
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  # Runs Postgres migrations before the gateway starts
+  gateway-postgres-migrations:
+    image: tensorzero/gateway
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+      ]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48
+      start_period: 5s
+
   gateway:
     image: tensorzero/gateway
     volumes:
@@ -29,6 +67,7 @@ services:
     command: --config-file /app/config/tensorzero.toml
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
     env_file:
       - ${ENV_FILE:-.env}
@@ -52,11 +91,14 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
 
   ui:
     image: tensorzero/ui
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
     env_file:
       - ${ENV_FILE:-.env}
@@ -64,6 +106,8 @@ services:
       - "4000:4000"
     depends_on:
       clickhouse:
+        condition: service_healthy
+      gateway-postgres-migrations:
         condition: service_healthy
       gateway:
         condition: service_healthy
@@ -83,3 +127,4 @@ services:
 
 volumes:
   clickhouse-data:
+  postgres-data:

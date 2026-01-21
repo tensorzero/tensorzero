@@ -22,6 +22,18 @@ export function FunctionTypeIcon({ type }: { type: FunctionConfig["type"] }) {
   );
 }
 
+export function FunctionTypeBadge({ type }: { type: FunctionConfig["type"] }) {
+  const iconConfig = getFunctionTypeIcon(type);
+  return (
+    <span
+      className={`${iconConfig.iconBg} inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 font-mono text-sm`}
+    >
+      {iconConfig.icon}
+      {type}
+    </span>
+  );
+}
+
 export function FunctionSelector({
   selected,
   onSelect,

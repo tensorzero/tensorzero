@@ -267,6 +267,7 @@ impl ModelConfig {
                     signature: _,
                     summary: _,
                     provider_type,
+                    extra_data: _,
                 }) => provider_type
                     .as_ref()
                     .is_some_and(|t| t != &provider.config.thought_block_provider_type()),
@@ -303,6 +304,7 @@ impl ModelConfig {
                                 signature: _,
                                 summary: _,
                                 provider_type,
+                                extra_data: _,
                             }) => {
                                 // When a thought is scoped to a particular provider type, we discard
                                 // if it doesn't match our target provider.
@@ -2733,6 +2735,7 @@ impl ShorthandModelConfig for ModelConfig {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::sync::Arc;
 
     use crate::cache::CacheEnabledMode;
     use crate::config::with_skip_credential_validation;
@@ -2807,6 +2810,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
 
         // Try inferring the good model only
@@ -2943,6 +2947,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -3033,6 +3038,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -3180,6 +3186,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let StreamResponseAndMessages {
             response:
@@ -3354,6 +3361,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let StreamResponseAndMessages {
             response:
@@ -3449,6 +3457,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3512,6 +3521,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3578,6 +3588,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3640,6 +3651,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3663,7 +3675,7 @@ mod tests {
             .await
             .unwrap()
             .expect("Missing dummy model");
-        assert_eq!(model_config.routing, vec!["dummy".into()]);
+        assert_eq!(model_config.routing, vec![Arc::<str>::from("dummy")]);
         let provider_config = &model_config.providers.get("dummy").unwrap().config;
         match provider_config {
             ProviderConfig::Dummy(provider) => assert_eq!(&*provider.model_name, "gpt-4o"),

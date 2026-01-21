@@ -250,11 +250,18 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
-# Set the thinking budget to the minimum value.
-# This speeds up our tests, saves us some tokens, and prevents the model from
-# hitting our token limit
+
+[models."gcp-gemini-2.5-pro-thinking"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gcp-gemini-2.5-pro-thinking".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-2.5-pro"
+location = "global"
+project_id = "tensorzero-public"
+# Include thoughts in the response (thinking_budget_tokens set at variant level)
 extra_body = [
-    { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
+    { pointer = "/generationConfig/thinkingConfig/includeThoughts", value = true },
 ]
 
 [models."gemini-2.0-flash-lite"]
@@ -478,19 +485,33 @@ type = "xai"
 model_name = "grok-4-1-fast-non-reasoning"
 api_key_location = "dynamic::xai_api_key"
 
-[models."meta-llama/Meta-Llama-3-70B-Instruct"]
+[models."grok-3-mini"]
+routing = ["xai"]
+
+[models."grok-3-mini".providers.xai]
+type = "xai"
+model_name = "grok-3-mini"
+
+[models."grok-4-fast-reasoning"]
+routing = ["xai"]
+
+[models."grok-4-fast-reasoning".providers.xai]
+type = "xai"
+model_name = "grok-4-fast-reasoning"
+
+[models."openai/gpt-oss-20b"]
 routing = ["hyperbolic"]
 
-[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+[models."openai/gpt-oss-20b".providers.hyperbolic]
 type = "hyperbolic"
-model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+model_name = "openai/gpt-oss-20b"
 
-[models."meta-llama/Meta-Llama-3-70B-Instruct-dynamic"]
+[models."openai/gpt-oss-20b-dynamic"]
 routing = ["hyperbolic"]
 
-[models."meta-llama/Meta-Llama-3-70B-Instruct-dynamic".providers.hyperbolic]
+[models."openai/gpt-oss-20b-dynamic".providers.hyperbolic]
 type = "hyperbolic"
-model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+model_name = "openai/gpt-oss-20b"
 api_key_location = "dynamic::hyperbolic_api_key"
 
 [models."deepseek-chat"]
@@ -537,6 +558,22 @@ routing = ["openrouter"]
 type = "openrouter"
 model_name = "openai/gpt-4o-mini"
 api_key_location = "dynamic::openrouter_api_key"
+
+# OpenRouter Grok 3 Mini (for effort-based reasoning tests)
+[models."grok-3-mini-openrouter"]
+routing = ["openrouter"]
+
+[models."grok-3-mini-openrouter".providers.openrouter]
+type = "openrouter"
+model_name = "x-ai/grok-3-mini"
+
+# OpenRouter Claude Haiku 4.5 (for max_tokens-based reasoning tests)
+[models."claude-haiku-4-5-openrouter"]
+routing = ["openrouter"]
+
+[models."claude-haiku-4-5-openrouter".providers.openrouter]
+type = "openrouter"
+model_name = "anthropic/claude-haiku-4.5"
 
 [functions.inference_ttft_chat]
 type = "chat"

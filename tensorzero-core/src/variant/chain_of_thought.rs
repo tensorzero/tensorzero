@@ -271,6 +271,7 @@ fn parse_thinking_output(
                         signature: None,
                         summary: None,
                         provider_type: None,
+                        extra_data: None,
                     }));
                 return Ok(output);
             };
@@ -281,6 +282,7 @@ fn parse_thinking_output(
                     signature: None,
                     summary: None,
                     provider_type: None,
+                    extra_data: None,
                 }),
             );
             Ok(output)
@@ -291,6 +293,7 @@ fn parse_thinking_output(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_prepare_thinking_output_schema() {
@@ -375,6 +378,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             })
         );
 
@@ -390,6 +394,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             })],
             json_block_index: Some(0),
         };
@@ -417,6 +422,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             })
         );
         assert_eq!(
@@ -426,6 +432,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             })
         );
     }
@@ -449,7 +456,7 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.inner.model, "gpt-4".into());
+        assert_eq!(exported.inner.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.inner.weight, Some(0.8));
         assert_eq!(exported.inner.temperature, Some(0.7));
         assert_eq!(exported.inner.max_tokens, Some(150));

@@ -12,6 +12,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
+use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_derive::export_schema;
 use tracing::instrument;
 use uuid::Uuid;
@@ -1180,8 +1181,9 @@ pub struct InsertDatapointResponse {
 
 /// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "LegacyDatapoint"))]
 #[ts(export)]
 #[export_schema]

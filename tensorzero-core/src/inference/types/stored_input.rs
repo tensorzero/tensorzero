@@ -21,7 +21,7 @@ use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::ops::Deref;
-use tensorzero_derive::export_schema;
+use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -238,8 +238,9 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[ts(export)]
 #[export_schema]
 pub enum StoredInputMessageContent {
