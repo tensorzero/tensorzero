@@ -41,6 +41,10 @@ pub enum ReasoningDetail {
         signature: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         format: Option<String>,
+        /// Stable index for grouping streaming chunks. If present, should be used
+        /// instead of array position for ID generation.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
     },
     /// Summary of reasoning (may be provided by some models).
     #[serde(rename = "reasoning.summary")]
@@ -48,8 +52,19 @@ pub enum ReasoningDetail {
         summary: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         format: Option<String>,
+        /// Stable index for grouping streaming chunks. If present, should be used
+        /// instead of array position for ID generation.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
     },
     /// Encrypted reasoning content (for models that don't expose reasoning).
     #[serde(rename = "reasoning.encrypted")]
-    Encrypted { data: String, format: String },
+    Encrypted {
+        data: String,
+        format: String,
+        /// Stable index for grouping streaming chunks. If present, should be used
+        /// instead of array position for ID generation.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
+    },
 }

@@ -1741,6 +1741,7 @@ fn openrouter_reasoning_detail_to_thought(detail: OpenRouterReasoningDetail) -> 
             text,
             signature,
             format,
+            index: _, // index is only used for streaming chunk grouping
         } => Thought {
             text,
             signature,
@@ -1748,14 +1749,22 @@ fn openrouter_reasoning_detail_to_thought(detail: OpenRouterReasoningDetail) -> 
             provider_type: Some(PROVIDER_TYPE.to_string()),
             extra_data: format.map(|f| json!({"format": f})),
         },
-        OpenRouterReasoningDetail::Summary { summary, format } => Thought {
+        OpenRouterReasoningDetail::Summary {
+            summary,
+            format,
+            index: _, // index is only used for streaming chunk grouping
+        } => Thought {
             text: None,
             signature: None,
             summary: Some(vec![ThoughtSummaryBlock::SummaryText { text: summary }]),
             provider_type: Some(PROVIDER_TYPE.to_string()),
             extra_data: format.map(|f| json!({"format": f})),
         },
-        OpenRouterReasoningDetail::Encrypted { data, format } => Thought {
+        OpenRouterReasoningDetail::Encrypted {
+            data,
+            format,
+            index: _, // index is only used for streaming chunk grouping
+        } => Thought {
             text: None,
             // Store encrypted data in signature field for multi-turn support
             signature: Some(data),
@@ -1767,43 +1776,66 @@ fn openrouter_reasoning_detail_to_thought(detail: OpenRouterReasoningDetail) -> 
 }
 
 /// Convert an OpenRouter reasoning detail to a TensorZero ThoughtChunk for streaming.
+///
+/// Uses the stable `index` field from the detail if present, otherwise falls back to
+/// the provided `fallback_id` (typically from enumerate position). This ensures chunks
+/// are grouped correctly even when OpenRouter streams different subsets of reasoning
+/// details across chunks.
 fn openrouter_reasoning_detail_to_thought_chunk(
     detail: OpenRouterReasoningDetail,
-    id: String,
+    fallback_id: String,
 ) -> ThoughtChunk {
     match detail {
         OpenRouterReasoningDetail::Text {
             text,
             signature,
             format,
-        } => ThoughtChunk {
-            id,
-            text,
-            signature,
-            summary_id: None,
-            summary_text: None,
-            provider_type: Some(PROVIDER_TYPE.to_string()),
-            extra_data: format.map(|f| json!({"format": f})),
-        },
-        OpenRouterReasoningDetail::Summary { summary, format } => ThoughtChunk {
-            id: id.clone(),
-            text: None,
-            signature: None,
-            summary_id: Some(id),
-            summary_text: Some(summary),
-            provider_type: Some(PROVIDER_TYPE.to_string()),
-            extra_data: format.map(|f| json!({"format": f})),
-        },
-        OpenRouterReasoningDetail::Encrypted { data, format } => ThoughtChunk {
-            id,
-            text: None,
-            // Store encrypted data in signature field for multi-turn support
-            signature: Some(data),
-            summary_id: None,
-            summary_text: None,
-            provider_type: Some(PROVIDER_TYPE.to_string()),
-            extra_data: Some(json!({"format": format, "encrypted": true})),
-        },
+            index,
+        } => {
+            let id = index.map(|i| i.to_string()).unwrap_or(fallback_id);
+            ThoughtChunk {
+                id,
+                text,
+                signature,
+                summary_id: None,
+                summary_text: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: format.map(|f| json!({"format": f})),
+            }
+        }
+        OpenRouterReasoningDetail::Summary {
+            summary,
+            format,
+            index,
+        } => {
+            let id = index.map(|i| i.to_string()).unwrap_or(fallback_id);
+            ThoughtChunk {
+                id: id.clone(),
+                text: None,
+                signature: None,
+                summary_id: Some(id),
+                summary_text: Some(summary),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: format.map(|f| json!({"format": f})),
+            }
+        }
+        OpenRouterReasoningDetail::Encrypted {
+            data,
+            format,
+            index,
+        } => {
+            let id = index.map(|i| i.to_string()).unwrap_or(fallback_id);
+            ThoughtChunk {
+                id,
+                text: None,
+                // Store encrypted data in signature field for multi-turn support
+                signature: Some(data),
+                summary_id: None,
+                summary_text: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: Some(json!({"format": format, "encrypted": true})),
+            }
+        }
     }
 }
 
@@ -1832,6 +1864,7 @@ fn thought_to_openrouter_reasoning_details(thought: &Thought) -> Vec<OpenRouterR
             details.push(OpenRouterReasoningDetail::Encrypted {
                 data: data.clone(),
                 format: format.unwrap_or_else(|| "raw".to_string()),
+                index: None, // index is only used for streaming chunk grouping
             });
         }
     } else {
@@ -1841,10 +1874,11 @@ fn thought_to_openrouter_reasoning_details(thought: &Thought) -> Vec<OpenRouterR
                 text: thought.text.clone(),
                 signature: thought.signature.clone(),
                 format,
+                index: None, // index is only used for streaming chunk grouping
             });
         }
         // Handle summary reasoning
-        else if let Some(summary_blocks) = &thought.summary {
+        if let Some(summary_blocks) = &thought.summary {
             for block in summary_blocks {
                 match block {
                     ThoughtSummaryBlock::SummaryText { text } => {
@@ -1854,6 +1888,7 @@ fn thought_to_openrouter_reasoning_details(thought: &Thought) -> Vec<OpenRouterR
                                 .and_then(|d| d.get("format"))
                                 .and_then(|v| v.as_str())
                                 .map(|s| s.to_string()),
+                            index: None, // index is only used for streaming chunk grouping
                         });
                     }
                 }
@@ -3571,7 +3606,7 @@ mod tests {
         });
         let detail: OpenRouterReasoningDetail = serde_json::from_value(json_text).unwrap();
         assert!(
-            matches!(detail, OpenRouterReasoningDetail::Text { text, signature, format }
+            matches!(detail, OpenRouterReasoningDetail::Text { text, signature, format, .. }
                 if text == Some("Let me think about this...".to_string())
                     && signature == Some("abc123".to_string())
                     && format == Some("raw".to_string())),
@@ -3587,7 +3622,7 @@ mod tests {
         let detail: OpenRouterReasoningDetail =
             serde_json::from_value(json_text_signature_only).unwrap();
         assert!(
-            matches!(detail, OpenRouterReasoningDetail::Text { text, signature, format }
+            matches!(detail, OpenRouterReasoningDetail::Text { text, signature, format, .. }
                 if text.is_none()
                     && signature == Some("EpsDCkgICxAC...".to_string())
                     && format == Some("anthropic-claude-v1".to_string())),
@@ -3602,7 +3637,7 @@ mod tests {
         });
         let detail: OpenRouterReasoningDetail = serde_json::from_value(json_summary).unwrap();
         assert!(
-            matches!(detail, OpenRouterReasoningDetail::Summary { summary, format }
+            matches!(detail, OpenRouterReasoningDetail::Summary { summary, format, .. }
                 if summary == "The answer is 42."
                     && format == Some("markdown".to_string())),
             "should parse reasoning.summary correctly"
@@ -3616,13 +3651,13 @@ mod tests {
         });
         let detail: OpenRouterReasoningDetail = serde_json::from_value(json_encrypted).unwrap();
         assert!(
-            matches!(detail, OpenRouterReasoningDetail::Encrypted { data, format }
+            matches!(detail, OpenRouterReasoningDetail::Encrypted { data, format, .. }
                 if data == "encrypted_data_here"
                     && format == "aes-256"),
             "should parse reasoning.encrypted correctly"
         );
 
-        // Test parsing reasoning.summary with extra `index` field (sent by OpenRouter in streaming)
+        // Test parsing reasoning.summary with `index` field (sent by OpenRouter in streaming)
         let json_summary_with_index = json!({
             "type": "reasoning.summary",
             "summary": "First",
@@ -3632,10 +3667,11 @@ mod tests {
         let detail: OpenRouterReasoningDetail =
             serde_json::from_value(json_summary_with_index).unwrap();
         assert!(
-            matches!(detail, OpenRouterReasoningDetail::Summary { summary, format }
+            matches!(detail, OpenRouterReasoningDetail::Summary { summary, format, index }
                 if summary == "First"
-                    && format == Some("xai-responses-v1".to_string())),
-            "should parse reasoning.summary with extra index field"
+                    && format == Some("xai-responses-v1".to_string())
+                    && index == Some(0)),
+            "should parse reasoning.summary with index field"
         );
     }
 
@@ -3688,6 +3724,7 @@ mod tests {
             text: Some("Thinking...".to_string()),
             signature: Some("sig123".to_string()),
             format: Some("raw".to_string()),
+            index: None,
         };
         let thought = openrouter_reasoning_detail_to_thought(text_detail);
         assert_eq!(
@@ -3716,6 +3753,7 @@ mod tests {
         let summary_detail = OpenRouterReasoningDetail::Summary {
             summary: "The conclusion is...".to_string(),
             format: None,
+            index: None,
         };
         let thought = openrouter_reasoning_detail_to_thought(summary_detail);
         assert!(thought.text.is_none(), "text should be None for summary");
@@ -3734,6 +3772,7 @@ mod tests {
         let encrypted_detail = OpenRouterReasoningDetail::Encrypted {
             data: "encrypted_blob".to_string(),
             format: "custom".to_string(),
+            index: None,
         };
         let thought = openrouter_reasoning_detail_to_thought(encrypted_detail);
         assert!(thought.text.is_none(), "text should be None for encrypted");
@@ -3762,10 +3801,11 @@ mod tests {
         let details = thought_to_openrouter_reasoning_details(&text_thought);
         assert_eq!(details.len(), 1, "should produce one detail");
         assert!(
-            matches!(&details[0], OpenRouterReasoningDetail::Text { text, signature, format }
+            matches!(&details[0], OpenRouterReasoningDetail::Text { text, signature, format, index }
                 if *text == Some("I'm reasoning...".to_string())
                     && *signature == Some("sig456".to_string())
-                    && *format == Some("raw".to_string())),
+                    && *format == Some("raw".to_string())
+                    && index.is_none()),
             "should convert to Text detail"
         );
 
@@ -3782,9 +3822,10 @@ mod tests {
         let details = thought_to_openrouter_reasoning_details(&summary_thought);
         assert_eq!(details.len(), 1, "should produce one detail");
         assert!(
-            matches!(&details[0], OpenRouterReasoningDetail::Summary { summary, format }
+            matches!(&details[0], OpenRouterReasoningDetail::Summary { summary, format, index }
                 if summary == "Summary here"
-                    && *format == Some("markdown".to_string())),
+                    && *format == Some("markdown".to_string())
+                    && index.is_none()),
             "should convert to Summary detail"
         );
 
@@ -3799,9 +3840,10 @@ mod tests {
         let details = thought_to_openrouter_reasoning_details(&encrypted_thought);
         assert_eq!(details.len(), 1, "should produce one detail");
         assert!(
-            matches!(&details[0], OpenRouterReasoningDetail::Encrypted { data, format }
+            matches!(&details[0], OpenRouterReasoningDetail::Encrypted { data, format, index }
                 if data == "encrypted_data"
-                    && format == "aes-256"),
+                    && format == "aes-256"
+                    && index.is_none()),
             "should convert to Encrypted detail"
         );
     }
@@ -3809,10 +3851,12 @@ mod tests {
     #[test]
     fn test_openrouter_reasoning_detail_roundtrip() {
         // Test that Text -> Thought -> ReasoningDetail preserves data
+        // Note: index is not preserved through roundtrip (it's only for streaming chunk grouping)
         let original_text = OpenRouterReasoningDetail::Text {
             text: Some("Reasoning process".to_string()),
             signature: Some("signature_value".to_string()),
             format: Some("raw".to_string()),
+            index: None,
         };
         let thought = openrouter_reasoning_detail_to_thought(original_text.clone());
         let roundtripped = thought_to_openrouter_reasoning_details(&thought);
@@ -3830,6 +3874,7 @@ mod tests {
         let original_encrypted = OpenRouterReasoningDetail::Encrypted {
             data: "encrypted_content".to_string(),
             format: "custom_format".to_string(),
+            index: None,
         };
         let thought = openrouter_reasoning_detail_to_thought(original_encrypted.clone());
         let roundtripped = thought_to_openrouter_reasoning_details(&thought);
@@ -3841,6 +3886,98 @@ mod tests {
         assert_eq!(
             roundtripped[0], original_encrypted,
             "Encrypted detail should roundtrip"
+        );
+    }
+
+    #[test]
+    fn test_openrouter_streaming_reasoning_details_stable_index() {
+        // This test verifies that when OpenRouter provides an `index` field in reasoning_details,
+        // we use it for stable chunk grouping instead of the enumerate position.
+        //
+        // Scenario: OpenRouter streams two chunks:
+        // - Chunk 1: [Text(index=0, "Hello "), Summary(index=1, "Sum1")]
+        // - Chunk 2: [Summary(index=1, " Sum2")] (only summary, no text)
+        //
+        // Without stable index: Chunk 2's summary would get id "0" (from enumerate),
+        // causing it to be grouped with the wrong thought.
+        //
+        // With stable index: Both summaries get id "1", correctly grouping them together.
+
+        // Chunk 1: Text at index 0, Summary at index 1
+        let detail_text = OpenRouterReasoningDetail::Text {
+            text: Some("Hello ".to_string()),
+            signature: None,
+            format: None,
+            index: Some(0),
+        };
+        let detail_summary1 = OpenRouterReasoningDetail::Summary {
+            summary: "Sum1".to_string(),
+            format: None,
+            index: Some(1),
+        };
+
+        // Convert with fallback ids that would be wrong without index
+        let chunk_text =
+            openrouter_reasoning_detail_to_thought_chunk(detail_text, "99".to_string());
+        let chunk_summary1 =
+            openrouter_reasoning_detail_to_thought_chunk(detail_summary1, "98".to_string());
+
+        // Text should use index 0, not fallback 99
+        assert_eq!(
+            chunk_text.id, "0",
+            "Text chunk should use index field, not fallback"
+        );
+        // Summary should use index 1, not fallback 98
+        assert_eq!(
+            chunk_summary1.id, "1",
+            "Summary chunk should use index field, not fallback"
+        );
+        assert_eq!(
+            chunk_summary1.summary_id,
+            Some("1".to_string()),
+            "Summary id should also use index"
+        );
+
+        // Chunk 2: Only Summary at index 1 (simulating partial streaming)
+        let detail_summary2 = OpenRouterReasoningDetail::Summary {
+            summary: " Sum2".to_string(),
+            format: None,
+            index: Some(1),
+        };
+
+        // Even though this is first in chunk 2's array (would be enumerate index 0),
+        // it should use the stable index 1
+        let chunk_summary2 =
+            openrouter_reasoning_detail_to_thought_chunk(detail_summary2, "0".to_string());
+
+        assert_eq!(
+            chunk_summary2.id, "1",
+            "Second summary chunk should use stable index 1, not enumerate position 0"
+        );
+        assert_eq!(
+            chunk_summary2.summary_id,
+            Some("1".to_string()),
+            "Summary id should match"
+        );
+
+        // Both summary chunks have the same id "1", so collect_chunks will correctly
+        // merge them into a single thought with summary "Sum1 Sum2"
+    }
+
+    #[test]
+    fn test_openrouter_streaming_reasoning_details_fallback_to_enumerate() {
+        // When no index is provided, we should fall back to the enumerate position
+        let detail_text = OpenRouterReasoningDetail::Text {
+            text: Some("Thinking...".to_string()),
+            signature: None,
+            format: None,
+            index: None,
+        };
+
+        let chunk = openrouter_reasoning_detail_to_thought_chunk(detail_text, "5".to_string());
+        assert_eq!(
+            chunk.id, "5",
+            "Should fall back to provided id when index is None"
         );
     }
 }
