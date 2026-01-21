@@ -224,7 +224,8 @@ pub use tensorzero_client::SnapshotHash;
 
 // Re-export evaluation types
 pub use tensorzero_client::{
-    CacheEnabledMode, EvaluatorStatsResponse, RunEvaluationParams, RunEvaluationResponse,
+    CacheEnabledMode, DatapointResult, EvaluatorStatsResponse, RunEvaluationParams,
+    RunEvaluationResponse,
 };
 
 // Re-export TensorZero inference types for convenience
