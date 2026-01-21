@@ -19,7 +19,9 @@ import {
   SectionLayout,
   SectionsGroup,
   SectionHeader,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
+import { toFunctionUrl } from "~/utils/urls";
 import { applyPaginationLogic } from "~/utils/pagination";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 
@@ -223,7 +225,22 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const function_type = function_config.type;
   return (
     <PageLayout>
-      <PageHeader label="Variant" name={variant_name} />
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Functions", href: "/observability/functions" },
+              {
+                label: function_name,
+                href: toFunctionUrl(function_name),
+                isIdentifier: true,
+              },
+              { label: "Variants" },
+            ]}
+          />
+        }
+        name={variant_name}
+      />
 
       <SectionsGroup>
         <SectionLayout>

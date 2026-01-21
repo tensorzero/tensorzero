@@ -10,7 +10,11 @@ test("should show the workflow evaluations page and navigate to the workflow eva
   ).toBeVisible();
   // Let's click on that run and see the run page
   await page.getByText("01968d04-142c-7e53-8ea7-3a3255b518dc").click();
-  await expect(page.getByText("Workflow Evaluation Run")).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Runs", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("goated")).toBeVisible();
 });
 
@@ -22,7 +26,11 @@ test("should render comment in workflow evaluation run and open modal when click
   );
 
   // Wait for the page to load
-  await expect(page.getByText("Workflow Evaluation Run")).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Runs", { exact: true }),
+  ).toBeVisible();
 
   // Check that the comment starting with "This comment is longer than a" is rendered in the table
   const commentText = page.getByText("This comment is longer than a");
