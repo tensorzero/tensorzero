@@ -2648,6 +2648,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -2662,6 +2663,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             _ => {
@@ -2695,6 +2697,7 @@ fn content_part_to_tensorzero_chunk(
             summary_text: None,
             signature: Some(thought_signature),
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
 
@@ -2773,6 +2776,7 @@ fn convert_to_output(
                     text: Some(text),
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -2784,6 +2788,7 @@ fn convert_to_output(
                     text: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             _ => {
@@ -2814,6 +2819,7 @@ fn convert_to_output(
             text: None,
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
 

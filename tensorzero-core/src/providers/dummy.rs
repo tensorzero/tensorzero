@@ -119,6 +119,7 @@ impl DummyProvider {
                 summary_text: None,
                 id: "0".to_string(),
                 provider_type: None,
+                extra_data: None,
             })
         });
         let response_chunks = response_chunks.into_iter().map(|chunk| {
@@ -412,6 +413,7 @@ impl InferenceProvider for DummyProvider {
                     signature: None,
                     summary: None,
                     provider_type: None,
+                    extra_data: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
@@ -423,6 +425,7 @@ impl InferenceProvider for DummyProvider {
                     signature: Some("my_signature".to_string()),
                     summary: None,
                     provider_type: None,
+                    extra_data: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
@@ -434,6 +437,7 @@ impl InferenceProvider for DummyProvider {
                     signature: None,
                     summary: None,
                     provider_type: None,
+                    extra_data: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_JSON_RESPONSE_RAW.to_string(),

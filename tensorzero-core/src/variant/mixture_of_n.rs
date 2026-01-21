@@ -428,6 +428,7 @@ fn make_stream_from_non_stream(
                         summary_id: None,
                         summary_text: None,
                         provider_type: thought.provider_type,
+                        extra_data: thought.extra_data,
                     });
                     id += 1;
                     Ok(chunk)
@@ -1765,12 +1766,14 @@ mod tests {
                         signature: Some("my_first_signature".into()),
                         summary: None,
                         provider_type: Some("my_first_provider_type".into()),
+                        extra_data: None,
                     }),
                     ContentBlockChatOutput::Thought(Thought {
                         text: Some("My second thought".into()),
                         signature: Some("my_second_signature".into()),
                         summary: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                         id: "456".into(),
@@ -1820,6 +1823,7 @@ mod tests {
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some("my_first_provider_type".into()),
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         id: "2".into(),
@@ -1828,6 +1832,7 @@ mod tests {
                         summary_id: None,
                         summary_text: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::ToolCall(ToolCallChunk {
                         id: "456".into(),

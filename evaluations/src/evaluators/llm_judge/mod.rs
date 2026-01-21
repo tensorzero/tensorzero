@@ -804,6 +804,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         let serialized = serialize_content_for_messages_input(&content).unwrap();

@@ -2531,12 +2531,14 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockOutput::Thought(Thought {
                 text: Some("still thinking".to_string()),
                 signature: Some("sig".to_string()),
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =
@@ -2552,6 +2554,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockOutput::Text(Text {
                 text: "Some text".to_string(),
@@ -2561,6 +2564,7 @@ mod tests {
                 signature: Some("sig2".to_string()),
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockOutput::ToolCall(ToolCall {
                 id: "id2".to_string(),
@@ -2616,6 +2620,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =

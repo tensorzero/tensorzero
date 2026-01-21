@@ -48,7 +48,11 @@ test("should show stale badge and disable edit/delete buttons on stale datapoint
 
   // Step 5: Verify stale behavior
   // 5a. Page loads successfully (not 404)
-  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Datapoints", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 
   // 5b. "Stale" badge is visible in the header

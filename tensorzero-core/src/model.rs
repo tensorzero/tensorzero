@@ -269,6 +269,7 @@ impl ModelConfig {
                     signature: _,
                     summary: _,
                     provider_type,
+                    extra_data: _,
                 }) => provider_type
                     .as_ref()
                     .is_some_and(|t| t != &provider.config.thought_block_provider_type()),
@@ -305,6 +306,7 @@ impl ModelConfig {
                                 signature: _,
                                 summary: _,
                                 provider_type,
+                                extra_data: _,
                             }) => {
                                 // When a thought is scoped to a particular provider type, we discard
                                 // if it doesn't match our target provider.

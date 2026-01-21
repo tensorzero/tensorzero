@@ -4,10 +4,9 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use rlt::{BenchSuite, IterInfo, IterReport, Status};
 use sqlx::PgPool;
-use sqlx::postgres::types::PgInterval;
 use tensorzero_core::{
     db::{ConsumeTicketsRequest, RateLimitQueries, postgres::PostgresConnectionInfo},
-    rate_limiting::ActiveRateLimitKey,
+    rate_limiting::{ActiveRateLimitKey, RateLimitInterval},
 };
 use tokio::time::Instant;
 
@@ -50,7 +49,7 @@ impl Contention {
 pub struct BucketSettings {
     pub capacity: i64,
     pub refill_amount: i64,
-    pub interval: PgInterval,
+    pub interval: RateLimitInterval,
 }
 
 #[derive(Clone)]
@@ -164,10 +163,6 @@ pub fn create_bucket_settings(capacity: i64, refill_amount: i64) -> BucketSettin
     BucketSettings {
         capacity,
         refill_amount,
-        interval: PgInterval {
-            months: 0,
-            days: 0,
-            microseconds: 1_000_000, // 1 second
-        },
+        interval: RateLimitInterval::Second,
     }
 }

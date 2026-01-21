@@ -652,6 +652,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                     signature: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             if !clean_text.is_empty() {
@@ -811,6 +812,7 @@ fn together_to_tensorzero_chunk(
                                 summary_text: None,
                                 id: thinking_state.get_id(),
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
                             }));
                         }
                     }
@@ -1131,6 +1133,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: Some("together".to_string()),
+                extra_data: None,
             })
         );
         assert_eq!(
@@ -1180,6 +1183,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: Some("together".to_string()),
+                extra_data: None,
             })
         );
         assert_eq!(
@@ -1712,6 +1716,7 @@ mod tests {
                 summary_text: None,
                 id: "1".to_string(),
                 provider_type: Some("together".to_string()),
+                extra_data: None,
             })]
         );
         assert!(matches!(thinking_state, ThinkingState::Thinking));

@@ -19,6 +19,7 @@ serde_path_to_error.workspace = true
 sqlx.workspace = true
 schemars = { workspace = true, optional = true }
 thiserror.workspace = true
+tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
 url.workspace = true
 uuid.workspace = true

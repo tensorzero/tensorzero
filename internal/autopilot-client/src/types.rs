@@ -333,6 +333,16 @@ pub struct StreamEventsParams {
     pub last_event_id: Option<Uuid>,
 }
 
+/// Request body for approving all pending tool calls.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApproveAllToolCallsRequest {
+    pub deployment_id: String,
+    pub tensorzero_version: String,
+    /// Only approve tool calls with event IDs <= this value.
+    /// Prevents race condition where new tool calls arrive after client fetched the list.
+    pub last_tool_call_event_id: Uuid,
+}
+
 // =============================================================================
 // Response Types
 // =============================================================================
@@ -370,6 +380,19 @@ pub struct ListEventsResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListSessionsResponse {
     pub sessions: Vec<Session>,
+}
+
+/// Response from approving all pending tool calls.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct ApproveAllToolCallsResponse {
+    /// Number of tool calls that were approved.
+    pub approved_count: u32,
+    /// Event IDs of the newly created ToolCallAuthorization events.
+    pub event_ids: Vec<Uuid>,
+    /// Event IDs of the tool calls that were approved.
+    pub tool_call_event_ids: Vec<Uuid>,
 }
 
 // =============================================================================

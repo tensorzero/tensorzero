@@ -1,10 +1,4 @@
-import {
-  data,
-  isRouteErrorResponse,
-  redirect,
-  useNavigate,
-  useSearchParams,
-} from "react-router";
+import { data, redirect, useNavigate, useSearchParams } from "react-router";
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
@@ -25,8 +19,9 @@ import {
   SectionLayout,
   SectionsGroup,
   SectionHeader,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
-import { logger } from "~/utils/logger";
+import { toFunctionUrl } from "~/utils/urls";
 import { applyPaginationLogic } from "~/utils/pagination";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 
@@ -230,7 +225,22 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const function_type = function_config.type;
   return (
     <PageLayout>
-      <PageHeader label="Variant" name={variant_name} />
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Functions", href: "/observability/functions" },
+              {
+                label: function_name,
+                href: toFunctionUrl(function_name),
+                isIdentifier: true,
+              },
+              { label: "Variants" },
+            ]}
+          />
+        }
+        name={variant_name}
+      />
 
       <SectionsGroup>
         <SectionLayout>
@@ -283,32 +293,4 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
       </SectionsGroup>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

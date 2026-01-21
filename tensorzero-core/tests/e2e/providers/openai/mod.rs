@@ -258,6 +258,15 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
+    // TODO (#5717): we don't parse streaming thought signatures correctly for OpenAI Responses API
+    // let reasoning_providers = vec![E2ETestProvider {
+    //     supports_batch_inference: false,
+    //     variant_name: "openai-gpt-5-mini".to_string(),
+    //     model_name: "gpt-5-mini-responses".into(),
+    //     model_provider_name: "openai".into(),
+    //     credentials: HashMap::new(),
+    // }];
+
     let reasoning_usage_providers = vec![
         E2ETestProvider {
             supports_batch_inference: false,
@@ -268,7 +277,7 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "openai-gpt-5-mini-chat".to_string(),
+            variant_name: "openai-gpt-5-mini-chat-completions".to_string(),
             model_name: "openai::gpt-5-mini".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
@@ -279,6 +288,8 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
+        // TODO (#5717): we don't parse streaming thought signatures correctly for OpenAI Responses API
+        // reasoning_inference: reasoning_providers,
         reasoning_inference: vec![],
         reasoning_usage_inference: reasoning_usage_providers,
         embeddings: embedding_providers,

@@ -71,6 +71,10 @@ pub struct ThoughtChunk {
         skip_serializing_if = "Option::is_none"
     )]
     pub provider_type: Option<String>,
+    /// Provider-specific opaque data for multi-turn reasoning support.
+    /// See `Thought.extra_data`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_data: Option<Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -231,7 +235,13 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
                 }
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
-                    thought.clone_from(&thought_chunk.text);
+                    // Take text if present, otherwise fall back to summary_text
+                    // (OpenRouter's reasoning.summary type uses summary_text instead of text)
+                    if thought_chunk.text.is_some() {
+                        thought.clone_from(&thought_chunk.text);
+                    } else {
+                        thought.clone_from(&thought_chunk.summary_text);
+                    }
                 }
                 ContentBlockChunk::Unknown(_) => {
                     // Unknown chunks are ignored for JSON functions
@@ -393,6 +403,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 summary_id,
                                 summary_text,
                                 provider_type,
+                                extra_data,
                             } = thought;
                             // We check for both 'text' and 'signature', in case a provider produces
                             // both in the same chunk.
@@ -410,6 +421,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                             signature: None,
                                             summary: None,
                                             provider_type: provider_type.clone(),
+                                            extra_data: extra_data.clone(),
                                         })
                                     },
                                     |block, text| {
@@ -430,6 +442,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                             signature: Some(signature),
                                             summary: None,
                                             provider_type: provider_type.clone(),
+                                            extra_data: extra_data.clone(),
                                         })
                                     },
                                     |block, signature| {
@@ -480,6 +493,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                                 text: summary_text,
                                             }]),
                                             provider_type,
+                                            extra_data,
                                         })
                                     },
                                     |block, summary_text| {
@@ -598,6 +612,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                     summary: None,
                                     signature: None,
                                     provider_type: None,
+                                    extra_data: None,
                                 }),
                             );
                         }
@@ -842,6 +857,7 @@ mod tests {
                     signature: None,
                     summary: None,
                     provider_type: None,
+                    extra_data: None,
                 })
             },
             |block, text| {
@@ -861,6 +877,7 @@ mod tests {
                 signature: _,
                 summary: _,
                 provider_type: _,
+                extra_data: _,
             }) => {
                 assert_eq!(text, &Some("Thinking...".to_string()));
             }
@@ -1286,6 +1303,7 @@ mod tests {
                             summary: None,
                             signature: None,
                             provider_type: None,
+                            extra_data: None,
                         }),
                     ]
                 );
@@ -1580,6 +1598,7 @@ mod tests {
                         summary_text: None,
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: Some("My other interleaved thought".to_string()),
@@ -1588,6 +1607,7 @@ mod tests {
                         summary_text: Some("Inline summary".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: None,
@@ -1596,6 +1616,7 @@ mod tests {
                         summary_text: Some("First summary".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: None,
@@ -1604,6 +1625,7 @@ mod tests {
                         summary_text: Some("Second summary".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: None,
@@ -1612,6 +1634,7 @@ mod tests {
                         summary_text: Some(" content.".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: None,
@@ -1620,6 +1643,7 @@ mod tests {
                         summary_text: Some(" message.".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                 ],
                 usage: None,
@@ -1652,6 +1676,7 @@ mod tests {
                     summary_text: None,
                     signature: None,
                     provider_type: None,
+                    extra_data: None,
                 })],
                 usage: None,
                 raw_usage: None,
@@ -1735,6 +1760,7 @@ mod tests {
                 ]),
                 signature: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockChatOutput::Thought(Thought {
                 text: Some("My other interleaved thought".to_string()),
@@ -1743,6 +1769,7 @@ mod tests {
                 }]),
                 signature: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         assert_eq!(chat_result.content, expected_content);
@@ -2377,6 +2404,7 @@ mod tests {
                 summary_text: None,
                 signature: None,
                 provider_type: None,
+                extra_data: None,
             })],
             usage: None,
             raw_usage: None,
@@ -2408,6 +2436,7 @@ mod tests {
                     summary_text: None,
                     signature: None,
                     provider_type: None,
+                    extra_data: None,
                 }),
             ],
             usage: None,
@@ -2435,5 +2464,31 @@ mod tests {
         assert_eq!(result.raw, None);
         assert_eq!(result.thought, None);
         assert_eq!(result.finish_reason, None);
+
+        // Test case: ThoughtChunk with only summary_text (no text)
+        // This is the format OpenRouter uses for reasoning.summary type
+        let summary_chunk = ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::Thought(ThoughtChunk {
+                id: "0".to_string(),
+                text: None,
+                summary_id: Some("0".to_string()),
+                summary_text: Some("This is a summary".to_string()),
+                signature: None,
+                provider_type: Some("openrouter".to_string()),
+                extra_data: None,
+            })],
+            usage: None,
+            raw_usage: None,
+            raw_response: "raw response".to_string(),
+            provider_latency: Duration::from_secs(1),
+            finish_reason: None,
+        };
+
+        let result = JsonInferenceResultChunk::from(summary_chunk);
+        assert_eq!(
+            result.thought,
+            Some("This is a summary".to_string()),
+            "summary_text should be extracted when text is None"
+        );
     }
 }
