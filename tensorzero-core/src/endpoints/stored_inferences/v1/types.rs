@@ -121,7 +121,7 @@ pub struct DemonstrationFeedbackFilter {
 /// This is flattened in the public API inside the `OrderBy` struct.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "by")]
 #[serde(rename_all = "snake_case")]

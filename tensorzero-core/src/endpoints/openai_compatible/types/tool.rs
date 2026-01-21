@@ -6,7 +6,6 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::tool::{
     FunctionTool, InferenceResponseToolCall, OpenAICustomTool, Tool, ToolCallWrapper, ToolChoice,
@@ -52,7 +51,7 @@ pub struct OpenAICompatibleToolMessage {
     pub tool_call_id: String,
 }
 
-#[derive(Clone, Debug, PartialEq, TensorZeroDeserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAICompatibleTool {

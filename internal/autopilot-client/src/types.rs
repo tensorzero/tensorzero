@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 // Re-export types from tensorzero-types that InputMessage depends on
-use tensorzero_derive::TensorZeroDeserialize;
 pub use tensorzero_types::{
     Base64File, File, InputMessage, InputMessageContent, ObjectStoragePointer, RawText, Role,
     Template, Text, Thought, ToolCallWrapper, Unknown, UrlFile,
@@ -45,7 +44,7 @@ pub struct Event {
 /// The UX-relevant status of the Autopilot.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "status")]
 pub enum AutopilotStatus {
@@ -71,7 +70,7 @@ pub struct StreamUpdate {
     feature = "ts-bindings",
     ts(export, tag = "type", rename_all = "snake_case")
 )]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 pub enum EventPayload {
@@ -110,7 +109,7 @@ impl EventPayload {
     feature = "ts-bindings",
     ts(export, tag = "type", rename_all = "snake_case")
 )]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 pub enum StatusUpdate {
@@ -228,7 +227,7 @@ pub struct AutopilotToolResult {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 pub enum ToolCallDecisionSource {
@@ -244,7 +243,7 @@ pub struct ToolCallAuthorization {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 pub enum ToolCallAuthorizationStatus {
@@ -253,7 +252,7 @@ pub enum ToolCallAuthorizationStatus {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 pub enum ToolOutcome {

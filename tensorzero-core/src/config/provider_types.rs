@@ -1,6 +1,5 @@
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use serde::{Deserialize, Serialize};
-use tensorzero_derive::TensorZeroDeserialize;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -165,7 +164,7 @@ pub struct GCPVertexAnthropicProviderTypeConfig {
     pub defaults: GCPDefaults,
 }
 
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "storage_type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
