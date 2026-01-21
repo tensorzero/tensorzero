@@ -79,7 +79,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tensorzero_derive::export_schema;
+use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 pub use tensorzero_types::{Input, InputMessage, InputMessageContent, TextKind, ToolCallWrapper};
 use uuid::Uuid;
 
@@ -874,9 +874,10 @@ impl RateLimitedInputContent for ContentBlock {
 
 /// The version of `ContentBlock` that is stored in ClickHouse.
 /// This is almost identical to `ContentBlock`, but without `File` data.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum StoredContentBlock {
     Text(Text),
     ToolCall(ToolCall),
@@ -889,9 +890,10 @@ pub enum StoredContentBlock {
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum ResolvedContentBlock {
     Text(Text),
     ToolCall(ToolCall),
@@ -944,9 +946,10 @@ enum ContentBlockOutputType {
 }
 
 /// Types of content blocks that can be returned by a model provider
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCall),
@@ -955,9 +958,10 @@ pub enum ContentBlockOutput {
 }
 
 /// Defines the types of content block that can come from a `chat` function
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[export_schema]
 pub enum ContentBlockChatOutput {
     #[schemars(title = "ContentBlockChatOutputText")]

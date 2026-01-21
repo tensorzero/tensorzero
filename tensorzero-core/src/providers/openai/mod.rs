@@ -14,6 +14,7 @@ use std::borrow::{Cow, ToOwned};
 use std::io::Write;
 use std::pin::Pin;
 use std::time::Duration;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use tracing::instrument;
 use url::Url;
@@ -2585,8 +2586,9 @@ pub(super) struct OpenAIResponseCustomCall {
     input: String,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub(super) enum OpenAIResponseToolCall {
     Function {
         id: String,
