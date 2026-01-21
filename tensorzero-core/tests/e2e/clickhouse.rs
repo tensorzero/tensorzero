@@ -1,6 +1,7 @@
 #![expect(clippy::print_stdout, clippy::print_stderr)]
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
@@ -57,14 +58,18 @@ impl Drop for DeleteDbOnDrop {
             Handle::current().block_on(async move {
                 if allow_db_missing {
                     client
-                        .run_query_synchronous_no_params(format!(
-                            "DROP DATABASE IF EXISTS {database} SYNC"
-                        ))
+                        .run_query_synchronous(
+                            "DROP DATABASE IF EXISTS {db_name:Identifier} SYNC".to_string(),
+                            &HashMap::from([("db_name", database.as_str())]),
+                        )
                         .await
                         .unwrap();
                 } else {
                     client
-                        .run_query_synchronous_no_params(format!("DROP DATABASE {database} SYNC"))
+                        .run_query_synchronous(
+                            "DROP DATABASE {db_name:Identifier} SYNC".to_string(),
+                            &HashMap::from([("db_name", database.as_str())]),
+                        )
                         .await
                         .unwrap();
                 }
@@ -84,7 +89,7 @@ pub async fn get_clean_clickhouse(
     allow_db_missing: bool,
 ) -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
     let database = format!(
-        "tensorzero_e2e_tests_migration_manager_{}",
+        "tensorzero-e2e_tests_migration_manager_{}",
         Uuid::now_v7().simple()
     );
     let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
