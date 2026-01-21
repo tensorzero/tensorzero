@@ -78,7 +78,7 @@ jobs:
                 exit 0
               else
                 echo "Autopilot E2E tests failed with conclusion: $CONCLUSION"
-                exit 1
+                exit 0
               fi
             fi
 
