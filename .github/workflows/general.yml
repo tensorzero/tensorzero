@@ -1169,7 +1169,7 @@ jobs:
     permissions:
       contents: read
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
-    needs: [build-gateway-e2e-container]
+    needs: [build-gateway-e2e-container, build-ui-container]
     uses: ./.github/workflows/dispatch-autopilot-e2e.yml
     secrets:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
