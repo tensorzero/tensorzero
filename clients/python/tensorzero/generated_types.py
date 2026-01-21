@@ -1257,6 +1257,12 @@ class Thought:
     Struct that represents a model's reasoning
     """
 
+    extra_data: Any | None = None
+    """
+    Provider-specific opaque data for multi-turn reasoning support.
+    For example, OpenRouter stores encrypted reasoning blocks with `{"format": "...", "encrypted": true}` structure.
+    Note: Not exposed to Python because `Value` doesn't implement `IntoPyObject`.
+    """
     provider_type: str | None = None
     """
     When set, this `Thought` block will only be used for providers
@@ -1265,8 +1271,8 @@ class Thought:
     """
     signature: str | None = None
     """
-    An optional signature - currently, this is only used with Anthropic,
-    and is ignored by other providers.
+    An optional signature - used with Anthropic and OpenRouter for multi-turn
+    reasoning conversations. Other providers will ignore this field.
     """
     summary: list[ThoughtSummaryBlock] | None = None
     text: str | None = None

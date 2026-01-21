@@ -6,6 +6,7 @@ use futures::future::try_join_all;
 use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 
 use super::helpers::{
@@ -632,8 +633,9 @@ fn prefill_json_message(messages: &mut Vec<AnthropicMessage>) {
     });
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 pub enum GCPVertexAnthropicContentBlock {
     Text {
         text: String,
@@ -681,6 +683,7 @@ fn convert_to_output(
             signature: Some(signature),
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         })),
         FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
@@ -688,6 +691,7 @@ fn convert_to_output(
                 signature: Some(data),
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }))
         }
         FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown(Unknown {
@@ -704,12 +708,33 @@ pub struct GCPVertexAnthropicUsage {
     input_tokens: Option<u32>,
     #[serde(default)]
     output_tokens: Option<u32>,
+    /// Number of input tokens used to create a new cache entry
+    #[serde(default)]
+    cache_creation_input_tokens: Option<u32>,
+    /// Number of input tokens read from cache
+    #[serde(default)]
+    cache_read_input_tokens: Option<u32>,
 }
 
 impl From<GCPVertexAnthropicUsage> for Usage {
     fn from(value: GCPVertexAnthropicUsage) -> Self {
+        // GCP Vertex Anthropic reports cache tokens separately from input_tokens.
+        // We need to add them back to get the total input token count.
+        let total_input_tokens = match (
+            value.input_tokens,
+            value.cache_creation_input_tokens,
+            value.cache_read_input_tokens,
+        ) {
+            (None, None, None) => None,
+            _ => Some(
+                value.input_tokens.unwrap_or(0)
+                    + value.cache_creation_input_tokens.unwrap_or(0)
+                    + value.cache_read_input_tokens.unwrap_or(0),
+            ),
+        };
+
         Usage {
-            input_tokens: value.input_tokens,
+            input_tokens: total_input_tokens,
             output_tokens: value.output_tokens,
         }
     }
@@ -1267,23 +1292,45 @@ mod tests {
         let anthropic_usage = GCPVertexAnthropicUsage {
             input_tokens: Some(100),
             output_tokens: Some(50),
+            ..Default::default()
         };
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, Some(100));
-        assert_eq!(usage.output_tokens, Some(50));
+        assert_eq!(usage.input_tokens, Some(100), "input_tokens should match");
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
 
         // Test with None values
         let anthropic_usage = GCPVertexAnthropicUsage {
             input_tokens: None,
             output_tokens: Some(100),
+            ..Default::default()
         };
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, None);
-        assert_eq!(usage.output_tokens, Some(100));
+        assert_eq!(
+            usage.input_tokens, None,
+            "input_tokens should be None when not provided"
+        );
+        assert_eq!(usage.output_tokens, Some(100), "output_tokens should match");
+
+        // Test with cache tokens
+        let anthropic_usage = GCPVertexAnthropicUsage {
+            input_tokens: Some(10),
+            output_tokens: Some(50),
+            cache_creation_input_tokens: Some(100),
+            cache_read_input_tokens: Some(200),
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(
+            usage.input_tokens,
+            Some(310),
+            "input_tokens should include cache tokens (10 + 100 + 200)"
+        );
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
     }
 
     #[test]
@@ -1305,6 +1352,7 @@ mod tests {
             usage: GCPVertexAnthropicUsage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let latency = Latency::NonStreaming {
@@ -1397,6 +1445,7 @@ mod tests {
             usage: GCPVertexAnthropicUsage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1485,6 +1534,7 @@ mod tests {
             usage: GCPVertexAnthropicUsage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1571,6 +1621,7 @@ mod tests {
             GCPVertexAnthropicUsage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
+                ..Default::default()
             },
             "both fields should be Some when present"
         );
@@ -1585,6 +1636,7 @@ mod tests {
             GCPVertexAnthropicUsage {
                 input_tokens: Some(50),
                 output_tokens: None,
+                ..Default::default()
             },
             "output_tokens should be None when missing"
         );
@@ -1599,6 +1651,7 @@ mod tests {
             GCPVertexAnthropicUsage {
                 input_tokens: None,
                 output_tokens: Some(100),
+                ..Default::default()
             },
             "input_tokens should be None when missing"
         );
@@ -1611,6 +1664,7 @@ mod tests {
             GCPVertexAnthropicUsage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             },
             "both fields should be None for empty object"
         );

@@ -560,10 +560,9 @@ mod tests {
             ..Default::default()
         };
 
-        let hyperbolic_request =
-            HyperbolicRequest::new("meta-llama/Meta-Llama-3-70B-Instruct", &request_with_tools)
-                .await
-                .expect("failed to create Hyperbolic Request during test");
+        let hyperbolic_request = HyperbolicRequest::new("openai/gpt-oss-20b", &request_with_tools)
+            .await
+            .expect("failed to create Hyperbolic Request during test");
 
         assert_eq!(hyperbolic_request.messages.len(), 1);
         assert_eq!(hyperbolic_request.temperature, Some(0.5));

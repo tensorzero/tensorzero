@@ -4,6 +4,7 @@ use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use url::Url;
 
 use crate::{
@@ -36,7 +37,7 @@ impl std::fmt::Display for RFTJsonSchemaInfoOption {
 /// If no response format is specified but the model is instructed (e.g., via prompts)
 /// to produce structured outputs, those outputs will be returned as raw JSON strings
 /// in the `output_text` field of the Sample namespace instead.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
 #[serde(tag = "type")]

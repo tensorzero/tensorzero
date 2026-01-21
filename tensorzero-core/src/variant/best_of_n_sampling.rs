@@ -835,6 +835,7 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::Arc;
     use uuid::Uuid;
 
     use crate::rate_limiting::ScopeInfo;
@@ -1737,7 +1738,7 @@ mod tests {
             exported.candidates,
             vec!["variant1".to_string(), "variant2".to_string()]
         );
-        assert_eq!(exported.evaluator.inner.model, "gpt-4".into());
+        assert_eq!(exported.evaluator.inner.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.evaluator.inner.temperature, Some(0.3));
     }
 
@@ -1765,7 +1766,10 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.evaluator.inner.model, "judge-model".into());
+        assert_eq!(
+            exported.evaluator.inner.model,
+            Arc::<str>::from("judge-model")
+        );
         assert_eq!(exported.evaluator.inner.temperature, Some(0.1));
         assert_eq!(exported.evaluator.inner.max_tokens, Some(50));
         assert_eq!(exported.evaluator.inner.seed, Some(99));

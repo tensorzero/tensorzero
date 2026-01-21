@@ -10,6 +10,7 @@
   - Run unit tests with `cargo test-unit-fast` which uses `nextest` under the hood.
 - When writing tests, key assertions should include a custom message stating the expected behavior.
 - Use `#[expect(clippy::...)]` instead of `#[allow(clippy::...)]`.
+- For internally-tagged enums (`#[serde(tag = "...")]`) without lifetimes, use `TensorZeroDeserialize` instead of `Deserialize` for better error messages via `serde_path_to_error`.
 
 ## For APIs
 

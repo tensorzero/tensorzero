@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize, Serializer};
+use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::cache::CacheParamsOptions;
 use crate::embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput};
@@ -81,8 +82,9 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "object", rename_all = "lowercase")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "object")]
+#[serde(rename_all = "lowercase")]
 pub enum OpenAIEmbeddingResponse {
     List {
         data: Vec<OpenAIEmbedding>,
@@ -96,8 +98,9 @@ pub enum OpenAIEmbeddingResponse {
     },
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "object", rename_all = "lowercase")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "object")]
+#[serde(rename_all = "lowercase")]
 pub enum OpenAIEmbedding {
     Embedding { embedding: Embedding, index: usize },
 }
