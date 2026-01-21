@@ -92,6 +92,7 @@ async fn test_provider_proxy() {
             remove_user_agent_non_amazon: false,
             health_port: 0,
             mode: CacheMode::ReadWrite,
+            save_request_body: true,
         },
         server_started_tx,
     ));
@@ -111,8 +112,10 @@ async fn test_provider_proxy() {
         .build()
         .unwrap();
 
+    let request_body = r#"{"test": "request body for debugging"}"#;
     let first_local_response = client
         .post(format!("http://{target_server_addr}/timestamp-good"))
+        .body(request_body)
         .send()
         .await
         .unwrap();
@@ -126,28 +129,56 @@ async fn test_provider_proxy() {
     assert_eq!(cached, "false");
     let first_local_response_body = first_local_response.text().await.unwrap();
 
-    // Wait for a file to show up on disk
-    loop {
+    // Wait for a file to show up on disk and verify the request body is saved on the second line
+    let cache_file_path = loop {
         let temp_path = temp_dir.path().to_path_buf();
         let found_file = tokio::task::spawn_blocking(move || {
             let files = std::fs::read_dir(temp_path).unwrap();
             for file in files {
-                if file.unwrap().path().to_string_lossy().contains("127.0.0.1") {
-                    return true;
+                let file = file.unwrap();
+                if file.path().to_string_lossy().contains("127.0.0.1") {
+                    return Some(file.path());
                 }
             }
-            false
+            None
         })
         .await
         .unwrap();
-        if found_file {
-            break;
+        if let Some(path) = found_file {
+            break path;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
+    };
+
+    // Verify the cache file format: first line is response JSON, second line is serialized request
+    let cache_content = std::fs::read_to_string(&cache_file_path).unwrap();
+    let mut lines = cache_content.lines();
+    let first_line = lines.next().unwrap();
+    // Verify first line is valid JSON (the response)
+    let _: Value = serde_json::from_str(first_line).unwrap();
+    // Verify second line contains the full serialized request (including headers, method, uri, body)
+    let second_line = lines.next().unwrap();
+    let serialized_request: Value = serde_json::from_str(second_line)
+        .expect("Second line should be valid JSON (the serialized request)");
+    // The serialized request has a "head" and "body" structure similar to responses
+    // head contains: method, uri, headers, version
+    let head = &serialized_request["head"];
+    // Verify it contains the request body (as a string)
+    assert_eq!(
+        serialized_request["body"].as_str().unwrap(),
+        request_body,
+        "Serialized request should contain the request body as a string"
+    );
+    // Verify it contains request metadata
+    assert_eq!(head["method"], "POST");
+    assert!(
+        head["uri"].as_str().unwrap().contains("/timestamp-good"),
+        "URI should contain the endpoint path"
+    );
 
     let second_local_response = client
         .post(format!("http://{target_server_addr}/timestamp-good"))
+        .body(request_body)
         .send()
         .await
         .unwrap();
@@ -218,6 +249,7 @@ async fn test_read_old_write_new() {
             sanitize_model_headers: true,
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
+            save_request_body: true,
         },
         server_started_tx,
     ));
@@ -329,6 +361,7 @@ async fn test_read_old_write_new() {
             sanitize_model_headers: true,
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
+            save_request_body: true,
         },
         server_started_tx,
     ));
@@ -378,6 +411,7 @@ async fn test_dropped_stream_body() {
             sanitize_model_headers: true,
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
+            save_request_body: true,
         },
         server_started_tx,
     ));
@@ -420,11 +454,16 @@ async fn test_dropped_stream_body() {
     assert!(files.len() == 1);
     let file = files.pop().unwrap().unwrap();
     let file_content = std::fs::read_to_string(file.path()).unwrap();
-    let file_json = serde_json::from_str::<Value>(&file_content).unwrap();
+    let mut lines = file_content.lines();
+    // First line is the response JSON
+    let first_line = lines.next().unwrap();
+    let file_json = serde_json::from_str::<Value>(first_line).unwrap();
     assert_eq!(
         file_json["body"],
         "data: Hello\n\ndata: World\n\ndata: [DONE]\n\n"
     );
+    // Second line is the request body (for debugging) - may be empty for POST without body
+    let _second_line = lines.next();
 
     // Now, make the same request, but drop the stream (due to a timeout) before it's done
 
@@ -481,6 +520,7 @@ async fn test_stream_body() {
             sanitize_model_headers: true,
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
+            save_request_body: true,
         },
         server_started_tx,
     ));
@@ -522,9 +562,14 @@ async fn test_stream_body() {
     assert!(files.len() == 1);
     let file = files[0].as_ref().unwrap();
     let file_content = std::fs::read_to_string(file.path()).unwrap();
-    let file_json = serde_json::from_str::<Value>(&file_content).unwrap();
+    let mut lines = file_content.lines();
+    // First line is the response JSON
+    let first_line = lines.next().unwrap();
+    let file_json = serde_json::from_str::<Value>(first_line).unwrap();
     assert_eq!(
         file_json["body"],
         "data: Hello\n\ndata: World\n\ndata: [DONE]\n\n"
     );
+    // Second line is the request body (for debugging) - may be empty for POST without body
+    let _second_line = lines.next();
 }
