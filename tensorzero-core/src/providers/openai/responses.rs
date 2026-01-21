@@ -19,7 +19,6 @@ use futures::{Stream, future::try_join_all};
 use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use url::Url;
 
@@ -1039,7 +1038,7 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
 // Streaming types for OpenAI Responses API
 // Based on: https://platform.openai.com/docs/api-reference/responses-streaming
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[expect(dead_code)]
