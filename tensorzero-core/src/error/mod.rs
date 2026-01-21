@@ -522,7 +522,6 @@ pub enum ErrorDetails {
         message: String,
     },
     PostgresQuery {
-        function_name: Option<String>,
         message: String,
     },
     PostgresResult {
@@ -1531,16 +1530,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Unexpected Postgres result of type {result_type}: {message}"
                 )
             }
-            ErrorDetails::PostgresQuery {
-                function_name,
-                message,
-            } => match function_name {
-                Some(function_name) => write!(
-                    f,
-                    "Postgres query failed in function {function_name} with message: {message}"
-                ),
-                None => write!(f, "Postgres query failed: {message}"),
-            },
+            ErrorDetails::PostgresQuery { message } => {
+                write!(f, "Postgres query failed: {message}")
+            }
             ErrorDetails::ValkeyConnection { message } => {
                 write!(f, "Error connecting to Valkey: {message}")
             }
@@ -1717,7 +1709,6 @@ impl From<sqlx::Error> for Error {
     fn from(err: sqlx::Error) -> Self {
         Self::new(ErrorDetails::PostgresQuery {
             message: err.to_string(),
-            function_name: None,
         })
     }
 }

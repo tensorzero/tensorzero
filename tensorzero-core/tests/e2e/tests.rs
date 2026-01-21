@@ -34,6 +34,7 @@ mod openai_compatible;
 mod otel;
 mod otel_config_headers;
 mod otel_export;
+mod postgres;
 mod prometheus;
 mod providers;
 mod proxy;

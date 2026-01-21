@@ -165,7 +165,7 @@ async fn throughput_by_variant(
 }
 
 fn map_sqlx_error(e: sqlx::Error) -> Error {
-    Error::new(ErrorDetails::PostgresConnection {
+    Error::new(ErrorDetails::PostgresQuery {
         message: e.to_string(),
     })
 }

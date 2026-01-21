@@ -14,6 +14,9 @@ pub mod experimentation;
 pub mod inference_count;
 pub mod rate_limiting;
 
+#[cfg(any(test, feature = "e2e_tests"))]
+pub mod test_helpers;
+
 const RUN_MIGRATIONS_COMMAND: &str = "Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres";
 
 #[derive(Debug, Clone)]
@@ -145,7 +148,7 @@ impl PostgresConnectionInfo {
                 .execute(pool)
                 .await
                 .map_err(|e| {
-                    Error::new(ErrorDetails::PostgresConnection {
+                    Error::new(ErrorDetails::PostgresQuery {
                         message: format!("Failed to write inference_retention_days config: {e}"),
                     })
                 })?;
@@ -161,7 +164,7 @@ impl PostgresConnectionInfo {
                 .execute(pool)
                 .await
                 .map_err(|e| {
-                    Error::new(ErrorDetails::PostgresConnection {
+                    Error::new(ErrorDetails::PostgresQuery {
                         message: format!("Failed to clear inference_retention_days config: {e}"),
                     })
                 })?;
