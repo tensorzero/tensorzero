@@ -1,19 +1,29 @@
 import { Button } from "~/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-interface PageButtonsProps {
-  onPreviousPage: () => void;
-  onNextPage: () => void;
-  disablePrevious: boolean;
-  disableNext: boolean;
-}
+type PageButtonsProps =
+  | {
+      onPreviousPage: () => void;
+      onNextPage: () => void;
+      disablePrevious: boolean;
+      disableNext: boolean;
+      disabled?: never;
+    }
+  | {
+      onPreviousPage?: never;
+      onNextPage?: never;
+      disablePrevious?: never;
+      disableNext?: never;
+      disabled: true;
+    };
 
-export default function PageButtons({
-  onPreviousPage,
-  onNextPage,
-  disablePrevious,
-  disableNext,
-}: PageButtonsProps) {
+const noop = () => {};
+
+export default function PageButtons(props: PageButtonsProps) {
+  const onPreviousPage = props.disabled ? noop : props.onPreviousPage;
+  const onNextPage = props.disabled ? noop : props.onNextPage;
+  const disablePrevious = props.disabled ?? props.disablePrevious;
+  const disableNext = props.disabled ?? props.disableNext;
   return (
     <div className="mt-4 flex items-center justify-center gap-2">
       <Button

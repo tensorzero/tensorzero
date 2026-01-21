@@ -559,6 +559,22 @@ type = "openrouter"
 model_name = "openai/gpt-4o-mini"
 api_key_location = "dynamic::openrouter_api_key"
 
+# OpenRouter Grok 3 Mini (for effort-based reasoning tests)
+[models."grok-3-mini-openrouter"]
+routing = ["openrouter"]
+
+[models."grok-3-mini-openrouter".providers.openrouter]
+type = "openrouter"
+model_name = "x-ai/grok-3-mini"
+
+# OpenRouter Claude Haiku 4.5 (for max_tokens-based reasoning tests)
+[models."claude-haiku-4-5-openrouter"]
+routing = ["openrouter"]
+
+[models."claude-haiku-4-5-openrouter".providers.openrouter]
+type = "openrouter"
+model_name = "anthropic/claude-haiku-4.5"
+
 [functions.inference_ttft_chat]
 type = "chat"
 

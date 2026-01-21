@@ -15,12 +15,15 @@ reqwest-eventsource.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_path_to_error.workspace = true
 sqlx.workspace = true
 schemars.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 ts-rs.workspace = true
 url.workspace = true
 uuid.workspace = true
+tensorzero-derive = { path = "../tensorzero-derive" }
 tensorzero-types = { path = "../tensorzero-types" }
 
 [lints]

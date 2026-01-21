@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::time::Duration;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use url::Url;
 
@@ -1094,8 +1095,9 @@ pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseC
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlock {
     Text {
         text: String,
@@ -1146,6 +1148,7 @@ fn convert_to_output(
             signature: Some(signature),
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         })),
         FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
@@ -1153,6 +1156,7 @@ fn convert_to_output(
                 signature: Some(data),
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }))
         }
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown(Unknown {
@@ -1341,8 +1345,9 @@ pub(super) fn handle_anthropic_error(
     }
 }
 
-#[derive(Deserialize, Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlockDelta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
@@ -1453,6 +1458,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1469,6 +1475,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1522,6 +1529,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(provider_type.to_string()),
+                    extra_data: None,
                 })],
                 None,
                 raw_message,
@@ -1537,6 +1545,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,

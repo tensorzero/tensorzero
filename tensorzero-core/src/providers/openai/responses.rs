@@ -202,6 +202,7 @@ impl OpenAIResponsesResponse<'_> {
                         signature: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                         summary: None,
+                        extra_data: None,
                     };
 
                     if let Some(encrypted_content) = encrypted_content {
@@ -1298,6 +1299,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 summary_id: Some(summary_index.to_string()),
                 summary_text: Some(delta),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             })],
             None,
             raw_message,

@@ -4,8 +4,7 @@ use async_trait::async_trait;
 use mockall::automock;
 
 use crate::error::Error;
-use crate::rate_limiting::ActiveRateLimitKey;
-use sqlx::postgres::types::PgInterval;
+use crate::rate_limiting::{ActiveRateLimitKey, RateLimitInterval};
 
 #[async_trait]
 #[cfg_attr(test, automock)]
@@ -27,7 +26,7 @@ pub trait RateLimitQueries: Send + Sync {
         key: &str,
         capacity: u64,
         refill_amount: u64,
-        refill_interval: PgInterval,
+        refill_interval: RateLimitInterval,
     ) -> Result<u64, Error>;
 }
 
@@ -37,7 +36,7 @@ pub struct ConsumeTicketsRequest {
     pub requested: u64,
     pub capacity: u64,
     pub refill_amount: u64,
-    pub refill_interval: PgInterval,
+    pub refill_interval: RateLimitInterval,
 }
 
 #[derive(Debug)]
@@ -53,7 +52,7 @@ pub struct ReturnTicketsRequest {
     pub returned: u64,
     pub capacity: u64,
     pub refill_amount: u64,
-    pub refill_interval: PgInterval,
+    pub refill_interval: RateLimitInterval,
 }
 
 pub struct ReturnTicketsReceipt {

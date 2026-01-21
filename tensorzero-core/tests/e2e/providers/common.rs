@@ -2548,6 +2548,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
                             signature: Some("My new TensorZero signature".to_string()),
                             summary: None,
                             provider_type: None,
+                            extra_data: None,
                         })],
                     },
                     InputMessage {
@@ -3663,12 +3664,10 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
     if provider.model_provider_name == "fireworks" || provider.model_provider_name == "together" {
         return;
     }
-
     // Hyperbolic seems to ignore these params
     if provider.model_provider_name == "hyperbolic" {
         return;
     }
-
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {

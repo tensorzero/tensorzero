@@ -759,6 +759,7 @@ fn convert_response_content_block(
                     summary: None,
                     signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })))
             }
             ResponseReasoningContent::RedactedContent(_) => {
@@ -985,6 +986,7 @@ fn process_stream_event(
                                 summary_text: None,
                                 signature: None,
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
                             })],
                             None,
                             raw_message,
@@ -1001,6 +1003,7 @@ fn process_stream_event(
                                 summary_text: None,
                                 signature: Some(signature),
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
                             })],
                             None,
                             raw_message,
