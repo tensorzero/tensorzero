@@ -11,8 +11,9 @@ use crate::db::stored_datapoint::StoredDatapoint;
 use crate::endpoints::datasets::v1::types::DatapointOrderBy;
 use crate::error::Error;
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MetricFilter {
     pub metric: String,
     pub metric_type: MetricConfigType,
@@ -21,9 +22,10 @@ pub struct MetricFilter {
     pub join_on: MetricConfigLevel,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum DatasetOutputSource {
     // When generating a dataset, don't include any output.
     None,
@@ -53,8 +55,9 @@ pub struct DatasetMetadata {
     pub last_updated: String,
 }
 
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 /// Legacy struct for old get_datapoint clickhouse query. To be deprecated.
 pub struct GetDatapointParams {
     pub dataset_name: String,

@@ -17,8 +17,9 @@ pub struct GetDatapointCountQueryParams {
 }
 
 /// Response containing datapoint counts
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetDatapointCountResponse {
     /// The count of datapoints for the dataset
     pub datapoint_count: u64,

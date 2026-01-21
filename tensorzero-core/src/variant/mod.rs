@@ -55,8 +55,9 @@ pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
@@ -69,8 +70,9 @@ impl VariantInfo {
 }
 
 /// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
-#[derive(ts_rs::TS, Debug, Serialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
@@ -117,8 +119,8 @@ pub struct ChainOfThoughtConfigPyClass {
 /// This is represented as a tool config in the
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum JsonMode {
     Off,
     On,

@@ -13,16 +13,18 @@ use crate::inference::types::{ContentBlockOutput, StoredRequestMessage};
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Response containing model inferences
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetModelInferencesResponse {
     pub model_inferences: Vec<ModelInference>,
 }
 
 // NOTE(shuyangli): Internal-only until we sort out `input_messages` types.
 /// Wire type for a single ModelInference (raw request and response sent to a model).
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ModelInference {
     /// Unique identifier for the ModelInference.
     pub id: Uuid,
