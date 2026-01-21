@@ -2531,6 +2531,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
                             signature: Some("My new TensorZero signature".to_string()),
                             summary: None,
                             provider_type: None,
+                            extra_data: None,
                         })],
                     },
                     InputMessage {
