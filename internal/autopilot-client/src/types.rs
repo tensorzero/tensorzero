@@ -79,7 +79,8 @@ pub enum EventPayload {
         outcome: ToolOutcome,
     },
     #[serde(other)]
-    Other,
+    #[serde(alias = "other")] // legacy name
+    Unknown,
 }
 
 impl EventPayload {
@@ -240,7 +241,8 @@ pub enum ToolOutcome {
     },
     Missing,
     #[serde(other)]
-    Other,
+    #[serde(alias = "other")] // legacy name
+    Unknown,
 }
 
 // =============================================================================
