@@ -129,7 +129,8 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        // TODO (#5680): we disabled GCP Vertex Anthropic tests on JSON functions + reasoning because the prefill breaks
+        // GCP Vertex Anthropic JSON + reasoning tests use json_mode=off (prompt-based JSON) to avoid prefill conflicts
+        // GCP Vertex AI doesn't support Anthropic's structured outputs beta header yet
         reasoning_inference: reasoning_providers.clone(),
         reasoning_usage_inference: reasoning_providers,
         embeddings: vec![],

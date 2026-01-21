@@ -106,7 +106,8 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: simple_inference_providers,
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        // TODO (#5680): we disabled AWS tests on JSON functions + reasoning because the prefill breaks
+        // Bedrock JSON + reasoning tests are skipped because Bedrock uses prefill (which conflicts with reasoning)
+        // Bedrock's Converse API doesn't support Anthropic's output_format parameter
         reasoning_inference: vec![claude_thinking_provider.clone()],
         reasoning_usage_inference: vec![claude_thinking_provider],
         embeddings: vec![],

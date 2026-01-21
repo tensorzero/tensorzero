@@ -312,6 +312,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let builder = http_client
             .post(&self.streaming_request_url)
             .headers(auth_headers);
+
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -333,6 +334,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
+        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -530,6 +532,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             .await?
             .into_iter()
             .collect::<Vec<_>>();
+        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -770,6 +773,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
 
+        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
         let content = if matches!(
             json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict

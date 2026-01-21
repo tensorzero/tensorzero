@@ -69,7 +69,8 @@ type = "chat_completion"
 model = "claude-sonnet-4-5-20250929-thinking-aws-bedrock"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-json_mode = "on"
+# AWS Bedrock doesn't support structured outputs yet, so use json_mode=off to avoid prefill conflicts with thinking
+json_mode = "off"
 max_tokens = 2048
 thinking_budget_tokens = 1024
 
@@ -78,7 +79,7 @@ type = "chat_completion"
 model = "claude-haiku-4-5-thinking"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-json_mode = "on"
+json_mode = "strict"
 max_tokens = 2048
 thinking_budget_tokens = 1024
 
@@ -87,7 +88,8 @@ type = "chat_completion"
 model = "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-json_mode = "on"
+# GCP Vertex AI doesn't support structured outputs yet, so use json_mode=off to avoid prefill conflicts with thinking
+json_mode = "off"
 max_tokens = 2048
 thinking_budget_tokens = 1024
 

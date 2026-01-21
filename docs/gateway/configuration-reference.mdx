@@ -662,20 +662,18 @@ api_base = "https://example.com/v1/messages"
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-Enables Anthropic's beta structured outputs feature, which provides native support for strict JSON schema validation and strict tool parameter validation.
+Enables strict validation for tool parameters when using tools with `strict = true`.
 
 When enabled:
 
 - Adds the `anthropic-beta: structured-outputs-2025-11-13` header to requests
-- For JSON functions with `json_mode = "strict"`, forwards the output schema in the `output_format` field
 - For tools with `strict = true`, forwards the `strict` parameter to enable strict validation
 
-```toml title="tensorzero.toml"
-[models.claude_structured.providers.anthropic]
-type = "anthropic"
-model_name = "claude-sonnet-4-5-20250929"
-beta_structured_outputs = true
-```
+<Note>
+
+For JSON functions with `json_mode = "strict"`, TensorZero automatically uses Anthropic's structured outputs feature without this setting. This setting is only needed for strict tool parameter validation.
+
+</Note>
 
 </Accordion>
 

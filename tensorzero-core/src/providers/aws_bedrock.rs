@@ -434,8 +434,18 @@ fn needs_json_prefill_raw(
     function_type: &FunctionType,
     json_mode: ModelInferenceRequestJsonMode,
 ) -> bool {
-    model_id.contains("claude")
-        && matches!(function_type, FunctionType::Json)
+    let is_claude_json = model_id.contains("claude") && matches!(function_type, FunctionType::Json);
+
+    // Warn if json_mode=strict is used since Bedrock doesn't support Anthropic's output_format
+    if is_claude_json && matches!(json_mode, ModelInferenceRequestJsonMode::Strict) {
+        tracing::warn!(
+            "AWS Bedrock does not support Anthropic's structured outputs feature. \
+            `json_mode = \"strict\"` will use prefill fallback instead of guaranteed schema compliance. \
+            For strict JSON schema enforcement, use direct Anthropic or GCP Vertex Anthropic."
+        );
+    }
+
+    is_claude_json
         && matches!(
             json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
