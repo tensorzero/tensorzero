@@ -18,6 +18,7 @@ serde_json.workspace = true
 sqlx.workspace = true
 schemars.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 ts-rs.workspace = true
 url.workspace = true
 uuid.workspace = true
