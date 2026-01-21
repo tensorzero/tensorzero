@@ -29,6 +29,7 @@ import {
   LineChartSkeleton,
   ChartAsyncErrorState,
 } from "~/components/ui/chart";
+import { Card, CardContent } from "~/components/ui/card";
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 export const handle: RouteHandle = {
@@ -157,25 +158,29 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
               onValueChange={setUsageMetric}
             />
           </ChartSectionHeader>
-          <Suspense
-            key={`usage-${location.search}`}
-            fallback={<BarChartSkeleton />}
-          >
-            <Await
-              resolve={modelUsageTimeseriesPromise}
-              errorElement={
-                <ChartAsyncErrorState defaultMessage="Failed to load usage data" />
-              }
-            >
-              {(modelUsageData) => (
-                <ModelUsageChart
-                  modelUsageData={modelUsageData}
-                  selectedMetric={usageMetric}
-                  timeGranularity={usageTimeGranularity}
-                />
-              )}
-            </Await>
-          </Suspense>
+          <Card>
+            <CardContent className="pt-6">
+              <Suspense
+                key={`usage-${location.search}`}
+                fallback={<BarChartSkeleton />}
+              >
+                <Await
+                  resolve={modelUsageTimeseriesPromise}
+                  errorElement={
+                    <ChartAsyncErrorState defaultMessage="Failed to load usage data" />
+                  }
+                >
+                  {(modelUsageData) => (
+                    <ModelUsageChart
+                      modelUsageData={modelUsageData}
+                      selectedMetric={usageMetric}
+                      timeGranularity={usageTimeGranularity}
+                    />
+                  )}
+                </Await>
+              </Suspense>
+            </CardContent>
+          </Card>
         </SectionLayout>
 
         <SectionLayout className="gap-6">
@@ -192,25 +197,29 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
               onValueChange={setLatencyMetric}
             />
           </ChartSectionHeader>
-          <Suspense
-            key={`latency-${location.search}`}
-            fallback={<LineChartSkeleton />}
-          >
-            <Await
-              resolve={modelLatencyQuantilesPromise}
-              errorElement={
-                <ChartAsyncErrorState defaultMessage="Failed to load latency data" />
-              }
-            >
-              {(latencyData) => (
-                <LatencyQuantileChart
-                  latencyData={latencyData}
-                  selectedMetric={latencyMetric}
-                  quantiles={quantiles}
-                />
-              )}
-            </Await>
-          </Suspense>
+          <Card>
+            <CardContent className="pt-6">
+              <Suspense
+                key={`latency-${location.search}`}
+                fallback={<LineChartSkeleton />}
+              >
+                <Await
+                  resolve={modelLatencyQuantilesPromise}
+                  errorElement={
+                    <ChartAsyncErrorState defaultMessage="Failed to load latency data" />
+                  }
+                >
+                  {(latencyData) => (
+                    <LatencyQuantileChart
+                      latencyData={latencyData}
+                      selectedMetric={latencyMetric}
+                      quantiles={quantiles}
+                    />
+                  )}
+                </Await>
+              </Suspense>
+            </CardContent>
+          </Card>
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>
