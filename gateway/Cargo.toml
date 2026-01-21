@@ -37,7 +37,7 @@ workspace = true
 e2e_tests = ["tensorzero-core/e2e_tests", "autopilot-worker/e2e_tests"]
 default = []
 ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings", "tensorzero-optimizers/ts-bindings"]
-json-schema-bindings = ["tensorzero-core/json-schema-bindings", "durable-tools/json-schema-bindings", "autopilot-worker/json-schema-bindings"]
+json-schema-bindings = ["tensorzero-core/json-schema-bindings"]
 
 [dev-dependencies]
 reqwest.workspace = true

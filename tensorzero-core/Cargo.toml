@@ -14,7 +14,7 @@ e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests"]
 optimization_tests = ["e2e_tests"]
 pyo3 = ["dep:pyo3", "tensorzero-types/pyo3"]
 ts-bindings = ["dep:ts-rs", "tensorzero-types/ts-bindings", "autopilot-client/ts-bindings"]
-json-schema-bindings = ["dep:schemars", "tensorzero-types/json-schema-bindings", "autopilot-client/json-schema-bindings"]
+json-schema-bindings = ["dep:schemars", "tensorzero-types/json-schema-bindings"]
 
 [[test]]
 name = "e2e"

@@ -6,14 +6,13 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-e2e_tests = ["json-schema-bindings"]
-json-schema-bindings = ["tensorzero-core/json-schema-bindings", "autopilot-client/json-schema-bindings", "durable-tools/json-schema-bindings"]
+e2e_tests = []
 
 [dependencies]
 durable-tools = { path = "../durable-tools" }
 tensorzero = { path = "../../clients/rust" }
 autopilot-client = { path = "../autopilot-client" }
-tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-core = { path = "../../tensorzero-core", features = ["json-schema-bindings"] }
 tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
 anyhow.workspace = true
 async-trait.workspace = true

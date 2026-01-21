@@ -21,8 +21,7 @@ use crate::tool_metadata::ToolMetadata;
 // Test Fixtures
 // ============================================================================
 
-#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 struct EchoParams {
     message: String,
 }

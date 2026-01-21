@@ -241,5 +241,4 @@ pub use async_trait::async_trait;
 pub use durable::{SpawnOptions, SpawnResult, TaskHandle, Worker, WorkerOptions};
 
 // Re-export schemars for parameter schemas
-#[cfg(feature = "json-schema-bindings")]
 pub use schemars;

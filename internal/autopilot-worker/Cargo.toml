@@ -7,8 +7,8 @@ rust-version.workspace = true
 
 [dependencies]
 # Internal crates
-durable-tools = { path = "../durable-tools", features = ["json-schema-bindings"] }
-tensorzero-core = { path = "../../tensorzero-core" }
+durable-tools = { path = "../durable-tools" }
+tensorzero-core = { path = "../../tensorzero-core", features = ["json-schema-bindings"] }
 autopilot-client = { path = "../autopilot-client" }
 autopilot-tools = { path = "../autopilot-tools" }
 
@@ -34,7 +34,6 @@ schemars.workspace = true
 
 [features]
 e2e_tests = ["autopilot-tools/e2e_tests"]
-json-schema-bindings = ["tensorzero-core/json-schema-bindings", "autopilot-client/json-schema-bindings", "autopilot-tools/json-schema-bindings"]
 
 [dev-dependencies]
 mockall = "0.14"

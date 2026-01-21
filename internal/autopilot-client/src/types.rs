@@ -161,8 +161,7 @@ pub struct AutopilotSideInfo {
 
 /// Side info for optimization workflow tool (hidden from LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "json-schema-bindings", derive(schemars::JsonSchema))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct OptimizationWorkflowSideInfo {
     /// Polling interval in seconds (default: 60).
     #[serde(default = "default_poll_interval_secs")]

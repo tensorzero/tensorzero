@@ -7,9 +7,6 @@ license.workspace = true
 [lints]
 workspace = true
 
-[features]
-json-schema-bindings = ["tensorzero-core/json-schema-bindings", "autopilot-client/json-schema-bindings"]
-
 [dependencies]
 durable-tools-spawn.workspace = true
 durable.workspace = true
@@ -30,7 +27,7 @@ tensorzero.workspace = true
 url = "2"
 secrecy.workspace = true
 
-tensorzero-core.workspace = true
+tensorzero-core = { workspace = true, features = ["json-schema-bindings"] }
 evaluations = { path = "../../evaluations" }
 tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
 
