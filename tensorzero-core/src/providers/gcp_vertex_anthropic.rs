@@ -340,6 +340,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
+            warn_gcp_vertex_anthropic_strict_json_mode(request.json_mode);
             prefill_json_chunk_response(chunk);
         }
         Ok((stream, raw_request))
@@ -538,6 +539,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
+            warn_gcp_vertex_anthropic_strict_json_mode(request.json_mode);
             prefill_json_message(&mut messages);
         }
 
@@ -634,6 +636,17 @@ fn prefill_json_message(messages: &mut Vec<AnthropicMessage>) {
             text: "Here is the JSON requested:\n{",
         })],
     });
+}
+
+/// Warn if json_mode=strict is used since GCP Vertex Anthropic doesn't support structured outputs
+fn warn_gcp_vertex_anthropic_strict_json_mode(json_mode: ModelInferenceRequestJsonMode) {
+    if matches!(json_mode, ModelInferenceRequestJsonMode::Strict) {
+        tracing::warn!(
+            "GCP Vertex Anthropic does not support Anthropic's structured outputs feature. \
+            `json_mode = \"strict\"` will use prefill fallback instead of guaranteed schema compliance. \
+            For strict JSON schema enforcement, use direct Anthropic."
+        );
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
