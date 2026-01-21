@@ -11,14 +11,14 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::Schema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::feedback::FeedbackByVariant;
 
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_feedback_by_variant tool (visible to LLM).
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GetFeedbackByVariantToolParams {
     /// The name of the metric to query.
     pub metric_name: String,

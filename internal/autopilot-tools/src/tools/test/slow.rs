@@ -5,10 +5,11 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the slow tool (visible to LLM).
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SlowToolParams {
     /// How long to sleep before returning (in milliseconds).
     pub delay_ms: u64,

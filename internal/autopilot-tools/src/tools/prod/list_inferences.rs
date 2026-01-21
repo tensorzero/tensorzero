@@ -6,14 +6,14 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::Schema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_inferences tool (visible to LLM).
-#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ListInferencesToolParams {
     /// Request parameters for listing inferences (filtering, pagination, ordering).
     #[serde(flatten)]

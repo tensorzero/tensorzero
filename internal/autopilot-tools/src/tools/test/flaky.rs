@@ -6,10 +6,11 @@ use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the flaky tool (visible to LLM).
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FlakyToolParams {
     /// Fail when attempt_number % fail_on_attempt == 0.
     pub fail_on_attempt: u32,

@@ -7,12 +7,12 @@ use autopilot_client::AutopilotSideInfo;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::Schema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
 
 /// Parameters for the create_datapoints_from_inferences tool (visible to LLM).
-#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct CreateDatapointsFromInferencesToolParams {
     /// The name of the dataset to create datapoints in.
     pub dataset_name: String,

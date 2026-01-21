@@ -4,10 +4,11 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the good simple tool (visible to LLM).
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GoodSimpleParams {
     /// The message to echo back.
     pub message: String,

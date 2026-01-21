@@ -6,14 +6,14 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::Schema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{UpdateDatapointRequest, UpdateDatapointsResponse};
 
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the update_datapoints tool (visible to LLM).
-#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct UpdateDatapointsToolParams {
     /// The name of the dataset containing the datapoints.
     pub dataset_name: String,

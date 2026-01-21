@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::Schema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use uuid::Uuid;
@@ -14,7 +14,7 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_latest_feedback_by_metric tool (visible to LLM).
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GetLatestFeedbackByMetricToolParams {
     /// The target ID (inference ID) to get feedback for.
     pub target_id: Uuid,

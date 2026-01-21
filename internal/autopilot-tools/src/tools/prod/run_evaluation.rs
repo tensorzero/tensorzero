@@ -10,14 +10,14 @@ use durable_tools::{
 };
 
 use crate::error::AutopilotToolError;
-use schemars::Schema;
+use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the run_evaluation tool (visible to LLM).
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RunEvaluationToolParams {
     /// Name of the evaluation to run (must be defined in config).
     pub evaluation_name: String,

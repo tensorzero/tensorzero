@@ -372,7 +372,7 @@ impl Default for TogetherLRScheduler {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "json-schema-bindings", derive(JsonSchema))]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "type")]
