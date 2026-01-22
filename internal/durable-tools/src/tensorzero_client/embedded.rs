@@ -28,7 +28,7 @@ use tensorzero_core::endpoints::datasets::v1::types::{
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
-use tensorzero_core::endpoints::internal::action::ActionInput;
+use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, ActionResponse};
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
@@ -175,15 +175,31 @@ impl TensorZeroClient for EmbeddedClient {
 
     async fn action(
         &self,
-        _snapshot_hash: SnapshotHash,
-        _input: ActionInput,
+        snapshot_hash: SnapshotHash,
+        input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError> {
-        Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-            source: Error::new(ErrorDetails::InternalError {
-                message: "Action endpoint is not supported for embedded client".to_string(),
-            })
-            .into(),
-        }))
+        let action_input = ActionInputInfo {
+            snapshot_hash,
+            input,
+        };
+
+        let result = crate::action::action(&self.app_state, action_input)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        match result {
+            ActionResponse::Inference(response) => Ok(response),
+            ActionResponse::Feedback(_) => {
+                Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InternalError {
+                        message: "Unexpected feedback response from action endpoint".to_string(),
+                    })
+                    .into(),
+                }))
+            }
+        }
     }
 
     async fn get_config_snapshot(

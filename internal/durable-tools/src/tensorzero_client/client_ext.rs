@@ -25,7 +25,7 @@ use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::feedback::internal::{
     LatestFeedbackIdByMetricResponse, get_latest_feedback_id_by_metric,
 };
-use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
+use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, ActionResponse};
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
@@ -321,16 +321,37 @@ impl TensorZeroClient for Client {
                     .await
                     .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
             }
-            ClientMode::EmbeddedGateway { .. } => {
-                Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                    source: tensorzero_core::error::Error::new(
-                        tensorzero_core::error::ErrorDetails::InternalError {
-                            message: "Action endpoint is not supported for embedded gateway mode"
-                                .to_string(),
-                        },
-                    )
-                    .into(),
-                }))
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => {
+                let action_input = ActionInputInfo {
+                    snapshot_hash,
+                    input,
+                };
+
+                let result = crate::action::action(&gateway.handle.app_state, action_input)
+                    .await
+                    .map_err(|e| {
+                        TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                            source: e.into(),
+                        })
+                    })?;
+
+                match result {
+                    ActionResponse::Inference(response) => Ok(response),
+                    ActionResponse::Feedback(_) => {
+                        Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                            source: tensorzero_core::error::Error::new(
+                                tensorzero_core::error::ErrorDetails::InternalError {
+                                    message: "Unexpected feedback response from action endpoint"
+                                        .to_string(),
+                                },
+                            )
+                            .into(),
+                        }))
+                    }
+                }
             }
         }
     }
