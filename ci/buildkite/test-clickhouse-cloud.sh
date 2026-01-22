@@ -84,16 +84,7 @@ uv run ./ui/fixtures/download-large-fixtures.py
 uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
 
-# Start postgres service for migrations
-# Also start Valkey
-# TODO(#5744): refactor so Clickhouse tests don't require Valkey
-docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres valkey
-export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-export TENSORZERO_VALKEY_URL=redis://localhost:6379
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-
 SQLX_OFFLINE=1 cargo build-e2e
-cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
 
 
 cargo run-e2e > e2e_logs.txt 2>&1 &

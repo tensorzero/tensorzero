@@ -700,8 +700,6 @@ jobs:
       - name: Run cargo-deny
         run: cargo deny check
 
-  # TODO(#5744): This job runs Postgres and Valkey rate limiting tests in addition to
-  # ClickHouse tests. Refactor to separate these into dedicated test jobs.
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
     permissions:
@@ -798,15 +796,6 @@ jobs:
         run: |
           # Note: In replicated mode, we use the HTTP port (8124) of the second replica so we can ensure this works
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8124/tensorzero_e2e_tests" >> $GITHUB_ENV
-
-      - name: Set Postgres database URL for tests
-        run: |
-          echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
-          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
-
-      - name: Set Valkey URL for tests
-        run: |
-          echo "TENSORZERO_VALKEY_URL=redis://localhost:6379" >> $GITHUB_ENV
 
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |
@@ -922,6 +911,59 @@ jobs:
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
+
+  # Run Postgres tests
+  # Postgres does not have unit test coverage, because sqlx doesn't expose mocks. We include it here to get early CI signals.
+  postgres-tests:
+    name: "Postgres tests"
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          shared-key: "build-gateway-cache"
+          save-if: false
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        with:
+          tool: cargo-nextest
+
+      - name: Set environment variables for Postgres and Valkey
+        run: |
+          echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+
+      - name: Launch Postgres
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up postgres gateway-postgres-migrations fixtures-postgres -d --wait
+
+      - name: Test (Rust)
+        run: cargo test-e2e --filterset 'test(db::) & test(postgres)'
+
+      - name: Print docker compose logs
+        if: always()
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
   # Run 'cargo test-optimization' against mock-provider-api
   mock-optimization-tests:
@@ -1225,6 +1267,7 @@ jobs:
         validate-python,
         lint-rust,
         clickhouse-tests,
+        postgres-tests,
         ui-tests,
         ui-tests-e2e,
         ui-tests-e2e-regen-model-inference-cache,
