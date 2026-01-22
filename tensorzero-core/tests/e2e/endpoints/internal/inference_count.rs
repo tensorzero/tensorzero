@@ -111,6 +111,8 @@ async fn submit_episode_feedback(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_inference_count_chat_function() {
+    // create_inference doesn't write to Postgres yet
+    skip_for_postgres!();
     let client = Client::new();
 
     // First get the current count
@@ -144,10 +146,13 @@ async fn test_get_inference_count_chat_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_inference_count_json_function() {
+    // create_inference doesn't write to Postgres yet
+    skip_for_postgres!();
+
     let client = Client::new();
 
     // First get the current count
-    let url = get_gateway_endpoint("/internal/functions/json_success/inference_count");
+    let url = get_gateway_endpoint("/internal/functions/judge_answer/inference_count");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -158,9 +163,9 @@ async fn test_get_inference_count_json_function() {
     let initial_response: InferenceCountResponse = serde_json::from_str(&body).unwrap();
     let initial_count = initial_response.inference_count;
 
-    // Create a new inference for json_success function
+    // Create a new inference for judge_answer function
     let inference_payload = json!({
-        "function_name": "json_success",
+        "function_name": "judge_answer",
         "input": {
             "system": {"assistant_name": "TestBot"},
             "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
@@ -258,6 +263,7 @@ async fn test_get_inference_count_unknown_variant() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_float_metric() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference
@@ -295,6 +301,7 @@ async fn test_get_feedback_stats_float_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_boolean_metric() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference
@@ -332,6 +339,7 @@ async fn test_get_feedback_stats_boolean_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_with_threshold() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference and submit feedback with a specific value
@@ -403,6 +411,7 @@ async fn test_get_feedback_stats_with_threshold() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_demonstration() {
+    skip_for_postgres!();
     let client = Client::new();
     // Use json_success which should be able to have demonstrations
     let url =
@@ -450,6 +459,7 @@ async fn test_get_feedback_stats_unknown_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_episode_level_boolean_metric() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference to get an episode_id
@@ -488,6 +498,7 @@ async fn test_get_feedback_stats_episode_level_boolean_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_episode_level_float_metric() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference to get an episode_id
@@ -574,7 +585,7 @@ pub async fn test_get_inference_count_basic() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_inference_count_with_variant_filter() {
-    let res = get_inference_count_fixture("basic_test", "variant_name=test")
+    let res = get_inference_count_fixture("write_haiku", "variant_name=initial_prompt_gpt4o_mini")
         .await
         .unwrap();
 
@@ -587,14 +598,14 @@ pub async fn test_get_inference_count_with_variant_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_inference_count_group_by_variant() {
-    let res = get_inference_count_fixture("basic_test", "group_by=variant")
+    let res = get_inference_count_fixture("write_haiku", "group_by=variant")
         .await
         .unwrap();
 
     let total_count = res.inference_count;
     assert!(
         total_count >= 1,
-        "Expected at least 1 inference for basic_test, got {total_count}"
+        "Expected at least 1 inference for write_haiku, got {total_count}"
     );
 
     let count_by_variant = res
