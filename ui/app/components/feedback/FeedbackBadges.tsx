@@ -3,7 +3,7 @@ import type { FeedbackRow } from "~/types/tensorzero";
 import type { FeedbackConfig } from "~/utils/config/feedback";
 
 // Badge styles using orange/amber/yellow spectrum for visual cohesion
-const getBadgeStyle = (
+export const getBadgeStyle = (
   property: "type" | "optimize" | "level",
   value: string | undefined,
 ) => {
