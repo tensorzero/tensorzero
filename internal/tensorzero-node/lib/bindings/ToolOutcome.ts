@@ -4,6 +4,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
 
 export type ToolOutcome =
   | ({ type: "success" } & AutopilotToolResult)
+  | { type: "rejected"; reason: string }
   | {
       type: "failure";
       /**
