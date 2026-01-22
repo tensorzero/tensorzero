@@ -21,7 +21,7 @@ pub use tensorzero::{
     PostgresConfig, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
     WriteConfigRequest, WriteConfigResponse,
 };
-use tensorzero::{GetInferencesResponse, ListInferencesRequest};
+use tensorzero::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -308,6 +308,12 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     async fn list_inferences(
         &self,
         request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+    /// Get specific inferences by their IDs.
+    async fn get_inferences(
+        &self,
+        request: GetInferencesRequest,
     ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
     // ========== Optimization Operations ==========
