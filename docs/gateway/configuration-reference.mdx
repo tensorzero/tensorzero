@@ -3125,6 +3125,8 @@ presence_penalty = 0.5
 
 Controls the reasoning effort level for reasoning models.
 
+For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingLevel`.
+
 <Warning>
 
 Only some model providers support this parameter. TensorZero will warn and ignore it if unsupported.
@@ -3133,7 +3135,7 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 <Tip>
 
-Some providers (e.g. Anthropic, Gemini) support `thinking_budget_tokens` instead.
+Some providers (e.g. Anthropic) support `thinking_budget_tokens` instead.
 
 </Tip>
 
