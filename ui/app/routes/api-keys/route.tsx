@@ -182,10 +182,7 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader
-        heading="TensorZero API Keys"
-        subheading="Authenticate requests to the TensorZero Gateway."
-      />
+      <PageHeader heading="TensorZero API Keys" />
       <SectionLayout>
         <AuthActions onGenerateKey={handleOpenModal} />
         <AuthTable apiKeys={apiKeys} />

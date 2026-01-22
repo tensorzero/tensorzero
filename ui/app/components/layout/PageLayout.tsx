@@ -35,7 +35,6 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 interface PageHeaderProps {
   eyebrow?: ReactNode;
   heading?: string;
-  subheading?: string;
   name?: string;
   count?: CountValue;
   tag?: ReactNode;
@@ -45,7 +44,6 @@ interface PageHeaderProps {
 function PageHeader({
   eyebrow,
   heading,
-  subheading,
   name,
   count,
   tag,
@@ -73,7 +71,6 @@ function PageHeader({
           {count !== undefined && <PageCount count={count} />}
           {tag && <span className="ml-1 inline-flex items-center">{tag}</span>}
         </div>
-        {subheading && <p className="text-fg-tertiary text-sm">{subheading}</p>}
       </div>
       {children && <div className="mt-8 flex flex-col gap-8">{children}</div>}
     </div>
