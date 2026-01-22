@@ -54,6 +54,17 @@ pub struct ApproveAllToolCallsGatewayRequest {
     pub last_tool_call_event_id: Uuid,
 }
 
+/// Response for the autopilot status endpoint.
+///
+/// Indicates whether the autopilot client is configured (i.e., whether
+/// `TENSORZERO_AUTOPILOT_API_KEY` is set).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutopilotStatusResponse {
+    pub enabled: bool,
+}
+
 // =============================================================================
 // Core Functions
 // =============================================================================
@@ -222,6 +233,17 @@ pub async fn approve_all_tool_calls_handler(
     Ok(Json(response))
 }
 
+/// Handler for `GET /internal/autopilot/status`
+///
+/// Returns whether autopilot is configured (i.e., whether `TENSORZERO_AUTOPILOT_API_KEY` is set).
+/// This endpoint does not require authentication and does not make any external calls.
+#[instrument(name = "autopilot.status", skip_all)]
+pub async fn autopilot_status_handler(State(app_state): AppState) -> Json<AutopilotStatusResponse> {
+    Json(AutopilotStatusResponse {
+        enabled: app_state.autopilot_client.is_some(),
+    })
+}
+
 /// Handler for `GET /internal/autopilot/v1/sessions/{session_id}/events/stream`
 ///
 /// Streams events for a session via SSE from the Autopilot API.
@@ -287,5 +309,15 @@ mod tests {
         let app_state = make_test_app_state_without_autopilot();
         let error = get_autopilot_client(&app_state).unwrap_err();
         assert_eq!(error.to_string(), "Autopilot credentials unavailable");
+    }
+
+    #[tokio::test]
+    async fn test_autopilot_status_handler_returns_false_when_not_configured() {
+        let app_state = make_test_app_state_without_autopilot();
+        let response = autopilot_status_handler(State(app_state)).await;
+        assert!(
+            !response.enabled,
+            "Expected enabled to be false when autopilot is not configured"
+        );
     }
 }
