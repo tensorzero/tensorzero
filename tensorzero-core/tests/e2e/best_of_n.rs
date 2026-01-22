@@ -1018,7 +1018,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                         ]
                     }
                 ],
-                "max_tokens": 4096,
+                "max_tokens": 64000,
                 "stream": false,
                 "system": [
                     {

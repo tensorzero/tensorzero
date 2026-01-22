@@ -11608,9 +11608,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // The OpenAI Responses API has a minimum value of 16.
     // Gemini 2.5 Flash uses internal thinking that can consume tokens before producing output,
     // so we need a higher max_tokens value.
-    let max_tokens = if provider.model_name.starts_with("responses-")
-        || provider.model_name.contains("gemini-2.5-flash")
-    {
+    let max_tokens = if provider.model_name.starts_with("responses-") {
         16
     } else {
         1
