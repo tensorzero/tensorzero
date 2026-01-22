@@ -19,8 +19,9 @@ use uuid::Uuid;
 // =============================================================================
 
 /// A session representing an autopilot conversation.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct Session {
     pub id: Uuid,
     pub organization_id: String,
@@ -31,8 +32,9 @@ pub struct Session {
 }
 
 /// An event within a session.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct Event {
     pub id: Uuid,
     pub payload: EventPayload,
@@ -41,8 +43,9 @@ pub struct Event {
 }
 
 /// The UX-relevant status of the Autopilot.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum AutopilotStatus {
     Idle,
@@ -53,17 +56,22 @@ pub enum AutopilotStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StreamUpdate {
     pub event: Event,
     pub status: AutopilotStatus,
 }
 
 /// The payload of an event.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[ts(export, tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
 pub enum EventPayload {
     Message(InputMessage),
     Error {
@@ -96,9 +104,13 @@ impl EventPayload {
 }
 
 /// A status update within a session.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[ts(export, tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
 pub enum StatusUpdate {
     Text { text: String },
 }
@@ -111,7 +123,8 @@ pub enum StatusUpdate {
 ///
 /// This extends the interface of a standard tool call with bookkeeping information that
 /// allows the caller to send over non-llm generated parameters.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutopilotToolCall {
     /// Name
     pub name: String,
@@ -128,7 +141,8 @@ pub struct AutopilotToolCall {
 /// We should implement this as a type that has optional or mandatory fields as needed
 /// for each kind of tool, then implement TryFrom<AutopilotSideInfo> for each tool's side info type.
 /// This can fail if the correct information is not present.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutopilotSideInfo {
     /// The event ID of the ToolCall event (for correlating ToolResult).
     pub tool_call_event_id: Uuid,
@@ -144,7 +158,8 @@ pub struct AutopilotSideInfo {
 }
 
 /// Side info for optimization workflow tool (hidden from LLM).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct OptimizationWorkflowSideInfo {
     /// Polling interval in seconds (default: 60).
     #[serde(default = "default_poll_interval_secs")]
@@ -204,32 +219,37 @@ impl From<AutopilotSideInfo> for () {
     fn from(_: AutopilotSideInfo) -> Self {}
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutopilotToolResult {
     pub result: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallDecisionSource {
     Ui,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
     pub status: ToolCallAuthorizationStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallAuthorizationStatus {
     Approved,
     Rejected { reason: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutcome {
     Success(AutopilotToolResult),
@@ -268,39 +288,42 @@ pub struct CreateEventRequest {
 }
 
 /// Query parameters for listing events.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListEventsParams {
     /// Maximum number of events to return. Defaults to 20.
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Cursor for pagination: return events with id < before.
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<Uuid>,
 }
 
 /// Query parameters for listing sessions.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListSessionsParams {
     /// Maximum number of sessions to return. Defaults to 20.
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Offset for pagination.
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
 }
 
 /// Query parameters for streaming events.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StreamEventsParams {
     /// Resume streaming from this event ID (exclusive).
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_event_id: Option<Uuid>,
 }
@@ -320,16 +343,18 @@ pub struct ApproveAllToolCallsRequest {
 // =============================================================================
 
 /// Response from creating an event.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CreateEventResponse {
     pub event_id: Uuid,
     pub session_id: Uuid,
 }
 
 /// Response from listing events.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListEventsResponse {
     pub events: Vec<Event>,
     /// The most recent `message` event with role `user` in this session.
@@ -345,15 +370,17 @@ pub struct ListEventsResponse {
 }
 
 /// Response from listing sessions.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListSessionsResponse {
     pub sessions: Vec<Session>,
 }
 
 /// Response from approving all pending tool calls.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ApproveAllToolCallsResponse {
     /// Number of tool calls that were approved.
     pub approved_count: u32,

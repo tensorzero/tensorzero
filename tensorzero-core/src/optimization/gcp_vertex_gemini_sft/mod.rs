@@ -7,8 +7,9 @@ use url::Url;
 /// Initialized GCP Vertex Gemini SFT Config (per-job settings only).
 /// Provider-level settings (project_id, region, bucket_name, credentials, etc.)
 /// come from `provider_types.gcp_vertex_gemini.sft` in the gateway config.
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct GCPVertexGeminiSFTConfig {
     pub model: String,
     pub learning_rate_multiplier: Option<f64>,
@@ -22,8 +23,9 @@ pub struct GCPVertexGeminiSFTConfig {
 /// Uninitialized GCP Vertex Gemini SFT Config (per-job settings only).
 /// Provider-level settings (project_id, region, bucket_name, credentials, etc.)
 /// come from `provider_types.gcp_vertex_gemini.sft` in the gateway config.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "GCPVertexGeminiSFTConfig"))]
 pub struct UninitializedGCPVertexGeminiSFTConfig {
     pub model: String,
@@ -115,8 +117,9 @@ impl UninitializedGCPVertexGeminiSFTConfig {
 
 /// Minimal job handle for GCP Vertex Gemini SFT.
 /// All configuration needed for polling comes from provider_types at poll time.
-#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct GCPVertexGeminiSFTJobHandle {
     pub job_url: Url,
