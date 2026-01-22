@@ -1,7 +1,5 @@
 import * as React from "react";
-import { useMemo } from "react";
 import {
-  Home,
   Inferences,
   Episodes,
   Functions,
@@ -13,15 +11,10 @@ import {
   Playground,
   Model,
   Chat,
+  SidebarCollapse,
+  SidebarExpand,
 } from "~/components/icons/Icons";
-import { KeyRound } from "lucide-react";
-import { useSidebar } from "~/components/ui/sidebar";
-import { useActivePath } from "~/hooks/use-active-path";
-import { useAutopilotAvailable } from "~/context/autopilot-available";
-import { TensorZeroLogo } from "~/components/icons/Icons";
-import { Link } from "react-router";
-import type { IconProps } from "~/components/icons/Icons";
-
+import { KeyRound, LayoutGrid } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -30,12 +23,17 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarRail,
-  SidebarTrigger,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
+  useSidebar,
 } from "~/components/ui/sidebar";
+import { useActivePath } from "~/hooks/use-active-path";
+import { useAutopilotAvailable } from "~/context/autopilot-available";
+import { TensorZeroLogo } from "~/components/icons/Icons";
+import { Link } from "react-router";
+import type { IconProps } from "~/components/icons/Icons";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
 import { ReadOnlyBadge } from "./ReadOnlyBadge";
 
@@ -51,16 +49,6 @@ interface NavigationSection {
 }
 
 const navigation: NavigationSection[] = [
-  {
-    title: "Autopilot",
-    items: [
-      {
-        title: "Sessions",
-        url: "/autopilot",
-        icon: Chat,
-      },
-    ],
-  },
   {
     title: "Observability",
     items: [
@@ -87,28 +75,8 @@ const navigation: NavigationSection[] = [
     ],
   },
   {
-    title: "Optimization",
+    title: "Evaluations",
     items: [
-      {
-        title: "Supervised Fine-Tuning",
-        url: "/optimization/supervised-fine-tuning",
-        icon: SupervisedFineTuning,
-      },
-    ],
-  },
-  {
-    title: "Workflows",
-    items: [
-      {
-        title: "Playground",
-        url: "/playground",
-        icon: Playground,
-      },
-      {
-        title: "Datasets",
-        url: "/datasets",
-        icon: Dataset,
-      },
       {
         title: "Inference Evaluations",
         url: "/evaluations",
@@ -122,29 +90,33 @@ const navigation: NavigationSection[] = [
     ],
   },
   {
-    title: "Operations",
+    title: "Optimization",
     items: [
       {
-        title: "TensorZero API Keys",
-        url: "/api-keys",
-        icon: KeyRound,
+        title: "Supervised Fine-Tuning",
+        url: "/optimization/supervised-fine-tuning",
+        icon: SupervisedFineTuning,
+      },
+    ],
+  },
+  {
+    title: "Data",
+    items: [
+      {
+        title: "Datasets",
+        url: "/datasets",
+        icon: Dataset,
       },
     ],
   },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { state } = useSidebar();
+  const { state, toggleSidebar } = useSidebar();
   const activePathUtils = useActivePath();
   const autopilotAvailable = useAutopilotAvailable();
 
-  // Filter out Autopilot section if not available
-  const filteredNavigation = useMemo(() => {
-    if (autopilotAvailable) {
-      return navigation;
-    }
-    return navigation.filter((section) => section.title !== "Autopilot");
-  }, [autopilotAvailable]);
+  const filteredNavigation = navigation;
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -171,12 +143,38 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuItem className="list-none">
               <SidebarMenuButton
                 asChild
-                tooltip={state === "collapsed" ? "Dashboard" : undefined}
+                tooltip={state === "collapsed" ? "Overview" : undefined}
                 isActive={activePathUtils.isActive("/")}
               >
                 <Link to="/" className="flex items-center gap-2">
-                  <Home className="h-4 w-4" />
-                  {state === "expanded" && <span>Dashboard</span>}
+                  <LayoutGrid className="h-4 w-4" />
+                  {state === "expanded" && <span>Overview</span>}
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            {autopilotAvailable && (
+              <SidebarMenuItem className="list-none">
+                <SidebarMenuButton
+                  asChild
+                  tooltip={state === "collapsed" ? "Autopilot" : undefined}
+                  isActive={activePathUtils.isActive("/autopilot")}
+                >
+                  <Link to="/autopilot" className="flex items-center gap-2">
+                    <Chat className="h-4 w-4" />
+                    {state === "expanded" && <span>Autopilot</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+            <SidebarMenuItem className="list-none">
+              <SidebarMenuButton
+                asChild
+                tooltip={state === "collapsed" ? "Playground" : undefined}
+                isActive={activePathUtils.isActive("/playground")}
+              >
+                <Link to="/playground" className="flex items-center gap-2">
+                  <Playground className="h-4 w-4" />
+                  {state === "expanded" && <span>Playground</span>}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -209,33 +207,55 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
-        <SidebarGroup>
-          {state === "expanded" && <SidebarGroupLabel>Other</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenuItem className="list-none">
-              <SidebarMenuButton
-                asChild
-                tooltip={state === "collapsed" ? "Documentation ↗" : undefined}
-              >
-                <Link
-                  to="https://www.tensorzero.com/docs"
-                  className="flex items-center gap-2"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Documentation className="h-4 w-4" />
-                  {state === "expanded" && <span>Documentation ↗</span>}
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="relative">
         <ReadOnlyBadge />
         {state === "expanded" && <TensorZeroStatusIndicator />}
-        <SidebarTrigger className="justify-left mt-1 flex" />
+        <SidebarMenuItem className="list-none">
+          <SidebarMenuButton
+            asChild
+            tooltip={state === "collapsed" ? "API Keys" : undefined}
+            isActive={activePathUtils.isActive("/api-keys")}
+          >
+            <Link to="/api-keys" className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              {state === "expanded" && <span>API Keys</span>}
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem className="list-none">
+          <SidebarMenuButton
+            asChild
+            tooltip={state === "collapsed" ? "Docs ↗" : undefined}
+          >
+            <Link
+              to="https://www.tensorzero.com/docs"
+              className="flex w-full items-center gap-2"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Documentation className="h-4 w-4" />
+              {state === "expanded" && (
+                <>
+                  <span>Docs</span>
+                  <span className="ml-auto">↗</span>
+                </>
+              )}
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem className="list-none">
+          <SidebarMenuButton
+            tooltip={state === "collapsed" ? "Toggle sidebar" : undefined}
+            onClick={toggleSidebar}
+          >
+            {state === "expanded" ? (
+              <SidebarCollapse className="h-4 w-4" />
+            ) : (
+              <SidebarExpand className="h-4 w-4" />
+            )}
+          </SidebarMenuButton>
+        </SidebarMenuItem>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
