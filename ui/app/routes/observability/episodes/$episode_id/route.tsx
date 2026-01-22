@@ -45,7 +45,6 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import {
-  PageErrorContainer,
   PageErrorNotice,
   TableErrorNotice,
 } from "~/components/ui/error/ErrorContentPrimitives";
@@ -500,13 +499,11 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         }
         name={params.episode_id}
       />
-      <PageErrorContainer>
-        <PageErrorNotice
-          icon={AlertTriangle}
-          title="Error loading episode"
-          description={message}
-        />
-      </PageErrorContainer>
+      <PageErrorNotice
+        icon={AlertTriangle}
+        title="Error loading episode"
+        description={message}
+      />
     </PageLayout>
   );
 }
