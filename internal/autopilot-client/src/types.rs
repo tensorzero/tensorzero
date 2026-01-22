@@ -9,14 +9,37 @@ use serde::{Deserialize, Serialize};
 // Re-export types from tensorzero-types that InputMessage depends on
 use schemars::JsonSchema;
 pub use tensorzero_types::{
-    Base64File, File, InputMessage, InputMessageContent, ObjectStoragePointer, RawText, Role,
-    Template, Text, Thought, ToolCallWrapper, Unknown, UrlFile,
+    Base64File, File, ObjectStoragePointer, RawText, Role, Template, Text, Thought,
+    ToolCallWrapper, Unknown, UrlFile,
 };
 use uuid::Uuid;
 
 // =============================================================================
 // Core Types
 // =============================================================================
+
+/// Content block types allowed in autopilot event messages.
+/// Restricted to only Text blocks (no ToolCall, File, Template, etc.).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
+pub enum EventPayloadMessageContent {
+    Text(Text),
+}
+
+/// A message payload specific to autopilot events.
+/// Content is restricted to Text blocks only.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadMessage {
+    pub role: Role,
+    pub content: Vec<EventPayloadMessageContent>,
+}
 
 /// A session representing an autopilot conversation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -64,6 +87,28 @@ pub struct StreamUpdate {
     pub status: AutopilotStatus,
 }
 
+/// Error payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventPayloadError {
+    pub message: String,
+}
+
+/// Status update payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventPayloadStatusUpdate {
+    pub status_update: StatusUpdate,
+}
+
+/// Tool result payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventPayloadToolResult {
+    pub tool_call_event_id: Uuid,
+    pub outcome: ToolOutcome,
+}
+
 /// The payload of an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,19 +118,12 @@ pub struct StreamUpdate {
     ts(export, tag = "type", rename_all = "snake_case")
 )]
 pub enum EventPayload {
-    Message(InputMessage),
-    Error {
-        message: String,
-    },
-    StatusUpdate {
-        status_update: StatusUpdate,
-    },
-    ToolCall(AutopilotToolCall),
-    ToolCallAuthorization(ToolCallAuthorization),
-    ToolResult {
-        tool_call_event_id: Uuid,
-        outcome: ToolOutcome,
-    },
+    Message(EventPayloadMessage),
+    Error(EventPayloadError),
+    StatusUpdate(EventPayloadStatusUpdate),
+    ToolCall(EventPayloadToolCall),
+    ToolCallAuthorization(EventPayloadToolCallAuthorization),
+    ToolResult(EventPayloadToolResult),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -93,12 +131,12 @@ pub enum EventPayload {
 
 impl EventPayload {
     /// Returns true if this payload type can be written by API clients.
-    /// System-generated types (StatusUpdate, ToolCall) return false.
+    /// System-generated types (e.g. AutopilotEventPayloadStatusUpdate) return false.
     pub fn is_client_writable(&self) -> bool {
         matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
             || matches!(
                 self,
-                EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult { .. }
+                EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult(_)
             )
     }
 }
@@ -125,7 +163,7 @@ pub enum StatusUpdate {
 /// allows the caller to send over non-llm generated parameters.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutopilotToolCall {
+pub struct EventPayloadToolCall {
     /// Name
     pub name: String,
     /// Arguments
@@ -234,7 +272,7 @@ pub enum ToolCallDecisionSource {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallAuthorization {
+pub struct EventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
     pub status: ToolCallAuthorizationStatus,
