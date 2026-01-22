@@ -2617,7 +2617,7 @@ async fn deny_timeout_with_default_global_timeout() {
 
     assert_eq!(
         err.to_string(),
-        "The `timeouts.non_streaming.total_ms` value `99999999` is greater than `gateway.global_outbound_http_timeout_ms`: `300000`"
+        "The `timeouts.non_streaming.total_ms` value `99999999` is greater than `gateway.global_outbound_http_timeout_ms`: `900000`"
     );
 }
 
