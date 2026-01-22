@@ -10,12 +10,13 @@ use crate::db::feedback::{FeedbackBounds, FeedbackBoundsByType, FeedbackQueries}
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetFeedbackBoundsResponse {
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub first_id: Option<Uuid>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub last_id: Option<Uuid>,
     pub by_type: FeedbackBoundsByType,
 }

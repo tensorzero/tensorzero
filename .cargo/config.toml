@@ -111,6 +111,8 @@ watch-e2e = "watch -x run-e2e"
 tsbuild = [
     "test",
     "export_bindings",
+    "--features",
+    "ts-bindings",
     "-p",
     "tensorzero-core",
     "-p",

@@ -110,6 +110,7 @@ pub struct E2ETestProviders {
     pub extra_body_inference: Vec<E2ETestProvider>,
     pub reasoning_inference: Vec<E2ETestProvider>,
     pub reasoning_usage_inference: Vec<E2ETestProvider>,
+    pub cache_input_tokens_inference: Vec<E2ETestProvider>,
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials_shorthand: Vec<E2ETestProvider>,
@@ -570,6 +571,22 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_cache_input_tokens_non_streaming() {
+            let providers = $func().await.cache_input_tokens_inference;
+            for provider in providers {
+                $crate::providers::commonv2::cache_input_tokens::test_cache_input_tokens_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_cache_input_tokens_streaming() {
+            let providers = $func().await.cache_input_tokens_inference;
+            for provider in providers {
+                $crate::providers::commonv2::cache_input_tokens::test_cache_input_tokens_streaming_with_provider(provider).await;
+            }
+        }
+
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
@@ -787,7 +804,7 @@ model = "responses-gpt-4o-mini-2024-07-18"
 
 [functions.pdf_test.variants.gcp_vertex_gemini]
 type = "chat_completion"
-model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite"
 
 [functions.pdf_test.variants.gcp_vertex_anthropic]
 type = "chat_completion"
@@ -795,7 +812,7 @@ model = "gcp_vertex_anthropic::projects/tensorzero-public/locations/global/publi
 
 [functions.pdf_test.variants.google_ai_studio]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
+model = "google_ai_studio_gemini::gemini-2.5-flash-lite"
 
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
@@ -856,7 +873,7 @@ model = "anthropic::claude-haiku-4-5"
 
 [functions.image_test.variants.google_ai_studio]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
+model = "google_ai_studio_gemini::gemini-2.5-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
@@ -2060,7 +2077,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             .get("temperature")
     } else if provider
         .variant_name
-        .contains("google-ai-studio-gemini-flash-8b")
+        .contains("google-ai-studio-gemini-flash-lite")
         || provider.variant_name.contains("gcp-vertex-gemini-flash")
     {
         raw_request_val
@@ -2275,7 +2292,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             .get("temperature")
     } else if provider
         .variant_name
-        .contains("google-ai-studio-gemini-flash-8b")
+        .contains("google-ai-studio-gemini-flash-lite")
         || provider.variant_name.contains("gcp-vertex-gemini-flash")
     {
         raw_request_val
@@ -4075,8 +4092,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 pub async fn test_inference_params_dynamic_credentials_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
-    if provider.model_name.contains("gemini-2.5-pro") {
+    // Gemini 2.5 models don't support penalty parameters
+    if provider.model_name.contains("gemini-2.5") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -4333,8 +4350,8 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
-    if provider.model_name.contains("gemini-2.5-pro") {
+    // Gemini 2.5 models don't support penalty parameters
+    if provider.model_name.contains("gemini-2.5") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -6553,9 +6570,9 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         return;
     }
 
-    // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
+    // NOTE - Gemini 2.5 produces unexpected behavior here (empty content or 'UNEXPECTED_TOOL_CALL')
     // See https://github.com/tensorzero/tensorzero/issues/2329
-    if provider.model_name == "gcp-gemini-2.5-pro" {
+    if provider.model_name.contains("gemini-2.5") {
         return;
     }
 
@@ -6806,9 +6823,9 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
-    // in streaming mode (since we don't have "unknown" streaming chunks)
-    if provider.model_name.contains("gemini-2.5-pro") {
+    // Gemini 2.5 produces unexpected behavior for this test (empty content or 'executableCode' blocks)
+    // We don't support 'executableCode' in streaming mode (since we don't have "unknown" streaming chunks)
+    if provider.model_name.contains("gemini-2.5") {
         return;
     }
 
@@ -11539,8 +11556,12 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         return;
     }
 
-    // The OpenAI Responses API has a minimum value of 16
-    let max_tokens = if provider.model_name.starts_with("responses-") {
+    // The OpenAI Responses API has a minimum value of 16.
+    // Gemini 2.5 Flash uses internal thinking that can consume tokens before producing output,
+    // so we need a higher max_tokens value.
+    let max_tokens = if provider.model_name.starts_with("responses-")
+        || provider.model_name.contains("gemini-2.5-flash")
+    {
         16
     } else {
         1
@@ -11555,6 +11576,28 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     // Include randomness in the prompt to force a cache miss for the first request
     let randomness = Uuid::now_v7();
+
+    // Try to disable thinking to avoid token consumption from internal reasoning.
+    // Anthropic providers don't support `thinking_budget_tokens: 0` (minimum is 1024),
+    // so we omit it for those providers - not including the parameter disables thinking.
+    let is_anthropic_provider = matches!(
+        provider.model_provider_name.as_str(),
+        "anthropic" | "gcp_vertex_anthropic" | "aws_bedrock"
+    );
+    let params = if is_anthropic_provider {
+        json!({
+            "chat_completion": {
+                "max_tokens": max_tokens
+            }
+        })
+    } else {
+        json!({
+            "chat_completion": {
+                "max_tokens": max_tokens,
+                "thinking_budget_tokens": 0
+            }
+        })
+    };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -11572,11 +11615,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         "stream": false,
         "tags": {"foo": "bar"},
         "cache_options": {"enabled": "on", "lookback_s": 10},
-        "params": {
-            "chat_completion": {
-                "max_tokens": max_tokens
-            }
-        },
+        "params": params,
         "extra_headers": extra_headers.extra_headers,
     });
     if provider.variant_name.contains("openai") && provider.variant_name.contains("o1") {

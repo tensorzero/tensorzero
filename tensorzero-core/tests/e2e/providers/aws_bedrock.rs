@@ -93,6 +93,25 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    // Cache providers - use Claude Haiku 4.5 which supports prompt caching on AWS Bedrock
+    // (Claude 3 Haiku does not support caching on Bedrock)
+    let cache_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "aws-bedrock".to_string(),
+            model_name: "claude-haiku-4-5-aws-bedrock".into(),
+            model_provider_name: "aws_bedrock".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "aws-bedrock".to_string(),
+            model_name: "nova-lite-v1".into(),
+            model_provider_name: "aws_bedrock".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
     // Dynamic region provider - passes region at request time
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
@@ -103,12 +122,13 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     E2ETestProviders {
-        simple_inference: simple_inference_providers,
+        simple_inference: simple_inference_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         // TODO (#5680): we disabled AWS tests on JSON functions + reasoning because the prefill breaks
         reasoning_inference: vec![claude_thinking_provider.clone()],
         reasoning_usage_inference: vec![claude_thinking_provider],
+        cache_input_tokens_inference: cache_providers,
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,

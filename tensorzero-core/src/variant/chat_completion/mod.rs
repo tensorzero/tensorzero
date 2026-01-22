@@ -46,8 +46,9 @@ use super::{
 /// If we don't have a schema, then we create a single variable corresponding to the template
 /// kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
 /// string contents of the input block.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
     pub schema: Option<JSONSchema>,
@@ -60,8 +61,9 @@ pub struct TemplateWithSchema {
     pub legacy_definition: bool,
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ChatCompletionConfig {
     weight: Option<f64>,
     model: Arc<str>,
@@ -77,9 +79,9 @@ pub struct ChatCompletionConfig {
     pub(crate) inference_params_v2: ChatCompletionInferenceParamsV2,
     json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     retries: RetryConfig,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     extra_body: Option<ExtraBodyConfig>,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     extra_headers: Option<ExtraHeadersConfig>,
     #[serde(skip)]
     _private: (),
@@ -204,8 +206,9 @@ impl ChatCompletionConfig {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
     user: Option<ResolvedTomlPathData>,
@@ -213,15 +216,17 @@ pub struct UninitializedInputWrappers {
     system: Option<ResolvedTomlPathData>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatTemplate {
     pub path: ResolvedTomlPathData,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
     /// Internal map of chat templates, made public for GEPA optimizer integration.
@@ -229,8 +234,9 @@ pub struct UninitializedChatTemplates {
     pub inner: HashMap<String, UninitializedChatTemplate>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
@@ -249,16 +255,16 @@ pub struct UninitializedChatCompletionConfig {
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
     pub stop_sequences: Option<Vec<String>>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<ServiceTier>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
     #[serde(default)]
@@ -266,10 +272,10 @@ pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub retries: RetryConfig,
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
@@ -877,6 +883,7 @@ mod tests {
     use indexmap::IndexMap;
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     use super::*;
 
@@ -2015,11 +2022,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     json_result.model_inference_results[0].model_provider_name,
-                    "json_provider".into()
+                    Arc::<str>::from("json_provider")
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].model_name,
-                    "json".into()
+                    Arc::<str>::from("json")
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
@@ -2147,11 +2154,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     json_result.model_inference_results[0].model_provider_name,
-                    "json_provider".into()
+                    Arc::<str>::from("json_provider")
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].model_name,
-                    "json".into()
+                    Arc::<str>::from("json")
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
@@ -2272,11 +2279,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     json_result.model_inference_results[0].model_provider_name,
-                    "json_provider".into()
+                    Arc::<str>::from("json_provider")
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].model_name,
-                    "json".into()
+                    Arc::<str>::from("json")
                 );
                 let expected_inference_params = InferenceParams {
                     chat_completion: ChatCompletionInferenceParams {
@@ -3000,7 +3007,7 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.model, "gpt-4".into());
+        assert_eq!(exported.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.weight, Some(0.8));
         assert_eq!(exported.temperature, Some(0.7));
         assert_eq!(exported.top_p, Some(0.9));

@@ -170,6 +170,7 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
+      TENSORZERO_VALKEY_URL: redis://valkey:6379
       TENSORZERO_MINIO_URL: http://minio:9000
       TENSORZERO_TEMPO_URL: http://tempo:3200
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
@@ -233,6 +234,8 @@ services:
       provider-proxy:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      valkey:
         condition: service_healthy
       otel-collector:
         condition: service_started

@@ -215,7 +215,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.gcp-vertex-gemini-flash]
 type = "chat_completion"
-model = "gemini-2.0-flash-001"
+model = "gcp-gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -223,7 +223,7 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp-vertex-gemini-flash-strict]
 type = "chat_completion"
-model = "gemini-2.0-flash-001"
+model = "gcp-gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -231,18 +231,10 @@ json_mode = "strict"
 
 [functions.json_success.variants.gcp-vertex-gemini-flash-implicit]
 type = "chat_completion"
-model = "gemini-2.0-flash-001"
+model = "gcp-gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "tool"
-max_tokens = 100
-
-[functions.json_success.variants.gcp-vertex-gemini-flash-lite-tuned]
-type = "chat_completion"
-model = "gemini-2.0-flash-lite-tuned"
-system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
-user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-json_mode = "on"
 max_tokens = 100
 
 [functions.json_success.variants.gcp-vertex-gemini-pro]
@@ -295,25 +287,25 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "tool"
 max_tokens = 100
 
-[functions.json_success.variants.google-ai-studio-gemini-flash-8b]
+[functions.json_success.variants.google-ai-studio-gemini-flash-lite]
 type = "chat_completion"
-model = "gemini-2.0-flash-lite"
+model = "gemini-2.5-flash-lite"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
 max_tokens = 100
 
-[functions.json_success.variants.google-ai-studio-gemini-flash-8b-strict]
+[functions.json_success.variants.google-ai-studio-gemini-flash-lite-strict]
 type = "chat_completion"
-model = "gemini-2.0-flash-lite"
+model = "gemini-2.5-flash-lite"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
 
-[functions.json_success.variants.google-ai-studio-gemini-flash-8b-implicit]
+[functions.json_success.variants.google-ai-studio-gemini-flash-lite-implicit]
 type = "chat_completion"
-model = "gemini-2.0-flash-lite"
+model = "gemini-2.5-flash-lite"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "tool"
@@ -673,7 +665,7 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp_vertex_gemini_flash_json_mode_off]
 type = "chat_completion"
-model = "gemini-2.0-flash-001"
+model = "gcp-gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -697,7 +689,7 @@ max_tokens = 100
 
 [functions.json_success.variants.google_ai_studio_gemini_flash_8b_json_mode_off]
 type = "chat_completion"
-model = "gemini-2.0-flash-lite"
+model = "gemini-2.5-flash-lite"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
