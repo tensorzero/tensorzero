@@ -224,7 +224,11 @@ export function SectionAsyncErrorState({
 
   let message: string;
   if (isRouteErrorResponse(error)) {
-    message = error.data ?? `${error.status} ${error.statusText}`;
+    if (typeof error.data === "string") {
+      message = error.data;
+    } else {
+      message = `${error.status} ${error.statusText}`;
+    }
   } else if (error instanceof Error) {
     message = error.message;
   } else {
