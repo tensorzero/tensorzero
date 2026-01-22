@@ -14,6 +14,7 @@ use durable_tools::{
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
@@ -364,8 +365,9 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
 }
 
 /// This is the type that we write in ToolOutcome::Failure for tool errors.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "kind")]
 pub enum ToolFailure {
     Control { message: String },
     Serialization { message: String },
@@ -383,8 +385,8 @@ mod tests {
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
         CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-        GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
-        ListDatapointsRequest, ListInferencesRequest, UpdateDatapointRequest,
+        GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
+        InferenceResponse, ListDatapointsRequest, ListInferencesRequest, UpdateDatapointRequest,
         UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
@@ -483,6 +485,12 @@ mod tests {
             async fn list_inferences(
                 &self,
                 request: ListInferencesRequest,
+            ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+            /// Get specific inferences by their IDs.
+            async fn get_inferences(
+                &self,
+                request: GetInferencesRequest,
             ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
             async fn launch_optimization_workflow(

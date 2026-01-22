@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use futures::future::try_join_all;
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
@@ -23,16 +22,15 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
         OptimizationJobInfo, OptimizerOutput,
-        dicl::{DiclOptimizationConfig, DiclOptimizationJobHandle},
+        dicl::{DEPRECATED_DEFAULT_MODEL, DiclOptimizationConfig, DiclOptimizationJobHandle},
     },
-    rate_limiting::ScopeInfo,
+    rate_limiting::{RateLimitingManager, ScopeInfo},
     stored_inference::RenderedSample,
     variant::dicl::UninitializedDiclConfig,
 };
 
 use crate::{JobHandle, Optimizer};
 
-#[async_trait]
 impl Optimizer for DiclOptimizationConfig {
     type Handle = DiclOptimizationJobHandle;
 
@@ -45,6 +43,16 @@ impl Optimizer for DiclOptimizationConfig {
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
+        // Warn if using deprecated default model
+        if self.model.as_ref() == DEPRECATED_DEFAULT_MODEL {
+            tracing::warn!(
+                "DICL optimization is using the deprecated default model `{}`. \
+                 Please specify the `model` field explicitly. \
+                 This field will be required in a future release. (#5616)",
+                DEPRECATED_DEFAULT_MODEL
+            );
+        }
+
         // Validate training examples
         validate_train_examples(&train_examples)?;
 
@@ -173,7 +181,6 @@ impl Optimizer for DiclOptimizationConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for DiclOptimizationJobHandle {
     async fn poll(
         &self,
@@ -346,14 +353,20 @@ async fn process_embedding_batch(
 
     // Create InferenceClients context for the embedding model
     let deferred_tasks = tokio_util::task::TaskTracker::new();
+    let rate_limiting_config = Arc::new(config.rate_limiting.clone());
+    let postgres_connection_info = PostgresConnectionInfo::Disabled;
+    let rate_limiting_manager = Arc::new(RateLimitingManager::new(
+        rate_limiting_config.clone(),
+        postgres_connection_info.clone(),
+    ));
     let clients = InferenceClients {
         http_client: client.clone(),
         credentials: Arc::new(credentials.clone()),
         clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        postgres_connection_info,
         cache_options: CacheOptions::default(),
         tags: tags.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        rate_limiting_manager,
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: Default::default(),
         deferred_tasks: deferred_tasks.clone(),
@@ -361,6 +374,7 @@ async fn process_embedding_batch(
         scope_info: ScopeInfo::new(tags.clone(), None),
         relay: None,
         include_raw_usage: false,
+        include_raw_response: false,
     };
 
     let response = embedding_model_config
@@ -633,7 +647,7 @@ mod tests {
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
             StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
-        jsonschema_util::StaticJSONSchema,
+        jsonschema_util::JSONSchema,
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
@@ -667,6 +681,7 @@ mod tests {
                     timeout_ms: None,
                     provider_name: Arc::from("dummy"),
                     extra_body: None,
+                    extra_headers: None,
                 },
             );
             let embedding_model_config = EmbeddingModelConfig {
@@ -1075,7 +1090,7 @@ mod tests {
     }
 
     fn create_test_json_function_config() -> FunctionConfig {
-        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let output_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}
@@ -1098,7 +1113,7 @@ mod tests {
     }
 
     fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
-        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let output_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}

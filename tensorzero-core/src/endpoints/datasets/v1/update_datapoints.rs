@@ -16,7 +16,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input, InputExt};
-use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
+use crate::jsonschema_util::JSONSchema;
 use crate::tool::apply_dynamic_tool_params_update_to_tool_call_config;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -305,25 +305,25 @@ async fn prepare_json_update(
 
     // Validate and update output_schema if provided
     let output_schema = if let Some(new_output_schema) = update.output_schema {
-        // Validate the new schema by converting it to DynamicJSONSchema
+        // Validate the new schema by converting it to JSONSchema
         let schema_str = serde_json::to_string(&new_output_schema).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize output_schema: {e}"),
             })
         })?;
-        let validated_schema = DynamicJSONSchema::parse_from_str(&schema_str)?;
+        let validated_schema = JSONSchema::parse_from_str(&schema_str)?;
         // Ensure the schema is valid by forcing compilation
         validated_schema.ensure_valid().await?;
         updated_datapoint.output_schema = new_output_schema;
         validated_schema
     } else {
-        // Use existing schema, convert it to DynamicJSONSchema
+        // Use existing schema, convert it to JSONSchema
         let schema_str = serde_json::to_string(&updated_datapoint.output_schema).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize existing output_schema: {e}"),
             })
         })?;
-        let schema = DynamicJSONSchema::parse_from_str(&schema_str)?;
+        let schema = JSONSchema::parse_from_str(&schema_str)?;
         // Ensure the schema is valid by forcing compilation
         schema.ensure_valid().await?;
         schema
@@ -332,11 +332,7 @@ async fn prepare_json_update(
     // Validate the output against the output schema. If the output is invalid, we only store the raw output.
     if let Some(new_output) = update.output {
         updated_datapoint.output = match new_output {
-            Some(output) => Some(
-                output
-                    .into_json_inference_output(JsonSchemaRef::Dynamic(&output_schema))
-                    .await,
-            ),
+            Some(output) => Some(output.into_json_inference_output(&output_schema).await),
             None => None,
         };
     }
@@ -364,7 +360,7 @@ async fn convert_input_to_stored_input(
     match input {
         None => Ok(None),
         Some(input) => {
-            function_config.validate_input(&input)?;
+            function_config.validate_input(&input).await?;
 
             // If the input file is already in ObjectStorage format, do not resolve; and directly skip into StoredInput.
             // Otherwise, if the file needs to be fetched (because it's new), fetch it and convert to StoredInput.
@@ -526,7 +522,7 @@ mod tests {
         JsonInferenceOutput, ObjectStoragePointer, Role, StoredInputMessage,
         StoredInputMessageContent, Text,
     };
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice};
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
@@ -821,7 +817,7 @@ mod tests {
                 Arc::new(FunctionConfig::Json(FunctionConfigJson {
                     variants: HashMap::new(),
                     schemas: SchemaData::default(),
-                    output_schema: StaticJSONSchema::from_value(json!({
+                    output_schema: JSONSchema::from_value(json!({
                         "type": "object",
                         "properties": {"value": {"type": "string"}},
                         "required": ["value"],

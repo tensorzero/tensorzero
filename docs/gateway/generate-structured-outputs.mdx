@@ -157,7 +157,7 @@ JsonInferenceResponse(
     ),
     usage=Usage(input_tokens=252, output_tokens=26),
     finish_reason=<FinishReason.STOP: 'stop'>,
-    original_response=None
+    raw_response=None
 )
 ```
 
@@ -465,7 +465,7 @@ routing = ["anthropic"]
 
 [models.claude_structured.providers.anthropic]
 type = "anthropic"
-model_name = "claude-sonnet-4-5-20250929"
+model_name = "claude-sonnet-4-5"
 beta_structured_outputs = true
 ```
 

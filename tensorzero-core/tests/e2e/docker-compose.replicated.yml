@@ -120,6 +120,17 @@ services:
       - "5778:5778"
       - "9411:9411"
 
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+    command: valkey-server --appendonly no
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
   gateway-postgres-migrations:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     environment:
@@ -138,7 +149,7 @@ services:
       test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_period: 5s
 
   # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
@@ -198,5 +209,5 @@ services:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_period: 5s # Give the script time to start

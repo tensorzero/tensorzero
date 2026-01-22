@@ -7,6 +7,10 @@ import {
 import type { ReactNode } from "react";
 import { cn } from "~/utils/common";
 import {
+  Breadcrumbs,
+  type BreadcrumbSegment,
+} from "~/components/layout/Breadcrumbs";
+import {
   PageCount,
   SectionCount,
   type CountValue,
@@ -29,62 +33,53 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 );
 
 interface PageHeaderProps {
-  label?: string;
+  eyebrow?: ReactNode;
   heading?: string;
   name?: string;
   count?: CountValue;
-  icon?: ReactNode;
-  iconBg?: string;
-  children?: ReactNode;
   tag?: ReactNode;
+  children?: ReactNode;
 }
 
-const PageHeader: React.FC<PageHeaderProps> = ({
+function PageHeader({
+  eyebrow,
   heading,
-  label,
   name,
   count,
-  icon,
-  iconBg = "bg-none",
-  children,
   tag,
-}: PageHeaderProps) => {
+  children,
+}: PageHeaderProps) {
+  const title = heading ?? name;
+
   return (
     <div className="flex flex-col">
-      <div className="flex flex-col gap-2">
-        {label !== undefined && (
-          <div className="text-fg-secondary flex items-center gap-1.5 text-sm font-normal">
-            {icon && (
-              <span
-                className={`${iconBg} flex size-5 items-center justify-center rounded-sm`}
-              >
-                {icon}
-              </span>
-            )}
-
-            {label}
-          </div>
+      <div className="flex flex-col gap-3">
+        {eyebrow && (
+          <div className="text-fg-secondary text-sm font-normal">{eyebrow}</div>
         )}
-        <div className="flex items-center gap-2">
-          {heading !== undefined && (
-            <h1 className="text-2xl font-medium">{heading}</h1>
-          )}
-          {name !== undefined && (
-            <span className="font-mono text-2xl leading-none font-medium">
-              {name}
-            </span>
+        <div>
+          {title && (
+            <h1
+              className={cn(
+                "inline align-middle text-2xl font-medium",
+                !heading && name && "font-mono",
+              )}
+            >
+              {title}
+            </h1>
           )}
           {count !== undefined && <PageCount count={count} />}
-
-          {tag}
+          {tag && (
+            <span className="ml-3 inline-flex items-center align-middle">
+              {tag}
+            </span>
+          )}
         </div>
       </div>
-
-      {/* TODO Use wrapper for this instead - feels strange here */}
       {children && <div className="mt-8 flex flex-col gap-8">{children}</div>}
     </div>
   );
-};
+}
 
 const SectionsGroup: React.FC<React.ComponentProps<"div">> = ({
   children,
@@ -106,44 +101,49 @@ const SectionLayout: React.FC<React.ComponentProps<"section">> = ({
   </section>
 );
 
-interface SectionHeaderProps extends React.PropsWithChildren {
+interface SectionHeaderProps {
   heading: string;
   count?: CountValue;
-  badge?: {
-    name: string;
-    tooltip: string;
-  };
+  badge?: { name: string; tooltip: string };
+  children?: ReactNode;
 }
 
-const SectionHeader: React.FC<SectionHeaderProps> = ({
+function SectionHeader({
   heading,
   count,
   badge,
   children,
-}) => (
-  <h2 className="flex items-center gap-2 text-xl font-medium">
-    {heading}
+}: SectionHeaderProps) {
+  return (
+    <h2 className="flex items-center gap-2 text-xl font-medium">
+      {heading}
+      {count !== undefined && <SectionCount count={count} />}
+      {badge && (
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="ml-1 px-2 py-0.5 text-xs font-medium"
+            >
+              {badge.name}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="max-w-xs">{badge.tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {children}
+    </h2>
+  );
+}
 
-    {count !== undefined && <SectionCount count={count} />}
-
-    {badge && (
-      <Tooltip delayDuration={0}>
-        <TooltipTrigger asChild>
-          <Badge
-            variant="outline"
-            className="ml-1 px-2 py-0.5 text-xs font-medium"
-          >
-            {badge.name}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="max-w-xs">{badge.tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    )}
-
-    {children}
-  </h2>
-);
-
-export { PageHeader, SectionHeader, SectionLayout, SectionsGroup, PageLayout };
+export {
+  PageHeader,
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+  PageLayout,
+  Breadcrumbs,
+  type BreadcrumbSegment,
+};

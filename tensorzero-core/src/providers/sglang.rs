@@ -45,8 +45,9 @@ use super::openai::{
 const PROVIDER_NAME: &str = "SGLang";
 pub const PROVIDER_TYPE: &str = "sglang";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct SGLangProvider {
     model_name: String,
     api_base: Url,
@@ -390,7 +391,7 @@ fn stream_sglang(
                 Err(e) => {
                     let message = e.to_string();
                     let mut raw_response = None;
-                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = e {
+                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = *e {
                         raw_response = resp.text().await.ok();
                     }
                     yield Err(ErrorDetails::InferenceServer {
@@ -790,6 +791,7 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,

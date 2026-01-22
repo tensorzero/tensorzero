@@ -52,7 +52,7 @@ DICL tends to work best when:
 
 <Tip>
 
-You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/optimization/dicl/) of this guide on GitHub.
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/optimization/dynamic-in-context-learning-dicl) of this guide on GitHub.
 
 </Tip>
 <Steps>
@@ -288,6 +288,10 @@ Configure DICL optimization by creating a `DICLOptimizationConfig` object with t
   Name to use for the DICL variant.
 </ParamField>
 
+<ParamField body="model" type="str">
+  Model to use for the DICL variant.
+</ParamField>
+
 {/* Optional Parameters */}
 
 <ParamField body="append_to_existing_variants" type="bool" default={false}>
@@ -309,8 +313,4 @@ Configure DICL optimization by creating a `DICLOptimizationConfig` object with t
 
 <ParamField body="max_concurrency" type="int" default={10}>
   Maximum concurrent embedding requests.
-</ParamField>
-
-<ParamField body="model" type="str" default="openai::gpt-5-mini">
-  Model to use for the DICL variant.
 </ParamField>

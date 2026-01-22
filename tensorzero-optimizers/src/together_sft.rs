@@ -1,6 +1,5 @@
 //! Together Supervised Fine-Tuning (SFT) optimizer implementation
 
-use async_trait::async_trait;
 use std::{borrow::Cow, collections::HashMap, fmt::Display, io::Write};
 
 use futures::future::try_join_all;
@@ -128,7 +127,6 @@ struct TogetherCreateJobRequest {
     pub hf_output_repo_name: Option<String>,
 }
 
-#[async_trait]
 impl Optimizer for TogetherSFTConfig {
     type Handle = TogetherSFTJobHandle;
 
@@ -281,7 +279,6 @@ impl Optimizer for TogetherSFTConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for TogetherSFTJobHandle {
     async fn poll(
         &self,

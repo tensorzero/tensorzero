@@ -305,7 +305,7 @@ pub struct TensorzeroRequestBuilder<'a> {
 #[pin_project]
 pub struct TensorZeroEventSource {
     #[pin]
-    stream: Pin<Box<dyn Stream<Item = Result<Event, ReqwestEventSourceError>> + Send>>,
+    stream: Pin<Box<dyn Stream<Item = Result<Event, Box<ReqwestEventSourceError>>> + Send>>,
     ticket: LimitedClientTicket<'static>,
     span: Span,
     // We deliberately hold this span across the entire lifetime of the event source stream,
@@ -314,7 +314,7 @@ pub struct TensorZeroEventSource {
 }
 
 impl Stream for TensorZeroEventSource {
-    type Item = Result<Event, reqwest_eventsource::Error>;
+    type Item = Result<Event, Box<reqwest_eventsource::Error>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -373,6 +373,24 @@ impl http_body::Body for TensorzeroBodyWrapper {
     }
 }
 
+#[pin_project]
+/// A wrapper over a bytes stream that holds on to a `LimitedClientTicket`
+/// We use this to extend the lifetime of our ticket until the stream is fully consumed
+pub struct TensorzeroBytesStream {
+    #[pin]
+    inner: std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>>,
+    /// Held to keep the ticket alive until the stream is dropped
+    ticket: LimitedClientTicket<'static>,
+}
+
+impl Stream for TensorzeroBytesStream {
+    type Item = Result<bytes::Bytes, reqwest::Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.project().inner.poll_next(cx)
+    }
+}
+
 impl TensorzeroResponseWrapper {
     pub fn status(&self) -> StatusCode {
         self.response.status()
@@ -399,6 +417,14 @@ impl TensorzeroResponseWrapper {
 
     pub async fn bytes(self) -> Result<bytes::Bytes, reqwest::Error> {
         self.response.bytes().await
+    }
+
+    /// Returns a stream of bytes, preserving our `LimitedClientTicket` until the stream is fully consumed
+    pub fn bytes_stream(self) -> TensorzeroBytesStream {
+        TensorzeroBytesStream {
+            inner: Box::pin(self.response.bytes_stream()),
+            ticket: self.ticket,
+        }
     }
 
     /// Converts this `TensorzeroResponseWrapper` into an `http::Response<TensorzeroBodyWrapper>`.
@@ -521,7 +547,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         self = self.with_otlp_headers();
         let event_source = self.builder.eventsource()?;
         Ok(TensorZeroEventSource {
-            stream: Box::pin(event_source),
+            stream: Box::pin(event_source.map(|r| r.map_err(Box::new))),
             ticket: self.ticket.into_owned(),
             span: tensorzero_h2_workaround_span(),
             tensorzero_external_span: tracing::debug_span!(
@@ -552,7 +578,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         let stream = response.bytes_stream().eventsource().map(|event| {
             event
                 .map(Event::Message)
-                .map_err(ReqwestEventSourceError::from)
+                .map_err(|e| Box::new(ReqwestEventSourceError::from(e)))
         });
         // Emit an initial Open event to mirror `reqwest_eventsource::EventSource` behavior.
         let stream = futures::stream::once(async { Ok(Event::Open) }).chain(stream);
@@ -671,9 +697,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 
 // This is set high enough that it should never be hit for a normal model response.
 // Users can customize it via `gateway.global_outbound_http_timeout_ms` in the config file.
-pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(5 * 60);
-pub const DEFAULT_HTTP_CLIENT_TIMEOUT_STD: std::time::Duration =
-    std::time::Duration::from_secs(5 * 60);
+pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(15 * 60);
 
 fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error> {
     let mut http_client_builder = Client::builder()
@@ -800,7 +824,7 @@ mod tests {
             match event {
                 Ok(_) => {}
                 Err(e) => {
-                    if matches!(e, reqwest_eventsource::Error::StreamEnded) {
+                    if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
                     panic!("Error in streaming response: {e:?}");

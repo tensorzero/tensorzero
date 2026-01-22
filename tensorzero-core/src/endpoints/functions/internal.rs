@@ -23,8 +23,9 @@ pub struct MetricsQueryParams {
 }
 
 /// Response containing metrics with feedback statistics
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MetricsWithFeedbackResponse {
     /// Metrics with feedback statistics
     pub metrics: Vec<MetricWithFeedback>,
@@ -103,8 +104,9 @@ pub struct VariantPerformancesQueryParams {
 }
 
 /// Response containing variant performance statistics
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VariantPerformancesResponse {
     /// Performance statistics for each (variant, time_period) combination
     pub performances: Vec<VariantPerformanceRow>,

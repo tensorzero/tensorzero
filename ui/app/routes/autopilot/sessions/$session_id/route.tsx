@@ -16,7 +16,7 @@ import {
   type RouteHandle,
 } from "react-router";
 import { AlertCircle, Loader2, Plus } from "lucide-react";
-import { PageHeader } from "~/components/layout/PageLayout";
+import { PageHeader, Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
@@ -25,7 +25,7 @@ import { ChatInput } from "~/components/autopilot/ChatInput";
 import { logger } from "~/utils/logger";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
-import type { Event } from "~/types/tensorzero";
+import type { AutopilotStatus, Event } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { ErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 
@@ -46,6 +46,7 @@ export type EventsData = {
   events: Event[];
   hasMoreEvents: boolean;
   pendingToolCalls: Event[];
+  status: AutopilotStatus;
 };
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -62,6 +63,7 @@ export async function loader({ params }: Route.LoaderArgs) {
         events: [] as Event[],
         hasMoreEvents: false,
         pendingToolCalls: [] as Event[],
+        status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
     };
@@ -87,7 +89,12 @@ export async function loader({ params }: Route.LoaderArgs) {
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-      return { events, hasMoreEvents, pendingToolCalls };
+      return {
+        events,
+        hasMoreEvents,
+        pendingToolCalls,
+        status: response.status,
+      };
     });
 
   return {
@@ -155,6 +162,7 @@ function EventStreamContent({
   onOptimisticMessagesChange,
   scrollContainerRef,
   onLoaded,
+  onStatusChange,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -163,11 +171,13 @@ function EventStreamContent({
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   onLoaded: () => void;
+  onStatusChange: (status: AutopilotStatus) => void;
 }) {
   const {
     events: initialEvents,
     hasMoreEvents: initialHasMore,
     pendingToolCalls: initialPendingToolCalls,
+    status: initialStatus,
   } = eventsData;
 
   // Signal that loading is complete
@@ -176,13 +186,19 @@ function EventStreamContent({
   }, [onLoaded]);
 
   // Now that we have resolved events, start SSE with the correct lastEventId
-  const { events, pendingToolCalls, error, isRetrying, prependEvents } =
+  const { events, pendingToolCalls, status, error, isRetrying, prependEvents } =
     useAutopilotEventStream({
       sessionId: isNewSession ? NIL_UUID : sessionId,
       initialEvents,
       initialPendingToolCalls,
+      initialStatus,
       enabled: !isNewSession,
     });
+
+  // Notify parent of status changes
+  useEffect(() => {
+    onStatusChange(status);
+  }, [status, onStatusChange]);
 
   // State for pagination
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
@@ -497,6 +513,7 @@ function EventStreamContent({
           topSentinelRef={topSentinelRef}
           pendingToolCallIds={pendingToolCallIds}
           optimisticMessages={visibleOptimisticMessages}
+          status={isNewSession ? undefined : status}
         />
       </div>
 
@@ -547,6 +564,24 @@ export default function AutopilotSessionEventsPage({
   useEffect(() => {
     setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
   }, [sessionId, isNewSession, eventsData]);
+
+  // Track autopilot status for disabling submit
+  const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>({
+    status: "idle",
+  });
+
+  // Reset status when session changes
+  useEffect(() => {
+    setAutopilotStatus({ status: "idle" });
+  }, [sessionId]);
+
+  const handleStatusChange = useCallback((status: AutopilotStatus) => {
+    setAutopilotStatus(status);
+  }, []);
+
+  // Disable submit unless status is idle or failed
+  const submitDisabled =
+    autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
 
   // Ref for scroll container - shared between parent and EventStreamContent
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -602,7 +637,13 @@ export default function AutopilotSessionEventsPage({
   return (
     <div className="container mx-auto flex h-full flex-col px-8 py-8">
       <PageHeader
-        label="Autopilot Session"
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Autopilot Sessions", href: "/autopilot/sessions" },
+            ]}
+          />
+        }
         name={isNewSession ? "New Session" : sessionId}
         tag={
           !isNewSession ? (
@@ -627,6 +668,7 @@ export default function AutopilotSessionEventsPage({
           onOptimisticMessagesChange={setOptimisticMessages}
           scrollContainerRef={scrollContainerRef}
           onLoaded={() => setIsEventsLoading(false)}
+          onStatusChange={handleStatusChange}
         />
       </Suspense>
 
@@ -638,6 +680,7 @@ export default function AutopilotSessionEventsPage({
         className="mt-4"
         isNewSession={isNewSession}
         disabled={isEventsLoading}
+        submitDisabled={submitDisabled}
       />
     </div>
   );
@@ -652,6 +695,7 @@ function EventStreamContentWrapper({
   onOptimisticMessagesChange,
   scrollContainerRef,
   onLoaded,
+  onStatusChange,
 }: {
   sessionId: string;
   eventsData: EventsData | Promise<EventsData>;
@@ -660,6 +704,7 @@ function EventStreamContentWrapper({
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   onLoaded: () => void;
+  onStatusChange: (status: AutopilotStatus) => void;
 }) {
   // New sessions have direct data (not a promise)
   if (!(eventsData instanceof Promise)) {
@@ -673,6 +718,7 @@ function EventStreamContentWrapper({
           onOptimisticMessagesChange={onOptimisticMessagesChange}
           scrollContainerRef={scrollContainerRef}
           onLoaded={onLoaded}
+          onStatusChange={onStatusChange}
         />
       </div>
     );
@@ -694,6 +740,7 @@ function EventStreamContentWrapper({
             onOptimisticMessagesChange={onOptimisticMessagesChange}
             scrollContainerRef={scrollContainerRef}
             onLoaded={onLoaded}
+            onStatusChange={onStatusChange}
           />
         )}
       </Await>

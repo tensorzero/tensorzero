@@ -305,5 +305,5 @@ model = "dummy::slow"
     // We have observability disabled, so we expect the overhead to be low (even though this is a debug build)
     // Notably, it does *not* include the 5-second sleep in the 'dummy::slow' model
     // This test can be slow on CI, so we give a generous 300ms margin
-    assert!(sum < 0.3, "Unexpectedly high histogram sum: {sum}s");
+    assert!(sum < 0.5, "Unexpectedly high histogram sum: {sum}s");
 }

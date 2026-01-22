@@ -122,8 +122,9 @@ impl DeepSeekCredentials {
     }
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DeepSeekProvider {
     model_name: String,
     #[serde(skip)]
@@ -489,7 +490,7 @@ fn stream_deepseek(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -614,6 +615,7 @@ fn deepseek_to_tensorzero_chunk(
                 summary_id: None,
                 summary_text: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }));
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
@@ -770,6 +772,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 signature: None,
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }));
         }
         if let Some(text) = message.content {
@@ -800,6 +803,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_response,
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: finish_reason.map(OpenAIFinishReason::into),
                 id: model_inference_id,
@@ -1109,6 +1113,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             })
         );
 

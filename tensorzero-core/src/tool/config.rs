@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{Error, ErrorDetails};
-use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
+use crate::jsonschema_util::JSONSchema;
 
 use super::IMPLICIT_TOOL_DESCRIPTION;
 use super::types::{FunctionTool, OpenAICustomTool, ProviderTool, Tool};
@@ -22,16 +22,16 @@ use super::wire::ToolChoice;
 #[cfg(test)]
 use super::params::DynamicToolParams;
 
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ToolConfig {
     Function(FunctionToolConfig),
     OpenAICustom(OpenAICustomTool),
 }
 
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum FunctionToolConfig {
     Static(Arc<StaticToolConfig>),
@@ -41,12 +41,12 @@ pub enum FunctionToolConfig {
 }
 
 /// Contains the configuration information for a specific tool
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
-    pub parameters: StaticJSONSchema,
+    pub parameters: JSONSchema,
     /// The display name sent to the LLM (can be overridden via config)
     pub name: String,
     /// The key used to reference this tool in allowed_tools and function config
@@ -55,39 +55,40 @@ pub struct StaticToolConfig {
 }
 
 /// Contains the configuration information for a tool defined at runtime
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
-    pub parameters: DynamicJSONSchema,
+    pub parameters: JSONSchema,
     pub name: String,
     pub strict: bool,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
-    pub parameters: StaticJSONSchema,
+    pub parameters: JSONSchema,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
-    pub parameters: DynamicJSONSchema,
+    pub parameters: JSONSchema,
 }
 
 /// Records / lists the tools that were allowed in the request
 /// Also lists how they were set (default, dynamically set)
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AllowedTools {
     pub tools: Vec<String>,
     pub choice: AllowedToolsChoice,
@@ -115,8 +116,9 @@ impl AllowedTools {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {
     /// If `allowed_tools` is not explicitly passed, we set the function tools
@@ -142,8 +144,9 @@ pub enum ToolConfigRef<'a> {
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ToolCallConfig {
     pub(crate) static_tools_available: Vec<FunctionToolConfig>,
     pub(crate) dynamic_tools_available: Vec<FunctionToolConfig>,
@@ -510,9 +513,9 @@ impl ToolCallConfig {
 impl FunctionToolConfig {
     pub async fn validate_arguments(&self, arguments: &Value) -> Result<(), Error> {
         match self {
-            FunctionToolConfig::Static(config) => config.parameters.validate(arguments),
+            FunctionToolConfig::Static(config) => config.parameters.validate(arguments).await,
             FunctionToolConfig::Dynamic(config) => config.parameters.validate(arguments).await,
-            FunctionToolConfig::Implicit(config) => config.parameters.validate(arguments),
+            FunctionToolConfig::Implicit(config) => config.parameters.validate(arguments).await,
             FunctionToolConfig::DynamicImplicit(config) => {
                 config.parameters.validate(arguments).await
             }

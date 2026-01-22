@@ -1,5 +1,6 @@
 import * as React from "react";
-import { type LucideIcon } from "lucide-react";
+import { useAsyncError, isRouteErrorResponse } from "react-router";
+import { AlertCircle, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
@@ -198,5 +199,71 @@ export function ChartErrorNotice(props: ErrorNoticeProps) {
     <ChartErrorContainer>
       <ErrorNotice {...props} />
     </ChartErrorContainer>
+  );
+}
+
+export function SectionErrorContainer({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-border flex justify-center rounded-md border py-12">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Convenience wrapper: ErrorNotice inside SectionErrorContainer.
+ * Use for section-level error states (BasicInfo, Input, Output, etc.).
+ */
+export function SectionErrorNotice(props: ErrorNoticeProps) {
+  return (
+    <SectionErrorContainer>
+      <ErrorNotice {...props} />
+    </SectionErrorContainer>
+  );
+}
+
+interface SectionAsyncErrorStateProps {
+  defaultMessage?: string;
+}
+
+/**
+ * Error state for sections using React Router's <Await> component.
+ * Must be rendered inside an <Await errorElement={...}> to access the async error.
+ * @throws Error if used outside of an <Await errorElement={...}> context
+ */
+export function SectionAsyncErrorState({
+  defaultMessage = "Failed to load data",
+}: SectionAsyncErrorStateProps) {
+  const error = useAsyncError();
+
+  if (error === undefined) {
+    throw new Error(
+      "SectionAsyncErrorState must be used inside an <Await errorElement={...}>",
+    );
+  }
+
+  let message: string;
+  if (isRouteErrorResponse(error)) {
+    if (typeof error.data === "string") {
+      message = error.data;
+    } else {
+      message = `${error.status} ${error.statusText}`;
+    }
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else {
+    message = defaultMessage;
+  }
+
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading data"
+      description={message}
+    />
   );
 }

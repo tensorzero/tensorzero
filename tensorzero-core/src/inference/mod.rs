@@ -28,7 +28,7 @@ use uuid::Uuid;
 /// that needs to do additional validation when streaming (e.g. Sagemaker)
 pub enum TensorZeroEventError {
     TensorZero(Error),
-    EventSource(reqwest_eventsource::Error),
+    EventSource(Box<reqwest_eventsource::Error>),
 }
 
 pub trait InferenceProvider {

@@ -5,6 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -150,8 +151,9 @@ impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJso
 /// Structs that almost map to the storage format of inferences, but contains a dispreferred_outputs field.
 /// When querying inferences, if the user requests a join with the DemonstrationFeedback table, we use the
 /// demonstration feedback as `output` and set the original output as `dispreferred_outputs`.
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub(super) enum ClickHouseStoredInferenceWithDispreferredOutputs {
     Json(ClickHouseStoredJsonInferenceWithDispreferredOutputs),
     Chat(ClickHouseStoredChatInferenceWithDispreferredOutputs),
@@ -177,8 +179,9 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
 // TODO(shuyangli): Move to tensorzero-core/src/endpoints/stored_inferences/v1/types.rs
 /// Source of an inference output when querying inferences. Users can choose this because there may be
 /// demonstration feedback (manually-curated output) for the inference that should be preferred.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum InferenceOutputSource {
     /// No output - used when creating datapoints without output.
@@ -265,15 +268,16 @@ pub enum PaginationParams {
 }
 
 /// Inference metadata from the InferenceById table.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceMetadata {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
     pub function_type: FunctionType,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<String>,
 }

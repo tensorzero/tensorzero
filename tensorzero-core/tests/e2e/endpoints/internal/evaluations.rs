@@ -7,6 +7,7 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
 use tensorzero_core::endpoints::internal::evaluations::types::GetEvaluationStatisticsResponse;
 use tensorzero_core::endpoints::internal::evaluations::{
     GetEvaluationResultsResponse, GetEvaluationRunInfosResponse,
@@ -217,7 +218,7 @@ async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
         run_info.evaluation_run_id,
         Uuid::parse_str("0196374b-04a3-7013-9049-e59ed5fe3f74").unwrap()
     );
-    assert_eq!(run_info.variant_name, "better_prompt_haiku_3_5");
+    assert_eq!(run_info.variant_name, "better_prompt_haiku_4_5");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -451,8 +452,11 @@ async fn test_get_evaluation_results_haiku() {
     // Verify all results belong to the correct evaluation run
     let expected_run_id = Uuid::parse_str(evaluation_run_id).unwrap();
     for result in &response.results {
-        assert_eq!(result.evaluation_run_id, expected_run_id);
-        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+        let EvaluationResultRow::Chat(row) = result else {
+            panic!("Expected Chat result, got {result:?}");
+        };
+        assert_eq!(row.evaluation_run_id, expected_run_id);
+        assert_eq!(row.variant_name, "better_prompt_haiku_4_5");
     }
 }
 
@@ -484,12 +488,11 @@ async fn test_get_evaluation_results_entity_extraction() {
         "Expected 4 results (2 datapoints * 2 metrics)"
     );
 
-    // Verify JSON function output structure
+    // Verify results are JSON type
     for result in &response.results {
-        assert!(
-            result.generated_output.contains("\"raw\""),
-            "Generated output should have 'raw' field for JSON function"
-        );
+        let EvaluationResultRow::Json(_) = result else {
+            panic!("Expected Json result, got {result:?}");
+        };
     }
 }
 
@@ -526,7 +529,7 @@ async fn test_get_evaluation_results_multiple_runs() {
     let eval_run_ids: std::collections::HashSet<_> = response
         .results
         .iter()
-        .map(|r| r.evaluation_run_id)
+        .map(EvaluationResultRow::evaluation_run_id)
         .collect();
     assert_eq!(
         eval_run_ids.len(),
@@ -576,10 +579,16 @@ async fn test_get_evaluation_results_pagination() {
     );
 
     // Verify no overlap between pages
-    let page1_datapoints: std::collections::HashSet<_> =
-        page1.results.iter().map(|r| r.datapoint_id).collect();
-    let page2_datapoints: std::collections::HashSet<_> =
-        page2.results.iter().map(|r| r.datapoint_id).collect();
+    let page1_datapoints: std::collections::HashSet<_> = page1
+        .results
+        .iter()
+        .map(EvaluationResultRow::datapoint_id)
+        .collect();
+    let page2_datapoints: std::collections::HashSet<_> = page2
+        .results
+        .iter()
+        .map(EvaluationResultRow::datapoint_id)
+        .collect();
 
     let overlap: Vec<_> = page1_datapoints.intersection(&page2_datapoints).collect();
     assert!(

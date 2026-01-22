@@ -11,15 +11,17 @@ use uuid::Uuid;
 // =============================================================================
 
 /// Response containing a list of workflow evaluation projects.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetWorkflowEvaluationProjectsResponse {
     pub projects: Vec<WorkflowEvaluationProject>,
 }
 
 /// Information about a single workflow evaluation project.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct WorkflowEvaluationProject {
     pub name: String,
     pub count: u32,
@@ -31,8 +33,9 @@ pub struct WorkflowEvaluationProject {
 // =============================================================================
 
 /// Response containing the count of workflow evaluation projects.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetWorkflowEvaluationProjectCountResponse {
     pub count: u32,
 }
@@ -42,15 +45,17 @@ pub struct GetWorkflowEvaluationProjectCountResponse {
 // =============================================================================
 
 /// Response containing a list of workflow evaluation runs from search.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct SearchWorkflowEvaluationRunsResponse {
     pub runs: Vec<WorkflowEvaluationRun>,
 }
 
 /// Information about a single workflow evaluation run.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct WorkflowEvaluationRun {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -67,15 +72,17 @@ pub struct WorkflowEvaluationRun {
 // =============================================================================
 
 /// Response containing a list of workflow evaluation runs with episode counts.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListWorkflowEvaluationRunsResponse {
     pub runs: Vec<WorkflowEvaluationRunWithEpisodeCount>,
 }
 
 /// Information about a single workflow evaluation run with episode count.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct WorkflowEvaluationRunWithEpisodeCount {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -93,8 +100,9 @@ pub struct WorkflowEvaluationRunWithEpisodeCount {
 // =============================================================================
 
 /// Response containing the count of workflow evaluation runs.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CountWorkflowEvaluationRunsResponse {
     pub count: u32,
 }
@@ -104,8 +112,9 @@ pub struct CountWorkflowEvaluationRunsResponse {
 // =============================================================================
 
 /// Response containing a list of workflow evaluation runs by IDs.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetWorkflowEvaluationRunsResponse {
     pub runs: Vec<WorkflowEvaluationRun>,
 }
@@ -115,8 +124,9 @@ pub struct GetWorkflowEvaluationRunsResponse {
 // =============================================================================
 
 /// Statistics for a single metric within a workflow evaluation run.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct WorkflowEvaluationRunStatistics {
     pub metric_name: String,
     pub count: u32,
@@ -130,8 +140,9 @@ pub struct WorkflowEvaluationRunStatistics {
 }
 
 /// Response containing statistics for a workflow evaluation run grouped by metric.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetWorkflowEvaluationRunStatisticsResponse {
     pub statistics: Vec<WorkflowEvaluationRunStatistics>,
 }
@@ -144,8 +155,9 @@ pub struct GetWorkflowEvaluationRunStatisticsResponse {
 ///
 /// Each inner Vec contains all episodes that share the same task_name (or NULL task_name).
 /// Episodes with NULL task_name are grouped individually.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListWorkflowEvaluationRunEpisodesByTaskNameResponse {
     pub episodes: Vec<Vec<crate::db::workflow_evaluation_queries::GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow>>,
 }
@@ -155,8 +167,9 @@ pub struct ListWorkflowEvaluationRunEpisodesByTaskNameResponse {
 // =============================================================================
 
 /// Response containing the count of distinct episodes by task_name.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CountWorkflowEvaluationRunEpisodesByTaskNameResponse {
     pub count: u32,
 }
@@ -166,15 +179,17 @@ pub struct CountWorkflowEvaluationRunEpisodesByTaskNameResponse {
 // =============================================================================
 
 /// Response containing a list of workflow evaluation run episodes with feedback.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetWorkflowEvaluationRunEpisodesWithFeedbackResponse {
     pub episodes: Vec<WorkflowEvaluationRunEpisodeWithFeedback>,
 }
 
 /// Information about a single workflow evaluation run episode with feedback.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct WorkflowEvaluationRunEpisodeWithFeedback {
     pub episode_id: Uuid,
     pub timestamp: DateTime<Utc>,
@@ -193,8 +208,9 @@ pub struct WorkflowEvaluationRunEpisodeWithFeedback {
 // =============================================================================
 
 /// Response containing the count of episodes for a workflow evaluation run.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CountWorkflowEvaluationRunEpisodesResponse {
     pub count: u32,
 }

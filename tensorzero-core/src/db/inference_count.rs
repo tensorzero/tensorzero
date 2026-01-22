@@ -58,8 +58,9 @@ pub struct GetFunctionThroughputByVariantParams<'a> {
 }
 
 /// Row returned from the get_function_throughput_by_variant query.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VariantThroughput {
     /// Start datetime of the period in RFC 3339 format with milliseconds
     #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
@@ -70,8 +71,9 @@ pub struct VariantThroughput {
 }
 
 /// Row returned from the list_functions_with_inference_count query.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FunctionInferenceCount {
     pub function_name: String,
     /// ISO 8601 timestamp of the most recent inference for this function

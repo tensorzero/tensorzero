@@ -26,8 +26,8 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
-            model_name: "gemini-2.0-flash-lite".into(),
+            variant_name: "google-ai-studio-gemini-flash-lite".to_string(),
+            model_name: "gemini-2.5-flash-lite".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -43,22 +43,22 @@ async fn get_providers() -> E2ETestProviders {
     let image_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google_ai_studio".to_string(),
-        model_name: "google_ai_studio_gemini::gemini-2.0-flash-lite".into(),
+        model_name: "google_ai_studio_gemini::gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "google-ai-studio-gemini-flash-8b-extra-body".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        variant_name: "google-ai-studio-gemini-flash-lite-extra-body".to_string(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "google-ai-studio-gemini-flash-8b-extra-headers".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        variant_name: "google-ai-studio-gemini-flash-lite-extra-headers".to_string(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -66,8 +66,8 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-flash-8b-dynamic".to_string(),
-            model_name: "gemini-2.0-flash-lite-dynamic".into(),
+            variant_name: "google-ai-studio-gemini-flash-lite-dynamic".to_string(),
+            model_name: "gemini-2.5-flash-lite-dynamic".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: credentials.clone(),
         },
@@ -82,8 +82,8 @@ async fn get_providers() -> E2ETestProviders {
 
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        variant_name: "google-ai-studio-gemini-flash-lite".to_string(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -91,15 +91,15 @@ async fn get_providers() -> E2ETestProviders {
     let json_providers = vec![
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
-            model_name: "gemini-2.0-flash-lite".into(),
+            variant_name: "google-ai-studio-gemini-flash-lite".to_string(),
+            model_name: "gemini-2.5-flash-lite".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-flash-8b-implicit".to_string(),
-            model_name: "gemini-2.0-flash-lite".into(),
+            variant_name: "google-ai-studio-gemini-flash-lite-implicit".to_string(),
+            model_name: "gemini-2.5-flash-lite".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -119,8 +119,8 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-flash-8b-strict".to_string(),
-            model_name: "gemini-2.0-flash-lite".into(),
+            variant_name: "google-ai-studio-gemini-flash-lite-strict".to_string(),
+            model_name: "gemini-2.5-flash-lite".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -129,31 +129,31 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google_ai_studio_gemini_flash_8b_json_mode_off".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
 
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "google-ai-studio-gemini-flash-8b-shorthand".to_string(),
-        model_name: "google_ai_studio_gemini::gemini-2.0-flash-lite".into(),
+        variant_name: "google-ai-studio-gemini-flash-lite-shorthand".to_string(),
+        model_name: "google_ai_studio_gemini::gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
 
     let provider_type_default_credentials_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        variant_name: "google-ai-studio-gemini-flash-lite".to_string(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
 
     let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "google-ai-studio-gemini-flash-8b-shorthand".to_string(),
-        model_name: "google_ai_studio_gemini::gemini-2.0-flash-lite".into(),
+        variant_name: "google-ai-studio-gemini-flash-lite-shorthand".to_string(),
+        model_name: "google_ai_studio_gemini::gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -162,7 +162,7 @@ async fn get_providers() -> E2ETestProviders {
         provider_type: "google_ai_studio_gemini".to_string(),
         model_info: HashMap::from([(
             "model_name".to_string(),
-            "gemini-2.0-flash-lite".to_string(),
+            "gemini-2.5-flash-lite".to_string(),
         )]),
         use_modal_headers: false,
     }];
@@ -197,6 +197,8 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: reasoning_providers.clone(),
+        reasoning_usage_inference: reasoning_providers.clone(),
+        cache_input_tokens_inference: standard_providers.clone(),
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
@@ -362,7 +364,7 @@ async fn test_google_ai_studio_gemini_tool_choice_auto_with_allowed_tools() {
         "tool_choice": "auto",
         "allowed_tools": ["get_humidity"],
         "stream": false,
-        "variant_name": "google-ai-studio-gemini-flash-8b",
+        "variant_name": "google-ai-studio-gemini-flash-lite",
     });
 
     let response = Client::new()
@@ -418,4 +420,76 @@ async fn test_google_ai_studio_gemini_tool_choice_auto_with_allowed_tools() {
         "Should only have one tool available"
     );
     assert_eq!(tools_available[0].get("name").unwrap(), "get_humidity");
+}
+
+/// Test cross-model inference: replaying tool calls from other providers (without thought blocks).
+/// This tests that the dummy thought signature injection works correctly with Gemini 3.
+/// When conversations from OpenAI/Anthropic are replayed to Gemini, they don't have thought blocks
+/// or signatures, so we inject dummy signatures to enable cross-model inference.
+#[tokio::test]
+async fn test_gemini_cross_model_inference_tool_calls() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // Simulate a conversation where the assistant made tool calls (from another provider like OpenAI)
+    // Note: No thought blocks - this is the cross-model inference case
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": "google-ai-studio-gemini-3-flash",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What's the weather in Tokyo?"
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "id": "call_123",
+                            "name": "get_temperature",
+                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
+                        }
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "id": "call_123",
+                            "name": "get_temperature",
+                            "result": "25"
+                        }
+                    ]
+                }
+            ]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Should succeed - our dummy signature injection enables cross-model inference
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Cross-model inference should succeed with dummy thought signatures"
+    );
+
+    let response_json = response.json::<Value>().await.unwrap();
+    // Should have a text response summarizing the weather
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(
+        content.iter().any(|block| block["type"] == "text"),
+        "Expected a text block in the response: {content:?}"
+    );
 }

@@ -167,7 +167,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Install pnpm
         run: |
@@ -217,7 +217,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Install pnpm
         run: |
@@ -434,7 +434,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Install pnpm
         run: |
@@ -575,7 +575,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Install pnpm
         run: |
@@ -700,6 +700,8 @@ jobs:
       - name: Run cargo-deny
         run: cargo deny check
 
+  # TODO(#5744): This job runs Postgres and Valkey rate limiting tests in addition to
+  # ClickHouse tests. Refactor to separate these into dedicated test jobs.
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
     permissions:
@@ -801,6 +803,10 @@ jobs:
         run: |
           echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
           echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+
+      - name: Set Valkey URL for tests
+        run: |
+          echo "TENSORZERO_VALKEY_URL=redis://localhost:6379" >> $GITHUB_ENV
 
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |
@@ -1169,11 +1175,26 @@ jobs:
     permissions:
       contents: read
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
-    needs: [build-gateway-e2e-container]
+    needs: [build-gateway-e2e-container, publish-dev-docker-hub-images]
     uses: ./.github/workflows/dispatch-autopilot-e2e.yml
     secrets:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
+
+  publish-dev-docker-hub-images:
+    permissions:
+      contents: read
+      actions: read
+      attestations: write
+      id-token: write
+      packages: write
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    uses: ./.github/workflows/docker-hub-publish.yml
+    with:
+      is_dev: true
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
@@ -1195,6 +1216,7 @@ jobs:
         build-gateway-e2e-container,
         build-mock-provider-api-container,
         mocked-batch-tests,
+        publish-dev-docker-hub-images,
         minikube,
         rust-build,
         rust-test,

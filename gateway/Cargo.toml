@@ -9,7 +9,6 @@ license.workspace = true
 tensorzero-core = { path = "../tensorzero-core" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 evaluations = { path = "../evaluations" }
-async-trait = { workspace = true }
 axum = { workspace = true }
 tracing = { version = "0.1.43", features = ["log", "release_max_level_debug"] }
 tokio = { workspace = true }
@@ -28,10 +27,7 @@ secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
-anyhow = { workspace = true }
-chrono = { workspace = true }
-ts-rs = { workspace = true }
-url = { workspace = true }
+ts-rs = { workspace = true, optional = true }
 async-stream = { workspace = true }
 
 [lints]
@@ -40,6 +36,7 @@ workspace = true
 [features]
 e2e_tests = ["tensorzero-core/e2e_tests", "autopilot-worker/e2e_tests"]
 default = []
+ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings", "tensorzero-optimizers/ts-bindings"]
 
 [dev-dependencies]
 reqwest.workspace = true
@@ -51,6 +48,6 @@ futures = { workspace = true }
 secrecy = { workspace = true }
 uuid = { workspace = true }
 tensorzero-unsafe-helpers = { path = "../internal/tensorzero-unsafe-helpers" }
-flate2 = "1.1.5"
+flate2 = "1.1.8"
 zstd = "0.13.3"
 brotli = "8.0.2"
