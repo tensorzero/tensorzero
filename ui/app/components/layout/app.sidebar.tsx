@@ -127,9 +127,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <Link to="/" className="flex items-center gap-2">
                 <TensorZeroLogo size={16} />
-                {state === "expanded" && (
-                  <span className="font-semibold">TensorZero</span>
-                )}
+                <span className="font-semibold whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                  TensorZero
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
