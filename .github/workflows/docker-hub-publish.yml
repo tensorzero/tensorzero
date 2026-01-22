@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       is_dev:
-        description: 'Whether to use -dev suffix for container names'
+        description: "Whether to use -dev suffix for container names"
         type: boolean
         required: false
         default: true

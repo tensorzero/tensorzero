@@ -12,9 +12,10 @@ use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_with_app_state}
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceOutput,
-    InferenceResponse, ListDatapointsRequest, ListInferencesRequest, TensorZeroError,
-    UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
+    GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
+    InferenceOutput, InferenceResponse, ListDatapointsRequest, ListInferencesRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
+    WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;
@@ -199,6 +200,15 @@ impl TensorZeroClient for EmbeddedClient {
                     .into(),
                 }))
             }
+            ActionResponse::RunEvaluation(_) => {
+                Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InternalError {
+                        message: "Unexpected run_evaluation response from action endpoint"
+                            .to_string(),
+                    })
+                    .into(),
+                }))
+            }
         }
     }
 
@@ -362,6 +372,19 @@ impl TensorZeroClient for EmbeddedClient {
         request: ListInferencesRequest,
     ) -> Result<GetInferencesResponse, TensorZeroClientError> {
         tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
+            &self.app_state.config,
+            &self.app_state.clickhouse_connection_info,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn get_inferences(
+        &self,
+        request: GetInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::stored_inferences::v1::get_inferences(
             &self.app_state.config,
             &self.app_state.clickhouse_connection_info,
             request,
