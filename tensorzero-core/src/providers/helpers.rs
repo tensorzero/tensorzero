@@ -57,6 +57,9 @@ pub async fn convert_stream_error(
             .into()
         }
         reqwest_eventsource::Error::Transport(inner) => {
+            // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
+            // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
+            // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
             let message = if inner.is_timeout() {
                 match request_id {
                     Some(id) => format!(
@@ -283,6 +286,9 @@ pub async fn inject_extra_request_data_and_send_with_headers(
         .await
         .map_err(|e| {
             let status_code = e.status();
+            // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
+            // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
+            // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
             let message = if e.is_timeout() {
                 format!(
                     "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({})",
@@ -364,6 +370,9 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
                     (message, body)
                 }
                 other => {
+                    // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
+                    // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
+                    // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
                     let is_timeout = matches!(&other, reqwest_eventsource::Error::Transport(e) if e.is_timeout());
                     let message = if is_timeout {
                         format!(
