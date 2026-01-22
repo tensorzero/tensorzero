@@ -525,6 +525,12 @@ pub enum ErrorDetails {
         result_type: &'static str,
         message: String,
     },
+    ValkeyConnection {
+        message: String,
+    },
+    ValkeyQuery {
+        message: String,
+    },
     ProviderNotFound {
         provider_name: String,
     },
@@ -720,6 +726,8 @@ impl ErrorDetails {
             ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::ValkeyConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::ValkeyQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::RateLimitExceeded { .. } => tracing::Level::WARN,
             ErrorDetails::RateLimitMissingMaxTokens => tracing::Level::WARN,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
@@ -876,6 +884,8 @@ impl ErrorDetails {
             ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ValkeyConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ValkeyQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             ErrorDetails::RateLimitMissingMaxTokens => StatusCode::BAD_REQUEST,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1522,6 +1532,12 @@ impl std::fmt::Display for ErrorDetails {
                 ),
                 None => write!(f, "Postgres query failed: {message}"),
             },
+            ErrorDetails::ValkeyConnection { message } => {
+                write!(f, "Error connecting to Valkey: {message}")
+            }
+            ErrorDetails::ValkeyQuery { message } => {
+                write!(f, "Valkey query failed: {message}")
+            }
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
             }
@@ -1693,6 +1709,14 @@ impl From<sqlx::Error> for Error {
         Self::new(ErrorDetails::PostgresQuery {
             message: err.to_string(),
             function_name: None,
+        })
+    }
+}
+
+impl From<redis::RedisError> for Error {
+    fn from(err: redis::RedisError) -> Self {
+        Self::new(ErrorDetails::ValkeyQuery {
+            message: err.to_string(),
         })
     }
 }

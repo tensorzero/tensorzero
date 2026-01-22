@@ -492,6 +492,23 @@ impl RateLimitInterval {
             },
         }
     }
+
+    /// Convert a `RateLimitInterval` to microseconds for Valkey Lua scripts.
+    ///
+    /// Note: in this implementation we define `Month` as exactly 30 days
+    /// (2,592,000,000,000 microseconds), not a calendar-aware month.
+    ///
+    /// TODO(shuyangli): change Postgres to match.
+    pub fn to_microseconds(&self) -> u64 {
+        match *self {
+            RateLimitInterval::Second => 1_000_000,
+            RateLimitInterval::Minute => 60_000_000,
+            RateLimitInterval::Hour => 3_600_000_000,
+            RateLimitInterval::Day => 86_400_000_000,
+            RateLimitInterval::Week => 604_800_000_000,
+            RateLimitInterval::Month => 2_592_000_000_000,
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
