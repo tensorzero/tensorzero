@@ -228,7 +228,26 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <div className="mx-auto flex w-full max-w-240 flex-col gap-12">
         <h1 className="text-2xl font-medium">Overview</h1>
-        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
+        {/* Top row: Autopilot and Playground as big tiles */}
+        <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2">
+          {autopilotAvailable && (
+            <DirectoryCard
+              source="/autopilot"
+              icon={Chat}
+              title="Autopilot"
+              description="AI-powered assistant"
+            />
+          )}
+          <DirectoryCard
+            source="/playground"
+            icon={Playground}
+            title="Playground"
+            description={numVariantsDesc}
+          />
+        </div>
+
+        {/* Main sections grid */}
+        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-4">
           <div id="observability" className="flex w-full flex-col gap-2">
             <h2 className="text-md text-fg-secondary font-medium">
               Observability
@@ -303,26 +322,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 icon={Dataset}
                 title="Datasets"
                 description={numDatasetsDesc}
-              />
-            </div>
-          </div>
-
-          <div id="tools" className="flex w-full flex-col gap-2">
-            <h2 className="text-md text-fg-secondary font-medium">Tools</h2>
-            <div className="flex flex-col gap-2">
-              {autopilotAvailable && (
-                <DirectoryCard
-                  source="/autopilot"
-                  icon={Chat}
-                  title="Autopilot"
-                  description="AI-powered assistant"
-                />
-              )}
-              <DirectoryCard
-                source="/playground"
-                icon={Playground}
-                title="Playground"
-                description={numVariantsDesc}
               />
             </div>
           </div>
