@@ -139,16 +139,16 @@ system_template = "functions/write_haiku/initial_prompt/system_template.minijinj
 user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
 retries = { num_retries = 4, max_delay_s = 10 }
 
-[functions.write_haiku.variants.initial_prompt_haiku_3_5]
+[functions.write_haiku.variants.initial_prompt_haiku_4_5]
 type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
+model = "anthropic::claude-haiku-4-5"
 system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
 user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
 retries = { num_retries = 4, max_delay_s = 10 }
 
-[functions.write_haiku.variants.better_prompt_haiku_3_5]
+[functions.write_haiku.variants.better_prompt_haiku_4_5]
 type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
+model = "anthropic::claude-haiku-4-5"
 system_template = "functions/write_haiku/better_prompt/system_template.minijinja"
 user_template = "functions/write_haiku/better_prompt/user_template.minijinja"
 retries = { num_retries = 4, max_delay_s = 10 }
@@ -248,9 +248,9 @@ model = "google_ai_studio_gemini::gemini-2.5-flash"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
 retries = { num_retries = 4, max_delay_s = 10 }
 
-[functions.multi_hop_rag_agent.variants."claude-3.5-haiku"]
+[functions.multi_hop_rag_agent.variants."claude-haiku-4-5"]
 type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
+model = "anthropic::claude-haiku-4-5"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
 retries = { num_retries = 4, max_delay_s = 10 }
 

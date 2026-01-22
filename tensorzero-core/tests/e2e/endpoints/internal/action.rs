@@ -2,6 +2,10 @@
 //!
 //! These tests verify that the action endpoint correctly executes inference
 //! using historical config snapshots loaded from ClickHouse.
+//!
+//! Note: These tests only run in HTTP gateway mode because the Rust SDK's embedded
+//! gateway mode doesn't support the action endpoint (it would require depending on
+//! durable-tools). The action endpoint is fully functional in HTTP mode.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -14,6 +18,11 @@ use tensorzero_core::config::write_config_snapshot;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
+
+// Helper to create HTTP gateway client for action tests
+async fn make_http_gateway() -> Client {
+    tensorzero::test_helpers::make_http_gateway().await
+}
 
 /// Test that the action endpoint can execute inference using a historical config
 /// that has a function not present in the running gateway config.
@@ -90,7 +99,11 @@ Do a historical inference successfully!
     }
 }
 
-tensorzero::make_gateway_test_functions!(test_action_with_historical_config_impl);
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_with_historical_config_impl_http_gateway() {
+    test_action_with_historical_config_impl(make_http_gateway().await).await;
+}
 
 /// Test that the action endpoint returns an error for a non-existent snapshot hash.
 async fn test_action_nonexistent_snapshot_hash_impl(client: Client) {
@@ -134,7 +147,11 @@ async fn test_action_nonexistent_snapshot_hash_impl(client: Client) {
     }
 }
 
-tensorzero::make_gateway_test_functions!(test_action_nonexistent_snapshot_hash_impl);
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_nonexistent_snapshot_hash_impl_http_gateway() {
+    test_action_nonexistent_snapshot_hash_impl(make_http_gateway().await).await;
+}
 
 /// Test that the action endpoint rejects streaming requests.
 async fn test_action_streaming_rejected_impl(client: Client) {
@@ -202,4 +219,8 @@ model = "action_test_model_{id}"
     }
 }
 
-tensorzero::make_gateway_test_functions!(test_action_streaming_rejected_impl);
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_streaming_rejected_impl_http_gateway() {
+    test_action_streaming_rejected_impl(make_http_gateway().await).await;
+}

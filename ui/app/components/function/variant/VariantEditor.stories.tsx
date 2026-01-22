@@ -177,7 +177,7 @@ export const WithJsonMode: Story = {
         inner: {
           type: "chat_completion",
           weight: 0.8,
-          model: "claude-3-opus-20240229",
+          model: "claude-opus-4-5",
           templates: {
             system: {
               template: {

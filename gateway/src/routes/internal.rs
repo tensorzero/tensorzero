@@ -237,7 +237,7 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         // Action endpoint for executing with historical config snapshots
         .route(
             "/internal/action",
-            post(endpoints::internal::action::action_handler),
+            post(super::action::action_handler),
         )
         // Autopilot proxy endpoints
         .route(

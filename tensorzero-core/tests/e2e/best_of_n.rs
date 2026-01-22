@@ -993,11 +993,11 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
             }
         }
         // For the judge model we want to check that the `raw_request` is correct
-        if model_name == "claude-3-haiku-20240307-anthropic" {
+        if model_name == "claude-haiku-4-5-anthropic" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({
-                "model": "claude-3-haiku-20240307",
+                "model": "claude-haiku-4-5",
                 "messages": [
                     {
                         "role": "user",
@@ -1018,7 +1018,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                         ]
                     }
                 ],
-                "max_tokens": 4096,
+                "max_tokens": 64000,
                 "stream": false,
                 "system": [
                     {
@@ -1052,15 +1052,11 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
     }
 
     // Check that all expected model names are present
-    let expected_model_names: std::collections::HashSet<String> = [
-        "test",
-        "json",
-        "json_goodbye",
-        "claude-3-haiku-20240307-anthropic",
-    ]
-    .iter()
-    .map(std::string::ToString::to_string)
-    .collect();
+    let expected_model_names: std::collections::HashSet<String> =
+        ["test", "json", "json_goodbye", "claude-haiku-4-5-anthropic"]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
     assert_eq!(model_names, expected_model_names);
 }
 
