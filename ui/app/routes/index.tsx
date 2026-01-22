@@ -19,7 +19,9 @@ import {
   SequenceChecks,
   Playground,
   Model,
+  Chat,
 } from "~/components/icons/Icons";
+import { useAutopilotAvailable } from "~/context/autopilot-available";
 import {
   Tooltip,
   TooltipContent,
@@ -220,6 +222,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     dynamicEvaluationsDesc,
     numModelsUsedDesc,
   } = loaderData;
+  const autopilotAvailable = useAutopilotAvailable();
 
   return (
     <PageLayout>
@@ -307,6 +310,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <div id="tools" className="flex w-full flex-col gap-2">
             <h2 className="text-md text-fg-secondary font-medium">Tools</h2>
             <div className="flex flex-col gap-2">
+              {autopilotAvailable && (
+                <DirectoryCard
+                  source="/autopilot"
+                  icon={Chat}
+                  title="Autopilot"
+                  description="AI-powered assistant"
+                />
+              )}
               <DirectoryCard
                 source="/playground"
                 icon={Playground}
