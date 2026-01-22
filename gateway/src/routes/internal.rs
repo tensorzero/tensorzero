@@ -235,6 +235,7 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             post(endpoints::internal::count_inferences::count_inferences_handler),
         )
         // Action endpoint for executing with historical config snapshots
+        // Uses the gateway's handler which adds RunEvaluation support
         .route(
             "/internal/action",
             post(super::action::action_handler),

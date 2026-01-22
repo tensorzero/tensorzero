@@ -12,7 +12,11 @@ use tensorzero::{
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::inference::types::Text;
+use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
+use tensorzero_core::inference::types::{
+    ContentBlockChatOutput, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+};
 use uuid::Uuid;
 
 /// Test that the action endpoint can execute inference using a historical config
@@ -86,6 +90,9 @@ Do a historical inference successfully!
         ActionResponse::Inference(_) => {}
         ActionResponse::Feedback(_) => {
             panic!("Expected inference response, got feedback response")
+        }
+        ActionResponse::RunEvaluation(_) => {
+            panic!("Expected inference response, got run_evaluation response")
         }
     }
 }
@@ -203,3 +210,421 @@ model = "action_test_model_{id}"
 }
 
 tensorzero::make_gateway_test_functions!(test_action_streaming_rejected_impl);
+
+/// Test that the action endpoint returns an error when evaluation is not found in config.
+async fn test_action_run_evaluation_missing_evaluation_impl(client: Client) {
+    let clickhouse = get_clickhouse().await;
+    let id = Uuid::now_v7();
+
+    // Create a historical config WITHOUT any evaluations
+    let historical_config = format!(
+        r#"
+[models.eval_test_model_{id}]
+routing = ["provider"]
+
+[models.eval_test_model_{id}.providers.provider]
+type = "dummy"
+model_name = "test"
+
+[functions.eval_test_func_{id}]
+type = "chat"
+
+[functions.eval_test_func_{id}.variants.baseline]
+type = "chat_completion"
+model = "eval_test_model_{id}"
+"#
+    );
+
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
+    let snapshot_hash = snapshot.hash.clone();
+
+    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let params = ActionInputInfo {
+        snapshot_hash,
+        input: ActionInput::RunEvaluation(Box::new(tensorzero::RunEvaluationActionParams {
+            evaluation_name: "nonexistent_evaluation".to_string(),
+            dataset_name: Some("some_dataset".to_string()),
+            datapoint_ids: None,
+            variant_name: "baseline".to_string(),
+            concurrency: 1,
+            inference_cache: tensorzero::CacheEnabledMode::Off,
+            max_datapoints: None,
+            precision_targets: HashMap::new(),
+            include_datapoint_results: false,
+        })),
+    };
+
+    let response = client.action(params).await;
+
+    assert!(
+        response.is_err(),
+        "Should return error for missing evaluation"
+    );
+
+    match response.unwrap_err() {
+        TensorZeroError::Http { status_code, .. } => {
+            assert_eq!(status_code, 400, "Should return 400 for missing evaluation");
+        }
+        other => panic!("Expected HTTP error, got: {other:?}"),
+    }
+}
+
+tensorzero::make_gateway_test_functions!(test_action_run_evaluation_missing_evaluation_impl);
+
+/// Test that the action endpoint returns an error when validation fails
+/// (neither dataset_name nor datapoint_ids provided).
+async fn test_action_run_evaluation_validation_error_impl(client: Client) {
+    let clickhouse = get_clickhouse().await;
+    let id = Uuid::now_v7();
+
+    // Create a historical config with an evaluation
+    let historical_config = format!(
+        r#"
+[models.eval_test_model_{id}]
+routing = ["provider"]
+
+[models.eval_test_model_{id}.providers.provider]
+type = "dummy"
+model_name = "test"
+
+[functions.eval_test_func_{id}]
+type = "chat"
+
+[functions.eval_test_func_{id}.variants.baseline]
+type = "chat_completion"
+model = "eval_test_model_{id}"
+
+[evaluations.test_eval_{id}]
+type = "inference"
+function_name = "eval_test_func_{id}"
+
+[evaluations.test_eval_{id}.evaluators.dummy_judge]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[evaluations.test_eval_{id}.evaluators.dummy_judge.variants.judge]
+type = "chat_completion"
+model = "eval_test_model_{id}"
+active = true
+system_instructions = "Return true."
+json_mode = "on"
+"#
+    );
+
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
+    let snapshot_hash = snapshot.hash.clone();
+
+    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Neither dataset_name nor datapoint_ids provided
+    let params = ActionInputInfo {
+        snapshot_hash,
+        input: ActionInput::RunEvaluation(Box::new(tensorzero::RunEvaluationActionParams {
+            evaluation_name: format!("test_eval_{id}"),
+            dataset_name: None,
+            datapoint_ids: None,
+            variant_name: "baseline".to_string(),
+            concurrency: 1,
+            inference_cache: tensorzero::CacheEnabledMode::Off,
+            max_datapoints: None,
+            precision_targets: HashMap::new(),
+            include_datapoint_results: false,
+        })),
+    };
+
+    let response = client.action(params).await;
+
+    assert!(
+        response.is_err(),
+        "Should return error when neither dataset_name nor datapoint_ids provided"
+    );
+
+    match response.unwrap_err() {
+        TensorZeroError::Http { status_code, .. } => {
+            assert_eq!(status_code, 400, "Should return 400 for validation error");
+        }
+        other => panic!("Expected HTTP error, got: {other:?}"),
+    }
+}
+
+tensorzero::make_gateway_test_functions!(test_action_run_evaluation_validation_error_impl);
+
+/// Test that the action endpoint returns an error when both dataset_name AND datapoint_ids are provided.
+async fn test_action_run_evaluation_both_dataset_and_ids_impl(client: Client) {
+    let clickhouse = get_clickhouse().await;
+    let id = Uuid::now_v7();
+
+    // Create a historical config with an evaluation
+    let historical_config = format!(
+        r#"
+[models.eval_test_model_{id}]
+routing = ["provider"]
+
+[models.eval_test_model_{id}.providers.provider]
+type = "dummy"
+model_name = "test"
+
+[functions.eval_test_func_{id}]
+type = "chat"
+
+[functions.eval_test_func_{id}.variants.baseline]
+type = "chat_completion"
+model = "eval_test_model_{id}"
+
+[evaluations.test_eval_{id}]
+type = "inference"
+function_name = "eval_test_func_{id}"
+
+[evaluations.test_eval_{id}.evaluators.dummy_judge]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[evaluations.test_eval_{id}.evaluators.dummy_judge.variants.judge]
+type = "chat_completion"
+model = "eval_test_model_{id}"
+active = true
+system_instructions = "Return true."
+json_mode = "on"
+"#
+    );
+
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
+    let snapshot_hash = snapshot.hash.clone();
+
+    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Both dataset_name AND datapoint_ids provided - should fail validation
+    let params = ActionInputInfo {
+        snapshot_hash,
+        input: ActionInput::RunEvaluation(Box::new(tensorzero::RunEvaluationActionParams {
+            evaluation_name: format!("test_eval_{id}"),
+            dataset_name: Some("some_dataset".to_string()),
+            datapoint_ids: Some(vec![Uuid::now_v7()]),
+            variant_name: "baseline".to_string(),
+            concurrency: 1,
+            inference_cache: tensorzero::CacheEnabledMode::Off,
+            max_datapoints: None,
+            precision_targets: HashMap::new(),
+            include_datapoint_results: false,
+        })),
+    };
+
+    let response = client.action(params).await;
+
+    assert!(
+        response.is_err(),
+        "Should return error when both dataset_name and datapoint_ids provided"
+    );
+
+    match response.unwrap_err() {
+        TensorZeroError::Http { status_code, .. } => {
+            assert_eq!(status_code, 400, "Should return 400 for validation error");
+        }
+        other => panic!("Expected HTTP error, got: {other:?}"),
+    }
+}
+
+tensorzero::make_gateway_test_functions!(test_action_run_evaluation_both_dataset_and_ids_impl);
+
+/// Test that the action endpoint can successfully run an evaluation with a historical config.
+async fn test_action_run_evaluation_basic_impl(client: Client) {
+    let clickhouse = get_clickhouse().await;
+    let id = Uuid::now_v7();
+    let dataset_name = format!("action_eval_dataset_{id}");
+    let function_name = format!("eval_func_{id}");
+
+    // Create a historical config with a function and evaluation
+    // The LLM judge uses dummy::llm_judge::true which always returns true
+    let historical_config = format!(
+        r#"
+[models.eval_model_{id}]
+routing = ["provider"]
+
+[models.eval_model_{id}.providers.provider]
+type = "dummy"
+model_name = "test"
+
+[functions.{function_name}]
+type = "chat"
+
+[functions.{function_name}.variants.baseline]
+type = "chat_completion"
+model = "eval_model_{id}"
+
+[evaluations.action_test_eval_{id}]
+type = "inference"
+function_name = "{function_name}"
+
+[evaluations.action_test_eval_{id}.evaluators.always_true]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[evaluations.action_test_eval_{id}.evaluators.always_true.variants.judge]
+type = "chat_completion"
+model = "dummy::llm_judge::true"
+active = true
+system_instructions = "Return true."
+json_mode = "on"
+"#
+    );
+
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
+    let snapshot_hash = snapshot.hash.clone();
+
+    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+
+    // Create test datapoints for the evaluation
+    let datapoint_id_1 = Uuid::now_v7();
+    let datapoint_id_2 = Uuid::now_v7();
+
+    let datapoints = vec![
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: function_name.clone(),
+            name: Some("Test datapoint 1".to_string()),
+            id: datapoint_id_1,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![StoredInputMessage {
+                    role: tensorzero_core::inference::types::Role::User,
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Hi there!".to_string(),
+            })]),
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        }),
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: function_name.clone(),
+            name: Some("Test datapoint 2".to_string()),
+            id: datapoint_id_2,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![StoredInputMessage {
+                    role: tensorzero_core::inference::types::Role::User,
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "How are you?".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "I'm doing well!".to_string(),
+            })]),
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        }),
+    ];
+
+    clickhouse.insert_datapoints(&datapoints).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Call the action endpoint with RunEvaluation using datapoint_ids
+    let params = ActionInputInfo {
+        snapshot_hash,
+        input: ActionInput::RunEvaluation(Box::new(tensorzero::RunEvaluationActionParams {
+            evaluation_name: format!("action_test_eval_{id}"),
+            dataset_name: None,
+            datapoint_ids: Some(vec![datapoint_id_1, datapoint_id_2]),
+            variant_name: "baseline".to_string(),
+            concurrency: 1,
+            inference_cache: tensorzero::CacheEnabledMode::Off,
+            max_datapoints: None,
+            precision_targets: HashMap::new(),
+            include_datapoint_results: true,
+        })),
+    };
+
+    let response = client.action(params).await;
+
+    assert!(
+        response.is_ok(),
+        "RunEvaluation action should succeed: {:?}",
+        response.err()
+    );
+
+    // Verify we got a RunEvaluation response with correct structure
+    match response.unwrap() {
+        ActionResponse::RunEvaluation(eval_response) => {
+            assert_eq!(
+                eval_response.num_datapoints, 2,
+                "Should have evaluated 2 datapoints"
+            );
+            assert_eq!(
+                eval_response.num_successes, 2,
+                "Both evaluations should succeed"
+            );
+            assert_eq!(eval_response.num_errors, 0, "Should have no errors");
+
+            // Verify stats contain the evaluator
+            assert!(
+                eval_response.stats.contains_key("always_true"),
+                "Stats should contain 'always_true' evaluator"
+            );
+
+            let always_true_stats = &eval_response.stats["always_true"];
+            assert_eq!(always_true_stats.count, 2, "Should have 2 samples");
+            // dummy::llm_judge::true always returns true (1.0)
+            assert!(
+                (always_true_stats.mean - 1.0).abs() < 0.01,
+                "Mean should be 1.0 for always_true evaluator, got {}",
+                always_true_stats.mean
+            );
+
+            // Verify datapoint results are included
+            assert!(
+                eval_response.datapoint_results.is_some(),
+                "Should include datapoint results when requested"
+            );
+            let results = eval_response.datapoint_results.unwrap();
+            assert_eq!(results.len(), 2, "Should have 2 datapoint results");
+
+            for result in &results {
+                assert!(result.success, "Each datapoint should be successful");
+                assert!(
+                    result.evaluations.contains_key("always_true"),
+                    "Each result should have always_true evaluation"
+                );
+            }
+        }
+        ActionResponse::Inference(_) => {
+            panic!("Expected RunEvaluation response, got Inference response")
+        }
+        ActionResponse::Feedback(_) => {
+            panic!("Expected RunEvaluation response, got Feedback response")
+        }
+    }
+}
+
+tensorzero::make_gateway_test_functions!(test_action_run_evaluation_basic_impl);
