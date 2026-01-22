@@ -56,10 +56,21 @@ pub async fn convert_stream_error(
             }
             .into()
         }
-        reqwest_eventsource::Error::Transport(_) => {
-            let message = match request_id {
-                Some(id) => format!("{base_message} [request_id: {id}]"),
-                None => base_message,
+        reqwest_eventsource::Error::Transport(inner) => {
+            let message = if inner.is_timeout() {
+                match request_id {
+                    Some(id) => format!(
+                        "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({base_message}) [request_id: {id}]"
+                    ),
+                    None => format!(
+                        "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({base_message})"
+                    ),
+                }
+            } else {
+                match request_id {
+                    Some(id) => format!("{base_message} [request_id: {id}]"),
+                    None => base_message,
+                }
             };
             ErrorDetails::FatalStreamError {
                 message,
@@ -271,10 +282,19 @@ pub async fn inject_extra_request_data_and_send_with_headers(
         .send()
         .await
         .map_err(|e| {
+            let status_code = e.status();
+            let message = if e.is_timeout() {
+                format!(
+                    "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({})",
+                    DisplayOrDebugGateway::new(&e)
+                )
+            } else {
+                format!("Error sending request: {}", DisplayOrDebugGateway::new(&e))
+            };
             (
                 Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    status_code,
+                    message,
                     provider_type: provider_type.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
@@ -343,13 +363,21 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
                     };
                     (message, body)
                 }
-                other => (
-                    format!(
-                        "Error sending request: {}",
-                        DisplayOrDebugGateway::new(other)
-                    ),
-                    None,
-                ),
+                other => {
+                    let is_timeout = matches!(&other, reqwest_eventsource::Error::Transport(e) if e.is_timeout());
+                    let message = if is_timeout {
+                        format!(
+                            "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({})",
+                            DisplayOrDebugGateway::new(&other)
+                        )
+                    } else {
+                        format!(
+                            "Error sending request: {}",
+                            DisplayOrDebugGateway::new(other)
+                        )
+                    };
+                    (message, None)
+                }
             };
             let error = Error::new(ErrorDetails::FatalStreamError {
                 message,
