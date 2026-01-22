@@ -251,20 +251,15 @@ export const Virtualized: Story = {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
 
     return (
-      <div>
-        <p className="text-fg-muted mb-4 text-sm">
-          500 items with virtualization (threshold=100). Should scroll smoothly.
-        </p>
-        <ButtonSelect
-          items={virtualizedItems}
-          selected={selected ?? null}
-          trigger="Select item"
-          placeholder="Search 500 items..."
-          emptyMessage="No items found"
-          virtualizeThreshold={100}
-          onSelect={(item) => updateArgs({ selected: item })}
-        />
-      </div>
+      <ButtonSelect
+        items={virtualizedItems}
+        selected={selected ?? null}
+        trigger="Select item"
+        placeholder="Search 500 items..."
+        emptyMessage="No items found"
+        virtualizeThreshold={100}
+        onSelect={(item) => updateArgs({ selected: item })}
+      />
     );
   },
 };
@@ -277,20 +272,15 @@ export const VirtualizedStressTest: Story = {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
 
     return (
-      <div>
-        <p className="text-fg-muted mb-4 text-sm">
-          Stress test: 1000 items with virtualization.
-        </p>
-        <ButtonSelect
-          items={stressTestItems}
-          selected={selected ?? null}
-          trigger="Select item"
-          placeholder="Search 1000 items..."
-          emptyMessage="No items found"
-          virtualizeThreshold={100}
-          onSelect={(item) => updateArgs({ selected: item })}
-        />
-      </div>
+      <ButtonSelect
+        items={stressTestItems}
+        selected={selected ?? null}
+        trigger="Select item"
+        placeholder="Search 1000 items..."
+        emptyMessage="No items found"
+        virtualizeThreshold={100}
+        onSelect={(item) => updateArgs({ selected: item })}
+      />
     );
   },
 };
@@ -308,10 +298,6 @@ export const VirtualizedKeyboardNav: Story = {
 
     return (
       <div>
-        <p className="text-fg-muted mb-4 text-sm">
-          <strong>Keyboard shortcuts:</strong> Arrow Up/Down, Home/End,
-          PageUp/PageDown, Enter
-        </p>
         <ButtonSelect
           items={virtualizedItems}
           selected={selected ?? null}
@@ -339,23 +325,18 @@ export const VirtualizedWithCreation: Story = {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
 
     return (
-      <div>
-        <p className="text-fg-muted mb-4 text-sm">
-          500 items with creation support. Type a name that does not exist.
-        </p>
-        <ButtonSelect
-          items={virtualizedItems}
-          selected={selected ?? null}
-          trigger="Select or create"
-          placeholder="Search or create..."
-          emptyMessage="No items found"
-          virtualizeThreshold={100}
-          creatable
-          createHeading="Create new"
-          existingHeading="Existing"
-          onSelect={(item) => updateArgs({ selected: item })}
-        />
-      </div>
+      <ButtonSelect
+        items={virtualizedItems}
+        selected={selected ?? null}
+        trigger="Select or create"
+        placeholder="Search or create..."
+        emptyMessage="No items found"
+        virtualizeThreshold={100}
+        creatable
+        createHeading="Create new"
+        existingHeading="Existing"
+        onSelect={(item) => updateArgs({ selected: item })}
+      />
     );
   },
 };

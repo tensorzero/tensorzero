@@ -108,10 +108,6 @@ export const Virtualized: Story = {
 
     return (
       <div className="w-80">
-        <p className="text-fg-muted mb-4 text-sm">
-          This combobox has 500 items. Virtualization renders only visible items
-          for smooth scrolling.
-        </p>
         <Combobox
           {...args}
           items={generateItems(500)}
@@ -137,9 +133,6 @@ export const ForceVirtualized: Story = {
 
     return (
       <div className="w-80">
-        <p className="text-fg-muted mb-4 text-sm">
-          Virtualization forced on with only 20 items (threshold=0).
-        </p>
         <Combobox
           {...args}
           items={generateItems(20)}
@@ -165,10 +158,6 @@ export const NoVirtualization: Story = {
 
     return (
       <div className="w-80">
-        <p className="text-fg-muted mb-4 text-sm">
-          200 items rendered without virtualization (threshold=Infinity). May be
-          slower.
-        </p>
         <Combobox
           {...args}
           items={generateItems(200)}
@@ -194,9 +183,6 @@ export const StressTest: Story = {
 
     return (
       <div className="w-80">
-        <p className="text-fg-muted mb-4 text-sm">
-          Stress test: 1000 items with virtualization. Should scroll smoothly.
-        </p>
         <Combobox
           {...args}
           items={generateItems(1000)}
@@ -227,19 +213,6 @@ export const KeyboardNavigation: Story = {
 
     return (
       <div className="w-80">
-        <p className="text-fg-muted mb-4 text-sm">
-          <strong>Keyboard shortcuts:</strong>
-          <br />
-          Arrow Up/Down: Move highlight
-          <br />
-          Home/End: Jump to start/end
-          <br />
-          PageUp/PageDown: Jump 8 items
-          <br />
-          Enter: Select
-          <br />
-          Escape: Close
-        </p>
         <Combobox
           {...args}
           items={generateItems(500)}
@@ -258,7 +231,7 @@ export const KeyboardNavigation: Story = {
 
 /**
  * Demo filtering behavior with virtualization.
- * Type to filter, selection persists through filter changes.
+ * Type to filter, highlight resets to first match.
  */
 export const FilteringDemo: Story = {
   args: {
@@ -279,10 +252,6 @@ export const FilteringDemo: Story = {
 
     return (
       <div className="w-80">
-        <p className="text-fg-muted mb-4 text-sm">
-          Type to filter. Try &quot;item-5&quot; or &quot;apple&quot;. Highlight
-          resets to first match when filtering.
-        </p>
         <Combobox
           {...args}
           items={items}
@@ -309,10 +278,6 @@ export const ThresholdTransition: Story = {
 
     return (
       <div className="w-80">
-        <p className="text-fg-muted mb-4 text-sm">
-          150 items with threshold=100. Type to filter below 100 items and
-          observe transition from virtualized to non-virtualized rendering.
-        </p>
         <Combobox
           {...args}
           items={generateItems(150)}
@@ -341,10 +306,6 @@ export const VirtualizedWithCreation: Story = {
 
     return (
       <div className="w-80">
-        <p className="text-fg-muted mb-4 text-sm">
-          500 items with creation support. Type a name that does not exist to
-          see the create option.
-        </p>
         <Combobox
           {...args}
           items={generateItems(500)}
