@@ -1891,7 +1891,7 @@ mod tests {
             extra_body: None,
             inference_extra_body: FilteredInferenceExtraBody {
                 data: vec![DynamicExtraBody::ModelProvider {
-                    model_name: "anthropic::claude-3".to_string(), // Wrong prefix
+                    model_name: "anthropic::claude-4".to_string(), // Wrong prefix
                     provider_name: Some("openai".to_string()),
                     pointer: "/test_wrong".to_string(),
                     value: json!(1),

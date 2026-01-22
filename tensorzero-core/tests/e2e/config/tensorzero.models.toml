@@ -166,7 +166,7 @@ routing = ["aws_bedrock"]
 
 [models."claude-sonnet-4-5-thinking-aws-bedrock".providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-sonnet-4-5-v1:0"
+model_id = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 region = "us-east-1"
 
 # AWS Bedrock with dynamic region for E2E testing

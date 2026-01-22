@@ -2107,9 +2107,9 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     let episode_id = Uuid::now_v7();
     println!("Provider name: {}", provider.model_provider_name);
 
-    // Note: Claude 4.5 on GCP Vertex AI doesn't allow both `temperature` and `top_p`
-    // to be specified at the same time, so we only send `temperature` for that provider.
-    let extra_body = if provider.model_provider_name == "aws_bedrock" {
+    // Note: Claude models don't allow both `temperature` and `top_p` to be specified at the same time.
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    let extra_body = if provider.model_provider_name == "aws_bedrock" && !is_claude_model {
         json!([
             {
                 "variant_name": provider.variant_name,
@@ -2121,6 +2121,15 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "provider_name": provider.model_provider_name,
                 "pointer": "/inferenceConfig/top_p",
                 "value": 0.8
+            }
+        ])
+    } else if provider.model_provider_name == "aws_bedrock" && is_claude_model {
+        // Claude on AWS Bedrock doesn't allow both temperature and top_p
+        json!([
+            {
+                "variant_name": provider.variant_name,
+                "pointer": "/inferenceConfig/temperature",
+                "value": 0.5
             }
         ])
     } else if provider.model_provider_name == "google_ai_studio_gemini"
@@ -2139,7 +2148,8 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "value": 0.8
             }
         ])
-    } else if provider.model_provider_name == "gcp_vertex_anthropic" {
+    } else if is_claude_model {
+        // Claude models don't allow both temperature and top_p
         json!([
             {
                 "variant_name": provider.variant_name,
@@ -2309,19 +2319,24 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         0.5
     );
 
-    let top_p = if provider.model_provider_name == "aws_bedrock" {
-        raw_request_val.get("inferenceConfig").unwrap().get("top_p")
-    } else if provider.model_provider_name == "google_ai_studio_gemini"
-        || provider.model_provider_name == "gcp_vertex_gemini"
-    {
-        raw_request_val
-            .get("generationConfig")
-            .unwrap()
-            .get("top_p")
-    } else {
-        raw_request_val.get("top_p")
-    };
-    assert_eq!(top_p.unwrap().as_f64().expect("Top P is not a number"), 0.8);
+    // Skip top_p check for Claude models since they don't allow both temperature and top_p
+    // to be specified at the same time.
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    if !is_claude_model {
+        let top_p = if provider.model_provider_name == "aws_bedrock" {
+            raw_request_val.get("inferenceConfig").unwrap().get("top_p")
+        } else if provider.model_provider_name == "google_ai_studio_gemini"
+            || provider.model_provider_name == "gcp_vertex_gemini"
+        {
+            raw_request_val
+                .get("generationConfig")
+                .unwrap()
+                .get("top_p")
+        } else {
+            raw_request_val.get("top_p")
+        };
+        assert_eq!(top_p.unwrap().as_f64().expect("Top P is not a number"), 0.8);
+    }
 }
 
 pub async fn test_bad_auth_extra_headers_with_provider(provider: E2ETestProvider) {
@@ -4102,6 +4117,26 @@ pub async fn test_inference_params_dynamic_credentials_inference_request_with_pr
     } else {
         UnfilteredInferenceExtraHeaders::default()
     };
+    // Note: Claude models don't allow both `temperature` and `top_p` to be specified
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    let chat_completion_params = if is_claude_model {
+        json!({
+            "temperature": 0.9,
+            "seed": 1337,
+            "max_tokens": 120,
+            "presence_penalty": 0.1,
+            "frequency_penalty": 0.2,
+        })
+    } else {
+        json!({
+            "temperature": 0.9,
+            "seed": 1337,
+            "max_tokens": 120,
+            "top_p": 0.9,
+            "presence_penalty": 0.1,
+            "frequency_penalty": 0.2,
+        })
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -4116,14 +4151,7 @@ pub async fn test_inference_params_dynamic_credentials_inference_request_with_pr
                 }
             ]},
         "params": {
-            "chat_completion": {
-                "temperature": 0.9,
-                "seed": 1337,
-                "max_tokens": 120,
-                "top_p": 0.9,
-                "presence_penalty": 0.1,
-                "frequency_penalty": 0.2,
-            }
+            "chat_completion": chat_completion_params
         },
         "stream": false,
         "credentials": provider.credentials,
@@ -4264,8 +4292,12 @@ pub async fn check_inference_params_response(
         .as_u64()
         .unwrap();
     assert_eq!(max_tokens, 120);
-    let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
-    assert_eq!(top_p, 0.9);
+    // Skip top_p check for Claude models since they don't allow both temperature and top_p
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    if !is_claude_model {
+        let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
+        assert_eq!(top_p, 0.9);
+    }
     let presence_penalty = inference_params
         .get("presence_penalty")
         .unwrap()
@@ -4360,6 +4392,26 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
     } else {
         UnfilteredInferenceExtraHeaders::default()
     };
+    // Note: Claude models don't allow both `temperature` and `top_p` to be specified
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    let chat_completion_params = if is_claude_model {
+        json!({
+            "temperature": 0.9,
+            "seed": 1337,
+            "max_tokens": 120,
+            "presence_penalty": 0.1,
+            "frequency_penalty": 0.2,
+        })
+    } else {
+        json!({
+            "temperature": 0.9,
+            "seed": 1337,
+            "max_tokens": 120,
+            "top_p": 0.9,
+            "presence_penalty": 0.1,
+            "frequency_penalty": 0.2,
+        })
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -4374,14 +4426,7 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
                 }
             ]},
         "params": {
-            "chat_completion": {
-                "temperature": 0.9,
-                "seed": 1337,
-                "max_tokens": 120,
-                "top_p": 0.9,
-                "presence_penalty": 0.1,
-                "frequency_penalty": 0.2,
-            }
+            "chat_completion": chat_completion_params
         },
         "stream": true,
         "credentials": provider.credentials,
@@ -4526,8 +4571,12 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
         .as_u64()
         .unwrap();
     assert_eq!(max_tokens, 120);
-    let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
-    assert_eq!(top_p, 0.9);
+    // Skip top_p check for Claude models since they don't allow both temperature and top_p
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    if !is_claude_model {
+        let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
+        assert_eq!(top_p, 0.9);
+    }
     let presence_penalty = inference_params
         .get("presence_penalty")
         .unwrap()
