@@ -537,6 +537,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         concurrency: 10,
         inference_cache: CacheEnabledMode::On,
+        tags: HashMap::new(),
     };
 
     let result = run_evaluation_core_streaming(core_args, Some(10), HashMap::new()).await;
@@ -1766,6 +1767,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             })],
         }],
     };
+    let external_tags = HashMap::new();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1776,6 +1778,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1792,6 +1795,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1808,6 +1812,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1824,6 +1829,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1867,6 +1873,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap();
@@ -1947,6 +1954,7 @@ async fn test_run_llm_judge_evaluator_json() {
             })],
         }],
     };
+    let external_tags = HashMap::new();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1957,6 +1965,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1973,6 +1982,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1989,6 +1999,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -2005,6 +2016,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -2048,6 +2060,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap();
@@ -2766,6 +2779,7 @@ async fn test_evaluation_with_dynamic_variant() {
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
+        tags: HashMap::new(),
     };
 
     let result = run_evaluation_core_streaming(core_args, None, HashMap::new()).await;
@@ -2831,6 +2845,7 @@ async fn test_max_datapoints_parameter() {
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
+        tags: HashMap::new(),
     };
 
     let max_datapoints = Some(3);
@@ -2882,6 +2897,7 @@ async fn test_precision_targets_parameter() {
 
     let evaluation_run_id = Uuid::now_v7();
     let evaluation_name = "haiku_without_outputs".to_string(); // Has both exact_match and topic_starts_with_f
+    let evaluation_name_tag = evaluation_name.clone();
 
     // Extract evaluation config and function configs table
     let evaluation_config = config
@@ -2899,6 +2915,16 @@ async fn test_precision_targets_parameter() {
 
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
+
+    let external_session_id = "session-123".to_string();
+    let external_tag_value = "external-value".to_string();
+    let external_tags = HashMap::from([
+        (
+            "tensorzero::autopilot::session_id".to_string(),
+            external_session_id.clone(),
+        ),
+        ("custom_tag".to_string(), external_tag_value.clone()),
+    ]);
 
     // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10
@@ -2919,6 +2945,7 @@ async fn test_precision_targets_parameter() {
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 5,
+        tags: external_tags.clone(),
     };
 
     // Run with precision targets
@@ -2931,14 +2958,19 @@ async fn test_precision_targets_parameter() {
     .unwrap();
 
     // Consume results and track evaluations, computing statistics as we go
+    let batcher_join_handle = result.batcher_join_handle.clone();
     let mut receiver = result.receiver;
     let mut exact_match_stats = PerEvaluatorStats::new(true); // Bernoulli evaluator (uses Wilson CI)
     let mut topic_stats = PerEvaluatorStats::new(false); // Treated as float evaluator (uses Wald CI)
     let mut total_datapoints = 0;
+    let mut tagged_inference_id = None;
 
     while let Some(update) = receiver.recv().await {
         if let EvaluationUpdate::Success(info) = update {
             total_datapoints += 1;
+            if tagged_inference_id.is_none() {
+                tagged_inference_id = Some(info.response.inference_id());
+            }
 
             // Track exact_match values (boolean)
             if let Some(Some(serde_json::Value::Bool(b))) = info.evaluations.get("exact_match") {
@@ -2985,6 +3017,94 @@ async fn test_precision_targets_parameter() {
         "topic_starts_with_f CI half-width {:.3} should be <= limit {:.3}",
         topic_ci.unwrap(),
         precision_targets["topic_starts_with_f"]
+    );
+
+    if let Some(handle) = batcher_join_handle {
+        handle
+            .await
+            .expect("ClickHouse batch writer should complete before tag assertions");
+    }
+    clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
+
+    let inference_id =
+        tagged_inference_id.expect("Should capture an inference id to validate tags");
+    let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .expect("Should load evaluation inference from ClickHouse");
+    assert_eq!(
+        clickhouse_inference["tags"]["tensorzero::evaluation_run_id"]
+            .as_str()
+            .unwrap(),
+        evaluation_run_id.to_string(),
+        "Evaluation inferences should include `tensorzero::evaluation_run_id` tags"
+    );
+    assert_eq!(
+        clickhouse_inference["tags"]["tensorzero::evaluation_name"]
+            .as_str()
+            .unwrap(),
+        evaluation_name_tag.as_str(),
+        "Evaluation inferences should include `tensorzero::evaluation_name` tags"
+    );
+    assert_eq!(
+        clickhouse_inference["tags"]["tensorzero::autopilot::session_id"]
+            .as_str()
+            .unwrap(),
+        external_session_id.as_str(),
+        "Evaluation inferences should include external tags"
+    );
+    assert_eq!(
+        clickhouse_inference["tags"]["custom_tag"].as_str().unwrap(),
+        external_tag_value.as_str(),
+        "Evaluation inferences should include custom external tags"
+    );
+
+    let metric_name = format!(
+        "tensorzero::evaluation_name::{}::evaluator_name::topic_starts_with_f",
+        evaluation_name_tag.as_str()
+    );
+    let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
+        &clickhouse,
+        "BooleanMetricFeedback",
+        inference_id,
+        Some(metric_name.as_str()),
+    )
+    .await
+    .expect("Should load evaluator feedback from ClickHouse");
+    let evaluator_inference_id = Uuid::parse_str(
+        clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let evaluator_inference = select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+        .await
+        .expect("Should load judge inference from ClickHouse");
+    assert_eq!(
+        evaluator_inference["tags"]["tensorzero::evaluation_run_id"]
+            .as_str()
+            .unwrap(),
+        evaluation_run_id.to_string(),
+        "Judge inferences should include `tensorzero::evaluation_run_id` tags"
+    );
+    assert_eq!(
+        evaluator_inference["tags"]["tensorzero::evaluation_name"]
+            .as_str()
+            .unwrap(),
+        evaluation_name_tag.as_str(),
+        "Judge inferences should include `tensorzero::evaluation_name` tags"
+    );
+    assert_eq!(
+        evaluator_inference["tags"]["tensorzero::autopilot::session_id"]
+            .as_str()
+            .unwrap(),
+        external_session_id.as_str(),
+        "Judge inferences should include external tags"
+    );
+    assert_eq!(
+        evaluator_inference["tags"]["custom_tag"].as_str().unwrap(),
+        external_tag_value.as_str(),
+        "Judge inferences should include custom external tags"
     );
 }
 

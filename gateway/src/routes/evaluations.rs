@@ -359,6 +359,7 @@ pub async fn run_evaluation_handler(
         cache_mode,
         max_datapoints: request.max_datapoints,
         precision_targets,
+        tags: HashMap::new(), // No external tags for HTTP-initiated evaluations
     };
 
     // Run the evaluation

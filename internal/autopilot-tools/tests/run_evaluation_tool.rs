@@ -68,6 +68,8 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
 
     // Create mock client with expectations
     let mut mock_client = MockTensorZeroClient::new();
+    let expected_tool_call_event_id = tool_call_event_id;
+    let expected_session_id = session_id;
     mock_client
         .expect_run_evaluation()
         .withf(move |params| {
@@ -78,6 +80,11 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
                 && params.concurrency == 5
                 && params.max_datapoints == Some(50)
                 && params.precision_targets.is_empty()
+                // Verify tags are being passed correctly
+                && params.tags.get("tensorzero::autopilot::tool_call_event_id") == Some(&expected_tool_call_event_id.to_string())
+                && params.tags.get("tensorzero::autopilot::session_id") == Some(&expected_session_id.to_string())
+                && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"test_hash".to_string())
+                && params.tags.get("tensorzero::autopilot") == Some(&String::new())
         })
         .returning(move |_| Ok(mock_response.clone()));
 
@@ -139,6 +146,8 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
 
     // Create mock client with expectations
     let mut mock_client = MockTensorZeroClient::new();
+    let expected_tool_call_event_id = tool_call_event_id;
+    let expected_session_id = session_id;
     mock_client
         .expect_run_evaluation()
         .withf(move |params| {
@@ -148,6 +157,11 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
                 && params.variant_name == "test_variant"
                 && params.concurrency == 10
                 && params.max_datapoints.is_none()
+                // Verify tags are being passed correctly
+                && params.tags.get("tensorzero::autopilot::tool_call_event_id") == Some(&expected_tool_call_event_id.to_string())
+                && params.tags.get("tensorzero::autopilot::session_id") == Some(&expected_session_id.to_string())
+                && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"test_hash".to_string())
+                && params.tags.get("tensorzero::autopilot") == Some(&String::new())
         })
         .returning(move |_| Ok(mock_response.clone()));
 
