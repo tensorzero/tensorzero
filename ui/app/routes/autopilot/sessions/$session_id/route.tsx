@@ -124,10 +124,15 @@ function EventStreamSkeleton() {
 }
 
 // Error component for when events fail to load
-function EventStreamError() {
+function EventStreamError({ onLoaded }: { onLoaded: () => void }) {
   const error = useAsyncError();
   const message =
     error instanceof Error ? error.message : "Failed to load session events";
+
+  // Clear loading state so ChatInput is usable for retry
+  useEffect(() => {
+    onLoaded();
+  }, [onLoaded]);
 
   return (
     <div className="border-border mt-8 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border p-4">
@@ -676,7 +681,10 @@ function EventStreamContentWrapper({
   // Existing sessions use Await to resolve the promise with error handling
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <Await resolve={eventsData} errorElement={<EventStreamError />}>
+      <Await
+        resolve={eventsData}
+        errorElement={<EventStreamError onLoaded={onLoaded} />}
+      >
         {(resolvedData) => (
           <EventStreamContent
             sessionId={sessionId}
